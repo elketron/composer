@@ -1,0 +1,231 @@
+diff --color -ruN a/flutter_inappwebview_linux/linux/in_app_webview/in_app_webview.cc b/flutter_inappwebview_linux/linux/in_app_webview/in_app_webview.cc
+--- a/flutter_inappwebview_linux/linux/in_app_webview/in_app_webview.cc	2026-10-18 14:32:02.939627211 +0200
++++ b/flutter_inappwebview_linux/linux/in_app_webview/in_app_webview.cc	2026-10-18 14:32:12.014435149 +0200
+@@ -1407,6 +1407,7 @@
+     // Store reference to current buffer - we keep it until the NEXT frame arrives
+     // This ensures the EGL image's backing DMA-BUF memory stays valid
+     current_buffer_ = buffer;
++    current_buffer_serial_++;
+   }
+   
+   // Release the PREVIOUS buffer now that we have a new one
+@@ -3643,6 +3644,37 @@
+   return false;
+ #endif
+ }
++
++bool InAppWebView::GetCurrentDmaBuf(uint32_t* fourcc, uint64_t* modifier, uint32_t* width,
++                                    uint32_t* height, uint32_t* n_planes, int fds[4],
++                                    uint32_t offsets[4], uint32_t strides[4],
++                                    uint64_t* serial) const {
++#ifdef HAVE_WPE_PLATFORM
++  std::lock_guard<std::mutex> lock(wpe_buffer_mutex_);
++  if (current_buffer_ == nullptr || !WPE_IS_BUFFER_DMA_BUF(current_buffer_)) {
++    return false;
++  }
++  WPEBufferDMABuf* dmabuf = WPE_BUFFER_DMA_BUF(current_buffer_);
++  uint32_t planes = wpe_buffer_dma_buf_get_n_planes(dmabuf);
++  if (planes == 0 || planes > 4) {
++    return false;
++  }
++  *fourcc = wpe_buffer_dma_buf_get_format(dmabuf);
++  *modifier = wpe_buffer_dma_buf_get_modifier(dmabuf);
++  *width = static_cast<uint32_t>(wpe_buffer_get_width(current_buffer_));
++  *height = static_cast<uint32_t>(wpe_buffer_get_height(current_buffer_));
++  *n_planes = planes;
++  for (uint32_t i = 0; i < planes; i++) {
++    fds[i] = wpe_buffer_dma_buf_get_fd(dmabuf, i);
++    offsets[i] = wpe_buffer_dma_buf_get_offset(dmabuf, i);
++    strides[i] = wpe_buffer_dma_buf_get_stride(dmabuf, i);
++  }
++  *serial = current_buffer_serial_;
++  return true;
++#else
++  return false;
++#endif
++}
+ 
+ void* InAppWebView::GetCurrentEglImage(uint32_t* out_width, uint32_t* out_height) const {
+ #ifdef HAVE_WPE_PLATFORM
+diff --color -ruN a/flutter_inappwebview_linux/linux/in_app_webview/inappwebview_egl_texture.cc b/flutter_inappwebview_linux/linux/in_app_webview/inappwebview_egl_texture.cc
+--- a/flutter_inappwebview_linux/linux/in_app_webview/inappwebview_egl_texture.cc	2026-10-18 14:32:02.939479045 +0200
++++ b/flutter_inappwebview_linux/linux/in_app_webview/inappwebview_egl_texture.cc	2026-10-18 14:32:12.014981381 +0200
+@@ -64,8 +64,98 @@
+ 
+   // Mutex to protect frame data access
+   GMutex mutex;
++
++  the current frame imported on Flutter's own EGL display.
++  EGLImageKHR own_image;
++  EGLDisplay own_display;
++  uint64_t own_serial;
++  gboolean own_import_failed;
+ };
+ 
++imports the webview's current DMA-BUF frame as an EGLImage on the EGL
++// display that is current here (Flutter's). The EGLImage the plugin creates on WPE's own
++// display can't be bound in Flutter's context on Mesa, which leaves the view blank.
++static gboolean import_frame_on_current_display(InAppWebViewEGLTexture* self) {
++  if (self->webview == nullptr || self->own_import_failed) {
++    return FALSE;
++  }
++  uint32_t fourcc = 0, width = 0, height = 0, n_planes = 0;
++  uint64_t modifier = 0, serial = 0;
++  int fds[4];
++  uint32_t offsets[4], strides[4];
++  if (!self->webview->GetCurrentDmaBuf(&fourcc, &modifier, &width, &height, &n_planes, fds,
++                                       offsets, strides, &serial)) {
++    return FALSE;
++  }
++  if (serial == self->own_serial && self->own_image != EGL_NO_IMAGE_KHR) {
++    return TRUE;  // this frame is already imported
++  }
++  EGLDisplay display = eglGetCurrentDisplay();
++  if (display == EGL_NO_DISPLAY) {
++    return FALSE;
++  }
++
++  static const EGLint fd_keys[4] = {EGL_DMA_BUF_PLANE0_FD_EXT, EGL_DMA_BUF_PLANE1_FD_EXT,
++                                    EGL_DMA_BUF_PLANE2_FD_EXT, EGL_DMA_BUF_PLANE3_FD_EXT};
++  static const EGLint offset_keys[4] = {EGL_DMA_BUF_PLANE0_OFFSET_EXT, EGL_DMA_BUF_PLANE1_OFFSET_EXT,
++                                        EGL_DMA_BUF_PLANE2_OFFSET_EXT, EGL_DMA_BUF_PLANE3_OFFSET_EXT};
++  static const EGLint pitch_keys[4] = {EGL_DMA_BUF_PLANE0_PITCH_EXT, EGL_DMA_BUF_PLANE1_PITCH_EXT,
++                                       EGL_DMA_BUF_PLANE2_PITCH_EXT, EGL_DMA_BUF_PLANE3_PITCH_EXT};
++  static const EGLint mod_lo_keys[4] = {EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT, EGL_DMA_BUF_PLANE1_MODIFIER_LO_EXT,
++                                        EGL_DMA_BUF_PLANE2_MODIFIER_LO_EXT, EGL_DMA_BUF_PLANE3_MODIFIER_LO_EXT};
++  static const EGLint mod_hi_keys[4] = {EGL_DMA_BUF_PLANE0_MODIFIER_HI_EXT, EGL_DMA_BUF_PLANE1_MODIFIER_HI_EXT,
++                                        EGL_DMA_BUF_PLANE2_MODIFIER_HI_EXT, EGL_DMA_BUF_PLANE3_MODIFIER_HI_EXT};
++  const uint64_t invalid_modifier = 0x00ffffffffffffffULL;  // DRM_FORMAT_MOD_INVALID
++
++  EGLint attribs[64];
++  int i = 0;
++  attribs[i++] = EGL_WIDTH;
++  attribs[i++] = static_cast<EGLint>(width);
++  attribs[i++] = EGL_HEIGHT;
++  attribs[i++] = static_cast<EGLint>(height);
++  attribs[i++] = EGL_LINUX_DRM_FOURCC_EXT;
++  attribs[i++] = static_cast<EGLint>(fourcc);
++  for (uint32_t p = 0; p < n_planes; p++) {
++    attribs[i++] = fd_keys[p];
++    attribs[i++] = fds[p];
++    attribs[i++] = offset_keys[p];
++    attribs[i++] = static_cast<EGLint>(offsets[p]);
++    attribs[i++] = pitch_keys[p];
++    attribs[i++] = static_cast<EGLint>(strides[p]);
++    if (modifier != invalid_modifier) {
++      attribs[i++] = mod_lo_keys[p];
++      attribs[i++] = static_cast<EGLint>(modifier & 0xffffffff);
++      attribs[i++] = mod_hi_keys[p];
++      attribs[i++] = static_cast<EGLint>(modifier >> 32);
++    }
++  }
++  attribs[i++] = EGL_NONE;
++
++  EGLImageKHR image = eglCreateImageKHR(display, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, nullptr, attribs);
++  if (image == EGL_NO_IMAGE_KHR) {
++    flutter_inappwebview_plugin::errorLog(
++        "InAppWebViewEGLTexture: DMA-BUF import on Flutter's display failed, EGL error " +
++        std::to_string(eglGetError()) + "; falling back");
++    self->own_import_failed = TRUE;
++    return FALSE;
++  }
++  if (self->own_image != EGL_NO_IMAGE_KHR) {
++    eglDestroyImageKHR(self->own_display, self->own_image);
++  }
++  static bool logged = false;
++  if (!logged) {
++    flutter_inappwebview_plugin::debugLog(
++        "InAppWebViewEGLTexture: importing frames on Flutter's EGL display");
++    logged = true;
++  }
++  self->own_image = image;
++  self->own_display = display;
++  self->own_serial = serial;
++  self->width = width;
++  self->height = height;
++  return TRUE;
++}
++
+ G_DEFINE_TYPE(InAppWebViewEGLTexture, inappwebview_egl_texture, fl_texture_gl_get_type())
+ 
+ // Check and cache the EGL image extension availability
+@@ -140,9 +230,15 @@
+     return FALSE;
+   }
+ 
++  prefer the frame imported on Flutter's own display.
++  void* frame_image = self->current_egl_image;
++  if (import_frame_on_current_display(self)) {
++    frame_image = self->own_image;
++  }
++
+   // Use the EGL image that was set via inappwebview_egl_texture_set_egl_image()
+   // This is updated by the on_frame_available callback before Flutter is notified
+-  if (self->current_egl_image != nullptr && self->width > 0 && self->height > 0) {
++  if (frame_image != nullptr && self->width > 0 && self->height > 0) {
+     // Check if EGL image extension is available
+     if (check_egl_image_extension(self)) {
+       // Create texture if needed
+@@ -154,7 +250,7 @@
+       // Bind the EGL image to our texture - ZERO-COPY!
+       glBindTexture(GL_TEXTURE_2D, self->texture_id);
+       self->glEGLImageTargetTexture2DOES(GL_TEXTURE_2D,
+-                                         static_cast<GLeglImageOES>(self->current_egl_image));
++                                         static_cast<GLeglImageOES>(frame_image));
+ 
+       // Set texture parameters
+       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+@@ -269,6 +365,12 @@
+ 
+   g_mutex_lock(&self->mutex);
+ 
++  our own imported frame.
++  if (self->own_image != EGL_NO_IMAGE_KHR) {
++    eglDestroyImageKHR(self->own_display, self->own_image);
++    self->own_image = EGL_NO_IMAGE_KHR;
++  }
++
+   // Free fallback buffer
+   if (self->fallback_buffer != nullptr) {
+     g_free(self->fallback_buffer);
+diff --color -ruN a/flutter_inappwebview_linux/linux/in_app_webview/in_app_webview.h b/flutter_inappwebview_linux/linux/in_app_webview/in_app_webview.h
+--- a/flutter_inappwebview_linux/linux/in_app_webview/in_app_webview.h	2026-10-18 14:32:02.939434322 +0200
++++ b/flutter_inappwebview_linux/linux/in_app_webview/in_app_webview.h	2026-10-18 14:32:12.016080567 +0200
+@@ -305,6 +305,13 @@
+   // The EGL image is owned by WPE and remains valid until the next frame.
+   void* GetCurrentEglImage(uint32_t* out_width, uint32_t* out_height) const;
+ 
++  the current frame's DMA-BUF, so the texture can import it on
++  // Flutter's own EGL display (an EGLImage made on WPE's display can't be bound there).
++  // `serial` changes with every new frame. Returns false if the frame isn't a DMA-BUF.
++  bool GetCurrentDmaBuf(uint32_t* fourcc, uint64_t* modifier, uint32_t* width, uint32_t* height,
++                        uint32_t* n_planes, int fds[4], uint32_t offsets[4], uint32_t strides[4],
++                        uint64_t* serial) const;
++
+   // Skip pixel readback - when using zero-copy EGL texture mode, we don't need
+   // to read pixels back to CPU. This improves performance and avoids GL context issues.
+   void SetSkipPixelReadback(bool skip) { skip_pixel_readback_ = skip; }
+@@ -475,6 +482,7 @@
+   
+   // Buffer rendering for WPEPlatform
+   WPEBuffer* current_buffer_ = nullptr;   // Current frame buffer (borrowed, not owned)
++  uint64_t current_buffer_serial_ = 0;    bumped for every new frame
+   void* current_egl_image_ = nullptr;     // EGL image created from current buffer
+   uint32_t current_buffer_width_ = 0;     // Width of current buffer
+   uint32_t current_buffer_height_ = 0;    // Height of current buffer
+diff --color -ruN a/flutter_inappwebview_linux/linux/in_app_webview/in_app_webview_settings.cc b/flutter_inappwebview_linux/linux/in_app_webview/in_app_webview_settings.cc
+--- a/flutter_inappwebview_linux/linux/in_app_webview/in_app_webview_settings.cc	2026-10-18 14:32:02.939360394 +0200
++++ b/flutter_inappwebview_linux/linux/in_app_webview/in_app_webview_settings.cc	2026-10-18 14:32:12.015234613 +0200
+@@ -402,7 +402,12 @@
+ 
+   // Apply disable animations setting
+   if (disableAnimations.has_value()) {
++    // WPE 2.54 renamed DISABLE_ANIMATIONS to REDUCED_MOTION.
++#ifdef WPE_SETTING_DISABLE_ANIMATIONS
+     wpe_settings_set_boolean(wpe_settings, WPE_SETTING_DISABLE_ANIMATIONS,
++#else
++    wpe_settings_set_boolean(wpe_settings, WPE_SETTING_REDUCED_MOTION,
++#endif
+                              disableAnimations.value(), WPE_SETTINGS_SOURCE_APPLICATION, &error);
+     g_clear_error(&error);
+   }

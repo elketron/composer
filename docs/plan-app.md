@@ -43,7 +43,7 @@ One `AppView` interface, a backend per platform:
 | platform | backend |
 |----------|---------|
 | Android, Windows, macOS | `flutter_inappwebview` (in-window, stable) |
-| Linux | `flutter_inappwebview` 6.2 beta (WPE WebKit as a Flutter texture) **if the spike shows it holds up**; else a separate window (`desktop_webview_window`), which tiles fine on Hyprland; else the system browser |
+| Linux | `flutter_inappwebview` 6.2 beta (WPE WebKit as a Flutter texture), with the patched `apps/vendor/flutter_inappwebview_linux` (WPE 2.54 build fix; frames imported on Flutter's EGL display). Fallbacks: software rendering, then the system browser. See [the spike](spikes/webview.md). |
 
 Apps open as `https://<server>/<site>/?token=<device token>&session=<id>`: the existing cookie flow signs the webview in, so apps, `send()` and live updates work unchanged. Cookie stores are per host, so servers don't mix.
 
@@ -78,7 +78,7 @@ The work PC runs `composer serve` inside WSL2, so the server stays Linux-only; o
 
 ## Milestones
 
-1. **Webview spike** — `flutter_inappwebview` 6.2 beta on Linux (Hyprland/Wayland) vs a separate window, and on Android; with the real ticket board and chat app: cookie sign-in, `send()`, live updates, input. Decide the Linux backend.
+1. ✅ **Webview spike** — in-window `flutter_inappwebview` works on Linux (with two patches) and Android: cookie sign-in, live WebSocket, `send()`, input, Flutter drawing on top. [Findings](spikes/webview.md).
 2. **Protocol in Dart + `/api/info`** — schema export, Dart codegen, up-to-date check.
 3. **App shell + servers** — theme, server list in secure storage, pairing (QR on Android, code on desktop), a connection per server, switcher.
 4. **Chat** — session tree (workers nested), chat (markdown, collapsed tool/thinking rows, streaming), composer, cancel, approval sheet.
@@ -89,5 +89,5 @@ The work PC runs `composer serve` inside WSL2, so the server stays Linux-only; o
 
 ## Open questions
 
-- Linux webview backend: decided by milestone 1.
+- Report the two Linux plugin fixes upstream (they'd let us drop the vendored copy).
 - Release signing: Android keystore now; Windows code signing (and MSIX) only if SmartScreen warnings bother you.
