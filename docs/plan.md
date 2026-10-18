@@ -305,8 +305,8 @@ Attaching to a worker **replaces** the main chat; the title shows a breadcrumb (
 
 ## Milestones
 
-1. **core + protocol** — Cargo workspace; site model, URL resolution, link + frontmatter parsing, in-memory index; shared message types.
-2. **server** — provider, agent loop, page tools, sessions, WS API.
+1. ✅ **core + protocol** — Cargo workspace; site model, URL resolution, link + frontmatter parsing, in-memory index; shared message types.
+2. ✅ **server** — provider, agent loop, page tools (`open`, `search`, `list_sites`, `write`, `edit`, `set_project`), sessions, WS + HTTP API, token auth, file watcher, `composer init / serve / ask`.
 3. **tui** — chat + page viewer against the server; nvim suspend.
 4. **actions** — justfile listing/running, hashed approvals, TUI prompt.
 5. **memory** — memory site conventions, compaction.

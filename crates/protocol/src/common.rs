@@ -22,6 +22,9 @@ pub struct SessionInfo {
     pub state: TurnState,
     /// Last seq written to the transcript.
     pub last_seq: Seq,
+    /// Prompt tokens of the last model call: the context in use.
+    #[serde(default)]
+    pub context_tokens: u32,
     /// Start of the last message, for session lists.
     pub preview: Option<String>,
     /// RFC 3339.

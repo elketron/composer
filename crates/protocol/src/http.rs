@@ -60,6 +60,8 @@ pub struct SearchHit {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct AppMessage {
+    /// The app's site, shown as the message source.
+    pub site: Option<String>,
     pub text: String,
     #[serde(default)]
     pub pages: Vec<Url>,
