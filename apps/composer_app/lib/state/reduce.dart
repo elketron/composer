@@ -2,6 +2,8 @@ import 'package:composer_protocol/composer_protocol.dart';
 
 import 'actions.dart';
 import 'app_state.dart';
+import 'chat_events.dart';
+import 'chat_state.dart';
 import 'effects.dart';
 import 'server_entry.dart';
 import 'server_status.dart';
@@ -34,12 +36,25 @@ import 'types.dart';
       PairSucceeded(:final server, :final info) => _paired(s, server.withName(info.name), info),
       ServerRemoved(:final url) => _removed(s, url),
       ReconnectRequested(:final url) => (s, [Reconnect(url)]),
-      LinkChanged(:final url, :final link, :final error, :final retryAt) => (
-          _updateStatus(s, url, (x) => x.copyWith(link: link, error: error, retryAt: retryAt)),
-          const [],
-        ),
+      LinkChanged(:final url, :final link, :final error, :final retryAt) => _link(s, url, link, error, retryAt),
       InfoReceived(:final url, :final info) => _info(s, url, info),
       ServerEvent(:final url, :final message) => (_event(s, url, message), const []),
+      SessionOpened(:final url, :final session) => _open(s, url, session),
+      SessionClosed(:final url) => _close(s, url),
+      NewSessionRequested(:final url, :final agent) => (s, [CreateSession(url, agent)]),
+      MessageSubmitted(:final url, :final text) => _toChat(s, url, (session) => ClientCommandMessageSend(session: session, text: text)),
+      CancelRequested(:final url) => _toChat(s, url, (session) => ClientCommandTurnCancel(session: session)),
+      ApprovalAnswered(:final url, :final request, :final approve) => (
+          _updateStatus(s, url, (x) => x.copyWith(approvals: [for (final a in x.approvals) if (a.request != request) a])),
+          [
+            SendCommand(
+              url,
+              ClientCommandApprovalRespond(request: request, decision: approve ? ApprovalDecision.approve : ApprovalDecision.deny),
+            ),
+          ],
+        ),
+      CommandFailed(:final message) => (s.copyWith(notice: Notice((s.notice?.id ?? 0) + 1, message)), const []),
+      NoticeShown(:final text) => (s.copyWith(notice: Notice((s.notice?.id ?? 0) + 1, text)), const []),
     };
 
 /// Pairing again with a known server replaces its token.
@@ -75,6 +90,46 @@ import 'types.dart';
   return (next.copyWith(servers: servers), [SaveServers(servers)]);
 }
 
+/// Coming online: the server re-sends open approvals, and the open chat catches up from its last seq.
+(AppState, List<AppEffect>) _link(AppState s, String url, LinkState link, String? error, DateTime? retryAt) {
+  final online = link == LinkState.online;
+  final next = _updateStatus(
+    s,
+    url,
+    (x) => x.copyWith(link: link, error: error, retryAt: retryAt, approvals: online ? const [] : null),
+  );
+  final chat = next.status[url]?.chat;
+  if (!online || chat == null) return (next, const []);
+  return (next, [SendCommand(url, ClientCommandSessionAttach(session: chat.session, since: chat.lastSeq))]);
+}
+
+(AppState, List<AppEffect>) _open(AppState s, String url, String session) {
+  final current = s.status[url]?.chat;
+  if (current?.session == session) return (s, const []);
+  return (
+    _updateStatus(s, url, (x) => x.copyWith(chat: ChatState(session: session))),
+    [
+      if (current != null) SendCommand(url, ClientCommandSessionDetach(session: current.session)),
+      SendCommand(url, ClientCommandSessionAttach(session: session)),
+    ],
+  );
+}
+
+(AppState, List<AppEffect>) _close(AppState s, String url) {
+  final current = s.status[url]?.chat;
+  if (current == null) return (s, const []);
+  return (
+    _updateStatus(s, url, (x) => x.copyWith(chat: null)),
+    [SendCommand(url, ClientCommandSessionDetach(session: current.session))],
+  );
+}
+
+/// A command for the open session.
+(AppState, List<AppEffect>) _toChat(AppState s, String url, ClientCommand Function(String session) command) {
+  final chat = s.status[url]?.chat;
+  return chat == null ? (s, const []) : (s, [SendCommand(url, command(chat.session))]);
+}
+
 AppState _event(AppState s, String url, ServerMessage message) => switch (message) {
       ServerMessageOk(result: CommandResultSessions(:final sessions)) =>
         _updateStatus(s, url, (x) => x.copyWith(sessions: _newestFirst(sessions))),
@@ -83,6 +138,19 @@ AppState _event(AppState s, String url, ServerMessage message) => switch (messag
           url,
           (x) => x.copyWith(sessions: _newestFirst([session, for (final y in x.sessions) if (y.id != session.id) y])),
         ),
+      ServerMessageApprovalRequest(:final request) => _updateStatus(
+          s,
+          url,
+          (x) => x.approvals.any((a) => a.request == request) ? x : x.copyWith(approvals: [...x.approvals, message]),
+        ),
+      ServerMessageApprovalResolved(:final request) =>
+        _updateStatus(s, url, (x) => x.copyWith(approvals: [for (final a in x.approvals) if (a.request != request) a])),
+      _ when sessionEvent(message) != null => _updateStatus(s, url, (x) {
+          final chat = x.chat;
+          if (chat == null) return x;
+          final next = applyChatEvent(chat, message);
+          return identical(next, chat) ? x : x.copyWith(chat: next);
+        }),
       _ => s,
     };
 

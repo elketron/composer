@@ -8,7 +8,8 @@ import '../theme/composer_theme.dart';
 import '../theme/tokens.dart' as t;
 import 'format.dart';
 import 'info_badge.dart';
-import 'session_row.dart';
+import 'chat/navigation.dart';
+import 'chat/session_tree.dart';
 import 'status_dot.dart';
 import 'store_scope.dart';
 
@@ -63,12 +64,18 @@ class ServerPage extends StatelessWidget {
         ]),
       ],
       const SizedBox(height: 28),
-      Text('SESSIONS', style: mono(size: 11, color: t.faint, weight: FontWeight.w600)),
-      const SizedBox(height: 8),
-      if (status.sessions.isEmpty)
-        Text(status.link == LinkState.online ? 'No sessions yet.' : '—', style: const TextStyle(color: t.faint))
-      else
-        for (final session in status.sessions) SessionRow(session),
+      Row(children: [
+        Text('SESSIONS', style: mono(size: 11, color: t.faint, weight: FontWeight.w600)),
+        const Spacer(),
+        TextButton.icon(
+          key: const Key('new-session-page'),
+          onPressed: status.link == LinkState.online ? () => newSession(context, server.url) : null,
+          icon: const Icon(Icons.add, size: 16),
+          label: const Text('New session'),
+        ),
+      ]),
+      const SizedBox(height: 4),
+      SessionTree(url: server.url, status: status, shrinkWrap: true),
     ]);
   }
 

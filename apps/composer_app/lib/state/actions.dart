@@ -82,3 +82,53 @@ final class ServerEvent extends AppAction {
   final String url;
   final ServerMessage message;
 }
+
+/// Open a session's chat (attach).
+final class SessionOpened extends AppAction {
+  const SessionOpened(this.url, this.session);
+  final String url;
+  final String session;
+}
+
+/// Leave the chat (detach).
+final class SessionClosed extends AppAction {
+  const SessionClosed(this.url);
+  final String url;
+}
+
+final class NewSessionRequested extends AppAction {
+  const NewSessionRequested(this.url, {this.agent = 'default'});
+  final String url;
+  final String agent;
+}
+
+final class MessageSubmitted extends AppAction {
+  const MessageSubmitted(this.url, this.text);
+  final String url;
+  final String text;
+}
+
+final class CancelRequested extends AppAction {
+  const CancelRequested(this.url);
+  final String url;
+}
+
+final class ApprovalAnswered extends AppAction {
+  const ApprovalAnswered(this.url, this.request, {required this.approve});
+  final String url;
+  final String request;
+  final bool approve;
+}
+
+/// A command the server refused, or that couldn't be sent.
+final class CommandFailed extends AppAction {
+  const CommandFailed(this.url, this.message);
+  final String url;
+  final String message;
+}
+
+/// Tell the user something (a snackbar).
+final class NoticeShown extends AppAction {
+  const NoticeShown(this.text);
+  final String text;
+}

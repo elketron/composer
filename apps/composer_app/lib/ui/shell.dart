@@ -3,7 +3,11 @@ import 'package:flutter/services.dart';
 
 import '../state/actions.dart';
 import '../theme/tokens.dart' as t;
+import 'approval_bar.dart';
+import 'chat/chat_view.dart';
+import 'rail.dart';
 import 'server_list.dart';
+import 'server_list_footer.dart';
 import 'server_page.dart';
 import 'status_dot.dart';
 import 'store_scope.dart';
@@ -25,6 +29,7 @@ class Shell extends StatelessWidget {
     if (server == null) return const WelcomePage();
     final status = state.statusOf(server.url);
     final page = ServerPage(key: ValueKey(server.url), server: server, status: status);
+    final chat = status.chat;
 
     return CallbackShortcuts(
       bindings: {
@@ -38,12 +43,23 @@ class Shell extends StatelessWidget {
           if (constraints.maxWidth >= wide) {
             return Scaffold(
               body: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                Container(
-                  width: 248,
-                  decoration: const BoxDecoration(color: t.surface, border: Border(right: BorderSide(color: t.border))),
-                  child: const ServerList(),
+                const Rail(),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                    const ApprovalBar(),
+                    Expanded(
+                      child: chat == null
+                          ? page
+                          : ChatView(
+                              key: ValueKey('${server.url} ${chat.session}'),
+                              url: server.url,
+                              status: status,
+                              chat: chat,
+                              onClose: () => store.dispatch(SessionClosed(server.url)),
+                            ),
+                    ),
+                  ]),
                 ),
-                Expanded(child: page),
               ]),
             );
           }
@@ -64,7 +80,10 @@ class Shell extends StatelessWidget {
               ),
               bottom: const PreferredSize(preferredSize: Size.fromHeight(1), child: Divider()),
             ),
-            body: page,
+            body: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              const ApprovalBar(),
+              Expanded(child: page),
+            ]),
           );
         }),
       ),
@@ -77,7 +96,10 @@ class Shell extends StatelessWidget {
         builder: (sheet) => SafeArea(
           child: SizedBox(
             height: MediaQuery.sizeOf(context).height * 0.5,
-            child: ServerList(onSelected: () => Navigator.pop(sheet)),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Expanded(child: SingleChildScrollView(child: ServerList(onSelected: () => Navigator.pop(sheet)))),
+              const ServerListFooter(),
+            ]),
           ),
         ),
       );

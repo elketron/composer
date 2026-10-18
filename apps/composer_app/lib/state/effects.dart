@@ -1,5 +1,7 @@
 // IO the reducer asks for; run by EffectRunner.
 
+import 'package:composer_protocol/composer_protocol.dart';
+
 import 'server_entry.dart';
 
 sealed class AppEffect {
@@ -37,4 +39,18 @@ final class Disconnect extends AppEffect {
 final class Reconnect extends AppEffect {
   const Reconnect(this.url);
   final String url;
+}
+
+/// Send a command; a failure comes back as `CommandFailed`.
+final class SendCommand extends AppEffect {
+  const SendCommand(this.url, this.command);
+  final String url;
+  final ClientCommand command;
+}
+
+/// `session.create`, then open it.
+final class CreateSession extends AppEffect {
+  const CreateSession(this.url, this.agent);
+  final String url;
+  final String agent;
 }

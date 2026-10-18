@@ -1,5 +1,6 @@
 import 'package:composer_app/state/actions.dart';
 import 'package:composer_app/state/app_state.dart';
+import 'package:composer_app/state/chat_items.dart';
 import 'package:composer_app/state/effects.dart';
 import 'package:composer_app/state/reduce.dart';
 import 'package:composer_app/state/server_entry.dart';
@@ -97,5 +98,71 @@ void main() {
     final state = loaded([home, work]);
     expect(reduce(state, ServerSelected(work.url)).$1.active, work.url);
     expect(reduce(state, const ServerSelected('https://nope')).$1.active, home.url);
+  });
+
+  group('chat', () {
+    ServerMessageApprovalRequest approval(String id) => ServerMessageApprovalRequest(
+          request: id, session: 'a', site: 's', recipe: 'r', args: const [], body: 'b', hash: 'h');
+
+    test('opening a session attaches it, switching detaches the old one, closing detaches', () {
+      var (state, effects) = reduce(loaded([home]), SessionOpened(home.url, 'a'));
+      expect(state.statusOf(home.url).chat!.session, 'a');
+      expect(effects.cast<SendCommand>().map((e) => e.command.runtimeType), [ClientCommandSessionAttach]);
+
+      (state, effects) = reduce(state, SessionOpened(home.url, 'b'));
+      final commands = effects.cast<SendCommand>().map((e) => e.command).toList();
+      expect((commands[0] as ClientCommandSessionDetach).session, 'a');
+      expect((commands[1] as ClientCommandSessionAttach).session, 'b');
+
+      (state, effects) = reduce(state, SessionClosed(home.url));
+      expect(state.statusOf(home.url).chat, isNull);
+      expect((effects.single as SendCommand).command, isA<ClientCommandSessionDetach>());
+    });
+
+    test('events fill the open chat; reconnecting re-attaches from the last seq', () {
+      var state = reduce(loaded([home]), SessionOpened(home.url, 'a')).$1;
+      state = reduce(
+        state,
+        ServerEvent(home.url, ServerMessageMessageDone(session: 'a', seq: 7, message: const ChatMessage(role: Role.user, content: 'hi'))),
+      ).$1;
+      expect(state.statusOf(home.url).chat!.items.single, isA<UserItem>());
+
+      final (_, effects) = reduce(state, LinkChanged(home.url, LinkState.online));
+      final attach = (effects.single as SendCommand).command as ClientCommandSessionAttach;
+      expect(attach.since, 7);
+    });
+
+    test('messages and cancel go to the open session only', () {
+      expect(reduce(loaded([home]), MessageSubmitted(home.url, 'x')).$2, isEmpty);
+      final state = reduce(loaded([home]), SessionOpened(home.url, 'a')).$1;
+      final send = (reduce(state, MessageSubmitted(home.url, 'x')).$2.single as SendCommand).command as ClientCommandMessageSend;
+      expect((send.session, send.text), ('a', 'x'));
+      expect((reduce(state, CancelRequested(home.url)).$2.single as SendCommand).command, isA<ClientCommandTurnCancel>());
+    });
+
+    test('approvals: collected once, removed when answered or resolved, refreshed on reconnect', () {
+      var state = loaded([home]);
+      state = reduce(state, ServerEvent(home.url, approval('r1'))).$1;
+      state = reduce(state, ServerEvent(home.url, approval('r1'))).$1;
+      state = reduce(state, ServerEvent(home.url, approval('r2'))).$1;
+      expect(state.statusOf(home.url).approvals.map((a) => a.request), ['r1', 'r2']);
+
+      final (answered, effects) = reduce(state, ApprovalAnswered(home.url, 'r1', approve: true));
+      expect(answered.statusOf(home.url).approvals.map((a) => a.request), ['r2']);
+      final respond = (effects.single as SendCommand).command as ClientCommandApprovalRespond;
+      expect(respond.decision, ApprovalDecision.approve);
+
+      state = reduce(answered, ServerEvent(home.url, const ServerMessageApprovalResolved(request: 'r2', session: 'a', approved: false))).$1;
+      expect(state.statusOf(home.url).approvals, isEmpty);
+
+      state = reduce(state, ServerEvent(home.url, approval('r3'))).$1;
+      expect(reduce(state, LinkChanged(home.url, LinkState.online)).$1.statusOf(home.url).approvals, isEmpty);
+    });
+
+    test('failed commands become notices', () {
+      final state = reduce(loaded([home]), CommandFailed(home.url, 'no such session')).$1;
+      expect(state.notice!.text, 'no such session');
+      expect(reduce(state, const NoticeShown('x')).$1.notice!.id, state.notice!.id + 1);
+    });
   });
 }

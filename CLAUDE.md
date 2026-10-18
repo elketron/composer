@@ -45,7 +45,8 @@ Snapshots always force a draw, so they can't catch a missing repaint: for that, 
   plus `AppEffect`s, `EffectRunner` does the IO. Same file rule: a class with behaviour (widgets
   included) gets its own file; plain data types share `types.dart` / `actions.dart` / `effects.dart`.
 - `flutter analyze` and `flutter test` (reducer, parsing). End to end: `integration_test/pairing_test.dart`
-  pairs through the UI with a real server (see its header); run it inside headless Weston
+  pairs through the UI with a real server, and `chat_test.dart` runs a whole turn with a recipe approval
+  (see their headers); run them inside headless Weston
   (`weston --backend=headless --renderer=gl --debug`, `WAYLAND_DISPLAY`, `GDK_BACKEND=wayland`).
 - `COMPOSER_APP_DATA=<dir>` keeps the server list in that directory (tests, a second instance).
 - `flutter test integration_test` leaves the *test* in `build/linux/.../bundle`; run `flutter build linux`

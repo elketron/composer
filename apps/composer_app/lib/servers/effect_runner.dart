@@ -1,3 +1,5 @@
+import 'package:composer_protocol/composer_protocol.dart';
+
 import '../state/actions.dart';
 import '../state/effects.dart';
 import '../state/server_entry.dart';
@@ -28,11 +30,32 @@ class EffectRunner {
         _connections.remove(url)?.close();
       case Reconnect(:final url):
         _connections[url]?.retryNow();
+      case SendCommand(:final url, :final command):
+        _request(url, command, dispatch);
+      case CreateSession(:final url, :final agent):
+        _request(url, ClientCommandSessionCreate(agent: agent), dispatch).then((result) {
+          if (result is CommandResultSession) dispatch(SessionOpened(url, result.session.id));
+        });
     }
   }
 
   /// The connection to a server, for sending commands.
   ServerConnection? connection(String url) => _connections[url];
+
+  /// Null when it failed (reported as `CommandFailed`).
+  Future<CommandResult?> _request(String url, ClientCommand command, void Function(AppAction) dispatch) async {
+    final connection = _connections[url];
+    if (connection == null) {
+      dispatch(CommandFailed(url, 'not connected'));
+      return null;
+    }
+    try {
+      return await connection.request(command);
+    } catch (error) {
+      dispatch(CommandFailed(url, describeError(error)));
+      return null;
+    }
+  }
 
   Future<void> _load(void Function(AppAction) dispatch) async {
     final store = await _servers;

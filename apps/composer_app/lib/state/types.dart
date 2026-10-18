@@ -12,6 +12,13 @@ enum StorageKind {
   file,
 }
 
+/// A short message for a snackbar; `id` tells repeats apart.
+class Notice {
+  const Notice(this.id, this.text);
+  final int id;
+  final String text;
+}
+
 /// Adding a server.
 class PairingState {
   const PairingState({this.busy = false, this.error});

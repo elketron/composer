@@ -26,6 +26,9 @@ class ServerConnection {
   int _nextId = 1;
   bool _closed = false;
 
+  /// Commands waiting for their `ok` / `error`.
+  final Map<int, Completer<CommandResult>> _pending = {};
+
   void start() => _connect();
 
   /// Retry now (a button, or the app coming back to the foreground).
@@ -36,15 +39,25 @@ class ServerConnection {
     _connect();
   }
 
-  /// Sends a command; returns its request id (the reply is a `ServerEvent` with `ok`/`error`).
+  /// Sends a command without waiting for the reply (it still arrives as a `ServerEvent`).
   int send(ClientCommand command) {
     final id = _nextId++;
     _channel?.sink.add(jsonEncode(ClientRequest(id: id, command: command).toJson()));
     return id;
   }
 
+  /// Sends a command and completes with its result; fails with a [ServerError] on an `error`
+  /// reply, or when offline or the connection drops first.
+  Future<CommandResult> request(ClientCommand command) {
+    if (_channel == null) return Future.error(const ServerError('offline'));
+    final completer = Completer<CommandResult>();
+    _pending[send(command)] = completer;
+    return completer.future;
+  }
+
   void close() {
     _closed = true;
+    _failPending('disconnected');
     _retry?.cancel();
     _subscription?.cancel();
     _channel?.sink.close();
@@ -82,10 +95,27 @@ class ServerConnection {
   void _receive(dynamic data) {
     if (data is! String) return;
     final json = jsonDecode(data);
-    if (json is Map<String, Object?>) _dispatch(ServerEvent(server.url, ServerMessage.fromJson(json)));
+    if (json is! Map<String, Object?>) return;
+    final message = ServerMessage.fromJson(json);
+    switch (message) {
+      case ServerMessageOk(:final id, :final result):
+        _pending.remove(id)?.complete(result);
+      case ServerMessageError(:final id?, :final message):
+        _pending.remove(id)?.completeError(ServerError(message));
+      default:
+    }
+    _dispatch(ServerEvent(server.url, message));
+  }
+
+  void _failPending(String reason) {
+    for (final completer in _pending.values) {
+      completer.completeError(ServerError(reason));
+    }
+    _pending.clear();
   }
 
   void _lost() {
+    _failPending('connection lost');
     _subscription?.cancel();
     _subscription = null;
     _channel = null;

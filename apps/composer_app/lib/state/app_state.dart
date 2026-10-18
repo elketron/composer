@@ -12,6 +12,7 @@ class AppState {
     this.status = const {},
     this.active,
     this.pairing = const PairingState(),
+    this.notice,
   });
 
   static const initial = AppState();
@@ -31,6 +32,9 @@ class AppState {
 
   final PairingState pairing;
 
+  /// The latest thing to tell you (a failed command).
+  final Notice? notice;
+
   ServerEntry? get activeServer => servers.where((s) => s.url == active).firstOrNull;
 
   ServerStatus statusOf(String url) => status[url] ?? ServerStatus.initial;
@@ -42,6 +46,7 @@ class AppState {
     Map<String, ServerStatus>? status,
     Object? active = _keep,
     PairingState? pairing,
+    Notice? notice,
   }) =>
       AppState(
         loaded: loaded ?? this.loaded,
@@ -50,5 +55,6 @@ class AppState {
         status: status ?? this.status,
         active: identical(active, _keep) ? this.active : active as String?,
         pairing: pairing ?? this.pairing,
+        notice: notice ?? this.notice,
       );
 }
