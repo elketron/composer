@@ -1,6 +1,6 @@
 # composer — plan
 
-Status: draft, iterating. See [idea.md](idea.md) for the original idea.
+Status: phase 1 done (all milestones below). Phase 2, the Flutter desktop/mobile app: [plan-app.md](plan-app.md). The original idea: [idea.md](idea.md).
 
 ## Concept
 
