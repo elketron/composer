@@ -2,15 +2,15 @@
 
 use std::sync::Arc;
 
-use base64::Engine;
-use composer_core::SiteUrl;
 use composer_protocol::{ChatMessage, MessageSource, Role, ServerMessage, ToolCall, TurnState};
 use tokio_util::sync::CancellationToken;
 
 use crate::agent::{AgentDefinition, system_prompt};
-use crate::provider::{ModelEvent, ModelMessage, ModelRequest, ModelToolCall};
+use crate::provider::{ModelMessage, ModelRequest, ModelToolCall};
 use crate::server::Server;
 use crate::session::Session;
+use crate::session::compaction::compact;
+use crate::session::model_call::{model_step, parse_args, prepare_history, tool_step};
 use crate::tools::ToolContext;
 
 /// Delivers a user-side message. Starts a turn, or queues it behind the running one.
@@ -95,12 +95,12 @@ fn accept_user_message(server: &Arc<Server>, session: &Arc<Session>, message: Ch
 }
 
 /// Model call → tools → model call ... until the model answers without tool calls.
+/// Before each call, a context over the threshold is compacted first.
 async fn run_turn(
     server: &Arc<Server>,
     session: &Arc<Session>,
     cancel: &CancellationToken,
 ) -> Result<(), String> {
-    let id = session.id().to_string();
     let agent = Arc::new(
         AgentDefinition::load(&server.workspace, &session.info().agent)
             .map_err(|e| e.to_string())?,
@@ -114,93 +114,47 @@ async fn run_turn(
     };
 
     for _ in 0..server.config.agent.max_steps {
-        if server.slots.is_full() {
-            session.update_info(&server.hub, |info| info.state = TurnState::Waiting);
+        if session.info().context_tokens >= server.config.agent.compaction_threshold {
+            compact(server, session, cancel, true).await?;
         }
-        let slot = tokio::select! {
-            slot = server.slots.acquire() => slot,
-            _ = cancel.cancelled() => return Ok(()),
-        };
-        session.update_info(&server.hub, |info| info.state = TurnState::Running);
-
         // The prompt is rebuilt every step: memory or the active project may have changed.
         let mut messages = vec![ModelMessage::System {
-            content: system_prompt(&agent, &server.workspace, &session.info()),
+            content: system_prompt(
+                &agent,
+                &server.workspace,
+                &server.index.read().expect("index lock"),
+                &session.info(),
+            ),
         }];
         messages.extend(prepare_history(server, session.history()));
-        let mut stream = server
-            .provider
-            .stream(ModelRequest {
+        let step = model_step(
+            server,
+            session,
+            ModelRequest {
                 messages,
                 tools: tools.clone(),
-            })
-            .await?;
-
-        let mut content = String::new();
-        let mut thinking = String::new();
-        let finished = loop {
-            let event = tokio::select! {
-                event = stream.recv() => event,
-                _ = cancel.cancelled() => break None,
-            };
-            match event {
-                Some(Ok(ModelEvent::Thinking(text))) => {
-                    thinking.push_str(&text);
-                    session.emit(&server.hub, |seq| ServerMessage::ThinkingDelta {
-                        session: id.clone(),
-                        seq,
-                        text,
-                    });
-                }
-                Some(Ok(ModelEvent::Content(text))) => {
-                    content.push_str(&text);
-                    session.emit(&server.hub, |seq| ServerMessage::MessageDelta {
-                        session: id.clone(),
-                        seq,
-                        text,
-                    });
-                }
-                Some(Ok(ModelEvent::Finished {
-                    tool_calls, usage, ..
-                })) => break Some((tool_calls, usage)),
-                Some(Err(e)) => return Err(e),
-                None => return Err("model stream ended unexpectedly".into()),
-            }
-        };
-        drop(stream);
-        drop(slot);
-
-        let (tool_calls, usage) = finished.unwrap_or_default();
-        if let Some(usage) = usage {
+            },
+            cancel,
+            true,
+        )
+        .await?;
+        if let Some(usage) = step.usage {
             session.update_info(&server.hub, |info| {
                 info.context_tokens = usage.prompt_tokens + usage.completion_tokens
             });
         }
-        record_assistant(server, session, content, thinking, &tool_calls)?;
-        if cancel.is_cancelled() || tool_calls.is_empty() {
+        record_assistant(
+            server,
+            session,
+            step.content,
+            step.thinking,
+            &step.tool_calls,
+        )?;
+        if step.cancelled || cancel.is_cancelled() || step.tool_calls.is_empty() {
             return Ok(());
         }
-
-        for call in &tool_calls {
-            let (result, is_error) = if cancel.is_cancelled() {
-                ("cancelled by the user".to_string(), true)
-            } else {
-                session.emit(&server.hub, |seq| ServerMessage::ToolCallStarted {
-                    session: id.clone(),
-                    seq,
-                    call_id: call.id.clone(),
-                    name: call.name.clone(),
-                    args: parse_args(&call.arguments),
-                });
-                server.tools.call(&context, call).await
-            };
-            session.emit(&server.hub, |seq| ServerMessage::ToolResult {
-                session: id.clone(),
-                seq,
-                call_id: call.id.clone(),
-                result: result.clone(),
-                is_error,
-            });
+        for call in &step.tool_calls {
+            let (result, _) = tool_step(server, &context, call).await;
             session
                 .push_history(ModelMessage::Tool {
                     call_id: call.id.clone(),
@@ -213,6 +167,37 @@ async fn run_turn(
         "reached the limit of {} model calls in one turn",
         server.config.agent.max_steps
     ))
+}
+
+/// Compacts an idle session now (`:compact`). Errors if a turn is running.
+pub fn compact_now(server: &Arc<Server>, session: &Arc<Session>) -> Result<(), String> {
+    if !session.try_start() {
+        return Err("a turn is running; compact when it is done".into());
+    }
+    let (server, session) = (server.clone(), session.clone());
+    tokio::spawn(async move {
+        let cancel = session.new_turn_token();
+        let id = session.id().to_string();
+        let text = match compact(&server, &session, &cancel, false).await {
+            Ok(0) => Some("Nothing to compact yet.".to_string()),
+            Ok(_) => None,
+            Err(error) => Some(format!("Compaction failed: {error}")),
+        };
+        if let Some(text) = text {
+            let message = system_message(text);
+            session.emit(&server.hub, |seq| ServerMessage::MessageDone {
+                session: id,
+                seq,
+                message,
+            });
+        }
+        session.update_info(&server.hub, |info| info.state = TurnState::Idle);
+        // Messages that arrived meanwhile start their turn now.
+        if session.stop_running() {
+            tokio::spawn(drive(server, session));
+        }
+    });
+    Ok(())
 }
 
 fn record_assistant(
@@ -255,49 +240,6 @@ fn record_assistant(
         message,
     });
     Ok(())
-}
-
-/// Drops thinking from earlier turns (only the current turn keeps it) and
-/// replaces image site URLs with data URLs.
-fn prepare_history(server: &Server, mut history: Vec<ModelMessage>) -> Vec<ModelMessage> {
-    let current_turn = history
-        .iter()
-        .rposition(|m| matches!(m, ModelMessage::User { .. }))
-        .unwrap_or(0);
-    for (i, message) in history.iter_mut().enumerate() {
-        match message {
-            ModelMessage::Assistant { thinking, .. } if i < current_turn => *thinking = None,
-            ModelMessage::User { images, .. } => {
-                *images = images
-                    .iter()
-                    .filter_map(|url| data_url(server, url))
-                    .collect();
-            }
-            _ => {}
-        }
-    }
-    history
-}
-
-fn data_url(server: &Server, url: &str) -> Option<String> {
-    let path = server.workspace.locate(&SiteUrl::parse(url).ok()?).ok()?;
-    let mime = match path.extension()?.to_str()?.to_ascii_lowercase().as_str() {
-        "png" => "image/png",
-        "jpg" | "jpeg" => "image/jpeg",
-        "gif" => "image/gif",
-        "webp" => "image/webp",
-        _ => return None,
-    };
-    let bytes = std::fs::read(&path).ok()?;
-    Some(format!(
-        "data:{mime};base64,{}",
-        base64::engine::general_purpose::STANDARD.encode(bytes)
-    ))
-}
-
-fn parse_args(arguments: &str) -> serde_json::Value {
-    serde_json::from_str(arguments)
-        .unwrap_or_else(|_| serde_json::Value::String(arguments.to_string()))
 }
 
 fn system_message(content: String) -> ChatMessage {

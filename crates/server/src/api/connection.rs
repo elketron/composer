@@ -11,7 +11,7 @@ use crate::agent::AgentDefinition;
 use crate::api::event_scope::{EventScope, scope};
 use crate::api::glob::url_matches;
 use crate::server::Server;
-use crate::session::submit;
+use crate::session::{compact_now, submit};
 use crate::tools::resolve_project;
 
 /// One client's WebSocket: what it attached to and subscribed to.
@@ -133,6 +133,11 @@ impl Connection {
                     source: Some(MessageSource::Tui),
                 };
                 submit(server, &s, message);
+                Ok(CommandResult::Done)
+            }
+            ClientCommand::SessionCompact { session } => {
+                let s = server.sessions.get(&session).map_err(|e| e.to_string())?;
+                compact_now(server, &s)?;
                 Ok(CommandResult::Done)
             }
             ClientCommand::TurnCancel { session } => {

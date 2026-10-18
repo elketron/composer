@@ -94,6 +94,16 @@ impl AppState {
                 }
                 _ => vec![],
             },
+            Action::Compact => match self.session.current.clone() {
+                Some(session) => {
+                    self.ui.flash(
+                        "compacting: saving memory, then summarizing",
+                        FlashLevel::Info,
+                    );
+                    self.send(ClientCommand::SessionCompact { session }, Pending::Ignore)
+                }
+                None => vec![],
+            },
             Action::NewSession { agent } => {
                 let agent = agent.unwrap_or_else(|| self.default_agent.clone());
                 let project = self.session.current_info().and_then(|s| s.project.clone());

@@ -103,6 +103,32 @@ pub fn chat_lines(state: &AppState, width: u16) -> Vec<Line<'static>> {
                     }
                 }
             }
+            ChatItem::Compacted { summary, messages } => {
+                let marker = if state.ui.show_tool_details {
+                    "▾ "
+                } else {
+                    "▸ "
+                };
+                let mut lines = vec![Line::from(vec![
+                    Span::styled(marker, theme::faint()),
+                    Span::styled("compacted", Style::new().fg(theme::WARN)),
+                    Span::styled(
+                        format!(" · {messages} messages summarized · memory saved first"),
+                        theme::faint(),
+                    ),
+                ])];
+                if state.ui.show_tool_details {
+                    for line in
+                        markdown::render(summary, inner.saturating_sub(2), None, theme::muted())
+                            .lines
+                    {
+                        let mut spans = vec![Span::styled("│ ", theme::faint())];
+                        spans.extend(line.spans);
+                        lines.push(Line::from(spans));
+                    }
+                }
+                blocks.push((Speaker::System, lines));
+            }
             ChatItem::System { text } => {
                 blocks.push((
                     Speaker::System,

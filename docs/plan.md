@@ -128,9 +128,11 @@ Each site's `index.md` explains its purpose and conventions; the agent opens it 
 
 - `site://memory` is a normal site; the agent writes to it any time during a session.
 - Suggested structure: `memory/index.md`, `memory/projects/<name>.md`, `memory/topics/...`, with `type: memory` frontmatter.
-- **Compaction** when context nears the model limit:
-  1. Run a compaction turn: the agent writes durable facts to memory pages.
-  2. Older messages are replaced by a summary (kept in the session transcript too).
+- The system prompt lists every memory page (title, URL, kind), so the agent knows what it knows without searching.
+- **Compaction** when the context reaches `agent.compaction_threshold` (checked before each model call), or on demand with `:compact`:
+  1. **Memory pass:** the model gets the old conversation, an instruction to save what's worth keeping, and only `open`/`search`/`write`/`edit`. Its tool calls show in the chat; nothing of it enters the history.
+  2. **Summary:** a tool-less call summarizes goals, decisions, state, open threads and URLs.
+  3. **Replace:** everything before the turn in progress becomes `[summary] + ack`; the turn in progress is kept. The old `history.jsonl` is archived, never deleted. A `session.compacted` event shows as a `▸ compacted` row (`T` shows the summary).
 
 ### Sub-agents / orchestration
 
@@ -312,7 +314,7 @@ Attaching to a worker **replaces** the main chat; the title shows a breadcrumb (
 2. ✅ **server** — provider, agent loop, page tools (`open`, `search`, `list_sites`, `write`, `edit`, `set_project`), sessions, WS + HTTP API, token auth, file watcher, `composer init / serve / ask`.
 3. ✅ **tui** — chat + page viewer against the server, pickers, hints, `:` commands, nvim round trip, headless script mode for testing.
 4. ✅ **actions** — `actions` / `run` tools, approvals per recipe version (recipe + dependencies + variables/settings hashed), approval popup, seed recipes pre-approved by `init`.
-5. **memory** — memory site conventions, compaction.
+5. ✅ **memory** — compaction (memory pass → summary → history replaced, old history archived), `:compact`, memory page list and agent identity in the prompt.
 6. **micro apps** — static serving, sdk, template, `new_app`, push messages; first app (ticket board or mockup tool).
 7. **orchestration** — tickets, worker mode, `spawn_worker`, worker view in TUI.
 8. **workflow views** — changes view for the active project.

@@ -1,14 +1,18 @@
 use std::path::Path;
 
-use composer_core::{SiteUrl, Workspace};
+use composer_core::{Index, SiteUrl, Workspace};
 use composer_protocol::SessionInfo;
 
 use crate::agent::AgentDefinition;
+
+/// Memory pages listed in the prompt, at most.
+const MEMORY_LIST_MAX: usize = 60;
 
 /// The system prompt: agent body → `site://home` → environment → relevant memory.
 pub fn system_prompt(
     agent: &AgentDefinition,
     workspace: &Workspace,
+    index: &Index,
     session: &SessionInfo,
 ) -> String {
     let mut sections = vec![agent.prompt.clone()];
@@ -18,10 +22,11 @@ pub fn system_prompt(
     }
 
     let mut env = format!(
-        "# Environment\n- date: {}\n- session: {} (agent `{}`)",
-        chrono::Local::now().format("%Y-%m-%d %A"),
-        session.id,
-        agent.name
+        "# Environment\n- you are the `{name}` agent ({url}); pages about other agents describe their roles, not yours\n- date: {date}\n- session: {id}",
+        name = agent.name,
+        url = agent.url,
+        date = chrono::Local::now().format("%Y-%m-%d %A"),
+        id = session.id,
     );
     match &session.project {
         Some(project) => env.push_str(&format!(
@@ -50,11 +55,35 @@ pub fn system_prompt(
             None => memory.push(format!("No memory page for this project yet: create `{url}.md` when you learn something worth keeping.")),
         }
     }
+    let pages = memory_pages(index);
+    if !pages.is_empty() {
+        memory.push(format!(
+            "Memory pages (open the ones that matter for the task):\n{pages}"
+        ));
+    }
     if !memory.is_empty() {
         sections.push(format!("# Memory\n\n{}", memory.join("\n\n")));
     }
 
     sections.join("\n\n---\n\n")
+}
+
+/// `- title — url (kind)` for each memory page except the index.
+fn memory_pages(index: &Index) -> String {
+    let mut pages: Vec<String> = index
+        .entries()
+        .filter(|e| e.url.site() == "memory" && !e.url.path().ends_with("index.md"))
+        .map(|e| match e.frontmatter.get_str("kind") {
+            Some(kind) => format!("- {} — {} ({kind})", e.title, e.url),
+            None => format!("- {} — {}", e.title, e.url),
+        })
+        .collect();
+    if pages.len() > MEMORY_LIST_MAX {
+        let more = pages.len() - MEMORY_LIST_MAX;
+        pages.truncate(MEMORY_LIST_MAX);
+        pages.push(format!("- … {more} more: `search site:memory <words>`"));
+    }
+    pages.join("\n")
 }
 
 fn page_body(workspace: &Workspace, url: &str) -> Option<String> {

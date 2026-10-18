@@ -20,6 +20,8 @@ pub enum Action {
     // ---- chat & sessions ----
     SendMessage(String),
     CancelTurn,
+    /// Save memory and summarize older messages now.
+    Compact,
     NewSession {
         agent: Option<String>,
     },

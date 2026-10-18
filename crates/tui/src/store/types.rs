@@ -60,6 +60,11 @@ pub enum ChatItem {
     System {
         text: String,
     },
+    /// Older messages were summarized; `T` shows the summary.
+    Compacted {
+        summary: String,
+        messages: u32,
+    },
 }
 
 /// The assistant message currently streaming in.

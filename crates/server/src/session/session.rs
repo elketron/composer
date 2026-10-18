@@ -98,6 +98,15 @@ impl Session {
             .to_vec()
     }
 
+    pub fn replace_history(&self, messages: Vec<ModelMessage>) -> Result<()> {
+        self.history.lock().expect("history lock").replace(messages)
+    }
+
+    /// Marks the session busy if it is idle (for work outside a turn, like compaction).
+    pub fn try_start(&self) -> bool {
+        !self.running.swap(true, Ordering::SeqCst)
+    }
+
     /// Queues a message. Returns `true` if this caller should start the turn
     /// loop, `false` if one is already running (it will pick the message up).
     pub fn enqueue(&self, message: ChatMessage) -> bool {

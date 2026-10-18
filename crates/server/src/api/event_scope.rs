@@ -23,7 +23,8 @@ pub fn scope(message: &ServerMessage) -> EventScope<'_> {
         | MessageDone { session, seq, .. }
         | ToolCallStarted { session, seq, .. }
         | ToolResult { session, seq, .. }
-        | AgentNavigated { session, seq, .. } => EventScope::Session {
+        | AgentNavigated { session, seq, .. }
+        | SessionCompacted { session, seq, .. } => EventScope::Session {
             id: session,
             seq: Some(*seq),
         },

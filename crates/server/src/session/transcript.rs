@@ -110,7 +110,8 @@ fn seq_of(message: &ServerMessage) -> Option<Seq> {
         | ServerMessage::MessageDone { seq, .. }
         | ServerMessage::ToolCallStarted { seq, .. }
         | ServerMessage::ToolResult { seq, .. }
-        | ServerMessage::AgentNavigated { seq, .. } => Some(*seq),
+        | ServerMessage::AgentNavigated { seq, .. }
+        | ServerMessage::SessionCompacted { seq, .. } => Some(*seq),
         _ => None,
     }
 }

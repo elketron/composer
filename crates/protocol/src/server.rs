@@ -79,6 +79,16 @@ pub enum ServerMessage {
         is_error: bool,
     },
 
+    /// Older messages were replaced by `summary` (after a memory pass).
+    #[serde(rename = "session.compacted")]
+    SessionCompacted {
+        session: SessionId,
+        seq: Seq,
+        summary: String,
+        /// How many history messages the summary replaced.
+        messages: u32,
+    },
+
     /// The agent opened a page; the TUI's viewer follows it.
     #[serde(rename = "agent.navigated")]
     AgentNavigated {

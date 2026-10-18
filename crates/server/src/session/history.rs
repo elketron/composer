@@ -40,6 +40,26 @@ impl History {
         Ok(())
     }
 
+    /// Replaces the whole history (compaction). The old file is kept as
+    /// `history.<timestamp>.jsonl` next to it; nothing is deleted.
+    pub fn replace(&mut self, messages: Vec<ModelMessage>) -> Result<()> {
+        if self.path.exists() {
+            let archive = self.path.with_extension(format!(
+                "{}.jsonl",
+                chrono::Utc::now().format("%Y%m%dT%H%M%S%.3f")
+            ));
+            std::fs::rename(&self.path, &archive).map_err(|e| ServerError::io(&self.path, e))?;
+        }
+        let mut text = String::new();
+        for message in &messages {
+            text.push_str(&serde_json::to_string(message).expect("messages serialize"));
+            text.push('\n');
+        }
+        std::fs::write(&self.path, text).map_err(|e| ServerError::io(&self.path, e))?;
+        self.messages = messages;
+        Ok(())
+    }
+
     pub fn messages(&self) -> &[ModelMessage] {
         &self.messages
     }

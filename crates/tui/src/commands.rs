@@ -27,10 +27,11 @@ pub fn parse_command(line: &str) -> Result<Action, String> {
             })
             .ok_or_else(|| "usage: :open <site://url>".into()),
         "follow" => Ok(Action::ToggleFollow),
+        "compact" => Ok(Action::Compact),
         "back" => Ok(Action::JumpBack),
         "" => Err(String::new()),
         other => Err(format!(
-            "unknown command `{other}` (try :new, :attach, :project, :open, :q)"
+            "unknown command `{other}` (try :new, :attach, :project, :open, :compact, :q)"
         )),
     }
 }

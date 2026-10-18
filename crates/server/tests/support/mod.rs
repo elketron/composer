@@ -26,11 +26,23 @@ pub async fn start(
     Arc<MockProvider>,
     SocketAddr,
 ) {
+    start_with(Config::defaults(), scripts).await
+}
+
+pub async fn start_with(
+    config: Config,
+    scripts: Vec<Vec<ModelEvent>>,
+) -> (
+    tempfile::TempDir,
+    Arc<Server>,
+    Arc<MockProvider>,
+    SocketAddr,
+) {
     let dir = tempfile::tempdir().unwrap();
     let home = Home::new(dir.path());
     init_home(&home).await.unwrap();
     let provider = Arc::new(MockProvider::new(scripts));
-    let server = Server::new(home, Config::defaults(), provider.clone()).unwrap();
+    let server = Server::new(home, config, provider.clone()).unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let serving = server.clone();

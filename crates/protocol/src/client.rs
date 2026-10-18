@@ -45,6 +45,10 @@ pub enum ClientCommand {
         images: Vec<Url>,
     },
 
+    /// Compact the session now: save memory, then summarize older messages.
+    #[serde(rename = "session.compact")]
+    SessionCompact { session: SessionId },
+
     #[serde(rename = "turn.cancel")]
     TurnCancel { session: SessionId },
 

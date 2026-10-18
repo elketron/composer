@@ -60,7 +60,8 @@ impl SessionStore {
             | MessageDone { session, seq, .. }
             | ToolCallStarted { session, seq, .. }
             | ToolResult { session, seq, .. }
-            | AgentNavigated { session, seq, .. } => (session, *seq),
+            | AgentNavigated { session, seq, .. }
+            | SessionCompacted { session, seq, .. } => (session, *seq),
             _ => return false,
         };
         if self.current.as_deref() != Some(session.as_str()) || seq <= self.last_seq {
@@ -141,6 +142,12 @@ impl SessionStore {
                     *e = *is_error;
                 }
             }
+            SessionCompacted {
+                summary, messages, ..
+            } => self.items.push(ChatItem::Compacted {
+                summary: summary.clone(),
+                messages: *messages,
+            }),
             TurnDone {
                 cancelled: true, ..
             } => {

@@ -42,6 +42,7 @@ Link related pages: [plan](site://plans/composer).
 - **Absolute dates.** "next week" becomes `2026-10-25`.
 - **Remove what is wrong.** If a memory turns out false, fix or delete it.
 - Don't store what is already in the project's code or git history.
+- When the context fills up, you are asked to save memory before older messages are summarized. Save then what the summary would lose: decisions with their reasons, preferences, and where things are.
 
 ## Pages
 
