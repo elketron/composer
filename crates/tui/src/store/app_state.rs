@@ -319,7 +319,31 @@ impl AppState {
             ServerMessage::PageChanged { url, .. } if self.page.shows(&url) => {
                 self.page.reload().into_iter().collect()
             }
-            ServerMessage::PageChanged { .. } | ServerMessage::WorkerStatus { .. } => vec![],
+            ServerMessage::PageChanged { .. } => vec![],
+            ServerMessage::WorkerStatus {
+                worker,
+                ticket,
+                state,
+                ..
+            } => {
+                let (text, level) = match state {
+                    composer_protocol::WorkerState::Starting => (
+                        format!("worker #{worker} started on ticket {ticket} · space w to watch"),
+                        FlashLevel::Info,
+                    ),
+                    composer_protocol::WorkerState::Running => return vec![],
+                    composer_protocol::WorkerState::Done => (
+                        format!("worker #{worker} finished ticket {ticket}"),
+                        FlashLevel::Info,
+                    ),
+                    composer_protocol::WorkerState::Failed => (
+                        format!("worker #{worker} failed ticket {ticket}"),
+                        FlashLevel::Warn,
+                    ),
+                };
+                self.ui.flash(text, level);
+                vec![]
+            }
             ServerMessage::ApprovalRequest {
                 request,
                 session,

@@ -36,7 +36,17 @@ impl PickerStore {
             PickerKind::Pages => vec![Effect::Search(String::new())],
             PickerKind::Sites => vec![Effect::LoadSites],
             PickerKind::Sessions => {
-                self.all = sessions.iter().map(session_item).collect();
+                // A tree: each top-level session (most recent first), then its workers.
+                let top = sessions.iter().filter(|s| s.parent.is_none());
+                self.all = top
+                    .flat_map(|parent| {
+                        let children = sessions
+                            .iter()
+                            .filter(|s| s.parent.as_deref() == Some(&parent.id));
+                        std::iter::once(parent).chain(children)
+                    })
+                    .map(session_item)
+                    .collect();
                 self.filter();
                 vec![]
             }

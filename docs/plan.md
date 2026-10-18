@@ -137,8 +137,9 @@ Each site's `index.md` explains its purpose and conventions; the agent opens it 
 ### Sub-agents / orchestration
 
 - Orchestrator writes a ticket: `site://orchestration/tickets/0001.md`.
-- `spawn_worker(ticket)` starts `composer serve --worker --ticket 0001` as a child process (concurrency limit in config).
-- Workers connect back to the parent over WS: the parent relays their events to clients (one endpoint for the TUI) and grants them LLM slots.
+- `spawn_worker(ticket)` creates the worker session (ticket + parent set, visible at once), sets the ticket `claimed` and starts `composer worker --session … --ticket … --agent … --parent http://…` as a child process (`agent.max_workers`, default 1). Its log: `state/workers/<id>.log`.
+- The worker process is a server instance without an API: model slots are lent by the parent (`slot.acquire`/`slot.release`), recipe approvals are asked through the parent (`approval.ask`; approval prompts reach every client), and its session events go to the parent (`worker.event`), which re-sequences them into the worker session's transcript. The worker keeps its model history in `state/workers/sessions/<id>/`.
+- `finish(done|failed, summary)` (worker only) ends it: the server sets the ticket status and sends the orchestrator a message (source: the worker), which starts its next turn. A worker that ends its turn without `finish` is reminded once; a process that exits without it fails the ticket.
 - **Plans vs tickets:** plans in `site://plans` hold longer-lived intent; tickets are units of work that link back to a plan.
 - Ticket frontmatter drives lifecycle: `open → claimed → done | failed`. Worker writes its result into the ticket.
 - On completion the orchestrator gets a push message.
@@ -319,7 +320,7 @@ Attaching to a worker **replaces** the main chat; the title shows a breadcrumb (
 4. ✅ **actions** — `actions` / `run` tools, approvals per recipe version (recipe + dependencies + variables/settings hashed), approval popup, seed recipes pre-approved by `init`.
 5. ✅ **memory** — compaction (memory pass → summary → history replaced, old history archived), `:compact`, memory page list and agent identity in the prompt.
 6. ✅ **micro apps** — `templates/sdk` + `templates/app` (Svelte 5 + Vite, bun), `new_app` + `ui-build` action, apps served at `/<site>/` with cookie auth, files API, `a` / `:app` in the TUI, messages from apps. The first real app (ticket board) comes with milestone 7.
-7. **orchestration** — tickets, worker mode, `spawn_worker`, worker view in TUI.
+7. ✅ **orchestration** — `spawn_worker` starts `composer worker` processes linked to the parent (slots, approvals and events over WS), `finish`, ticket status by the server, worker sessions nested in the TUI, ticket board app (seed).
 8. **workflow views** — changes view for the active project.
 9. **remote** — device pairing + tokens, `tailscale serve` setup, remote nvim round trip, `site://chat` phone app.
 

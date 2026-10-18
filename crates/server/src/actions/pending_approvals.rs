@@ -33,6 +33,16 @@ impl PendingApprovals {
         self.waiting.lock().expect("pending lock").remove(id);
     }
 
+    /// All open requests (sent to every client when it connects).
+    pub fn all(&self) -> Vec<ServerMessage> {
+        self.waiting
+            .lock()
+            .expect("pending lock")
+            .values()
+            .map(|(m, _)| m.clone())
+            .collect()
+    }
+
     /// Open requests of one session (sent to a client when it attaches).
     pub fn for_session(&self, session: &str) -> Vec<ServerMessage> {
         self.waiting

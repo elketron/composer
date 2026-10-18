@@ -18,6 +18,7 @@ mod slot_guard;
 mod slot_pool;
 pub mod tools;
 mod watcher;
+pub mod worker;
 
 pub use config::Config;
 pub use config_sections::{AgentConfig, ProviderConfig, ServerConfig};

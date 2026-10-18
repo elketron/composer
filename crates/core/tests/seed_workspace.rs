@@ -40,7 +40,7 @@ fn lists_sites() {
         ["agents", "home", "memory", "orchestration", "plans"]
     );
     let orch = sites.iter().find(|s| s.name == "orchestration").unwrap();
-    assert!(orch.has_justfile && orch.has_index && !orch.has_ui);
+    assert!(orch.has_justfile && orch.has_index && orch.has_ui);
     assert_eq!(orch.title, "Orchestration");
 }
 

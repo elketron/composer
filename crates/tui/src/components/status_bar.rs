@@ -90,8 +90,16 @@ impl Component for StatusBar {
             _ => Span::styled("○ not following ", theme::faint()),
         };
 
-        let used: usize = left.iter().map(|s| s.width()).sum::<usize>() + right.width();
-        let gap = (area.width as usize).saturating_sub(used);
+        // The right side gets what is left, cut with `…` (long URLs, errors).
+        let left_width: usize = left.iter().map(|s| s.width()).sum();
+        let room = (area.width as usize).saturating_sub(left_width + 2);
+        let right = if right.width() > room {
+            let cut: String = right.content.chars().take(room.saturating_sub(1)).collect();
+            Span::styled(format!("{cut}…"), right.style)
+        } else {
+            right
+        };
+        let gap = (area.width as usize).saturating_sub(left_width + right.width());
         left.push(Span::raw(" ".repeat(gap)));
         left.push(right);
         frame.render_widget(

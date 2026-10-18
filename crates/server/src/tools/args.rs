@@ -51,3 +51,15 @@ pub struct RunArgs {
 pub struct NewAppArgs {
     pub site: String,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct SpawnWorkerArgs {
+    pub ticket: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct FinishArgs {
+    /// `done` or `failed`.
+    pub status: String,
+    pub summary: String,
+}

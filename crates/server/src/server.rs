@@ -1,6 +1,8 @@
 use std::collections::HashMap;
+use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, OnceLock, RwLock};
 
 use composer_core::{Index, Page, SiteUrl, Workspace};
 use composer_protocol::{ApprovalDecision, ChangedBy, PageChangeKind, ServerMessage, TurnState};
@@ -18,6 +20,7 @@ use crate::provider::{OpenAiProvider, Provider};
 use crate::session::{Session, SessionManager};
 use crate::slot_pool::SlotPool;
 use crate::tools::ToolRegistry;
+use crate::worker::{ParentLink, WorkerRegistry};
 
 /// The running harness. Shared as `Arc<Server>` by the API, turns and tools.
 pub struct Server {
@@ -34,6 +37,15 @@ pub struct Server {
     pub pending_approvals: PendingApprovals,
     /// Required on every request (header or `?token=`).
     pub token: String,
+    /// Worker processes this server started.
+    pub workers: WorkerRegistry,
+    /// The binary started for workers (`$COMPOSER_WORKER_EXE`, else this executable).
+    pub worker_exe: PathBuf,
+    /// Set in a worker process: the server that spawned it.
+    pub parent: Option<Arc<ParentLink>>,
+    /// Worker processes: the agent called `finish`.
+    worker_finished: AtomicBool,
+    listen_addr: OnceLock<SocketAddr>,
     /// Hash of each file as we last saw or wrote it; tells the watcher which changes are ours.
     known_hashes: Mutex<HashMap<PathBuf, String>>,
     watcher: Mutex<Option<notify::RecommendedWatcher>>,
@@ -51,6 +63,26 @@ impl Server {
     }
 
     pub fn new(home: Home, config: Config, provider: Arc<dyn Provider>) -> Result<Arc<Self>> {
+        Self::build(home, config, provider, None)
+    }
+
+    /// The server inside a worker process: no API, slots and approvals come from the
+    /// parent, and its sessions live in `state/workers/sessions` (the parent keeps the real transcript).
+    pub fn new_worker(
+        home: Home,
+        config: Config,
+        provider: Arc<dyn Provider>,
+        parent: Arc<ParentLink>,
+    ) -> Result<Arc<Self>> {
+        Self::build(home, config, provider, Some(parent))
+    }
+
+    fn build(
+        home: Home,
+        config: Config,
+        provider: Arc<dyn Provider>,
+        parent: Option<Arc<ParentLink>>,
+    ) -> Result<Arc<Self>> {
         let workspace = Workspace::new(home.sites());
         if !workspace.root().is_dir() {
             return Err(ServerError::Invalid(format!(
@@ -61,13 +93,34 @@ impl Server {
         let index = Index::build(&workspace)?;
         tracing::info!("indexed {} pages", index.len());
         let hub = EventHub::new(4096);
+        let (sessions_dir, slots, approvals) = match &parent {
+            None => (
+                home.sessions(),
+                SlotPool::new(config.agent.slots, hub.clone()),
+                Approvals::load(&home.approvals_file())?,
+            ),
+            Some(link) => (
+                home.state().join("workers").join("sessions"),
+                SlotPool::remote(link.clone(), hub.clone()),
+                Approvals::load_read_only(&home.approvals_file())?,
+            ),
+        };
+        let worker_exe = std::env::var_os("COMPOSER_WORKER_EXE")
+            .map(PathBuf::from)
+            .or_else(|| std::env::current_exe().ok())
+            .unwrap_or_else(|| PathBuf::from("composer"));
         Ok(Arc::new(Self {
             token: local_token(&home)?,
-            sessions: SessionManager::load(&home.sessions())?,
-            slots: SlotPool::new(config.agent.slots, hub.clone()),
+            sessions: SessionManager::load(&sessions_dir)?,
+            slots,
             tools: ToolRegistry::standard(),
-            approvals: Approvals::load(&home.approvals_file())?,
+            approvals,
             pending_approvals: PendingApprovals::default(),
+            workers: WorkerRegistry::default(),
+            worker_exe,
+            parent,
+            worker_finished: AtomicBool::new(false),
+            listen_addr: OnceLock::new(),
             index: RwLock::new(index),
             known_hashes: Mutex::new(HashMap::new()),
             watcher: Mutex::new(None),
@@ -79,8 +132,25 @@ impl Server {
         }))
     }
 
+    /// Where the API listens (set by `serve`); workers connect back here.
+    pub fn listen_addr(&self) -> Option<SocketAddr> {
+        self.listen_addr.get().copied()
+    }
+
+    /// Worker processes: the agent called `finish`.
+    pub fn worker_finished(&self) -> bool {
+        self.worker_finished.load(Ordering::SeqCst)
+    }
+
+    pub fn mark_worker_finished(&self) {
+        self.worker_finished.store(true, Ordering::SeqCst);
+    }
+
     /// Watches the workspace and serves the API until the listener fails.
     pub async fn serve(self: &Arc<Self>, listener: TcpListener) -> Result<()> {
+        if let Ok(addr) = listener.local_addr() {
+            let _ = self.listen_addr.set(addr);
+        }
         *self.watcher.lock().expect("watcher lock") = Some(crate::watcher::watch(self)?);
         let router = crate::api::router(self.clone());
         axum::serve(listener, router)
@@ -183,6 +253,22 @@ impl Server {
         hash: &str,
         cancel: &CancellationToken,
     ) -> Option<ApprovalDecision> {
+        // In a worker process the parent asks its clients.
+        if let Some(link) = &self.parent {
+            session.update_info(&self.hub, |info| info.state = TurnState::AwaitingApproval);
+            let answer = tokio::select! {
+                answer = link.ask_approval(site, recipe, args, body, hash) => answer.ok(),
+                _ = cancel.cancelled() => None,
+            };
+            session.update_info(&self.hub, |info| info.state = TurnState::Running);
+            return answer.map(|approved| {
+                if approved {
+                    ApprovalDecision::Approve
+                } else {
+                    ApprovalDecision::Deny
+                }
+            });
+        }
         let request = format!("{:08x}", rand::random::<u32>());
         let message = ServerMessage::ApprovalRequest {
             request: request.clone(),

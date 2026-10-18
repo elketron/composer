@@ -219,6 +219,7 @@ fn render_page(page: &PageView, width: u16) -> Rendered {
         for (key, value) in map {
             let value_text = match value {
                 serde_json::Value::String(s) => s.clone(),
+                serde_json::Value::Null => "—".to_string(),
                 serde_json::Value::Array(items) => items
                     .iter()
                     .map(|v| {

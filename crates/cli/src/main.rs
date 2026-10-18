@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 use composer_server::client::{AskOptions, ask};
+use composer_server::worker::{WorkerOptions, run_worker};
 use composer_server::{Config, Home, Server, init_home, local_token};
 use composer_tui::{Startup, TuiOptions};
 
@@ -41,6 +42,16 @@ enum Command {
         /// Also print the model's reasoning.
         #[arg(long, short = 't')]
         thinking: bool,
+    },
+    /// Run a worker on a ticket (started by the server for `spawn_worker`).
+    #[command(hide = true)]
+    Worker {
+        #[arg(long)]
+        session: String,
+        #[arg(long)]
+        ticket: String,
+        #[arg(long)]
+        parent: String,
     },
     /// Drive the TUI headlessly from a script and save snapshots (for development).
     #[command(hide = true)]
@@ -110,6 +121,21 @@ async fn main() -> anyhow::Result<()> {
                 show_thinking: thinking,
             };
             ask(&home, options).await?;
+        }
+        Some(Command::Worker {
+            session,
+            ticket,
+            parent,
+        }) => {
+            // `--agent` and `--project` are the global flags.
+            let options = WorkerOptions {
+                session,
+                ticket,
+                agent: cli.agent,
+                project: cli.project,
+                parent_url: parent,
+            };
+            run_worker(home, options).await?;
         }
         Some(Command::Script { file, out, new }) => {
             let script = std::fs::read_to_string(&file)?;

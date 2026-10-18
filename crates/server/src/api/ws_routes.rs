@@ -52,6 +52,9 @@ async fn run(server: Arc<Server>, socket: WebSocket) {
     });
 
     connection.send(Arc::new(server.slots.status()));
+    for request in server.pending_approvals.all() {
+        connection.send(Arc::new(request));
+    }
     while let Some(Ok(message)) = stream.next().await {
         let text = match message {
             Message::Text(text) => text,
@@ -60,12 +63,14 @@ async fn run(server: Arc<Server>, socket: WebSocket) {
         };
         let reply = match serde_json::from_str::<ClientRequest>(&text) {
             Ok(request) => connection.handle(&server, request),
-            Err(e) => ServerMessage::Error {
+            Err(e) => Some(ServerMessage::Error {
                 id: None,
                 message: format!("bad request: {e}"),
-            },
+            }),
         };
-        connection.send(Arc::new(reply));
+        if let Some(reply) = reply {
+            connection.send(Arc::new(reply));
+        }
     }
     forwarder.abort();
     writer.abort();

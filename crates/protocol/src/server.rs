@@ -147,4 +147,6 @@ pub enum CommandResult {
     Done,
     Session { session: SessionInfo },
     Sessions { sessions: Vec<SessionInfo> },
+    SlotGranted { grant: u64 },
+    Approval { approved: bool },
 }

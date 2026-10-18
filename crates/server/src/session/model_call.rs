@@ -26,7 +26,7 @@ pub async fn model_step(
         session.update_info(&server.hub, |info| info.state = TurnState::Waiting);
     }
     let slot = tokio::select! {
-        slot = server.slots.acquire() => slot,
+        slot = server.slots.acquire() => slot?,
         _ = cancel.cancelled() => return Ok(StepOutput { cancelled: true, ..StepOutput::default() }),
     };
     session.update_info(&server.hub, |info| info.state = TurnState::Running);

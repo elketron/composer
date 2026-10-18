@@ -7,6 +7,7 @@ mod connection;
 mod event_scope;
 mod glob;
 mod http_routes;
+mod resequence;
 mod ws_routes;
 
 use std::sync::Arc;

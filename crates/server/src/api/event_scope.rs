@@ -28,10 +28,8 @@ pub fn scope(message: &ServerMessage) -> EventScope<'_> {
             id: session,
             seq: Some(*seq),
         },
-        ApprovalRequest { session, .. } | ApprovalResolved { session, .. } => EventScope::Session {
-            id: session,
-            seq: None,
-        },
+        // Every client: a worker's recipe needs your answer wherever you are.
+        ApprovalRequest { .. } | ApprovalResolved { .. } => EventScope::Global,
         PageChanged { url, .. } => EventScope::Page(url),
         SessionUpdated { .. } | WorkerStatus { .. } | Slots { .. } => EventScope::Global,
         Ok { .. } | Error { .. } => EventScope::Reply,

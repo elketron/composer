@@ -181,7 +181,7 @@ fn summarize_args(args: &serde_json::Value) -> String {
             .trim_end()
             .to_string();
     }
-    for key in ["url", "query", "path", "site"] {
+    for key in ["url", "query", "path", "ticket", "status", "site"] {
         if let Some(value) = get(key) {
             return value.to_string();
         }

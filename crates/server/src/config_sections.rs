@@ -36,6 +36,9 @@ pub struct AgentConfig {
     /// A recipe run is killed after this many seconds.
     #[serde(default = "default_recipe_timeout")]
     pub recipe_timeout_secs: u64,
+    /// Worker processes running at once (each needs a model slot to make progress).
+    #[serde(default = "default_max_workers")]
+    pub max_workers: u32,
 }
 
 fn default_base_url() -> String {
@@ -60,4 +63,8 @@ fn default_compaction_threshold() -> u32 {
 
 fn default_recipe_timeout() -> u64 {
     300
+}
+
+fn default_max_workers() -> u32 {
+    1
 }

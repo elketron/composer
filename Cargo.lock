@@ -423,10 +423,16 @@ name = "composer-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "axum",
  "clap",
+ "composer-protocol",
  "composer-server",
  "composer-tui",
+ "futures",
+ "serde_json",
+ "tempfile",
  "tokio",
+ "tokio-tungstenite 0.30.0",
  "tracing",
  "tracing-subscriber",
 ]

@@ -10,3 +10,7 @@ new-ticket title:
         -e "s/{{{{date}}/$(date +%F)/g" \
         templates/ticket.md > "tickets/$id.md"
     echo "site://orchestration/tickets/$id"
+
+# Build the ticket board (ui/dist), served at /orchestration/.
+ui-build:
+    cd ui && bun install && bun run build

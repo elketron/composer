@@ -10,6 +10,8 @@ use crate::error::{Result, ServerError};
 pub struct Approvals {
     path: PathBuf,
     approved: Mutex<Vec<Approval>>,
+    /// Worker processes: the parent owns the file; approvals are kept in memory only.
+    read_only: bool,
 }
 
 impl Approvals {
@@ -23,6 +25,15 @@ impl Approvals {
         Ok(Self {
             path: path.to_path_buf(),
             approved: Mutex::new(approved),
+            read_only: false,
+        })
+    }
+
+    /// For worker processes: reads the file, never writes it.
+    pub fn load_read_only(path: &Path) -> Result<Self> {
+        Ok(Self {
+            read_only: true,
+            ..Self::load(path)?
         })
     }
 
@@ -44,6 +55,9 @@ impl Approvals {
             hash: hash.to_string(),
             approved_at: chrono::Utc::now().to_rfc3339(),
         });
+        if self.read_only {
+            return Ok(());
+        }
         let json = serde_json::to_string_pretty(&*approved).expect("approvals serialize");
         std::fs::write(&self.path, json).map_err(|e| ServerError::io(&self.path, e))
     }

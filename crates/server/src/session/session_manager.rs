@@ -22,6 +22,9 @@ impl SessionManager {
             .map_err(|e| ServerError::io(dir, e))?
             .flatten()
         {
+            if !entry.path().is_dir() {
+                continue;
+            }
             match Session::load(&entry.path()) {
                 Ok(session) => {
                     sessions.insert(session.id().to_string(), session);
@@ -57,6 +60,14 @@ impl SessionManager {
         };
         let session = Session::create(&self.dir.join(&id), info)?;
         sessions.insert(id, session.clone());
+        Ok(session)
+    }
+
+    /// Creates a session with a given id and info (a worker mirrors its parent's session id).
+    pub fn create_with_info(&self, info: SessionInfo) -> Result<Arc<Session>> {
+        let mut sessions = self.sessions.write().expect("sessions lock");
+        let session = Session::create(&self.dir.join(&info.id), info)?;
+        sessions.insert(session.id().to_string(), session.clone());
         Ok(session)
     }
 

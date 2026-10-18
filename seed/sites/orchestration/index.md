@@ -15,6 +15,7 @@ Tickets: units of work handed to worker agents. Each worker runs in its own sess
 ## Actions
 
 - `just new-ticket "<title>"` — creates the next ticket from the template and prints its URL. Use this instead of picking an id yourself.
+- `just ui-build` — builds the ticket board app (open it from the TUI with `a`).
 
 ## Ticket format
 
@@ -46,10 +47,10 @@ Filled in by the worker: what was done, where, anything left over.
 
 ## Lifecycle
 
-1. **Orchestrator** creates the ticket (`just new-ticket`), fills Task, Context and Done when, then `spawn_worker(id)`.
+1. **Orchestrator** creates the ticket (`run orchestration new-ticket <title>`), fills Task, Context and Done when, then `spawn_worker(id)`. It returns right away; the worker runs in its own process and session.
 2. **Server** sets `status: claimed` when the worker starts.
 3. **Worker** does the work, writes **Result**, then calls `finish(done | failed, summary)`.
-4. **Orchestrator** gets a message when the worker finishes, reads the Result, updates the plan.
+4. **Orchestrator** gets a message when the worker finishes (the server sets `status: done` or `failed`), reads the Result, updates the plan. A worker that dies without `finish` counts as failed.
 
 ## Rules
 

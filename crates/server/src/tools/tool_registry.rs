@@ -4,12 +4,14 @@ use crate::agent::AgentDefinition;
 use crate::provider::{ModelToolCall, ToolSpec};
 use crate::tools::actions_tool::ActionsTool;
 use crate::tools::edit_tool::EditTool;
+use crate::tools::finish_tool::FinishTool;
 use crate::tools::list_sites_tool::ListSitesTool;
 use crate::tools::new_app_tool::NewAppTool;
 use crate::tools::open_tool::OpenTool;
 use crate::tools::run_tool::RunTool;
 use crate::tools::search_tool::SearchTool;
 use crate::tools::set_project_tool::SetProjectTool;
+use crate::tools::spawn_worker_tool::SpawnWorkerTool;
 use crate::tools::write_tool::WriteTool;
 use crate::tools::{Tool, ToolContext};
 
@@ -31,6 +33,8 @@ impl ToolRegistry {
                 Arc::new(ActionsTool),
                 Arc::new(RunTool),
                 Arc::new(NewAppTool),
+                Arc::new(SpawnWorkerTool),
+                Arc::new(FinishTool),
             ],
         }
     }
