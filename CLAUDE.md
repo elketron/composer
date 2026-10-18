@@ -39,6 +39,20 @@ Set `EDITOR` to a non-interactive script to exercise the `e` (edit page) round t
 Snapshots always force a draw, so they can't catch a missing repaint: for that, run
 `scripts/check-tui-redraw.py target/debug/composer <COMPOSER_HOME>` (the real TUI in a pseudo-terminal).
 
+## The Flutter app (`apps/composer_app`)
+
+- Same Flux shape as the TUI: widgets dispatch `AppAction`s, `reduce` (pure) returns the next `AppState`
+  plus `AppEffect`s, `EffectRunner` does the IO. Same file rule: a class with behaviour (widgets
+  included) gets its own file; plain data types share `types.dart` / `actions.dart` / `effects.dart`.
+- `flutter analyze` and `flutter test` (reducer, parsing). End to end: `integration_test/pairing_test.dart`
+  pairs through the UI with a real server (see its header); run it inside headless Weston
+  (`weston --backend=headless --renderer=gl --debug`, `WAYLAND_DISPLAY`, `GDK_BACKEND=wayland`).
+- `COMPOSER_APP_DATA=<dir>` keeps the server list in that directory (tests, a second instance).
+- `flutter test integration_test` leaves the *test* in `build/linux/.../bundle`; run `flutter build linux`
+  before launching the bundle yourself, or it waits for a test runner and never shows a window.
+- Screenshots: launch the bundle in headless Weston (`--debug`) and capture with `weston-screenshooter`
+  while it paints; phone layouts on the Android emulator (`adb exec-out screencap`).
+
 ## Seeing an app
 
 Apps are served at `http://<bind>/<site>/?token=<state/token>&session=<id>` (`:app <site>` in a headless

@@ -1,0 +1,85 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+import '../state/actions.dart';
+import '../theme/tokens.dart' as t;
+import 'server_list.dart';
+import 'server_page.dart';
+import 'status_dot.dart';
+import 'store_scope.dart';
+import 'welcome_page.dart';
+
+/// The app frame: a server rail beside the page on wide screens; on phones the title opens
+/// the switcher. ctrl-1…9 switches servers.
+class Shell extends StatelessWidget {
+  const Shell({super.key});
+
+  static const wide = 720.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final store = StoreScope.of(context);
+    final state = store.state;
+    if (!state.loaded) return const Scaffold();
+    final server = state.activeServer;
+    if (server == null) return const WelcomePage();
+    final status = state.statusOf(server.url);
+    final page = ServerPage(key: ValueKey(server.url), server: server, status: status);
+
+    return CallbackShortcuts(
+      bindings: {
+        for (var i = 0; i < state.servers.length && i < 9; i++)
+          SingleActivator(LogicalKeyboardKey(LogicalKeyboardKey.digit1.keyId + i), control: true):
+              () => store.dispatch(ServerSelected(state.servers[i].url)),
+      },
+      child: Focus(
+        autofocus: true,
+        child: LayoutBuilder(builder: (context, constraints) {
+          if (constraints.maxWidth >= wide) {
+            return Scaffold(
+              body: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                Container(
+                  width: 248,
+                  decoration: const BoxDecoration(color: t.surface, border: Border(right: BorderSide(color: t.border))),
+                  child: const ServerList(),
+                ),
+                Expanded(child: page),
+              ]),
+            );
+          }
+          return Scaffold(
+            appBar: AppBar(
+              titleSpacing: 8,
+              title: TextButton(
+                key: const Key('switch-server'),
+                style: TextButton.styleFrom(foregroundColor: t.text),
+                onPressed: () => _openSwitcher(context),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  StatusDot(status.link),
+                  const SizedBox(width: 8),
+                  Flexible(child: Text(server.name, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600))),
+                  const SizedBox(width: 4),
+                  Icon(Icons.expand_more, size: 18, color: t.muted),
+                ]),
+              ),
+              bottom: const PreferredSize(preferredSize: Size.fromHeight(1), child: Divider()),
+            ),
+            body: page,
+          );
+        }),
+      ),
+    );
+  }
+
+  void _openSwitcher(BuildContext context) => showModalBottomSheet<void>(
+        context: context,
+        showDragHandle: true,
+        builder: (sheet) => SafeArea(
+          child: SizedBox(
+            height: MediaQuery.sizeOf(context).height * 0.5,
+            child: ServerList(onSelected: () => Navigator.pop(sheet)),
+          ),
+        ),
+      );
+}
+
