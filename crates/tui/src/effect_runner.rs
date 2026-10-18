@@ -49,6 +49,14 @@ impl EffectRunner {
                     dispatcher.dispatch(Action::SearchResults { query, hits });
                 });
             }
+            Effect::FetchDiff(session) => {
+                tokio::spawn(async move {
+                    dispatcher.dispatch(match api.project_diff(&session).await {
+                        Ok(diff) => Action::DiffLoaded(diff),
+                        Err(error) => Action::DiffFailed(error),
+                    });
+                });
+            }
             Effect::LoadSites => {
                 tokio::spawn(async move {
                     dispatcher.dispatch(Action::SitesLoaded(api.sites().await.unwrap_or_default()));
@@ -57,6 +65,7 @@ impl EffectRunner {
             Effect::EditPage(_)
             | Effect::ViewText { .. }
             | Effect::OpenBrowser(_)
+            | Effect::OpenFile { .. }
             | Effect::Quit => {}
         }
     }

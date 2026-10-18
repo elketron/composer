@@ -5,7 +5,9 @@ use crate::effect::Effect;
 use crate::store::types::{
     ConnState, FlashLevel, Mode, Outgoing, Pane, Pending, PendingApproval, PickerTarget, Startup,
 };
-use crate::store::{ApprovalStore, ConnectionStore, PageStore, PickerStore, SessionStore, UiStore};
+use crate::store::{
+    ApprovalStore, ConnectionStore, PageStore, PickerStore, ProjectStore, SessionStore, UiStore,
+};
 
 /// All shared state. `reduce` is the only way it changes; it does no IO.
 #[derive(Debug)]
@@ -16,6 +18,7 @@ pub struct AppState {
     pub ui: UiStore,
     pub picker: PickerStore,
     pub approvals: ApprovalStore,
+    pub project: ProjectStore,
     startup: Option<Startup>,
     default_agent: String,
 }
@@ -29,6 +32,7 @@ impl AppState {
             ui: UiStore::new(),
             picker: PickerStore::new(),
             approvals: ApprovalStore::default(),
+            project: ProjectStore::default(),
             default_agent: startup.agent.clone(),
             startup: Some(startup),
         }
@@ -140,7 +144,34 @@ impl AppState {
             }
             Action::PageBack => self.page.back().into_iter().collect(),
             Action::PageForward => self.page.forward().into_iter().collect(),
+            Action::ReloadPage if self.project.open => self.refresh_changes(),
             Action::ReloadPage => self.page.reload().into_iter().collect(),
+            Action::ToggleChanges => {
+                self.project.open = !self.project.open;
+                if !self.project.open {
+                    return vec![];
+                }
+                self.reduce(Action::FocusPane(Pane::Page));
+                self.refresh_changes()
+            }
+            Action::RefreshChanges => self.refresh_changes(),
+            Action::DiffLoaded(diff) => {
+                self.project.loaded(diff);
+                vec![]
+            }
+            Action::DiffFailed(error) => {
+                self.project.failed(error);
+                vec![]
+            }
+            Action::OpenFileAt { path, line } => {
+                match self.session.current_info().and_then(|i| i.project.clone()) {
+                    Some(project) => vec![Effect::OpenFile {
+                        path: format!("{project}/{path}"),
+                        line,
+                    }],
+                    None => vec![],
+                }
+            }
             Action::ToggleFollow => {
                 self.page.follow = !self.page.follow;
                 let text = if self.page.follow {
@@ -244,6 +275,16 @@ impl AppState {
                 self.picker.sites(sites);
                 vec![]
             }
+        }
+    }
+
+    fn refresh_changes(&mut self) -> Vec<Effect> {
+        match self.session.current.clone() {
+            Some(session) if self.project.open && !self.project.loading => {
+                self.project.loading = true;
+                vec![Effect::FetchDiff(session)]
+            }
+            _ => vec![],
         }
     }
 
@@ -378,8 +419,17 @@ impl AppState {
                 }
             }
             other => {
-                self.session.apply(&other);
-                vec![]
+                let current = self.session.apply(&other);
+                // The agent may have changed project files: refresh an open changes view.
+                let changed = matches!(
+                    other,
+                    ServerMessage::ToolResult { .. } | ServerMessage::TurnDone { .. }
+                );
+                if current && changed && self.project.open {
+                    self.refresh_changes()
+                } else {
+                    vec![]
+                }
             }
         }
     }

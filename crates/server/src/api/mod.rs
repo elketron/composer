@@ -39,6 +39,10 @@ pub fn router(server: Arc<Server>) -> Router {
             post(http_routes::post_message),
         )
         .route(
+            "/api/sessions/{id}/project/diff",
+            get(http_routes::project_diff),
+        )
+        .route(
             "/api/files/{site}/{*path}",
             get(app_routes::get_file).put(app_routes::put_file),
         )

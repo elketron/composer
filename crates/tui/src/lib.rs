@@ -11,6 +11,7 @@ mod api_client;
 mod app;
 mod commands;
 pub mod components;
+mod diff_parse;
 mod dispatcher;
 mod editor;
 mod effect;

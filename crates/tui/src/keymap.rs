@@ -9,6 +9,8 @@ type Chord = (KeyCode, KeyModifiers);
 pub struct Keymap {
     bindings: Vec<(Vec<Chord>, Action)>,
     pending: Vec<Chord>,
+    /// The keys of `pending`, to hand back when the sequence turns out unbound.
+    pending_keys: Vec<KeyEvent>,
 }
 
 impl Keymap {
@@ -31,6 +33,7 @@ impl Keymap {
             (vec![key('r')], Action::ReloadPage),
             (vec![key('e')], Action::EditPage),
             (vec![key('a')], Action::OpenApp(None)),
+            (vec![key('g'), key('d')], Action::ToggleChanges),
             (vec![key('t')], Action::ToggleThinking),
             (vec![key('T')], Action::ToggleToolDetails),
             (vec![ctrl('c')], Action::CancelTurn),
@@ -46,13 +49,16 @@ impl Keymap {
         Self {
             bindings,
             pending: Vec::new(),
+            pending_keys: Vec::new(),
         }
     }
 
     pub fn feed(&mut self, key: KeyEvent) -> KeyOutcome {
         self.pending.push(normalize(key));
+        self.pending_keys.push(key);
         if let Some((_, action)) = self.bindings.iter().find(|(seq, _)| *seq == self.pending) {
             self.pending.clear();
+            self.pending_keys.clear();
             return KeyOutcome::Action(action.clone());
         }
         if self
@@ -62,11 +68,11 @@ impl Keymap {
         {
             return KeyOutcome::Pending;
         }
-        let was_sequence = self.pending.len() > 1;
         self.pending.clear();
-        // An unknown second key cancels the sequence instead of reaching a component.
-        if was_sequence {
-            KeyOutcome::Pending
+        let keys = std::mem::take(&mut self.pending_keys);
+        // Not a binding after all: the component gets the keys (so `gg` still scrolls to the top).
+        if keys.len() > 1 {
+            KeyOutcome::Replay(keys)
         } else {
             KeyOutcome::Unbound
         }
@@ -101,9 +107,17 @@ mod tests {
         assert_eq!(km.feed(k(' ')), KeyOutcome::Pending);
         assert_eq!(
             km.feed(k('x')),
-            KeyOutcome::Pending,
-            "bad sequence is swallowed"
+            KeyOutcome::Replay(vec![k(' '), k('x')]),
+            "unbound sequences go to the component"
         );
+        assert_eq!(km.feed(k('g')), KeyOutcome::Pending);
+        assert_eq!(
+            km.feed(k('g')),
+            KeyOutcome::Replay(vec![k('g'), k('g')]),
+            "gg still scrolls"
+        );
+        assert_eq!(km.feed(k('g')), KeyOutcome::Pending);
+        assert_eq!(km.feed(k('d')), KeyOutcome::Action(Action::ToggleChanges));
         let shift_h = KeyEvent::new(KeyCode::Char('H'), KeyModifiers::SHIFT);
         assert_eq!(km.feed(shift_h), KeyOutcome::Action(Action::PageBack));
     }

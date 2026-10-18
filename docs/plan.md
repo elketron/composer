@@ -210,7 +210,7 @@ Everything else lives in floating windows (fuzzy finder, telescope-style) instea
 | `t` | toggle thinking |
 | `t` / `T` | expand all thinking / tool results (per-row `Space` later) |
 | `e` | edit current page in nvim |
-| `gd` | changes view of active project; `Enter` on hunk → nvim at line |
+| `gd` | changes view of the active project (toggle); `j`/`k`, `{`/`}` files, `Enter` → editor at that line |
 | `a` | open current site's micro app |
 | `Ctrl-o` | back to the previous chat (e.g. from a worker to the main chat) |
 | `?` | help |
@@ -321,7 +321,7 @@ Attaching to a worker **replaces** the main chat; the title shows a breadcrumb (
 5. ✅ **memory** — compaction (memory pass → summary → history replaced, old history archived), `:compact`, memory page list and agent identity in the prompt.
 6. ✅ **micro apps** — `templates/sdk` + `templates/app` (Svelte 5 + Vite, bun), `new_app` + `ui-build` action, apps served at `/<site>/` with cookie auth, files API, `a` / `:app` in the TUI, messages from apps. The first real app (ticket board) comes with milestone 7.
 7. ✅ **orchestration** — `spawn_worker` starts `composer worker` processes linked to the parent (slots, approvals and events over WS), `finish`, ticket status by the server, worker sessions nested in the TUI, ticket board app (seed).
-8. **workflow views** — changes view for the active project.
+8. ✅ **workflow views** — changes view (`gd`): git changes of the active project against HEAD (untracked files included), refreshed every 2s and after the agent's tool calls; `j`/`k`, `{`/`}` between files, `Enter` opens `$EDITOR +line file`.
 9. **remote** — device pairing + tokens, `tailscale serve` setup, remote nvim round trip, `site://chat` phone app.
 
 Auth (tokens) and relative URLs are built in from milestone 2, so remote access is not a retrofit.

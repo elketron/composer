@@ -8,6 +8,13 @@ pub enum Effect {
     FetchPage(String),
     Search(String),
     LoadSites,
+    /// Fetch the active project's git changes for a session.
+    FetchDiff(String),
+    /// Suspend the TUI and open a project file in the editor at a line. Run by the app loop.
+    OpenFile {
+        path: String,
+        line: u32,
+    },
     /// Suspend the TUI and edit the page in nvim (temp file round trip). Run by the app loop.
     EditPage(String),
     /// Show text read-only in the editor (e.g. a recipe awaiting approval). Run by the app loop.

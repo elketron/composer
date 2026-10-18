@@ -40,6 +40,17 @@ pub enum Action {
     OpenApp(Option<String>),
     ReloadPage,
 
+    // ---- changes view (active project) ----
+    ToggleChanges,
+    RefreshChanges,
+    DiffLoaded(composer_protocol::http::ProjectDiff),
+    DiffFailed(String),
+    /// Open a project file in the editor at a line.
+    OpenFileAt {
+        path: String,
+        line: u32,
+    },
+
     // ---- approvals ----
     ApprovalDecide(ApprovalDecision),
     /// Read the recipe in the editor before deciding.
@@ -77,4 +88,6 @@ pub enum KeyOutcome {
     Pending,
     /// Not bound: the focused component may handle it.
     Unbound,
+    /// A started sequence that matched nothing: these keys go to the component.
+    Replay(Vec<crossterm::event::KeyEvent>),
 }

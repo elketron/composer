@@ -1,5 +1,5 @@
 use composer_protocol::http::{
-    PageResponse, PutPageRequest, PutPageResponse, SearchHit, SiteSummary,
+    PageResponse, ProjectDiff, PutPageRequest, PutPageResponse, SearchHit, SiteSummary,
 };
 
 use crate::store::types::PageView;
@@ -58,6 +58,11 @@ impl ApiClient {
     pub async fn search(&self, query: &str) -> Result<Vec<SearchHit>, String> {
         let query: String = query.bytes().map(|b| format!("%{b:02X}")).collect();
         self.get(&format!("/api/search?limit=60&q={query}")).await
+    }
+
+    pub async fn project_diff(&self, session: &str) -> Result<ProjectDiff, String> {
+        self.get(&format!("/api/sessions/{session}/project/diff"))
+            .await
     }
 
     pub async fn sites(&self) -> Result<Vec<SiteSummary>, String> {

@@ -6,7 +6,7 @@ use ratatui::widgets::Block;
 
 use crate::action::Action;
 use crate::components::{
-    ApprovalPopup, ChatPane, CommandLine, Component, PageViewer, Picker, StatusBar,
+    ApprovalPopup, ChangesView, ChatPane, CommandLine, Component, PageViewer, Picker, StatusBar,
 };
 use crate::store::AppState;
 use crate::store::types::{Mode, Pane};
@@ -19,6 +19,7 @@ const TWO_PANE_MIN_WIDTH: u16 = 100;
 pub struct Root {
     pub chat: ChatPane,
     pub page: PageViewer,
+    changes: ChangesView,
     status: StatusBar,
     command: CommandLine,
     picker: Picker,
@@ -30,10 +31,20 @@ impl Root {
         Self {
             chat: ChatPane::new(),
             page: PageViewer::new(),
+            changes: ChangesView::new(),
             status: StatusBar,
             command: CommandLine::new(),
             picker: Picker,
             approval: ApprovalPopup,
+        }
+    }
+
+    /// The right pane: the changes view when open, else the page viewer.
+    fn render_right(&self, frame: &mut Frame, area: Rect, state: &AppState) {
+        if state.project.open {
+            self.changes.render(frame, area, state);
+        } else {
+            self.page.render(frame, area, state);
         }
     }
 }
@@ -60,6 +71,7 @@ impl Component for Root {
             Mode::Hint => self.page.handle_key(key, state),
             Mode::Normal => match state.ui.focus {
                 Pane::Chat => self.chat.handle_key(key, state),
+                Pane::Page if state.project.open => self.changes.handle_key(key, state),
                 Pane::Page => self.page.handle_key(key, state),
             },
         }
@@ -76,7 +88,7 @@ impl Component for Root {
             .or_else(|| (panes.width < TWO_PANE_MIN_WIDTH).then_some(state.ui.focus));
         match single {
             Some(Pane::Chat) => self.chat.render(frame, panes, state),
-            Some(Pane::Page) => self.page.render(frame, panes, state),
+            Some(Pane::Page) => self.render_right(frame, panes, state),
             None => {
                 let [chat, _, page] = Layout::horizontal([
                     Constraint::Percentage(54),
@@ -85,7 +97,7 @@ impl Component for Root {
                 ])
                 .areas(panes);
                 self.chat.render(frame, chat, state);
-                self.page.render(frame, page, state);
+                self.render_right(frame, page, state);
             }
         }
 

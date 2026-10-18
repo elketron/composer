@@ -77,3 +77,19 @@ pub fn open_browser(url: &str) -> Action {
         Err(e) => Action::Flash(format!("{opener}: {e}"), FlashLevel::Error),
     }
 }
+
+/// Opens a project file in `$EDITOR` at `line` (`+line` works for vi, vim, nvim, helix, ...).
+pub fn open_file(path: &str, line: u32) -> Action {
+    if !std::path::Path::new(path).is_file() {
+        return Action::Flash(format!("{path} is not on this machine"), FlashLevel::Warn);
+    }
+    let editor = std::env::var("EDITOR").unwrap_or_else(|_| "nvim".into());
+    match Command::new(&editor)
+        .arg(format!("+{line}"))
+        .arg(path)
+        .status()
+    {
+        Ok(_) => Action::RefreshChanges,
+        Err(e) => Action::Flash(format!("{editor}: {e}"), FlashLevel::Error),
+    }
+}

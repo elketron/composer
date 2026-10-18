@@ -6,7 +6,7 @@ use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use composer_core::SiteUrl;
 use composer_protocol::http::{
-    AppMessage, PageResponse, PutPageRequest, PutPageResponse, SearchHit, SiteSummary,
+    AppMessage, PageResponse, ProjectDiff, PutPageRequest, PutPageResponse, SearchHit, SiteSummary,
 };
 use composer_protocol::{ChangedBy, ChatMessage, MessageSource, Role};
 
@@ -144,4 +144,22 @@ fn write(
         url: written.to_string(),
         hash: crate::content_hash(body.content.as_bytes()),
     }))
+}
+
+/// `GET /api/sessions/{id}/project/diff`: git changes of the session's active project.
+pub async fn project_diff(
+    State(server): State<Arc<Server>>,
+    Path(id): Path<String>,
+) -> Result<Json<ProjectDiff>, ApiError> {
+    let session = server.sessions.get(&id)?;
+    let Some(project) = session.info().project else {
+        return Err(ApiError(
+            StatusCode::NOT_FOUND,
+            "no active project; set one with :project <path>".into(),
+        ));
+    };
+    let diff = crate::project::project_diff(std::path::Path::new(&project))
+        .await
+        .map_err(|e| ApiError(StatusCode::UNPROCESSABLE_ENTITY, e))?;
+    Ok(Json(diff))
 }

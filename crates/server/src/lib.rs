@@ -11,6 +11,7 @@ mod hash;
 mod home;
 mod hub;
 mod init;
+pub mod project;
 pub mod provider;
 mod server;
 pub mod session;

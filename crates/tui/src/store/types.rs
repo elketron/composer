@@ -145,3 +145,24 @@ pub struct PendingApproval {
     pub body: String,
     pub hash: String,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DiffKind {
+    /// `── path ──` before a file's hunks.
+    File,
+    Hunk,
+    Add,
+    Del,
+    Context,
+    Note,
+}
+
+/// One displayed diff line, with where it points in the project (for opening the editor).
+#[derive(Debug, Clone, PartialEq)]
+pub struct DiffLine {
+    pub kind: DiffKind,
+    pub text: String,
+    pub file: Option<String>,
+    /// Line in the new version of the file.
+    pub line: Option<u32>,
+}

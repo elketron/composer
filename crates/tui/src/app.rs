@@ -55,6 +55,10 @@ impl App {
                 KeyOutcome::Action(action) => vec![action],
                 KeyOutcome::Pending => vec![],
                 KeyOutcome::Unbound => self.root.handle_key(key, &self.state),
+                KeyOutcome::Replay(keys) => keys
+                    .into_iter()
+                    .flat_map(|k| self.root.handle_key(k, &self.state))
+                    .collect(),
             }
         } else {
             self.root.handle_key(key, &self.state)
@@ -77,6 +81,7 @@ impl App {
                 Effect::EditPage(_)
                 | Effect::ViewText { .. }
                 | Effect::OpenBrowser(_)
+                | Effect::OpenFile { .. }
                 | Effect::Quit => deferred.push(effect),
                 other => self.runner.run(other),
             }
@@ -90,6 +95,13 @@ impl App {
         let deadline = tokio::time::Instant::now() + duration;
         while let Ok(Some(action)) = tokio::time::timeout_at(deadline, self.actions.recv()).await {
             for effect in self.process(action) {
+                if let Effect::OpenFile { path, line } = &effect {
+                    if std::env::var_os("EDITOR").is_some() {
+                        let result = editor::open_file(path, *line);
+                        self.dispatcher.dispatch(result);
+                    }
+                    continue;
+                }
                 if let Effect::OpenBrowser(url) = &effect {
                     self.dispatcher
                         .dispatch(Action::Flash(format!("would open {url}"), FlashLevel::Info));
@@ -128,6 +140,7 @@ impl App {
     pub async fn run(mut self, mut terminal: DefaultTerminal) -> anyhow::Result<()> {
         let mut events = EventStream::new();
         let mut tick = tokio::time::interval(Duration::from_secs(1));
+        let mut ticks = 0u64;
         let mut dirty = true;
         loop {
             if dirty {
@@ -147,6 +160,15 @@ impl App {
                         match effect {
                             Effect::Quit => return Ok(()),
                             Effect::OpenBrowser(url) => self.dispatcher.dispatch(editor::open_browser(&url)),
+                            Effect::OpenFile { path, line } => {
+                                drop(events);
+                                ratatui::restore();
+                                let result = editor::open_file(&path, line);
+                                terminal = ratatui::init();
+                                terminal.clear()?;
+                                events = EventStream::new();
+                                self.dispatcher.dispatch(result);
+                            }
                             Effect::ViewText { name, text } => {
                                 drop(events);
                                 ratatui::restore();
@@ -171,7 +193,14 @@ impl App {
                     }
                     dirty = true;
                 }
-                _ = tick.tick() => dirty = self.state.ui.flash.is_some(),
+                _ = tick.tick() => {
+                    ticks += 1;
+                    dirty = self.state.ui.flash.is_some();
+                    // The project changes outside our view too (you, in nvim): keep the changes view live.
+                    if self.state.project.open && ticks.is_multiple_of(2) {
+                        self.dispatcher.dispatch(Action::RefreshChanges);
+                    }
+                }
             }
         }
     }
