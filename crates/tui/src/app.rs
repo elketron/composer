@@ -149,7 +149,12 @@ impl App {
             }
             tokio::select! {
                 event = events.next() => match event {
-                    Some(Ok(Event::Key(key))) if key.kind == KeyEventKind::Press => self.handle_key(key),
+                    Some(Ok(Event::Key(key))) if key.kind == KeyEventKind::Press => {
+                        self.handle_key(key);
+                        // Keys can change local view state without an action (typing in the
+                        // composer, scrolling), so every key repaints.
+                        dirty = true;
+                    }
                     Some(Ok(Event::Resize(..))) => dirty = true,
                     Some(Ok(_)) => {}
                     Some(Err(e)) => return Err(e.into()),

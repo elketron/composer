@@ -30,6 +30,8 @@ snap chat
 
 Use a scratch `COMPOSER_HOME` (`composer init`, set another port in its config.toml) so ~/.composer stays untouched.
 Set `EDITOR` to a non-interactive script to exercise the `e` (edit page) round trip headlessly.
+Snapshots always force a draw, so they can't catch a missing repaint: for that, run
+`scripts/check-tui-redraw.py target/debug/composer <COMPOSER_HOME>` (the real TUI in a pseudo-terminal).
 
 ## Seeing an app
 
