@@ -1,0 +1,43 @@
+[
+  {
+    "name": "home",
+    "version": "0.1.0",
+    "model": "m",
+    "slots": 2
+  },
+  {
+    "name": "memory",
+    "title": "Memory",
+    "has_justfile": false,
+    "has_ui": false
+  },
+  {
+    "url": "site://memory/user.md",
+    "title": "User",
+    "frontmatter": {
+      "title": "User",
+      "tags": [
+        "a"
+      ]
+    },
+    "frontmatter_error": null,
+    "raw": "# User\n",
+    "backlinks": [
+      "site://memory/index.md"
+    ],
+    "hash": "h"
+  },
+  {
+    "path": "/p",
+    "branch": "main",
+    "files": [
+      {
+        "path": "a.rs",
+        "status": "M",
+        "added": 2,
+        "removed": 1
+      }
+    ],
+    "diff": "+x"
+  }
+]

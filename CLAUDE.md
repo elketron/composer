@@ -8,6 +8,12 @@ Design and decisions: [docs/plan.md](docs/plan.md) (phase 1), [docs/plan-app.md]
 - **Types without impl blocks may share a file** (plain data enums/structs, e.g. `action.rs`, `store/types.rs`).
 - File name = type name in snake_case (`SessionStore` → `session_store.rs`).
 
+## Protocol changes
+
+`crates/protocol` is the source of truth for Rust, TypeScript (`--features ts`) and Dart. After changing it,
+regenerate the Dart models and fixtures: `cargo run -p composer-protocol --features schema --bin dartgen`
+(`-- --check` fails when they are stale), then `dart test` in `apps/composer_protocol`.
+
 ## TUI
 
 - Flux: all state changes go through `Action` → stores' `reduce` → `AppState`. Reducers do no IO; they return `Effect`s, which the `EffectRunner` executes.

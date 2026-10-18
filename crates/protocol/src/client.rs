@@ -5,6 +5,7 @@ use crate::common::{ApprovalDecision, Seq, SessionId, Url, WorkerState};
 /// A command from a client. The server answers with `ok` or `error` carrying the same `id`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct ClientRequest {
     pub id: u64,
     #[serde(flatten)]
@@ -13,6 +14,7 @@ pub struct ClientRequest {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(tag = "type")]
 pub enum ClientCommand {
     #[serde(rename = "session.create")]

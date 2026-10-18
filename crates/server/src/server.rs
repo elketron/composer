@@ -141,6 +141,18 @@ impl Server {
         token == self.token || self.devices.verify(token).is_some()
     }
 
+    /// `server.name` from config.toml, else the hostname.
+    pub fn name(&self) -> String {
+        if !self.config.server.name.trim().is_empty() {
+            return self.config.server.name.trim().to_string();
+        }
+        std::fs::read_to_string("/etc/hostname")
+            .map(|h| h.trim().to_string())
+            .ok()
+            .filter(|h| !h.is_empty())
+            .unwrap_or_else(|| "composer".into())
+    }
+
     /// Where the API listens (set by `serve`); workers connect back here.
     pub fn listen_addr(&self) -> Option<SocketAddr> {
         self.listen_addr.get().copied()

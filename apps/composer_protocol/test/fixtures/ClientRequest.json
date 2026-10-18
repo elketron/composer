@@ -1,0 +1,100 @@
+[
+  {
+    "id": 1,
+    "type": "session.create",
+    "agent": "default",
+    "project": null
+  },
+  {
+    "id": 2,
+    "type": "session.list"
+  },
+  {
+    "id": 3,
+    "type": "session.attach",
+    "session": "a3f1",
+    "since": 3
+  },
+  {
+    "id": 4,
+    "type": "session.detach",
+    "session": "a3f1"
+  },
+  {
+    "id": 5,
+    "type": "message.send",
+    "session": "a3f1",
+    "text": "hi",
+    "pages": [
+      "site://home"
+    ],
+    "images": []
+  },
+  {
+    "id": 6,
+    "type": "session.compact",
+    "session": "a3f1"
+  },
+  {
+    "id": 7,
+    "type": "turn.cancel",
+    "session": "a3f1"
+  },
+  {
+    "id": 8,
+    "type": "project.set",
+    "session": "a3f1",
+    "path": "/p"
+  },
+  {
+    "id": 9,
+    "type": "approval.respond",
+    "request": "r1",
+    "decision": "approve"
+  },
+  {
+    "id": 10,
+    "type": "subscribe",
+    "urls": [
+      "*"
+    ]
+  },
+  {
+    "id": 11,
+    "type": "worker.hello",
+    "session": "a3f1"
+  },
+  {
+    "id": 12,
+    "type": "worker.event",
+    "event": {
+      "type": "turn.started",
+      "session": "a3f1",
+      "seq": 1
+    }
+  },
+  {
+    "id": 13,
+    "type": "slot.acquire"
+  },
+  {
+    "id": 14,
+    "type": "slot.release",
+    "grant": 7
+  },
+  {
+    "id": 15,
+    "type": "approval.ask",
+    "site": "t",
+    "recipe": "r",
+    "args": [],
+    "body": "b",
+    "hash": "h"
+  },
+  {
+    "id": 16,
+    "type": "worker.finish",
+    "state": "failed",
+    "summary": "why"
+  }
+]

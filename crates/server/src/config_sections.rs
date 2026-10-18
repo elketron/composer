@@ -20,6 +20,9 @@ pub struct ServerConfig {
     /// Keep on localhost; expose to the tailnet with `tailscale serve`.
     #[serde(default = "default_bind")]
     pub bind: String,
+    /// How this server introduces itself to apps (`GET /api/info`); empty: the hostname.
+    #[serde(default)]
+    pub name: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

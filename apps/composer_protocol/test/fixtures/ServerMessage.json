@@ -1,0 +1,213 @@
+[
+  {
+    "type": "ok",
+    "id": 1,
+    "result": {
+      "kind": "done"
+    }
+  },
+  {
+    "type": "ok",
+    "id": 2,
+    "result": {
+      "kind": "session",
+      "session": {
+        "id": "a3f1",
+        "agent": "default",
+        "project": "/home/me/project",
+        "ticket": null,
+        "parent": null,
+        "state": "awaiting_approval",
+        "last_seq": 42,
+        "context_tokens": 1200,
+        "preview": "hello",
+        "updated": "2026-10-18T12:00:00Z"
+      }
+    }
+  },
+  {
+    "type": "ok",
+    "id": 3,
+    "result": {
+      "kind": "sessions",
+      "sessions": [
+        {
+          "id": "a3f1",
+          "agent": "default",
+          "project": "/home/me/project",
+          "ticket": null,
+          "parent": null,
+          "state": "awaiting_approval",
+          "last_seq": 42,
+          "context_tokens": 1200,
+          "preview": "hello",
+          "updated": "2026-10-18T12:00:00Z"
+        }
+      ]
+    }
+  },
+  {
+    "type": "ok",
+    "id": 4,
+    "result": {
+      "kind": "slot_granted",
+      "grant": 7
+    }
+  },
+  {
+    "type": "ok",
+    "id": 5,
+    "result": {
+      "kind": "approval",
+      "approved": true
+    }
+  },
+  {
+    "type": "error",
+    "id": 6,
+    "message": "nope"
+  },
+  {
+    "type": "error",
+    "id": null,
+    "message": "lagged"
+  },
+  {
+    "type": "turn.started",
+    "session": "a3f1",
+    "seq": 1
+  },
+  {
+    "type": "turn.queued",
+    "session": "a3f1",
+    "seq": 2,
+    "source": {
+      "kind": "worker",
+      "session": "b2c3"
+    }
+  },
+  {
+    "type": "turn.done",
+    "session": "a3f1",
+    "seq": 3,
+    "cancelled": false
+  },
+  {
+    "type": "thinking.delta",
+    "session": "a3f1",
+    "seq": 4,
+    "text": "th"
+  },
+  {
+    "type": "message.delta",
+    "session": "a3f1",
+    "seq": 5,
+    "text": "he"
+  },
+  {
+    "type": "message.done",
+    "session": "a3f1",
+    "seq": 6,
+    "message": {
+      "role": "assistant",
+      "content": "done",
+      "thinking": "hmm",
+      "tool_calls": [
+        {
+          "call_id": "c1",
+          "name": "open",
+          "args": {
+            "url": "site://home"
+          }
+        }
+      ],
+      "source": {
+        "kind": "app",
+        "site": "design"
+      }
+    }
+  },
+  {
+    "type": "tool.call",
+    "session": "a3f1",
+    "seq": 7,
+    "call_id": "c1",
+    "name": "open",
+    "args": {
+      "url": "x"
+    }
+  },
+  {
+    "type": "tool.result",
+    "session": "a3f1",
+    "seq": 8,
+    "call_id": "c1",
+    "result": "ok",
+    "is_error": false
+  },
+  {
+    "type": "session.compacted",
+    "session": "a3f1",
+    "seq": 9,
+    "summary": "sum",
+    "messages": 12
+  },
+  {
+    "type": "agent.navigated",
+    "session": "a3f1",
+    "seq": 10,
+    "url": "site://home/index.md"
+  },
+  {
+    "type": "approval.request",
+    "request": "r1",
+    "session": "a3f1",
+    "site": "tools",
+    "recipe": "hello",
+    "args": [
+      "bob"
+    ],
+    "body": "hello name:\n    echo hi",
+    "hash": "abc"
+  },
+  {
+    "type": "approval.resolved",
+    "request": "r1",
+    "session": "a3f1",
+    "approved": false
+  },
+  {
+    "type": "session.updated",
+    "session": {
+      "id": "a3f1",
+      "agent": "default",
+      "project": "/home/me/project",
+      "ticket": null,
+      "parent": null,
+      "state": "awaiting_approval",
+      "last_seq": 42,
+      "context_tokens": 1200,
+      "preview": "hello",
+      "updated": "2026-10-18T12:00:00Z"
+    }
+  },
+  {
+    "type": "page.changed",
+    "url": "site://memory/user.md",
+    "kind": "modified",
+    "by": "external"
+  },
+  {
+    "type": "worker.status",
+    "worker": "w1",
+    "ticket": "0001",
+    "parent": "a3f1",
+    "state": "done"
+  },
+  {
+    "type": "slots",
+    "used": 1,
+    "total": 2,
+    "waiting": 0
+  }
+]

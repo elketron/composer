@@ -6,13 +6,24 @@ use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use composer_core::SiteUrl;
 use composer_protocol::http::{
-    AppMessage, PageResponse, ProjectDiff, PutPageRequest, PutPageResponse, SearchHit, SiteSummary,
+    AppMessage, PageResponse, ProjectDiff, PutPageRequest, PutPageResponse, SearchHit, ServerInfo,
+    SiteSummary,
 };
 use composer_protocol::{ChangedBy, ChatMessage, MessageSource, Role};
 
 use crate::api::ApiError;
 use crate::server::Server;
 use crate::session::submit;
+
+/// `GET /api/info`: what this server is.
+pub async fn info(State(server): State<Arc<Server>>) -> Json<ServerInfo> {
+    Json(ServerInfo {
+        name: server.name(),
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        model: server.provider.model().to_string(),
+        slots: server.config.agent.slots,
+    })
+}
 
 pub async fn sites(State(server): State<Arc<Server>>) -> Result<Json<Vec<SiteSummary>>, ApiError> {
     let sites = server.workspace.sites()?;

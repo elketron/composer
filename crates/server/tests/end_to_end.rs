@@ -328,6 +328,21 @@ async fn http_pages_auth_and_conflicts() {
     let client = reqwest::Client::new();
     let base = format!("http://{addr}");
 
+    let info: serde_json::Value = client
+        .get(format!("{base}/api/info"))
+        .bearer_auth(&server.token)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(info["model"], "mock");
+    assert_eq!(info["slots"], 2);
+    assert!(
+        !info["name"].as_str().unwrap().is_empty() && !info["version"].as_str().unwrap().is_empty()
+    );
+
     let unauthorized = client
         .get(format!("{base}/api/pages/memory/user"))
         .send()

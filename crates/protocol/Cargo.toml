@@ -8,8 +8,15 @@ license.workspace = true
 [features]
 # `cargo test -p composer-protocol --features ts` writes TS types to bindings/
 ts = ["dep:ts-rs"]
+# JSON Schema of every message, for generating the Dart models (`cargo run -p composer-protocol --features schema --bin dartgen`)
+schema = ["dep:schemars"]
 
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
 ts-rs = { workspace = true, optional = true }
+schemars = { workspace = true, optional = true }
+
+[[bin]]
+name = "dartgen"
+required-features = ["schema"]

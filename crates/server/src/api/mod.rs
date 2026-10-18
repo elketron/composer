@@ -25,6 +25,7 @@ use crate::server::Server;
 pub fn router(server: Arc<Server>) -> Router {
     Router::new()
         .route("/ws", get(ws_routes::upgrade))
+        .route("/api/info", get(http_routes::info))
         .route("/api/sites", get(http_routes::sites))
         .route("/api/search", get(http_routes::search))
         .route(
