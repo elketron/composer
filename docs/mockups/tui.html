@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>composer TUI</title>
+<link rel="stylesheet" href="theme.css">
+<style>
+  body { padding: 40px 32px 80px; }
+  header.doc { max-width: 1240px; margin: 0 auto 40px; }
+  header.doc h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; }
+  header.doc p { color: var(--muted); margin: 0; }
+
+  section.screen { max-width: 1240px; margin: 0 auto 56px; }
+  section.screen h2 { font-size: 14px; font-weight: 600; margin: 0 0 2px; }
+  section.screen p.note { color: var(--muted); margin: 0 0 12px; font-size: 13px; }
+
+  /* ---- terminal ---- */
+  .term {
+    --cell: 1.35em;
+    font: 13px/var(--cell) var(--font-mono);
+    background: var(--bg);
+    border: 1px solid var(--border);
+   
+    height: calc(var(--cell) * 40 + 16px);
+    padding: 8px;
+    display: flex; flex-direction: column; gap: 0;
+    position: relative; overflow: hidden;
+    box-shadow: 0 20px 60px #0008;
+  }
+  .panes { flex: 1; display: flex; gap: 1ch; min-height: 0; }
+  .pane {
+    position: relative; flex: 1; min-width: 0;
+    border: 1px solid var(--border);
+    padding: calc(var(--cell) * .6) 1.5ch calc(var(--cell) * .5);
+    display: flex; flex-direction: column;
+  }
+  .pane.focus { border-color: var(--border-strong); }
+  .pane.focus > .title { color: var(--text); }
+  .pane > .title {
+    position: absolute; top: calc(var(--cell) * -.5); left: 1.5ch;
+    background: var(--bg); padding: 0 1ch; color: var(--muted); white-space: nowrap;
+  }
+  .pane > .title b { color: var(--accent); font-weight: 400; }
+  .pane > .title .sep { color: var(--faint); }
+  .pane .body { flex: 1; overflow: hidden; white-space: pre-wrap; }
+  .pane.chat { flex: 1.15; }
+
+  .status { display: flex; height: var(--cell); margin-top: 6px; color: var(--muted); white-space: pre; }
+  .status > span { padding: 0 1.5ch; border-right: 1px solid var(--border); }
+  .status > span:last-child { border: 0; margin-left: auto; }
+  .mode { color: var(--bg) !important; font-weight: 600; border: 0 !important; }
+  .mode.normal { background: var(--accent); }
+  .mode.insert { background: var(--ok); }
+  .mode.hint   { background: var(--warn); }
+  .mode.cmd    { background: var(--info); }
+
+  /* chat */
+  .who { color: var(--muted); }
+  .who.you { color: var(--accent); }
+  .who.agent { color: var(--info); }
+  .row { color: var(--muted); }
+  .row .k { color: var(--faint); }
+  .row .n { color: var(--info); }
+  .row .ok { color: var(--ok); }
+  .think { color: var(--faint); font-style: italic; border-left: 1px solid var(--border-strong); padding-left: 1.5ch; display: block; }
+  .cursor { background: var(--text); color: var(--bg); }
+  .stream::after { content: '▍'; color: var(--accent); }
+  /* message blocks: full-width background bands, one colour per speaker */
+  .msg { display: block; margin: 0 -1ch calc(var(--cell) * .5); padding: calc(var(--cell) * .25) 1ch; }
+  .msg.you   { background: var(--you); }
+  .msg.agent { background: var(--surface); }
+  .msg.sys   { background: none; border: 1px solid var(--border); }
+  .input {
+    border: 1px solid var(--border); padding: 0 1ch;
+    min-height: calc(var(--cell) * 2 + 2px); margin-top: 6px; white-space: pre-wrap; color: var(--text);
+  }
+  .input.active { border-color: var(--ok); }
+  .input .ph { color: var(--faint); }
+  .lnk { color: var(--accent); text-decoration: underline; text-decoration-color: #8fb3e855; text-underline-offset: 3px; }
+
+  /* page viewer */
+  .fm { color: var(--faint); }
+  .fm .key { color: var(--muted); }
+  .h1 { color: var(--text); font-weight: 600; }
+  .h2 { color: var(--text); font-weight: 600; }
+  .dim { color: var(--muted); }
+  .faint { color: var(--faint); }
+  .bl { border-top: 1px solid var(--border); margin-top: 6px; padding-top: 4px; color: var(--muted); }
+  .tag { color: var(--info); }
+
+  /* hint labels */
+  .hint { background: var(--warn); color: var(--bg); font-weight: 600; padding: 0 .3ch; margin-right: .3ch; }
+  .term.hinting .body { color: var(--faint); }
+  .term.hinting .lnk { color: var(--text); }
+
+  /* floating */
+  .float {
+    position: absolute; left: 50%; top: 14%; transform: translateX(-50%);
+    width: 84ch; background: var(--surface);
+    border: 1px solid var(--border-strong);
+    box-shadow: 0 24px 80px #000c; padding: calc(var(--cell)*.6) 0 0;
+  }
+  .float > .title { position: absolute; top: calc(var(--cell) * -.5); left: 1.5ch; padding: 0 1ch; background: var(--surface); color: var(--text); }
+  .float .q { padding: 0 2ch; border-bottom: 1px solid var(--border); padding-bottom: 6px; white-space: pre; }
+  .float .q .p { color: var(--accent); }
+  .float ul { list-style: none; margin: 0; padding: 4px 0; }
+  .float li { display: flex; padding: 0 2ch; white-space: pre; color: var(--muted); }
+  .float li .t { color: var(--text); width: 20ch; flex: none; }
+  .float li .r { margin-left: auto; color: var(--faint); }
+  .float li.sel { background: var(--raised); box-shadow: inset 2px 0 var(--accent); }
+  .float li mark { background: none; color: var(--accent); }
+  .float .foot { border-top: 1px solid var(--border); padding: 2px 2ch; color: var(--faint); white-space: pre; }
+  .float .foot b { color: var(--muted); font-weight: 400; }
+  .float.warn { border-color: var(--warn); }
+  .float.warn > .title { color: var(--warn); }
+  .code { background: var(--bg); margin: 6px 2ch; padding: 4px 1.5ch; border: 1px solid var(--border); white-space: pre; color: var(--text); }
+  .scrim { position: absolute; inset: 0; background: #0008; }
+
+  /* diff */
+  .add { color: var(--ok); }
+  .del { color: var(--err); }
+  .mod { color: var(--warn); }
+  .hunk { color: var(--info); }
+  .ln { color: var(--faint); }
+  .selrow { background: var(--raised); display: block; box-shadow: inset 2px 0 var(--accent); }
+</style>
+</head>
+<body>
+
+<header class="doc">
+  <h1>composer · TUI mockups</h1>
+  <p>Two panes, everything else floats. One accent colour (links, focus, Normal mode); state colours only where state matters.</p>
+</header>
+
+<!-- ============ 1. main ============ -->
+<section class="screen">
+  <h2>1 · Main: chat + page viewer, agent streaming</h2>
+  <p class="note">Tool calls and thinking collapse to one-line rows. The viewer follows the agent; the title shows the page URL.</p>
+  <div class="term">
+    <div class="panes">
+      <div class="pane chat focus">
+        <span class="title"><b>default</b> <span class="sep">·</span> composer <span class="sep">·</span> #a3f1</span>
+        <div class="body"><div class="msg you"><span class="who you">you</span>
+what's left on the server api plan?</div><div class="msg agent"><span class="who agent">agent</span>
+<span class="row"><span class="k">▸</span> thinking <span class="k">· 312 tok</span></span>
+<span class="row"><span class="k">▸</span> <span class="n">open</span>    site://plans/server-api</span>
+<span class="row"><span class="k">▸</span> <span class="n">search</span>  type:ticket plan:server-api <span class="k">→ 3 pages</span></span>
+<span class="row"><span class="k">▸</span> <span class="n">open</span>    site://orchestration/tickets/0003</span>
+
+Two steps are still open on <span class="lnk">server-api</span>:
+
+  1. HTTP page endpoints — <span class="lnk">ticket 0003</span> is claimed by a
+     worker, no result yet.
+  2. Device pairing — no ticket yet.
+
+The WS message types are done (<span class="lnk">ticket 0002</span>). Want me to
+create a ticket for pairing and queue it after 0003?</div><div class="msg you"><span class="who you">you</span>
+yes, and note in memory that pairing uses QR codes</div><div class="msg agent"><span class="who agent">agent</span>
+<span class="row"><span class="k">▸</span> <span class="n">run</span>     orchestration › new-ticket "Device pairing" <span class="ok">✓</span></span>
+<span class="row"><span class="k">▸</span> <span class="n">edit</span>    site://orchestration/tickets/0004</span>
+<span class="stream">Created <span class="lnk">ticket 0004</span>. Adding the QR detail to the project</span></div></div>
+        <div class="input"><span class="ph">i to write · ctrl-c cancels the turn</span></div>
+      </div>
+
+      <div class="pane">
+        <span class="title">site://orchestration/tickets/0004</span>
+        <div class="body"><span class="fm">title   <span class="dim">Device pairing</span>
+type    <span class="tag">ticket</span>      status  <span class="dim">open</span>
+plan    <span class="lnk">site://plans/server-api</span></span>
+
+<span class="h1"># Device pairing</span>
+
+<span class="h2">## Task</span>
+Add <span class="dim">`composer pair`</span>: generate a one-time code,
+show it as a QR code, exchange it for a device token
+stored in state/devices.toml.
+
+<span class="h2">## Context</span>
+  • <span class="lnk">Remote access</span>  <span class="faint">site://plans/server-api#remote</span>
+  • <span class="lnk">composer</span>  <span class="faint">site://memory/projects/composer</span>
+
+<span class="h2">## Done when</span>
+  • a phone can pair and call /api/sites
+  • tokens can be revoked
+
+<span class="h2">## Result</span>
+<span class="faint">—</span>
+
+
+
+<div class="bl">backlinks  <span class="lnk">site://plans/server-api</span></div></div>
+      </div>
+    </div>
+    <div class="status"><span class="mode normal"> NORMAL </span><span>~/Projects/composer</span><span>ctx 38K/160K</span><span>slots 2/2 · 1 waiting</span><span>● following agent</span></div>
+  </div>
+</section>
+
+<!-- ============ 2. picker ============ -->
+<section class="screen">
+  <h2>2 · Floating picker: <code>Space p</code> pages</h2>
+  <p class="note">Fuzzy match over URLs and titles. Same window for sites, search, sessions and tickets; only the source changes.</p>
+  <div class="term">
+    <div class="panes">
+      <div class="pane chat"><span class="title"><b>default</b> <span class="sep">·</span> composer</span><div class="body faint">…</div></div>
+      <div class="pane"><span class="title">site://orchestration/tickets/0004</span><div class="body faint">…</div></div>
+    </div>
+    <div class="status"><span class="mode normal"> NORMAL </span><span>~/Projects/composer</span><span>ctx 38K/160K</span><span>slots 1/2</span><span>● following agent</span></div>
+    <div class="scrim"></div>
+    <div class="float">
+      <span class="title">pages</span>
+      <div class="q"><span class="p">›</span> comp<span class="cursor"> </span>                                                          <span class="faint">6/214</span></div>
+      <ul>
+        <li class="sel"><span class="t"><mark>comp</mark>oser</span>          <span class="dim">memory/projects/<mark>comp</mark>oser.md</span><span class="r">memory</span></li>
+        <li><span class="t">Server API</span>        <span class="dim">plans/server-api.md · <mark>comp</mark>oser</span><span class="r">plans</span></li>
+        <li><span class="t">TUI layout</span>        <span class="dim">plans/tui.md · <mark>comp</mark>oser</span><span class="r">plans</span></li>
+        <li><span class="t">Device pairing</span>    <span class="dim">orchestration/tickets/0004.md</span><span class="r">orchestration</span></li>
+        <li><span class="t">Ratatui patterns</span>  <span class="dim">memory/topics/ratatui.md · <mark>comp</mark>onents</span><span class="r">memory</span></li>
+        <li><span class="t">Default</span>           <span class="dim">agents/default.md · inside <mark>comp</mark>oser</span><span class="r">agents</span></li>
+      </ul>
+      <div class="foot"><b>enter</b> open   <b>ctrl-v</b> open in split   <b>e</b> nvim   <b>tab</b> preview   <b>esc</b> close</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 3. approval ============ -->
+<section class="screen">
+  <h2>3 · Recipe approval</h2>
+  <p class="note">Only for a recipe not run before, or one whose body changed since approval. Warn colour, never the accent.</p>
+  <div class="term">
+    <div class="panes">
+      <div class="pane chat"><span class="title"><b>default</b> <span class="sep">·</span> composer</span><div class="body"><div class="msg you"><span class="who you">you</span>
+take a snapshot of the login mockup</div><div class="msg agent"><span class="who agent">agent</span>
+<span class="row"><span class="k">▸</span> <span class="n">actions</span> design</span>
+<span class="row"><span class="k">▸</span> <span class="n">run</span>     design › snapshot login <span style="color:var(--warn)">waiting for approval</span></span></div></div>
+        <div class="input"><span class="ph">i to write</span></div></div>
+      <div class="pane"><span class="title">site://design/mockups/login/annotations.md</span><div class="body faint">…</div></div>
+    </div>
+    <div class="status"><span class="mode normal"> NORMAL </span><span>~/Projects/composer</span><span>ctx 41K/160K</span><span>slots 1/2</span><span>● following agent</span></div>
+    <div class="scrim"></div>
+    <div class="float warn" style="top:20%">
+      <span class="title">run recipe?</span>
+      <div class="q"><span class="dim">site</span> design   <span class="dim">recipe</span> snapshot   <span class="dim">args</span> login   <span class="faint">new · never approved</span></div>
+      <div class="code">snapshot name:
+    playwright screenshot ui/dist/index.html#{{name}} \
+      mockups/{{name}}/snapshot.png --viewport-size 1280,800</div>
+      <div class="q faint" style="border:0">sha256 4be1…9c02 · approval is kept until the recipe body changes</div>
+      <div class="foot"><b>y</b> approve   <b>n</b> deny   <b>e</b> view in nvim</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 4. hints ============ -->
+<section class="screen">
+  <h2>4 · Hint mode: <code>f</code></h2>
+  <p class="note">Every visible link gets a label; typing it follows the link. Everything else dims.</p>
+  <div class="term hinting">
+    <div class="panes">
+      <div class="pane chat"><span class="title"><b>default</b> <span class="sep">·</span> composer</span>
+        <div class="body"><div class="msg you"><span class="who you">you</span>
+what's left on the server api plan?</div><div class="msg agent"><span class="who agent">agent</span>
+Two steps are still open on <span class="hint">a</span><span class="lnk">server-api</span>:
+
+  1. HTTP page endpoints — <span class="hint">s</span><span class="lnk">ticket 0003</span> is claimed.
+  2. Device pairing — no ticket yet.
+
+The WS message types are done (<span class="hint">d</span><span class="lnk">ticket 0002</span>).</div></div>
+        <div class="input"></div></div>
+      <div class="pane focus"><span class="title">site://memory/projects/composer.md</span>
+        <div class="body"><span class="h1"># composer</span>
+
+Rust server + Ratatui TUI + Svelte micro apps.
+Agents browse a web of markdown sites.
+
+<span class="h2">## Links</span>
+  • <span class="hint">f</span><span class="lnk">plan</span>          site://plans/composer
+  • <span class="hint">g</span><span class="lnk">server api</span>    site://plans/server-api
+  • <span class="hint">h</span><span class="lnk">user</span>          site://memory/user
+
+<span class="h2">## Decisions</span>
+  • Provider: local OpenAI-compatible, 2 slots.
+  • Pairing uses QR codes. <span class="faint">(2026-10-18)</span></div></div>
+    </div>
+    <div class="status"><span class="mode hint"> HINT </span><span>type a label · esc cancels</span><span></span><span>● following agent</span></div>
+  </div>
+</section>
+
+<!-- ============ 5. changes ============ -->
+<section class="screen">
+  <h2>5 · Changes view: <code>gd</code></h2>
+  <p class="note">A built-in view in the right pane. Live git status + diff of the active project. <code>enter</code> on a line opens nvim there.</p>
+  <div class="term">
+    <div class="panes">
+      <div class="pane chat"><span class="title"><b>default</b> <span class="sep">·</span> composer</span>
+        <div class="body"><div class="msg you"><span class="who you">you</span>
+run the tests and show me what changed</div><div class="msg agent"><span class="who agent">agent</span>
+<span class="row"><span class="k">▸</span> <span class="n">run</span>     composer › test <span class="ok">✓ 14 passed</span></span>
+
+Added URL resolution with relative links and
+<span class="dim">`site://x`</span> → <span class="dim">`x/index.md`</span>. Tests cover cross-site links.</div></div>
+        <div class="input"><span class="ph">i to write</span></div></div>
+      <div class="pane focus"><span class="title">changes <span class="sep">·</span> ~/Projects/composer <span class="sep">·</span> main</span>
+        <div class="body"><span class="mod">M</span> crates/core/src/url.rs          <span class="add">+48</span> <span class="del">-6</span>
+<span class="add">A</span> crates/core/tests/resolve.rs    <span class="add">+72</span>
+<span class="mod">M</span> crates/core/src/lib.rs           <span class="add">+1</span>
+
+<span class="hunk">@@ crates/core/src/url.rs:31 @@ impl SiteUrl</span>
+<span class="ln"> 31</span>      pub fn resolve(&self, href: &str) -> Result&lt;SiteUrl&gt; {
+<span class="ln"> 32</span> <span class="del">-        Ok(Self::parse(href)?)</span>
+<span class="selrow"><span class="ln"> 32</span> <span class="add">+        if let Some(rest) = href.strip_prefix("site://") {</span></span><span class="ln"> 33</span> <span class="add">+            return Self::parse_abs(rest);</span>
+<span class="ln"> 34</span> <span class="add">+        }</span>
+<span class="ln"> 35</span> <span class="add">+        let base = self.path.parent().unwrap_or(Path::new(""));</span>
+<span class="ln"> 36</span> <span class="add">+        Ok(SiteUrl { site: self.site.clone(),</span>
+<span class="ln"> 37</span> <span class="add">+                     path: normalize(base.join(href))? })</span>
+<span class="ln"> 38</span>      }
+<span class="ln"> 39</span>
+<span class="hunk">@@ crates/core/src/url.rs:71 @@ fn normalize</span>
+<span class="ln"> 71</span> <span class="add">+    if path.as_os_str().is_empty() {</span>
+<span class="ln"> 72</span> <span class="add">+        return Ok(PathBuf::from("index.md"));</span>
+<span class="ln"> 73</span> <span class="add">+    }</span></div></div>
+    </div>
+    <div class="status"><span class="mode normal"> NORMAL </span><span>~/Projects/composer</span><span>ctx 52K/160K</span><span>slots 0/2</span><span>○ not following</span></div>
+  </div>
+</section>
+
+<!-- ============ 6. worker ============ -->
+<section class="screen">
+  <h2>6 · Attached to a worker, Insert mode</h2>
+  <p class="note">The worker replaces the main chat; the breadcrumb shows where you are. <code>ctrl-o</code> jumps back.</p>
+  <div class="term">
+    <div class="panes">
+      <div class="pane chat focus"><span class="title"><b>orchestrator</b> <span class="sep">›</span> <b>worker</b> #0003 <span class="sep">·</span> <span style="color:var(--warn)">running</span></span>
+        <div class="body"><div class="msg sys"><span class="who">ticket · from orchestrator</span>
+Implement HTTP page endpoints <span class="faint">site://orchestration/tickets/0003</span></div><div class="msg agent"><span class="who agent">worker</span>
+<span class="row"><span class="k">▸</span> <span class="n">open</span>    site://orchestration/tickets/0003</span>
+<span class="row"><span class="k">▾</span> thinking <span class="k">· 188 tok</span></span>
+<span class="think">The context links the API section of the plan. GET
+and PUT for pages, files separate. Frontmatter should
+come back parsed so apps don't need a YAML parser.</span>
+<span class="row"><span class="k">▸</span> <span class="n">open</span>    site://plans/server-api#http</span>
+<span class="row"><span class="k">▸</span> <span class="n">edit</span>    ~/Projects/composer/crates/server/src/http.rs</span>
+<span class="row"><span class="k">▸</span> <span class="n">run</span>     composer › test <span class="ok">✓</span></span>
+
+<span class="stream">GET and PUT are in. Writing the hash check for PUT</span></div></div>
+        <div class="input active">also return the etag header so the nvim round trip can use it<span class="cursor"> </span></div></div>
+      <div class="pane"><span class="title">site://plans/server-api</span>
+        <div class="body"><span class="fm">type <span class="tag">plan</span>   status <span class="dim">active</span>   project <span class="dim">composer</span></span>
+
+<span class="h1"># Server API</span>
+
+<span class="h2">## Steps</span>
+  <span class="ok">[x]</span> WS message types  <span class="lnk">0002</span>
+  <span class="faint">[ ]</span> HTTP endpoints  <span class="lnk">0003</span>  <span style="color:var(--warn)">claimed</span>
+  <span class="faint">[ ]</span> Device pairing  <span class="lnk">0004</span>
+
+<span class="h2">## Decisions</span>
+  • JSON over WS, seq-numbered events.
+    <span class="dim">Why: replay is reading the log.</span></div></div>
+    </div>
+    <div class="status"><span class="mode insert"> INSERT </span><span>~/Projects/composer</span><span>ctx 21K/160K</span><span>slots 2/2</span><span>ctrl-o back to orchestrator</span></div>
+  </div>
+</section>
+
+</body>
+</html>

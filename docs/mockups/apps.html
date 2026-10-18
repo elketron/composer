@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>composer apps</title>
+<link rel="stylesheet" href="theme.css">
+<style>
+  body { padding: 40px 32px 80px; }
+  .doc { max-width: 1240px; margin: 0 auto; }
+  .doc > header h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; }
+  .doc > header p { color: var(--muted); margin: 0 0 40px; }
+  section.shot { margin-bottom: 56px; }
+  section.shot > h2 { font-size: 14px; font-weight: 600; margin: 0 0 2px; }
+  section.shot > p.note { color: var(--muted); margin: 0 0 14px; font-size: 13px; }
+  .label { font: 11px var(--font-mono); color: var(--faint); text-transform: uppercase; letter-spacing: .06em; margin: 0 0 8px; }
+
+  /* ===== sdk components (these become templates/sdk) ===== */
+  .btn {
+    font: 500 13px var(--font-ui); height: 30px; padding: 0 12px; border-radius: var(--radius);
+    border: 1px solid var(--border-strong); background: var(--raised); color: var(--text);
+    display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
+  }
+  .btn:hover { border-color: var(--faint); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+  .btn.ghost { background: none; border-color: transparent; color: var(--muted); }
+  .btn.danger { color: var(--err); }
+  .btn:focus-visible, .input:focus, .focus-ring { outline: 2px solid var(--accent); outline-offset: 1px; }
+  kbd {
+    font: 11px var(--font-mono); color: var(--muted); padding: 1px 5px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border-strong); background: var(--surface);
+  }
+  .btn.primary kbd { color: var(--bg); border-color: #0003; background: #0001; }
+  .input {
+    font: 13px var(--font-ui); height: 30px; padding: 0 10px; border-radius: var(--radius);
+    border: 1px solid var(--border-strong); background: var(--bg); color: var(--text); width: 100%;
+  }
+  textarea.input { height: auto; padding: 8px 10px; resize: none; line-height: 1.5; }
+  .input::placeholder { color: var(--faint); }
+  .badge { font: 11px var(--font-mono); padding: 1px 7px; border-radius: var(--radius-sm); border: 1px solid currentColor; display: inline-block; line-height: 16px; }
+  .badge.open { color: var(--muted); }
+  .badge.claimed { color: var(--warn); }
+  .badge.done { color: var(--ok); }
+  .badge.failed { color: var(--err); }
+  .badge.agent { color: var(--info); }
+  .dot { width: 7px; height: 7px; border-radius: var(--radius-sm); background: var(--ok); display: inline-block; }
+  .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); }
+  .tabs a { color: var(--muted); padding: 6px 12px; font-size: 13px; border-bottom: 2px solid transparent; margin-bottom: -1px; text-decoration: none; }
+  .tabs a.on { color: var(--text); border-color: var(--accent); }
+  .list { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .list > div { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .list > div:last-child { border: 0; }
+  .list > div.sel { background: var(--raised); box-shadow: inset 2px 0 var(--accent); }
+  .list .sub { color: var(--faint); font: 12px var(--font-mono); margin-left: auto; }
+  .toast { background: var(--overlay); border: 1px solid var(--border-strong); border-radius: var(--radius); padding: 10px 14px; font-size: 13px; display: flex; gap: 10px; align-items: center; box-shadow: 0 10px 30px #0008; }
+  .muted { color: var(--muted); } .faint { color: var(--faint); }
+
+  /* ===== app shell ===== */
+  .app { border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); overflow: hidden; box-shadow: 0 20px 60px #0008; display: flex; flex-direction: column; }
+  .bar { height: 44px; display: flex; align-items: center; gap: 12px; padding: 0 14px; border-bottom: 1px solid var(--border); background: var(--surface); font-size: 13px; }
+  .bar .site { font: 600 13px var(--font-mono); color: var(--text); }
+  .bar .crumb { font: 12px var(--font-mono); color: var(--faint); }
+  .bar .crumb b { color: var(--muted); font-weight: 400; }
+  .bar .right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+  .chip { font: 12px var(--font-mono); color: var(--muted); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 2px 10px; display: inline-flex; gap: 6px; align-items: center; }
+  .foot { height: 28px; display: flex; align-items: center; gap: 16px; padding: 0 14px; border-top: 1px solid var(--border); font-size: 12px; color: var(--faint); }
+
+  /* ===== design system section ===== */
+  .ds { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; }
+  .swatches { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .sw { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; font: 11px var(--font-mono); }
+  .sw i { display: block; height: 40px; }
+  .sw span { display: block; padding: 5px 8px; color: var(--muted); background: var(--surface); }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+
+  /* ===== tickets board ===== */
+  .board { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding: 14px; height: 470px; }
+  .col h3 { font: 500 12px var(--font-mono); color: var(--muted); margin: 0 0 10px; display: flex; gap: 8px; align-items: center; }
+  .col h3 .n { color: var(--faint); }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; margin-bottom: 8px; font-size: 13px; }
+  .card.sel { border-color: var(--accent); }
+  .card .id { font: 11px var(--font-mono); color: var(--faint); }
+  .card .t { margin: 2px 0 8px; color: var(--text); }
+  .card .meta { display: flex; gap: 8px; align-items: center; font: 11px var(--font-mono); color: var(--faint); }
+  .card .meta a { color: var(--muted); }
+  .pulse { width: 6px; height: 6px; border-radius: var(--radius-sm); background: var(--warn); box-shadow: 0 0 0 3px #d6b06a22; }
+
+  /* ===== mockup annotator ===== */
+  .ann { display: grid; grid-template-columns: 200px 1fr 300px; height: 560px; }
+  .side { border-right: 1px solid var(--border); padding: 12px; }
+  .side.r { border-right: 0; border-left: 1px solid var(--border); display: flex; flex-direction: column; gap: 12px; }
+  .canvas { background: var(--bg) radial-gradient(var(--border) 1px, transparent 1px) 0 0 / 16px 16px; position: relative; display: grid; place-items: center; }
+  .frame { width: 360px; background: #e9eaee; border-radius: var(--radius); padding: 32px 28px; color: #222; font-size: 13px; position: relative; box-shadow: 0 10px 40px #0009; }
+  .frame h4 { margin: 0 0 18px; font-size: 18px; }
+  .frame .f { height: 34px; border: 1px solid #c4c7cf; border-radius: 4px; background: #fff; margin: 4px 0 12px; }
+  .frame .b { height: 36px; border-radius: 4px; background: #333; margin-top: 8px; }
+  .frame .s { color: #777; font-size: 12px; margin-top: 14px; text-align: center; }
+  .box { position: absolute; border: 1.5px dashed var(--accent); border-radius: var(--radius-sm); background: #8fb3e810; }
+  .box .num { position: absolute; top: -10px; left: -10px; width: 20px; height: 20px; border-radius: var(--radius-sm); background: var(--accent); color: var(--bg); font: 600 11px var(--font-mono); display: grid; place-items: center; }
+  .box.draft { border-color: var(--warn); background: #d6b06a10; }
+  .box.draft .num { background: var(--warn); }
+  .anote { border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; font-size: 13px; background: var(--surface); }
+  .anote .h { display: flex; gap: 8px; align-items: center; margin-bottom: 4px; font: 11px var(--font-mono); color: var(--faint); }
+  .anote .n { width: 18px; height: 18px; border-radius: var(--radius-sm); background: var(--accent); color: var(--bg); font: 600 10px var(--font-mono); display: grid; place-items: center; }
+  .anote.draft { border-color: var(--warn); }
+  .anote.draft .n { background: var(--warn); }
+  .tools { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); display: flex; gap: 2px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 3px; }
+  .tools span { font: 12px var(--font-mono); color: var(--muted); padding: 3px 10px; border-radius: var(--radius-sm); }
+  .tools span.on { background: var(--raised); color: var(--text); }
+
+  /* ===== phone ===== */
+  .phones { display: flex; gap: 32px; align-items: flex-start; }
+  .phone { width: 390px; height: 780px; border-radius: 28px; border: 1px solid var(--border-strong); background: var(--bg); overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 20px 60px #0009; }
+  .phone .bar { height: 52px; }
+  .msgs { flex: 1; padding: 14px; display: flex; flex-direction: column; gap: 12px; overflow: hidden; font-size: 14px; }
+  .who { font: 11px var(--font-mono); color: var(--faint); margin-bottom: 2px; }
+  .who.you { color: var(--accent); } .who.agent { color: var(--info); }
+  .me { align-self: flex-end; background: var(--you); border: 1px solid #8fb3e826; border-radius: var(--radius) var(--radius) var(--radius-sm) var(--radius); padding: 8px 12px; max-width: 80%; }
+  .tool { font: 12px var(--font-mono); color: var(--faint); }
+  .tool b { color: var(--info); font-weight: 400; }
+  .appr { border: 1px solid var(--warn); border-radius: var(--radius); padding: 12px; background: var(--surface); }
+  .appr pre { font: 12px var(--font-mono); background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px; margin: 8px 0 10px; white-space: pre-wrap; color: var(--text); }
+  .compose { border-top: 1px solid var(--border); padding: 10px; display: flex; gap: 8px; background: var(--surface); }
+  .compose .input { height: 40px; border-radius: var(--radius); padding: 0 14px; font-size: 14px; }
+  .compose .btn { height: 40px; width: 40px; border-radius: var(--radius); justify-content: center; padding: 0; }
+  .sess { padding: 8px 14px; display: flex; flex-direction: column; gap: 6px; }
+  .sess .s { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; background: var(--surface); }
+  .sess .s .t { display: flex; justify-content: space-between; font-size: 14px; }
+  .sess .s .p { font-size: 13px; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+</style>
+</head>
+<body>
+<div class="doc">
+<header>
+  <h1>composer · micro apps</h1>
+  <p>Shared sdk (theme + components) and the app shell every scaffold starts from. Dark, quiet, one accent. Keyboard hints are part of the UI, not a help page.</p>
+</header>
+
+<!-- ============ design system ============ -->
+<section class="shot">
+  <h2>Design system · <code>templates/sdk</code></h2>
+  <p class="note">Same tokens as the TUI. Four surfaces, three text levels, one accent, four state colours.</p>
+  <div class="ds">
+    <div>
+      <div class="label">surfaces &amp; text</div>
+      <div class="swatches" style="margin-bottom:16px">
+        <div class="sw"><i style="background:var(--bg)"></i><span>bg #0c0d0f</span></div>
+        <div class="sw"><i style="background:var(--surface)"></i><span>surface #121317</span></div>
+        <div class="sw"><i style="background:var(--raised)"></i><span>raised #191b20</span></div>
+        <div class="sw"><i style="background:var(--overlay)"></i><span>overlay #1f2228</span></div>
+        <div class="sw"><i style="background:var(--text)"></i><span>text #d5d8de</span></div>
+        <div class="sw"><i style="background:var(--muted)"></i><span>muted #868c96</span></div>
+        <div class="sw"><i style="background:var(--faint)"></i><span>faint #50555e</span></div>
+        <div class="sw"><i style="background:var(--border-strong)"></i><span>border #363a42</span></div>
+      </div>
+      <div class="label">accent &amp; state</div>
+      <div class="swatches">
+        <div class="sw"><i style="background:var(--accent)"></i><span>accent</span></div>
+        <div class="sw"><i style="background:var(--ok)"></i><span>ok</span></div>
+        <div class="sw"><i style="background:var(--warn)"></i><span>warn</span></div>
+        <div class="sw"><i style="background:var(--err)"></i><span>err</span></div>
+        <div class="sw"><i style="background:var(--info)"></i><span>info · agent</span></div>
+      </div>
+    </div>
+    <div>
+      <div class="label">components</div>
+      <div class="row">
+        <button class="btn primary">Send to agent <kbd>⌘↵</kbd></button>
+        <button class="btn">New ticket <kbd>n</kbd></button>
+        <button class="btn ghost">Cancel</button>
+        <button class="btn danger">Delete</button>
+      </div>
+      <div class="row"><input class="input" placeholder="Search pages…  type:ticket status:open" style="max-width:380px"></div>
+      <div class="row">
+        <span class="badge open">open</span><span class="badge claimed">claimed</span>
+        <span class="badge done">done</span><span class="badge failed">failed</span><span class="badge agent">worker</span>
+      </div>
+      <div class="row" style="display:block"><div class="tabs"><a class="on">Board</a><a>List</a><a>Page</a></div></div>
+      <div class="list" style="margin-bottom:14px">
+        <div class="sel">composer <span class="sub">memory/projects</span></div>
+        <div>Server API <span class="sub">plans</span></div>
+        <div>Device pairing <span class="sub">tickets/0004</span></div>
+      </div>
+      <div class="toast"><span class="dot"></span>Sent to <span class="mono">default · #a3f1</span> <span class="faint" style="margin-left:auto">queued after current turn</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ tickets ============ -->
+<section class="shot">
+  <h2>Example · <code>site://orchestration</code> ticket board</h2>
+  <p class="note">The shell (top bar, footer) is identical in every app: site, current page, connection, session. Cards are ticket pages; moving a card edits frontmatter.</p>
+  <div class="app">
+    <div class="bar">
+      <span class="site">orchestration</span><span class="crumb">/ <b>tickets</b></span>
+      <div class="tabs" style="border:0;margin-left:16px"><a class="on">Board</a><a>List</a></div>
+      <div class="right">
+        <span class="chip"><span class="dot"></span>default · #a3f1</span>
+        <span class="chip">slots 2/2</span>
+        <button class="btn">New ticket <kbd>n</kbd></button>
+      </div>
+    </div>
+    <div class="board">
+      <div class="col"><h3><span class="badge open">open</span><span class="n">1</span></h3>
+        <div class="card"><div class="id">0005</div><div class="t">Compaction turn writes to memory</div><div class="meta"><a>plans/memory</a></div></div>
+      </div>
+      <div class="col"><h3><span class="badge claimed">claimed</span><span class="n">2</span></h3>
+        <div class="card sel"><div class="id">0003</div><div class="t">Implement HTTP page endpoints</div><div class="meta"><span class="pulse"></span>worker · 4m <a style="margin-left:auto">plans/server-api</a></div></div>
+        <div class="card"><div class="id">0004</div><div class="t">Device pairing</div><div class="meta"><span class="faint">waiting for slot</span><a style="margin-left:auto">plans/server-api</a></div></div>
+      </div>
+      <div class="col"><h3><span class="badge done">done</span><span class="n">2</span></h3>
+        <div class="card"><div class="id">0002</div><div class="t">WS message types</div><div class="meta">12 files · <a>plans/server-api</a></div></div>
+        <div class="card"><div class="id">0001</div><div class="t">Cargo workspace + core crate</div><div class="meta">8 files · <a>plans/composer</a></div></div>
+      </div>
+      <div class="col"><h3><span class="badge failed">failed</span><span class="n">0</span></h3>
+        <div class="faint" style="font-size:13px;border:1px dashed var(--border);border-radius:var(--radius);padding:16px;text-align:center">nothing failed</div>
+      </div>
+    </div>
+    <div class="foot"><span><kbd>h/l</kbd> column</span><span><kbd>j/k</kbd> card</span><span><kbd>enter</kbd> open page</span><span><kbd>a</kbd> attach in TUI</span><span style="margin-left:auto">site://orchestration/tickets/0003</span></div>
+  </div>
+</section>
+
+<!-- ============ annotator ============ -->
+<section class="shot">
+  <h2>Example · <code>site://design</code> mockup annotator</h2>
+  <p class="note">Draw a box, write what should change, send. Boxes save to <code>mockup.json</code>, notes to <code>annotations.md</code>, and a snapshot goes with the message as an image.</p>
+  <div class="app">
+    <div class="bar">
+      <span class="site">design</span><span class="crumb">/ mockups / <b>login</b></span>
+      <div class="right">
+        <span class="chip"><span class="dot"></span>default · #a3f1</span>
+      </div>
+    </div>
+    <div class="ann">
+      <div class="side">
+        <div class="label">mockups</div>
+        <div class="list">
+          <div class="sel">login <span class="sub">2</span></div>
+          <div>settings <span class="sub">0</span></div>
+          <div>ticket view <span class="sub">5</span></div>
+        </div>
+      </div>
+      <div class="canvas">
+        <div class="tools"><span>select <kbd>v</kbd></span><span class="on">box <kbd>b</kbd></span><span>arrow <kbd>a</kbd></span></div>
+        <div class="frame">
+          <h4>Sign in</h4>
+          <div>Email</div><div class="f"></div>
+          <div>Password</div><div class="f"></div>
+          <div class="b"></div>
+          <div class="s">Forgot password? · Create account</div>
+          <div class="box" style="left:20px;top:80px;width:320px;height:130px"><span class="num">1</span></div>
+          <div class="box draft" style="left:60px;top:264px;width:240px;height:26px"><span class="num">2</span></div>
+        </div>
+      </div>
+      <div class="side r">
+        <div class="label" style="margin:0">annotations</div>
+        <div class="anote"><div class="h"><span class="n">1</span>sent · 10:42</div>Replace email + password with a single “pair this device” code field.</div>
+        <div class="anote draft"><div class="h"><span class="n">2</span>draft</div><textarea class="input" rows="3" style="border:0;padding:0;background:none">These links aren't needed, pairing is the only way in. Remove them.</textarea></div>
+        <div style="margin-top:auto">
+          <label style="display:flex;gap:8px;align-items:center;font-size:12px;color:var(--muted);margin-bottom:10px"><input type="checkbox" checked> attach snapshot</label>
+          <button class="btn primary" style="width:100%;justify-content:center">Send 1 note to agent <kbd>⌘↵</kbd></button>
+        </div>
+      </div>
+    </div>
+    <div class="foot"><span>agent sees <span class="mono">site://design/mockups/login</span></span><span style="margin-left:auto"><span class="dot" style="background:var(--warn)"></span> agent edited mockup.json · 10:44</span></div>
+  </div>
+</section>
+
+<!-- ============ phone ============ -->
+<section class="shot">
+  <h2>Example · <code>site://chat</code> on the phone</h2>
+  <p class="note">Check in and send short messages. Sessions list, chat with collapsed tool rows, approvals inline.</p>
+  <div class="phones">
+    <div class="phone">
+      <div class="bar"><span class="site">chat</span><div class="right"><span class="chip">slots 1/2</span></div></div>
+      <div class="sess">
+        <div class="label" style="margin:8px 0 2px">sessions</div>
+        <div class="s"><div class="t"><span>default <span class="faint mono">#a3f1</span></span><span class="badge claimed">running</span></div><div class="p">Created ticket 0004. Adding the QR detail to…</div></div>
+        <div class="s"><div class="t"><span>orchestrator <span class="faint mono">#77c0</span></span><span class="faint" style="font-size:12px">12m</span></div><div class="p">Queued 0004 after 0003.</div></div>
+        <div class="s" style="margin-left:16px"><div class="t"><span>worker <span class="faint mono">#0003</span></span><span class="badge claimed">running</span></div><div class="p">GET and PUT are in. Writing the hash check…</div></div>
+        <div class="s"><div class="t"><span>default <span class="faint mono">#19be</span></span><span class="faint" style="font-size:12px">yesterday</span></div><div class="p">Memory layout settled: user, projects, topics…</div></div>
+      </div>
+    </div>
+    <div class="phone">
+      <div class="bar"><span class="faint">‹</span><span class="site">default</span><span class="crumb">#a3f1</span><div class="right"><span class="dot"></span></div></div>
+      <div class="msgs">
+        <div class="me">what's left on the server api plan?</div>
+        <div><div class="who agent">agent</div>
+          <div class="tool">▸ <b>open</b> plans/server-api · <b>search</b> 3 · <b>open</b> 0003</div>
+          <div style="margin-top:6px">Two steps open: HTTP endpoints (<a>0003</a>, claimed) and device pairing (no ticket yet). Create one?</div></div>
+        <div class="me">yes</div>
+        <div><div class="who agent">agent</div>
+          <div class="appr"><div style="font-size:13px"><span style="color:var(--warn)">Run recipe?</span> <span class="mono muted">orchestration › new-ticket</span></div>
+            <pre>new-ticket title:
+  # creates tickets/&lt;next id&gt;.md</pre>
+            <div style="display:flex;gap:8px"><button class="btn primary" style="flex:1;justify-content:center">Approve</button><button class="btn" style="flex:1;justify-content:center">Deny</button></div></div></div>
+      </div>
+      <div class="compose"><input class="input" placeholder="Message"><button class="btn primary">↑</button></div>
+    </div>
+  </div>
+</section>
+</div>
+</body>
+</html>

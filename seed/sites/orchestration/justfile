@@ -1,0 +1,12 @@
+# Create the next ticket from the template and print its URL.
+new-ticket title:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mkdir -p tickets
+    last=$(ls tickets | grep -E '^[0-9]{4}\.md$' | sort | tail -n1 | cut -c1-4 || true)
+    id=$(printf '%04d' $(( 10#${last:-0} + 1 )))
+    sed -e "s/{{{{id}}/$id/g" \
+        -e "s/{{{{title}}/{{title}}/g" \
+        -e "s/{{{{date}}/$(date +%F)/g" \
+        templates/ticket.md > "tickets/$id.md"
+    echo "site://orchestration/tickets/$id"

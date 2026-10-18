@@ -1,0 +1,46 @@
+/* composer theme — shared by TUI (as RGB values) and micro apps (templates/sdk). */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:ital,wght@0,400;0,600;1,400&display=swap');
+
+:root {
+  /* surfaces: one step apart, never more than four */
+  --bg:        #0c0d0f;
+  --surface:   #121317;
+  --raised:    #191b20;
+  --overlay:   #1f2228;
+
+  /* lines */
+  --border:        #24272d;
+  --border-strong: #363a42;
+
+  /* text */
+  --text:   #d5d8de;
+  --muted:  #868c96;
+  --faint:  #50555e;
+
+  /* one accent; links, focus, selection */
+  --accent:      #8fb3e8;
+  --accent-dim:  #8fb3e81f;
+  --you:         #151a22;   /* your messages: bg tinted ~7% toward accent */
+
+  /* state */
+  --ok:    #8cc29a;
+  --warn:  #d6b06a;
+  --err:   #e07c7c;
+  --info:  #b39ce0;   /* agent / thinking / tool rows */
+
+  --font-ui:   'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  --radius-sm: 2px;   /* min: badges, chips, kbd, markers, dots */
+  --radius: 5px;      /* max: buttons, inputs, cards, panels */
+  --gap: 12px;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text); }
+body { font: 14px/1.5 var(--font-ui); -webkit-font-smoothing: antialiased; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, .mono { font-family: var(--font-mono); font-size: 0.92em; }
+input[type=checkbox] { accent-color: var(--accent); }
+::selection { background: var(--accent-dim); }
