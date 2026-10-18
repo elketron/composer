@@ -18,7 +18,7 @@ The workspace is the web; each top-level folder is a **site**.
 ~/.composer/
   config.toml            provider url, model, api key, worker limit, port
   sites/                 the web — agent-visible
-    index.md             root page: lists sites, always in the system prompt
+    home/index.md        root page (site://home): lists sites, always in the system prompt
     memory/
     plans/
     agents/
@@ -115,7 +115,7 @@ You coordinate work by writing tickets in site://orchestration ...
 ### System prompt assembly
 
 1. Agent definition body
-2. `site://index` (root page listing all sites)
+2. `site://home` (root page listing all sites)
 3. Active project info (path, git branch) if set
 4. Relevant memory (e.g. `site://memory/projects/<project>.md`)
 
@@ -402,11 +402,11 @@ Mockups: [tui.html](mockups/tui.html), [apps.html](mockups/apps.html). Tokens: [
 
 ## Seed sites
 
-`seed/sites/` in this repo is copied to `~/.composer/sites/` by `composer init` (existing files are never overwritten). These pages are the agent's manual; keep them short — `site://index` is in every system prompt.
+`seed/sites/` in this repo is copied to `~/.composer/sites/` by `composer init` (existing files are never overwritten). These pages are the agent's manual; keep them short — `site://home` is in every system prompt.
 
 | page | content |
 |------|---------|
-| `index.md` | root: what the web is, addressing, site table, how to work |
+| `home/index.md` | root (`site://home`): what the web is, addressing, site table, how to work |
 | `memory/index.md` | layout (`user.md`, `projects/`, `topics/`, `feedback/`), page format, rules |
 | `plans/index.md` | plan format (goal, steps → tickets, decisions), status lifecycle |
 | `orchestration/index.md` | ticket format, lifecycle, `just new-ticket` |

@@ -4,7 +4,7 @@ type: index
 ---
 # Agents
 
-Agent definitions. Each page is one agent: frontmatter configures it, the body is its system prompt. The server builds the full prompt as: agent body → [Home](site://index) → active project → relevant memory.
+Agent definitions. Each page is one agent: frontmatter configures it, the body is its system prompt. The server builds the full prompt as: agent body → [Home](site://home) → active project → relevant memory.
 
 ## Agents
 
@@ -30,6 +30,6 @@ System prompt here.
 
 ## Rules
 
-- Keep prompts short: [Home](site://index) already explains the web, don't repeat it.
+- Keep prompts short: [Home](site://home) already explains the web, don't repeat it.
 - `tools` and `sites` are enforced by the server, not just advice.
 - Changing an agent changes all future sessions using it; tell the user when you do.

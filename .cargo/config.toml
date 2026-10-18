@@ -1,0 +1,3 @@
+[env]
+# ts-rs: u64 ids/seqs arrive as JSON numbers, not bigint
+TS_RS_LARGE_INT = "number"
