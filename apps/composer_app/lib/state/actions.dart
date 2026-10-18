@@ -132,3 +132,63 @@ final class NoticeShown extends AppAction {
   const NoticeShown(this.text);
   final String text;
 }
+
+/// Open a page in the reader.
+final class PageRequested extends AppAction {
+  const PageRequested(this.url, this.page);
+  final String url;
+  final String page;
+}
+
+final class PageBack extends AppAction {
+  const PageBack(this.url);
+  final String url;
+}
+
+final class PageForward extends AppAction {
+  const PageForward(this.url);
+  final String url;
+}
+
+final class PageReloadRequested extends AppAction {
+  const PageReloadRequested(this.url);
+  final String url;
+}
+
+final class PageLoaded extends AppAction {
+  const PageLoaded(this.url, this.requested, this.page);
+  final String url;
+  final String requested;
+  final PageResponse page;
+}
+
+final class PageFailed extends AppAction {
+  const PageFailed(this.url, this.requested, this.error);
+  final String url;
+  final String requested;
+  final String error;
+}
+
+final class FollowToggled extends AppAction {
+  const FollowToggled(this.url);
+  final String url;
+}
+
+/// Show a site's micro app in the reader.
+final class AppRequested extends AppAction {
+  const AppRequested(this.url, this.site);
+  final String url;
+  final String site;
+}
+
+/// Close the reader (desktop pane).
+final class ReaderClosed extends AppAction {
+  const ReaderClosed(this.url);
+  final String url;
+}
+
+final class SitesLoaded extends AppAction {
+  const SitesLoaded(this.url, this.sites);
+  final String url;
+  final List<SiteSummary> sites;
+}

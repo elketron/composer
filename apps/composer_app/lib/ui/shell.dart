@@ -5,6 +5,7 @@ import '../state/actions.dart';
 import '../theme/tokens.dart' as t;
 import 'approval_bar.dart';
 import 'chat/chat_view.dart';
+import 'pages/reader.dart';
 import 'rail.dart';
 import 'server_list.dart';
 import 'server_list_footer.dart';
@@ -41,6 +42,15 @@ class Shell extends StatelessWidget {
         autofocus: true,
         child: LayoutBuilder(builder: (context, constraints) {
           if (constraints.maxWidth >= wide) {
+            final main = chat == null
+                ? page
+                : ChatView(
+                    key: ValueKey('${server.url} ${chat.session}'),
+                    url: server.url,
+                    status: status,
+                    chat: chat,
+                    onClose: () => store.dispatch(SessionClosed(server.url)),
+                  );
             return Scaffold(
               body: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 const Rail(),
@@ -48,15 +58,20 @@ class Shell extends StatelessWidget {
                   child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                     const ApprovalBar(),
                     Expanded(
-                      child: chat == null
-                          ? page
-                          : ChatView(
-                              key: ValueKey('${server.url} ${chat.session}'),
+                      child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                        Expanded(child: main),
+                        // The reader beside the chat, as the TUI's second pane.
+                        if (status.page.isOpen)
+                          Container(
+                            width: (constraints.maxWidth - 272) * 0.5,
+                            decoration: const BoxDecoration(border: Border(left: BorderSide(color: t.border))),
+                            child: Reader(
                               url: server.url,
                               status: status,
-                              chat: chat,
-                              onClose: () => store.dispatch(SessionClosed(server.url)),
+                              onClose: () => store.dispatch(ReaderClosed(server.url)),
                             ),
+                          ),
+                      ]),
                     ),
                   ]),
                 ),

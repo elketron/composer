@@ -32,6 +32,13 @@ class EffectRunner {
         _connections[url]?.retryNow();
       case SendCommand(:final url, :final command):
         _request(url, command, dispatch);
+      case FetchPage(:final url, :final page):
+        _fetchPage(url, page, dispatch);
+      case FetchSites(:final url):
+        final server = _connections[url]?.server;
+        if (server != null) {
+          fetchSites(url, server.token).then((sites) => dispatch(SitesLoaded(url, sites)), onError: (_) {});
+        }
       case CreateSession(:final url, :final agent):
         _request(url, ClientCommandSessionCreate(agent: agent), dispatch).then((result) {
           if (result is CommandResultSession) dispatch(SessionOpened(url, result.session.id));
@@ -54,6 +61,16 @@ class EffectRunner {
     } catch (error) {
       dispatch(CommandFailed(url, describeError(error)));
       return null;
+    }
+  }
+
+  Future<void> _fetchPage(String url, String page, void Function(AppAction) dispatch) async {
+    final server = _connections[url]?.server;
+    if (server == null) return dispatch(PageFailed(url, page, 'not connected'));
+    try {
+      dispatch(PageLoaded(url, page, await fetchPage(url, server.token, page)));
+    } catch (error) {
+      dispatch(PageFailed(url, page, describeError(error)));
     }
   }
 

@@ -6,7 +6,7 @@ import '../../theme/tokens.dart' as t;
 
 /// Agent, id, state and context use of the open session.
 class ChatHeader extends StatelessWidget {
-  const ChatHeader({super.key, required this.sessionId, this.session, this.parent, this.onClose});
+  const ChatHeader({super.key, required this.sessionId, this.session, this.parent, this.onClose, this.onBrowse});
 
   final String sessionId;
   final SessionInfo? session;
@@ -14,6 +14,9 @@ class ChatHeader extends StatelessWidget {
   /// The orchestrator, for a worker.
   final SessionInfo? parent;
   final VoidCallback? onClose;
+
+  /// Open the sites (site://home) in the reader.
+  final VoidCallback? onBrowse;
 
   @override
   Widget build(BuildContext context) {
@@ -45,6 +48,13 @@ class ChatHeader extends StatelessWidget {
           const SizedBox(width: 10),
           Tooltip(message: s!.project!, child: Text(s.project!.split('/').last, style: mono(size: 11, color: t.faint))),
         ],
+        if (onBrowse != null)
+          IconButton(
+            key: const Key('browse'),
+            tooltip: 'Sites',
+            onPressed: onBrowse,
+            icon: const Icon(Icons.menu_book_outlined, size: 18, color: t.muted),
+          ),
         if (onClose != null)
           IconButton(tooltip: 'Close the chat', onPressed: onClose, icon: const Icon(Icons.close, size: 18, color: t.muted)),
       ]),

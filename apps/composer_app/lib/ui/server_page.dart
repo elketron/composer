@@ -8,6 +8,7 @@ import '../theme/composer_theme.dart';
 import '../theme/tokens.dart' as t;
 import 'format.dart';
 import 'info_badge.dart';
+import 'pages/site_list.dart';
 import 'chat/navigation.dart';
 import 'chat/session_tree.dart';
 import 'status_dot.dart';
@@ -62,6 +63,12 @@ class ServerPage extends StatelessWidget {
           InfoBadge('slots', '${info.slots}'),
           InfoBadge('composer', info.version),
         ]),
+      ],
+      if (status.sites.isNotEmpty) ...[
+        const SizedBox(height: 28),
+        Text('SITES', style: mono(size: 11, color: t.faint, weight: FontWeight.w600)),
+        const SizedBox(height: 10),
+        SiteList(url: server.url, status: status),
       ],
       const SizedBox(height: 28),
       Row(children: [

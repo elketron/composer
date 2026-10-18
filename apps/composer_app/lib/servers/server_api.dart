@@ -6,6 +6,8 @@ import 'dart:io';
 import 'package:composer_protocol/composer_protocol.dart';
 import 'package:http/http.dart' as http;
 
+import '../state/site_url.dart';
+
 const _timeout = Duration(seconds: 10);
 
 /// What a QR code or pasted text says: `https://host/pair?code=AB12-CD34` (the QR of
@@ -51,6 +53,27 @@ Future<ServerInfo> fetchInfo(String url, String token) async {
   if (response.statusCode == 401) throw const ServerError('this device was revoked (pair it again)');
   if (response.statusCode != 200) throw ServerError('server answered ${response.statusCode}');
   return ServerInfo.fromJson(jsonDecode(response.body) as Map<String, Object?>);
+}
+
+/// `GET /api/pages/...` for a `site://` URL.
+Future<PageResponse> fetchPage(String url, String token, String page) async {
+  final response = await http
+      .get(Uri.parse('$url${pageApiPath(page)}'), headers: {HttpHeaders.authorizationHeader: 'Bearer $token'})
+      .timeout(_timeout);
+  if (response.statusCode == 404) throw const ServerError('no such page');
+  if (response.statusCode != 200) throw ServerError('server answered ${response.statusCode}');
+  return PageResponse.fromJson(jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, Object?>);
+}
+
+/// `GET /api/sites`.
+Future<List<SiteSummary>> fetchSites(String url, String token) async {
+  final response = await http
+      .get(Uri.parse('$url/api/sites'), headers: {HttpHeaders.authorizationHeader: 'Bearer $token'})
+      .timeout(_timeout);
+  if (response.statusCode != 200) throw ServerError('server answered ${response.statusCode}');
+  return (jsonDecode(utf8.decode(response.bodyBytes)) as List)
+      .map((e) => SiteSummary.fromJson(e as Map<String, Object?>))
+      .toList();
 }
 
 /// Trades a pairing code for a device token (`POST /api/pair`).

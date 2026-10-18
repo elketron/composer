@@ -54,3 +54,14 @@ final class CreateSession extends AppEffect {
   final String url;
   final String agent;
 }
+
+final class FetchPage extends AppEffect {
+  const FetchPage(this.url, this.page);
+  final String url;
+  final String page;
+}
+
+final class FetchSites extends AppEffect {
+  const FetchSites(this.url);
+  final String url;
+}

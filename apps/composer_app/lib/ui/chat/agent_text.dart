@@ -5,13 +5,18 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../state/actions.dart';
 import '../../theme/composer_theme.dart';
 import '../../theme/tokens.dart' as t;
+import '../../state/site_url.dart';
+import '../pages/page_navigation.dart';
 import '../store_scope.dart';
 
 /// The agent's reply, as markdown. Web links open in the browser.
 class AgentText extends StatelessWidget {
-  const AgentText(this.text, {super.key, this.streaming = false});
+  const AgentText(this.text, {super.key, required this.url, this.streaming = false});
 
   final String text;
+
+  /// The server, for opening `site://` links.
+  final String url;
 
   /// Still arriving: shows a caret.
   final bool streaming;
@@ -51,11 +56,13 @@ class AgentText extends StatelessWidget {
 
   void _open(BuildContext context, String? href) {
     if (href == null) return;
-    final uri = Uri.tryParse(href);
-    if (uri != null && (uri.scheme == 'http' || uri.scheme == 'https')) {
-      launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else {
-      StoreScope.read(context).dispatch(NoticeShown('$href: pages open in the app with the page reader (next milestone)'));
+    switch (resolveLink(href, null)) {
+      case SiteLink(url: final page):
+        openPage(context, url, page);
+      case ExternalLink(url: final target):
+        launchUrl(Uri.parse(target), mode: LaunchMode.externalApplication);
+      case InvalidLink():
+        StoreScope.read(context).dispatch(NoticeShown("can't open $href"));
     }
   }
 }

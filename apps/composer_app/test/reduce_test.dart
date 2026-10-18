@@ -128,7 +128,7 @@ void main() {
       expect(state.statusOf(home.url).chat!.items.single, isA<UserItem>());
 
       final (_, effects) = reduce(state, LinkChanged(home.url, LinkState.online));
-      final attach = (effects.single as SendCommand).command as ClientCommandSessionAttach;
+      final attach = effects.whereType<SendCommand>().single.command as ClientCommandSessionAttach;
       expect(attach.since, 7);
     });
 
@@ -163,6 +163,89 @@ void main() {
       final state = reduce(loaded([home]), CommandFailed(home.url, 'no such session')).$1;
       expect(state.notice!.text, 'no such session');
       expect(reduce(state, const NoticeShown('x')).$1.notice!.id, state.notice!.id + 1);
+    });
+  });
+
+  group('reader', () {
+    PageResponse page(String url) =>
+        PageResponse(url: url, title: url, frontmatter: const {}, raw: '# x', backlinks: const [], hash: 'h');
+
+    AppState opened(String url) {
+      var state = reduce(loaded([home]), PageRequested(home.url, url)).$1;
+      return reduce(state, PageLoaded(home.url, url, page(url))).$1;
+    }
+
+    test('navigating fetches, keeps history, back and forward', () {
+      var (state, effects) = reduce(loaded([home]), PageRequested(home.url, 'site://memory'));
+      expect(state.statusOf(home.url).page.loading, 'site://memory');
+      expect((effects.single as FetchPage).page, 'site://memory');
+      state = reduce(state, PageLoaded(home.url, 'site://memory', page('site://memory/index.md'))).$1;
+      state = reduce(state, PageRequested(home.url, 'site://memory/user.md')).$1;
+      state = reduce(state, PageLoaded(home.url, 'site://memory/user.md', page('site://memory/user.md'))).$1;
+      expect(state.statusOf(home.url).page.back, ['site://memory/index.md']);
+
+      (state, effects) = reduce(state, PageBack(home.url));
+      expect((effects.single as FetchPage).page, 'site://memory/index.md');
+      expect(state.statusOf(home.url).page.forward, ['site://memory/user.md']);
+      expect(state.statusOf(home.url).page.back, isEmpty);
+    });
+
+    test('a late answer for an abandoned request is dropped; failures show', () {
+      var state = reduce(loaded([home]), PageRequested(home.url, 'site://a')).$1;
+      state = reduce(state, PageRequested(home.url, 'site://b')).$1;
+      state = reduce(state, PageLoaded(home.url, 'site://a', page('site://a/index.md'))).$1;
+      expect(state.statusOf(home.url).page.page, isNull);
+      state = reduce(state, PageFailed(home.url, 'site://b', 'no such page')).$1;
+      expect(state.statusOf(home.url).page.error, 'site://b: no such page');
+      expect(state.statusOf(home.url).page.loading, isNull);
+    });
+
+    test('the page on screen reloads when it changes on disk', () {
+      final state = opened('site://memory/user.md');
+      final changed = ServerEvent(
+        home.url,
+        const ServerMessagePageChanged(url: 'site://memory/user.md', kind: PageChangeKind.modified, by: ChangedBy.agent),
+      );
+      expect((reduce(state, changed).$2.single as FetchPage).page, 'site://memory/user.md');
+      final other = ServerEvent(
+        home.url,
+        const ServerMessagePageChanged(url: 'site://memory/x.md', kind: PageChangeKind.modified, by: ChangedBy.agent),
+      );
+      expect(reduce(state, other).$2, isEmpty);
+    });
+
+    test('follows the agent in the open session, live events only, unless turned off', () {
+      final sessions = ServerEvent(
+        home.url,
+        ServerMessageOk(id: 1, result: CommandResultSessions(sessions: [SessionInfo(id: 'a', agent: 'default', state: TurnState.idle, lastSeq: 5, updated: '')])),
+      );
+      var state = reduce(loaded([home]), sessions).$1;
+      state = reduce(state, SessionOpened(home.url, 'a')).$1;
+      ServerEvent nav(int seq, String session) =>
+          ServerEvent(home.url, ServerMessageAgentNavigated(session: session, seq: seq, url: 'site://plans/x'));
+
+      expect(reduce(state, nav(4, 'a')).$2, isEmpty, reason: 'a replay');
+      expect(reduce(state, nav(6, 'b')).$2, isEmpty, reason: 'another session');
+      final (followed, effects) = reduce(state, nav(6, 'a'));
+      expect((effects.single as FetchPage).page, 'site://plans/x');
+      expect(followed.statusOf(home.url).page.loading, 'site://plans/x');
+
+      state = reduce(state, FollowToggled(home.url)).$1;
+      expect(reduce(state, nav(7, 'a')).$2, isEmpty);
+    });
+
+    test('apps show in the reader; closing keeps the follow choice', () {
+      var state = reduce(opened('site://orchestration'), AppRequested(home.url, 'orchestration')).$1;
+      expect(state.statusOf(home.url).page.appSite, 'orchestration');
+      state = reduce(state, FollowToggled(home.url)).$1;
+      state = reduce(state, ReaderClosed(home.url)).$1;
+      expect(state.statusOf(home.url).page.isOpen, isFalse);
+      expect(state.statusOf(home.url).page.follow, isFalse);
+    });
+
+    test('coming online fetches the site list', () {
+      final (_, effects) = reduce(loaded([home]), LinkChanged(home.url, LinkState.online));
+      expect(effects.whereType<FetchSites>().single.url, home.url);
     });
   });
 }

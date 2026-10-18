@@ -42,6 +42,8 @@ dependencies:
   composer_protocol:
     path: ../composer_protocol
   flutter_markdown_plus: ^1.0.12
+  # Micro apps. 6.2 beta: the first with a Linux backend (WPE WebKit); see docs/spikes/webview.md.
+  flutter_inappwebview: 6.2.0-beta.3
   url_launcher: ^6.3.3
 
 dev_dependencies:
@@ -111,3 +113,8 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+dependency_overrides:
+  # WPE WebKit 2.54 build fix and frames imported on Flutter's EGL display (blank view otherwise).
+  flutter_inappwebview_linux:
+    path: ../vendor/flutter_inappwebview_linux

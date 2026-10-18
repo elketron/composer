@@ -87,6 +87,8 @@ class ServerConnection {
       _subscription = channel.stream.listen(_receive, onDone: _lost, onError: (_) => _lost());
       _dispatch(LinkChanged(server.url, LinkState.online));
       send(const ClientCommandSessionList());
+      // Page changes (to reload the page on screen).
+      send(const ClientCommandSubscribe(urls: ['*']));
     } catch (error) {
       _scheduleRetry(describeError(error));
     }

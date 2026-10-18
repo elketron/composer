@@ -5,6 +5,8 @@ import 'app_state.dart';
 import 'chat_events.dart';
 import 'chat_state.dart';
 import 'effects.dart';
+import 'page_state.dart';
+import 'site_url.dart';
 import 'server_entry.dart';
 import 'server_status.dart';
 import 'types.dart';
@@ -38,7 +40,7 @@ import 'types.dart';
       ReconnectRequested(:final url) => (s, [Reconnect(url)]),
       LinkChanged(:final url, :final link, :final error, :final retryAt) => _link(s, url, link, error, retryAt),
       InfoReceived(:final url, :final info) => _info(s, url, info),
-      ServerEvent(:final url, :final message) => (_event(s, url, message), const []),
+      ServerEvent(:final url, :final message) => _serverEvent(s, url, message),
       SessionOpened(:final url, :final session) => _open(s, url, session),
       SessionClosed(:final url) => _close(s, url),
       NewSessionRequested(:final url, :final agent) => (s, [CreateSession(url, agent)]),
@@ -54,6 +56,53 @@ import 'types.dart';
           ],
         ),
       CommandFailed(:final message) => (s.copyWith(notice: Notice((s.notice?.id ?? 0) + 1, message)), const []),
+      PageRequested(:final url, :final page) => _withPage(s, url, (p) => _navigate(url, p, page)),
+      PageBack(:final url) => _withPage(s, url, (p) {
+          if (p.back.isEmpty) return (p, const []);
+          final target = p.back.last;
+          return (
+            p.copyWith(
+              back: p.back.sublist(0, p.back.length - 1),
+              forward: [...p.forward, if (p.page != null) p.page!.url],
+              loading: target,
+              error: null,
+              appSite: null,
+            ),
+            [FetchPage(url, target)],
+          );
+        }),
+      PageForward(:final url) => _withPage(s, url, (p) {
+          if (p.forward.isEmpty) return (p, const []);
+          final target = p.forward.last;
+          return (
+            p.copyWith(
+              forward: p.forward.sublist(0, p.forward.length - 1),
+              back: [...p.back, if (p.page != null) p.page!.url],
+              loading: target,
+              error: null,
+              appSite: null,
+            ),
+            [FetchPage(url, target)],
+          );
+        }),
+      PageReloadRequested(:final url) => _withPage(
+          s,
+          url,
+          (p) => p.page == null ? (p, const []) : (p.copyWith(appSite: null), [FetchPage(url, p.page!.url)]),
+        ),
+      PageLoaded(:final url, :final requested, :final page) => _withPage(s, url, (p) {
+          final wanted = p.loading == requested || (p.loading == null && p.page != null && samePage(p.page!.url, requested));
+          return wanted ? (p.copyWith(page: page, loading: null, error: null), const []) : (p, const []);
+        }),
+      PageFailed(:final url, :final requested, :final error) => _withPage(
+          s,
+          url,
+          (p) => p.loading == requested ? (p.copyWith(loading: null, error: '$requested: $error'), const []) : (p, const []),
+        ),
+      FollowToggled(:final url) => _withPage(s, url, (p) => (p.copyWith(follow: !p.follow), const [])),
+      AppRequested(:final url, :final site) => _withPage(s, url, (p) => (p.copyWith(appSite: site, error: null), const [])),
+      ReaderClosed(:final url) => _withPage(s, url, (p) => (PageState(follow: p.follow), const [])),
+      SitesLoaded(:final url, :final sites) => (_updateStatus(s, url, (x) => x.copyWith(sites: sites)), const []),
       NoticeShown(:final text) => (s.copyWith(notice: Notice((s.notice?.id ?? 0) + 1, text)), const []),
     };
 
@@ -99,15 +148,21 @@ import 'types.dart';
     (x) => x.copyWith(link: link, error: error, retryAt: retryAt, approvals: online ? const [] : null),
   );
   final chat = next.status[url]?.chat;
-  if (!online || chat == null) return (next, const []);
-  return (next, [SendCommand(url, ClientCommandSessionAttach(session: chat.session, since: chat.lastSeq))]);
+  if (!online) return (next, const []);
+  return (
+    next,
+    [
+      FetchSites(url),
+      if (chat != null) SendCommand(url, ClientCommandSessionAttach(session: chat.session, since: chat.lastSeq)),
+    ],
+  );
 }
 
 (AppState, List<AppEffect>) _open(AppState s, String url, String session) {
   final current = s.status[url]?.chat;
   if (current?.session == session) return (s, const []);
   return (
-    _updateStatus(s, url, (x) => x.copyWith(chat: ChatState(session: session))),
+    _updateStatus(s, url, (x) => x.copyWith(chat: ChatState(session: session, liveAfter: x.session(session)?.lastSeq ?? 0))),
     [
       if (current != null) SendCommand(url, ClientCommandSessionDetach(session: current.session)),
       SendCommand(url, ClientCommandSessionAttach(session: session)),
@@ -128,6 +183,46 @@ import 'types.dart';
 (AppState, List<AppEffect>) _toChat(AppState s, String url, ClientCommand Function(String session) command) {
   final chat = s.status[url]?.chat;
   return chat == null ? (s, const []) : (s, [SendCommand(url, command(chat.session))]);
+}
+
+(AppState, List<AppEffect>) _serverEvent(AppState s, String url, ServerMessage message) {
+  final next = _event(s, url, message);
+  final status = s.status[url];
+  if (status == null) return (next, const []);
+  final page = status.page;
+  return switch (message) {
+    // The open page changed on disk: reload it in place.
+    ServerMessagePageChanged(url: final changed)
+        when page.page != null && page.loading == null && samePage(page.page!.url, changed) =>
+      (next, [FetchPage(url, page.page!.url)]),
+    // Follow the agent, live events of the open session only.
+    ServerMessageAgentNavigated(:final session, :final seq, url: final target)
+        when page.follow && status.chat?.session == session && seq > status.chat!.liveAfter =>
+      _withPage(next, url, (p) => _navigate(url, p, target)),
+    _ => (next, const []),
+  };
+}
+
+(PageState, List<AppEffect>) _navigate(String url, PageState p, String target) {
+  final current = p.page?.url;
+  final push = current != null && !samePage(current, target);
+  return (
+    p.copyWith(
+      loading: target,
+      error: null,
+      appSite: null,
+      back: push ? [...p.back, current] : null,
+      forward: push ? const [] : null,
+    ),
+    [FetchPage(url, target)],
+  );
+}
+
+(AppState, List<AppEffect>) _withPage(AppState s, String url, (PageState, List<AppEffect>) Function(PageState) update) {
+  final status = s.status[url];
+  if (status == null) return (s, const []);
+  final (page, effects) = update(status.page);
+  return (s.copyWith(status: {...s.status, url: status.copyWith(page: page)}), effects);
 }
 
 AppState _event(AppState s, String url, ServerMessage message) => switch (message) {

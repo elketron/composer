@@ -5,6 +5,7 @@ import '../../state/chat_state.dart';
 import '../../state/server_status.dart';
 import '../../theme/composer_theme.dart';
 import '../../theme/tokens.dart' as t;
+import '../pages/page_navigation.dart';
 import 'agent_text.dart';
 import 'approval_card.dart';
 import 'chat_header.dart';
@@ -39,17 +40,24 @@ class ChatView extends StatelessWidget {
       for (final approval in approvals.toList().reversed)
         (ValueKey('approval-${approval.request}'), ApprovalCard(url: url, approval: approval)),
       if (streaming != null && streaming.content.isNotEmpty)
-        (const ValueKey('streaming'), AgentText(streaming.content, streaming: true)),
+        (const ValueKey('streaming'), AgentText(streaming.content, url: url, streaming: true)),
       if (streaming != null && streaming.thinking.isNotEmpty && streaming.content.isEmpty)
         (const ValueKey('streaming-thinking'), const CollapsibleRow(label: TextSpan(text: 'thinking …'))),
       if (busy && streaming == null && session.state == TurnState.waiting)
         (const ValueKey('waiting'), Text('waiting for a model slot', style: mono(size: 12, color: t.faint))),
-      for (final (i, item) in chat.items.indexed.toList().reversed) (ValueKey('item-$i'), ChatItemView(item)),
+      for (final (i, item) in chat.items.indexed.toList().reversed) (ValueKey('item-$i'), ChatItemView(item, url: url)),
     ];
     final keys = [for (final (key, _) in rows) key];
 
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      if (header) ChatHeader(sessionId: chat.session, session: session, parent: parent, onClose: onClose),
+      if (header)
+        ChatHeader(
+          sessionId: chat.session,
+          session: session,
+          parent: parent,
+          onClose: onClose,
+          onBrowse: () => openPage(context, url, 'site://home'),
+        ),
       Expanded(
         child: rows.isEmpty
             ? Center(child: Text(chat.lastSeq == 0 ? 'Say something to start.' : '', style: const TextStyle(color: t.faint)))

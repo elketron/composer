@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../theme/composer_theme.dart';
 import '../../theme/tokens.dart' as t;
+import '../pages/page_navigation.dart';
 import '../store_scope.dart';
 import 'chat_view.dart';
 
@@ -23,6 +24,13 @@ class ChatPage extends StatelessWidget {
           TextSpan(text: session?.agent ?? 'new session', style: mono(size: 15, color: t.text, weight: FontWeight.w600)),
           if (chat != null) TextSpan(text: '  #${chat.session}', style: mono(size: 12, color: t.faint)),
         ])),
+        actions: [
+          IconButton(
+            tooltip: 'Sites',
+            onPressed: () => openPage(context, url, 'site://home'),
+            icon: const Icon(Icons.menu_book_outlined, size: 20, color: t.muted),
+          ),
+        ],
         bottom: const PreferredSize(preferredSize: Size.fromHeight(1), child: Divider()),
       ),
       body: chat == null
