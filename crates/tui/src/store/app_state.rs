@@ -67,6 +67,10 @@ impl AppState {
                 self.ui.show_thinking = !self.ui.show_thinking;
                 vec![]
             }
+            Action::ToggleHelp => {
+                self.ui.help_open = !self.ui.help_open;
+                vec![]
+            }
             Action::ToggleToolDetails => {
                 self.ui.show_tool_details = !self.ui.show_tool_details;
                 vec![]

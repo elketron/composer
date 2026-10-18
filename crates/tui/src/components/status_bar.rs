@@ -86,8 +86,8 @@ impl Component for StatusBar {
                 };
                 Span::styled(format!("{} ", flash.text), Style::new().fg(color))
             }
-            _ if state.page.follow => Span::styled("● following agent ", theme::muted()),
-            _ => Span::styled("○ not following ", theme::faint()),
+            _ if state.page.follow => Span::styled("? help  ● following agent ", theme::muted()),
+            _ => Span::styled("? help  ○ not following ", theme::faint()),
         };
 
         // The right side gets what is left, cut with `…` (long URLs, errors).

@@ -2,6 +2,29 @@
 
 use crate::action::Action;
 
+/// Every command, as shown by help: (usage, what it does).
+pub const COMMANDS: [(&str, &str); 10] = [
+    (
+        ":new [agent]",
+        "start a new session (default agent, or e.g. orchestrator)",
+    ),
+    (":attach <id>", "switch to a session by id (or Space w)"),
+    (
+        ":project [path]",
+        "set the active project; without a path, clear it",
+    ),
+    (":open <url>", "open a page, e.g. :open memory/user"),
+    (
+        ":app [site]",
+        "open a site's app in the browser (default: the page's site)",
+    ),
+    (":compact", "save memory, then summarize older messages now"),
+    (":follow", "toggle following the agent's pages (F)"),
+    (":back", "back to the previous session (ctrl-o)"),
+    (":help", "this help (?)"),
+    (":q", "quit"),
+];
+
 /// Parses a command line (without the `:`).
 pub fn parse_command(line: &str) -> Result<Action, String> {
     let line = line.trim();
@@ -34,10 +57,9 @@ pub fn parse_command(line: &str) -> Result<Action, String> {
                 .to_string()
         }))),
         "back" => Ok(Action::JumpBack),
+        "help" | "h" => Ok(Action::ToggleHelp),
         "" => Err(String::new()),
-        other => Err(format!(
-            "unknown command `{other}` (try :new, :attach, :project, :open, :compact, :app, :q)"
-        )),
+        other => Err(format!("unknown command `{other}` (:help lists them)")),
     }
 }
 

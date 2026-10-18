@@ -6,7 +6,8 @@ use ratatui::widgets::Block;
 
 use crate::action::Action;
 use crate::components::{
-    ApprovalPopup, ChangesView, ChatPane, CommandLine, Component, PageViewer, Picker, StatusBar,
+    ApprovalPopup, ChangesView, ChatPane, CommandLine, Component, Help, PageViewer, Picker,
+    StatusBar,
 };
 use crate::store::AppState;
 use crate::store::types::{Mode, Pane};
@@ -24,10 +25,12 @@ pub struct Root {
     command: CommandLine,
     picker: Picker,
     approval: ApprovalPopup,
+    help: Help,
 }
 
 impl Root {
-    pub fn new() -> Self {
+    /// `bindings`: the keymap's keys and descriptions, for help.
+    pub fn new(bindings: Vec<(String, &'static str)>) -> Self {
         Self {
             chat: ChatPane::new(),
             page: PageViewer::new(),
@@ -36,6 +39,7 @@ impl Root {
             command: CommandLine::new(),
             picker: Picker,
             approval: ApprovalPopup,
+            help: Help::new(bindings),
         }
     }
 
@@ -54,6 +58,9 @@ impl Component for Root {
     fn handle_key(&mut self, key: KeyEvent, state: &AppState) -> Vec<Action> {
         if state.approvals.current().is_some() {
             return self.approval.handle_key(key, state);
+        }
+        if state.ui.help_open {
+            return self.help.handle_key(key, state);
         }
         if state.ui.picker_open {
             return self.picker.handle_key(key, state);
@@ -108,6 +115,9 @@ impl Component for Root {
         }
         if state.ui.picker_open {
             self.picker.render(frame, area, state);
+        }
+        if state.ui.help_open {
+            self.help.render(frame, area, state);
         }
         if state.approvals.current().is_some() {
             self.approval.render(frame, area, state);

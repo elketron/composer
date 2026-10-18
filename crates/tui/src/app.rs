@@ -31,13 +31,14 @@ impl App {
     /// Must be called inside a tokio runtime: starts the server connection.
     pub fn new(options: &TuiOptions) -> Self {
         let (dispatcher, actions) = Dispatcher::new();
+        let keymap = Keymap::defaults();
         let mut state = AppState::new(options.startup.clone(), options.context_limit);
         state.conn.server_url = options.server_url.trim_end_matches('/').to_string();
         state.conn.token = options.token.clone();
         Self {
             state,
-            root: Root::new(),
-            keymap: Keymap::defaults(),
+            root: Root::new(keymap.help()),
+            keymap,
             runner: EffectRunner::new(&options.server_url, &options.token, dispatcher.clone()),
             dispatcher,
             actions,
@@ -49,6 +50,7 @@ impl App {
     pub fn handle_key(&mut self, key: KeyEvent) {
         let normal = self.state.mode() == Mode::Normal
             && !self.state.ui.picker_open
+            && !self.state.ui.help_open
             && self.state.approvals.current().is_none();
         let actions = if normal {
             match self.keymap.feed(key) {

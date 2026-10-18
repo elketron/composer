@@ -213,7 +213,7 @@ Everything else lives in floating windows (fuzzy finder, telescope-style) instea
 | `gd` | changes view of the active project (toggle); `j`/`k`, `{`/`}` files, `Enter` → editor at that line |
 | `a` | open current site's micro app |
 | `Ctrl-o` | back to the previous chat (e.g. from a worker to the main chat) |
-| `?` | help |
+| `?` | help overlay (also `:help`): modes, every binding (generated from the keymap), pane keys, commands |
 
 Commands: `:new [agent]`, `:attach <id>`, `:project <path>`, `:open <url>`, `:app [site]`, `:search <q>`, `:pair`, `:q`.
 

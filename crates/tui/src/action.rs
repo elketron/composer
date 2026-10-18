@@ -15,6 +15,7 @@ pub enum Action {
     ToggleMaximize,
     ToggleThinking,
     ToggleToolDetails,
+    ToggleHelp,
     Flash(String, FlashLevel),
 
     // ---- chat & sessions ----
