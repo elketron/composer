@@ -5,10 +5,6 @@ use composer_protocol::{ClientCommand, ClientRequest, CommandResult, Role, Serve
 use futures::{SinkExt, StreamExt};
 use tokio_tungstenite::tungstenite::Message;
 
-use crate::config::Config;
-use crate::home::Home;
-use crate::init::local_token;
-
 /// Options for `composer ask`.
 #[derive(Debug, Clone)]
 pub struct AskOptions {
@@ -18,21 +14,22 @@ pub struct AskOptions {
     pub session: Option<String>,
     pub project: Option<String>,
     pub show_thinking: bool,
+    /// `http(s)://host[:port]` of the server.
+    pub server_url: String,
+    pub token: String,
 }
 
 /// Sends one message over the WebSocket API and prints the turn as it streams.
-pub async fn ask(home: &Home, options: AskOptions) -> anyhow::Result<()> {
-    let config = Config::load(&home.config_file())?;
-    let token = local_token(home)?;
-    let url = format!("ws://{}/ws?token={token}", config.server.bind);
+pub async fn ask(options: AskOptions) -> anyhow::Result<()> {
+    let base = options.server_url.trim_end_matches('/');
+    let url = format!(
+        "{}/ws?token={}",
+        base.replacen("http", "ws", 1),
+        options.token
+    );
     let (mut socket, _) = tokio_tungstenite::connect_async(&url)
         .await
-        .with_context(|| {
-            format!(
-                "connecting to {} (is `composer serve` running?)",
-                config.server.bind
-            )
-        })?;
+        .with_context(|| format!("connecting to {base} (is `composer serve` running?)"))?;
 
     let mut next_id = 0;
     let mut request = |command| {

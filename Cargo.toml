@@ -23,18 +23,19 @@ tempfile = "3.27.0"
 tokio = { version = "1.53.3", features = ["full"] }
 tokio-util = "0.7.20"
 axum = { version = "0.8.9", features = ["ws"] }
-reqwest = { version = "0.13.5", features = ["json", "stream"] }
+reqwest = { version = "0.13.5", features = ["json", "stream", "form"] }
 futures = "0.3.34"
 toml = "1.1.8"
 clap = { version = "4.6.7", features = ["derive"] }
 include_dir = "0.7.4"
 notify = "8"
-tokio-tungstenite = "0.30.0"
+tokio-tungstenite = { version = "0.30.0", features = ["rustls-tls-webpki-roots"] }
 async-trait = "0.1.92"
 sha2 = "0.11.1"
 chrono = "0.4.45"
 rand = "0.9"
 base64 = "0.22"
+qrcode = { version = "0.14.1", default-features = false }
 anyhow = "1.0.104"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }

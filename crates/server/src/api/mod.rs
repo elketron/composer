@@ -1,4 +1,4 @@
-//! The WS/HTTP API. Every route requires the token.
+//! The WS/HTTP API. Every route requires a token, except pairing.
 
 mod api_error;
 mod app_routes;
@@ -7,6 +7,7 @@ mod connection;
 mod event_scope;
 mod glob;
 mod http_routes;
+mod pair_routes;
 mod resequence;
 mod ws_routes;
 
@@ -54,5 +55,14 @@ pub fn router(server: Arc<Server>) -> Router {
             server.clone(),
             auth::require_token,
         ))
+        // Pairing needs no token: the one-time code is the credential.
+        .merge(
+            Router::new()
+                .route(
+                    "/pair",
+                    get(pair_routes::pair_page).post(pair_routes::pair_submit),
+                )
+                .route("/api/pair", post(pair_routes::pair_api)),
+        )
         .with_state(server)
 }

@@ -11,6 +11,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::actions::{Approvals, PendingApprovals};
 use crate::config::Config;
+use crate::devices::Devices;
 use crate::error::{Result, ServerError};
 use crate::hash::content_hash;
 use crate::home::Home;
@@ -37,6 +38,8 @@ pub struct Server {
     pub pending_approvals: PendingApprovals,
     /// Required on every request (header or `?token=`).
     pub token: String,
+    /// Paired devices (remote access), each with its own token.
+    pub devices: Devices,
     /// Worker processes this server started.
     pub workers: WorkerRegistry,
     /// The binary started for workers (`$COMPOSER_WORKER_EXE`, else this executable).
@@ -117,6 +120,7 @@ impl Server {
             approvals,
             pending_approvals: PendingApprovals::default(),
             workers: WorkerRegistry::default(),
+            devices: Devices::new(&home.state()),
             worker_exe,
             parent,
             worker_finished: AtomicBool::new(false),
@@ -130,6 +134,11 @@ impl Server {
             config,
             home,
         }))
+    }
+
+    /// The local token, or a paired device's token.
+    pub fn accepts_token(&self, token: &str) -> bool {
+        token == self.token || self.devices.verify(token).is_some()
     }
 
     /// Where the API listens (set by `serve`); workers connect back here.

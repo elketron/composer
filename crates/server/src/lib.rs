@@ -6,6 +6,7 @@ pub mod api;
 pub mod client;
 mod config;
 mod config_sections;
+pub mod devices;
 mod error;
 mod hash;
 mod home;

@@ -322,7 +322,7 @@ Attaching to a worker **replaces** the main chat; the title shows a breadcrumb (
 6. ✅ **micro apps** — `templates/sdk` + `templates/app` (Svelte 5 + Vite, bun), `new_app` + `ui-build` action, apps served at `/<site>/` with cookie auth, files API, `a` / `:app` in the TUI, messages from apps. The first real app (ticket board) comes with milestone 7.
 7. ✅ **orchestration** — `spawn_worker` starts `composer worker` processes linked to the parent (slots, approvals and events over WS), `finish`, ticket status by the server, worker sessions nested in the TUI, ticket board app (seed).
 8. ✅ **workflow views** — changes view (`gd`): git changes of the active project against HEAD (untracked files included), refreshed every 2s and after the agent's tool calls; `j`/`k`, `{`/`}` between files, `Enter` opens `$EDITOR +line file`.
-9. **remote** — device pairing + tokens, `tailscale serve` setup, remote nvim round trip, `site://chat` phone app.
+9. ✅ **remote** — device pairing (`pair`, QR, `/pair`, `login`), per-device tokens with revoke, `tailscale serve` support (forwarded origin, Secure cookies), remote TUI over `wss://`, `site://chat` phone app.
 
 Auth (tokens) and relative URLs are built in from milestone 2, so remote access is not a retrofit.
 
@@ -385,16 +385,16 @@ Every session event has a monotonically increasing `seq` and is appended to `tra
 
 ## Remote access
 
-Goal: use the server from another laptop or the phone, over Tailscale.
+Use the server from another laptop or the phone, over Tailscale. Tested end to end over `https://<machine>.<tailnet>.ts.net`.
 
-- Server binds `127.0.0.1`; exposed to the tailnet with `tailscale serve` → HTTPS on `https://<machine>.<tailnet>.ts.net`, tailnet-only. HTTPS also unlocks browser features on the phone (clipboard, camera).
-- **Auth everywhere:** each device gets its own token via pairing (`composer pair` shows a code / QR, device stores the token). Tokens live in `state/devices.toml` and can be revoked. Apps get a token through the URL from the client that opened them.
-- **All URLs are relative to the server's public URL**, never hardcoded `localhost`.
-- **Remote TUI:** connects to the public URL. Things that touch the server's filesystem go through the API:
-  - Opening a micro app opens the browser on the client machine with the server URL.
-  - Open in nvim: fetch the file to a temp file, edit, `PUT` back on save with a hash check to detect conflicts. This is the **one editing mechanism** for all remote clients (later also phone editing). Running the TUI over ssh still works as a fallback.
-  - Changes view uses the `/project/diff` endpoint.
-- **Phone:** no TUI. The phone client is itself a micro app — `site://chat/ui/`. Scope for now: **check in and send short messages** (session list, read chat, send a message, approve recipes). Low priority; the core idea comes first.
+- **Exposure:** the server binds `127.0.0.1`; `tailscale serve --bg http://127.0.0.1:7420` makes it HTTPS on the tailnet only. Needs root once: `sudo tailscale set --operator=$USER`. Off again: `tailscale serve --https=443 off`.
+- **Pairing:** `composer pair --name phone` makes a one-time code (10 minutes, stored hashed in `state/pairing.json`) and prints a QR code for `https://…/pair?code=…` plus `composer login https://… CODE` for computers. It warns when Tailscale isn't serving yet.
+  - Phone: the `/pair` page asks to confirm (a link preview can't spend the code), then sets an HttpOnly, `Secure`, SameSite=Strict cookie for a year and opens `/chat/`.
+  - Computer: `composer login <server> <code>` stores the server and token in `<home>/remote.json`; `composer` (TUI) and `composer ask` then use it (`composer logout` undoes it).
+- **Devices:** each has its own token, stored only as a hash in `state/devices.json`; `composer devices` lists, `composer devices revoke <name>` cuts one off immediately. The local token (`state/token`) keeps working on the server machine.
+- **Auth:** every route needs the local token or a device token (header, `?token=`, or cookie), except `/pair` and `/api/pair` (the code is the credential). The origin check accepts `X-Forwarded-Host` from `tailscale serve`; cookies get `Secure` behind HTTPS.
+- **Remote TUI:** connects to the public URL over `wss://`. Page editing is the temp-file round trip through the API (the one editing mechanism); apps open in the client's browser with the public URL; the changes view shows the diff, but opening a project file needs the TUI on the server machine.
+- **Phone (`site://chat`):** sessions (workers nested), the chat (tool and thinking rows collapsed, light markdown), sending messages, answering recipe approvals inline, starting a session. Built with `just ui-build` in the chat site (pre-approved by `init`).
 
 ## Visual design
 

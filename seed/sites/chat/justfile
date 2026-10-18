@@ -1,0 +1,3 @@
+# Build the phone chat app (ui/dist), served at /chat/.
+ui-build:
+    cd ui && bun install && bun run build

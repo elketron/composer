@@ -1,17 +1,17 @@
 use std::sync::Arc;
 
 use axum::extract::{Request, State};
-use axum::http::{HeaderValue, StatusCode, header};
+use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 
 use crate::server::Server;
 
-const COOKIE: &str = "composer_token";
+pub const COOKIE: &str = "composer_token";
 
-/// Requires the token: `Authorization: Bearer <t>`, `?token=<t>`, or the cookie that a
-/// `?token=` request sets (so an app opened with the token can load its scripts and call
-/// the API). Browser requests must also come from our own origin.
+/// Requires a token (the local one or a paired device's): `Authorization: Bearer <t>`,
+/// `?token=<t>`, or the cookie that a `?token=` request (or pairing) sets. Browser
+/// requests must also come from our own origin.
 pub async fn require_token(
     State(server): State<Arc<Server>>,
     request: Request,
@@ -22,47 +22,70 @@ pub async fn require_token(
         .get(header::AUTHORIZATION)
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.strip_prefix("Bearer "))
-        .is_some_and(|t| t == server.token);
-    let query = request
+        .is_some_and(|t| server.accepts_token(t));
+    let query_token = request
         .uri()
         .query()
         .unwrap_or("")
         .split('&')
         .filter_map(|pair| pair.split_once('='))
-        .any(|(k, v)| k == "token" && v == server.token);
+        .find(|(k, v)| *k == "token" && server.accepts_token(v))
+        .map(|(_, v)| v.to_string());
     let cookie = headers
         .get_all(header::COOKIE)
         .iter()
         .filter_map(|v| v.to_str().ok())
         .flat_map(|v| v.split(';'))
         .filter_map(|pair| pair.trim().split_once('='))
-        .any(|(k, v)| k == COOKIE && v == server.token);
-    if !(bearer || query || cookie) {
+        .any(|(k, v)| k == COOKIE && server.accepts_token(v));
+    if !(bearer || query_token.is_some() || cookie) {
         return (StatusCode::UNAUTHORIZED, "missing or wrong token").into_response();
     }
 
-    if let Some(origin) = headers.get(header::ORIGIN).and_then(|v| v.to_str().ok()) {
-        let host = headers
-            .get(header::HOST)
-            .and_then(|v| v.to_str().ok())
-            .unwrap_or("");
-        let same_origin = origin
-            .split_once("://")
-            .is_some_and(|(_, rest)| rest == host);
-        if !same_origin {
-            return (StatusCode::FORBIDDEN, "cross-origin request").into_response();
-        }
+    if let Some(origin) = headers.get(header::ORIGIN).and_then(|v| v.to_str().ok())
+        && !same_origin(origin, headers)
+    {
+        return (StatusCode::FORBIDDEN, "cross-origin request").into_response();
     }
 
+    let secure = is_https(headers);
     let mut response = next.run(request).await;
-    if query && !cookie {
-        let value = format!(
-            "{COOKIE}={}; Path=/; HttpOnly; SameSite=Strict",
-            server.token
-        );
-        if let Ok(value) = HeaderValue::from_str(&value) {
-            response.headers_mut().append(header::SET_COOKIE, value);
-        }
+    if let Some(token) = query_token.filter(|_| !cookie) {
+        set_cookie(&mut response, &token, secure, None);
     }
     response
+}
+
+/// The browser's origin is our host, directly or as `tailscale serve` forwards it.
+pub fn same_origin(origin: &str, headers: &HeaderMap) -> bool {
+    let Some((_, origin_host)) = origin.split_once("://") else {
+        return false;
+    };
+    [header::HOST.as_str(), "x-forwarded-host"]
+        .iter()
+        .filter_map(|name| headers.get(*name).and_then(|v| v.to_str().ok()))
+        .any(|host| host == origin_host)
+}
+
+/// Behind `tailscale serve` the browser speaks HTTPS even though we see HTTP.
+pub fn is_https(headers: &HeaderMap) -> bool {
+    headers
+        .get("x-forwarded-proto")
+        .and_then(|v| v.to_str().ok())
+        == Some("https")
+}
+
+/// The auth cookie: HttpOnly, SameSite=Strict, `Secure` over HTTPS. `max_age` in seconds
+/// makes it outlive the browser session (paired devices).
+pub fn set_cookie(response: &mut Response, token: &str, secure: bool, max_age: Option<u64>) {
+    let mut value = format!("{COOKIE}={token}; Path=/; HttpOnly; SameSite=Strict");
+    if secure {
+        value.push_str("; Secure");
+    }
+    if let Some(age) = max_age {
+        value.push_str(&format!("; Max-Age={age}"));
+    }
+    if let Ok(value) = HeaderValue::from_str(&value) {
+        response.headers_mut().append(header::SET_COOKIE, value);
+    }
 }

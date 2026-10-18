@@ -116,6 +116,14 @@ export async function send(text: string, options: { pages?: string[]; images?: s
 type Watcher = { patterns: string[]; callback: (change: PageChange) => void };
 const watchers = new Set<Watcher>();
 let socket: WebSocket | null = null;
+// Requests waiting for their `ok` / `error` reply, by id.
+const waiting = new Map<number, { resolve: (result: any) => void; reject: (error: Error) => void }>();
+let nextId = 100;
+const listeners = new Set<(message: any) => void>();
+let ready: Promise<void>;
+let markReady: () => void = () => {};
+const resetReady = () => (ready = new Promise((resolve) => (markReady = resolve)));
+resetReady();
 // A rune: components reading isConnected() update when it changes.
 let connected = $state(false);
 
@@ -129,11 +137,20 @@ function connect() {
   socket = ws;
   ws.onopen = () => {
     connected = true;
+    markReady();
     const urls = [...watchers].flatMap((w) => w.patterns);
     ws.send(JSON.stringify({ id: 1, type: 'subscribe', urls }));
   };
   ws.onmessage = (event) => {
     const message = JSON.parse(event.data);
+    if ((message.type === 'ok' || message.type === 'error') && waiting.has(message.id)) {
+      const { resolve, reject } = waiting.get(message.id)!;
+      waiting.delete(message.id);
+      if (message.type === 'ok') resolve(message.result);
+      else reject(new Error(message.message));
+      return;
+    }
+    for (const listener of listeners) listener(message);
     if (message.type !== 'page.changed') return;
     for (const watcher of watchers) {
       if (watcher.patterns.some((p) => matches(p, message.url))) watcher.callback(message);
@@ -141,6 +158,9 @@ function connect() {
   };
   ws.onclose = () => {
     connected = false;
+    resetReady();
+    for (const { reject } of waiting.values()) reject(new Error('connection lost'));
+    waiting.clear();
     socket = null;
     setTimeout(connect, 2000);
   };
@@ -164,6 +184,25 @@ function matches(pattern: string, url: string): boolean {
     return url.startsWith(pattern.slice(0, -1)) && rest.length > 0 && !rest.includes('/');
   }
   return pattern === url;
+}
+
+/**
+ * Sends a command over the WebSocket API (`session.list`, `session.attach`, `message.send`,
+ * `approval.respond`, ...; see crates/protocol) and resolves with its result.
+ */
+export async function request(command: Record<string, unknown>): Promise<any> {
+  await ready;
+  const id = nextId++;
+  return new Promise((resolve, reject) => {
+    waiting.set(id, { resolve, reject });
+    socket!.send(JSON.stringify({ id, ...command }));
+  });
+}
+
+/** Every server event (session events of attached sessions, approvals, slots, ...). */
+export function onMessage(callback: (message: any) => void): () => void {
+  listeners.add(callback);
+  return () => listeners.delete(callback);
 }
 
 connect();

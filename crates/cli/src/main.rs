@@ -1,9 +1,11 @@
+mod remote;
+
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 use composer_server::client::{AskOptions, ask};
 use composer_server::worker::{WorkerOptions, run_worker};
-use composer_server::{Config, Home, Server, init_home, local_token};
+use composer_server::{Config, Home, Server, init_home};
 use composer_tui::{Startup, TuiOptions};
 
 #[derive(Parser)]
@@ -43,6 +45,28 @@ enum Command {
         #[arg(long, short = 't')]
         thinking: bool,
     },
+    /// Pair a device (phone, laptop) for remote access: prints a QR code and a login command.
+    Pair {
+        /// The device's name, used to revoke it later.
+        #[arg(long, default_value = "phone")]
+        name: String,
+    },
+    /// List paired devices, or revoke one.
+    Devices {
+        #[command(subcommand)]
+        action: Option<DevicesAction>,
+    },
+    /// Connect this machine to a remote composer server, with a code from `composer pair`.
+    Login {
+        /// e.g. https://my-pc.tailnet.ts.net
+        server: String,
+        code: String,
+        /// This device's name (default: the hostname).
+        #[arg(long)]
+        name: Option<String>,
+    },
+    /// Forget the remote server; use the local one again.
+    Logout,
     /// Run a worker on a ticket (started by the server for `spawn_worker`).
     #[command(hide = true)]
     Worker {
@@ -64,6 +88,12 @@ enum Command {
     },
 }
 
+#[derive(Subcommand)]
+enum DevicesAction {
+    /// Revoke a device: its token stops working.
+    Revoke { name: String },
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
@@ -82,14 +112,8 @@ async fn main() -> anyhow::Result<()> {
 
     match cli.command {
         None => {
-            composer_tui::run(tui_options(
-                &home,
-                &cli.agent,
-                cli.session,
-                cli.new,
-                cli.project,
-            )?)
-            .await?
+            let options = tui_options(&home, &cli.agent, cli.session, cli.new, cli.project)?;
+            composer_tui::run(options).await?
         }
         Some(Command::Init) => {
             let created = init_home(&home).await?;
@@ -113,15 +137,27 @@ async fn main() -> anyhow::Result<()> {
             if text.trim().is_empty() {
                 anyhow::bail!("nothing to ask");
             }
+            let (server_url, token) = remote::client(&home)?;
             let options = AskOptions {
                 text,
                 agent: cli.agent,
                 session: cli.session,
                 project: cli.project,
                 show_thinking: thinking,
+                server_url,
+                token,
             };
-            ask(&home, options).await?;
+            ask(options).await?;
         }
+        Some(Command::Pair { name }) => remote::pair(&home, &name)?,
+        Some(Command::Devices { action }) => {
+            let revoke = action.map(|DevicesAction::Revoke { name }| name);
+            remote::devices(&home, revoke)?;
+        }
+        Some(Command::Login { server, code, name }) => {
+            remote::login(&home, &server, &code, name).await?
+        }
+        Some(Command::Logout) => remote::logout(&home)?,
         Some(Command::Worker {
             session,
             ticket,
@@ -148,6 +184,7 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Connects to the remote server from `composer login`, or the local one.
 fn tui_options(
     home: &Home,
     agent: &str,
@@ -156,9 +193,10 @@ fn tui_options(
     project: Option<String>,
 ) -> anyhow::Result<TuiOptions> {
     let config = Config::load(&home.config_file())?;
+    let (server_url, token) = remote::client(home)?;
     Ok(TuiOptions {
-        server_url: format!("http://{}", config.server.bind),
-        token: local_token(home)?,
+        server_url,
+        token,
         startup: Startup {
             session,
             new,
