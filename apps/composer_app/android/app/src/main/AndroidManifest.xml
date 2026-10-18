@@ -3,6 +3,12 @@
     <!-- Scanning the QR code of `composer pair`. -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <!-- Notifications (approvals, finished turns and workers), and a foreground service that
+         keeps the connections to your servers open while the app is in the background. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- Cleartext is allowed for servers reached by tailnet IP or on the LAN (http://);
          tailnet traffic is encrypted by WireGuard either way. -->
     <application
@@ -10,6 +16,17 @@
         android:label="composer"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <!-- specialUse: a long-lived connection to self-hosted servers fits no other type, and
+             dataSync is limited to 6h a day on Android 15. Do not rename (the plugin's service). -->
+        <service
+            android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
+            android:foregroundServiceType="specialUse"
+            android:stopWithTask="true"
+            android:exported="false">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keeps the connection to the user's self-hosted composer servers open, to show approval requests and replies." />
+        </service>
         <activity
             android:name=".MainActivity"
             android:exported="true"

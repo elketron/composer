@@ -13,9 +13,11 @@ final class AppStarted extends AppAction {
   const AppStarted();
 }
 
-/// Back in the foreground: retry offline servers now.
-final class AppResumed extends AppAction {
-  const AppResumed();
+/// The app came to the front (retry offline servers now) or went to the background (notify
+/// what is pending instead of showing it).
+final class ForegroundChanged extends AppAction {
+  const ForegroundChanged(this.foreground);
+  final bool foreground;
 }
 
 final class ServersLoaded extends AppAction {

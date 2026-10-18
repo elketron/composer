@@ -45,6 +45,8 @@ dependencies:
   # Micro apps. 6.2 beta: the first with a Linux backend (WPE WebKit); see docs/spikes/webview.md.
   flutter_inappwebview: 6.2.0-beta.3
   url_launcher: ^6.3.3
+  flutter_local_notifications: ^22.3.2
+  flutter_foreground_task: ^11.0.3
 
 dev_dependencies:
   flutter_test:

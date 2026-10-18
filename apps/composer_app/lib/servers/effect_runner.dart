@@ -3,12 +3,18 @@ import 'package:composer_protocol/composer_protocol.dart';
 import '../state/actions.dart';
 import '../state/effects.dart';
 import '../state/server_entry.dart';
+import 'background_keeper.dart';
+import 'notifier.dart';
 import 'server_api.dart';
 import 'server_connection.dart';
 import 'server_store.dart';
 
 /// Runs the reducer's effects: storage, pairing, and the connection to every server.
 class EffectRunner {
+  EffectRunner(this._notifier);
+
+  final Notifier _notifier;
+  final _keeper = BackgroundKeeper();
   final Map<String, ServerConnection> _connections = {};
   ServerStore? _store;
 
@@ -32,6 +38,12 @@ class EffectRunner {
         _connections[url]?.retryNow();
       case SendCommand(:final url, :final command):
         _request(url, command, dispatch);
+      case Notify():
+        _notifier.show(effect);
+      case CancelNotification(:final key):
+        _notifier.cancel(key);
+      case KeepAlive(:final servers):
+        _keeper.keep(servers).catchError((_) {});
       case FetchPage(:final url, :final page):
         _fetchPage(url, page, dispatch);
       case FetchSites(:final url):

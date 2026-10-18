@@ -91,7 +91,7 @@ void main() {
     var state = loaded([home, work]);
     state = reduce(state, LinkChanged(home.url, LinkState.online)).$1;
     state = reduce(state, LinkChanged(work.url, LinkState.offline, error: 'x')).$1;
-    expect(reduce(state, const AppResumed()).$2.whereType<Reconnect>().map((e) => e.url), [work.url]);
+    expect(reduce(state, const ForegroundChanged(true)).$2.whereType<Reconnect>().map((e) => e.url), [work.url]);
   });
 
   test('switching and shortcuts only select known servers', () {
@@ -149,7 +149,7 @@ void main() {
 
       final (answered, effects) = reduce(state, ApprovalAnswered(home.url, 'r1', approve: true));
       expect(answered.statusOf(home.url).approvals.map((a) => a.request), ['r2']);
-      final respond = (effects.single as SendCommand).command as ClientCommandApprovalRespond;
+      final respond = effects.whereType<SendCommand>().single.command as ClientCommandApprovalRespond;
       expect(respond.decision, ApprovalDecision.approve);
 
       state = reduce(answered, ServerEvent(home.url, const ServerMessageApprovalResolved(request: 'r2', session: 'a', approved: false))).$1;
@@ -246,6 +246,83 @@ void main() {
     test('coming online fetches the site list', () {
       final (_, effects) = reduce(loaded([home]), LinkChanged(home.url, LinkState.online));
       expect(effects.whereType<FetchSites>().single.url, home.url);
+    });
+  });
+
+  group('notifications', () {
+    ServerMessageApprovalRequest approval(String id) => ServerMessageApprovalRequest(
+          request: id, session: 'a', site: 'tools', recipe: 'greet', args: const ['bob'], body: 'b', hash: 'h');
+    SessionInfo info(String id, TurnState state, {String? ticket}) =>
+        SessionInfo(id: id, agent: 'default', state: state, lastSeq: 1, updated: '', ticket: ticket, preview: 'hi');
+    AppState withSessions(AppState s, List<SessionInfo> sessions) =>
+        reduce(s, ServerEvent(home.url, ServerMessageOk(id: 1, result: CommandResultSessions(sessions: sessions)))).$1;
+    AppState background(AppState s) => reduce(s, const ForegroundChanged(false)).$1;
+
+    test('approvals: only in the background, once, withdrawn when answered or resolved', () {
+      var state = loaded([home]);
+      expect(reduce(state, ServerEvent(home.url, approval('r1'))).$2.whereType<Notify>(), isEmpty, reason: 'the bar shows it');
+
+      state = background(state);
+      var (next, effects) = reduce(state, ServerEvent(home.url, approval('r2')));
+      final note = effects.whereType<Notify>().single;
+      expect((note.title, note.approval, note.session), ('Run tools › greet bob?', 'r2', 'a'));
+      // A reconnect re-sends it: no second notification.
+      next = reduce(next, LinkChanged(home.url, LinkState.online)).$1;
+      expect(reduce(next, ServerEvent(home.url, approval('r2'))).$2.whereType<Notify>(), isEmpty);
+
+      expect(
+        reduce(next, ServerEvent(home.url, const ServerMessageApprovalResolved(request: 'r2', session: 'a', approved: true))).$2,
+        [isA<CancelNotification>().having((c) => c.key, 'key', 'approval:r2')],
+      );
+      expect(reduce(next, ApprovalAnswered(home.url, 'r2', approve: false)).$2.whereType<CancelNotification>(), hasLength(1));
+    });
+
+    test('going to the background notifies approvals still open', () {
+      var state = reduce(loaded([home]), ServerEvent(home.url, approval('r1'))).$1;
+      final (next, effects) = reduce(state, const ForegroundChanged(false));
+      expect(effects.whereType<Notify>().single.approval, 'r1');
+      state = reduce(reduce(next, const ForegroundChanged(true)).$1, const ForegroundChanged(false)).$1;
+      expect(reduce(state, const ForegroundChanged(false)).$2.whereType<Notify>(), isEmpty);
+    });
+
+    test('a finished turn: notified unless you are looking at it; never for list reloads', () {
+      var state = withSessions(loaded([home]), [info('a', TurnState.running)]);
+      final done = ServerEvent(home.url, ServerMessageSessionUpdated(session: info('a', TurnState.idle)));
+      final (_, effects) = reduce(state, done);
+      expect(effects.whereType<Notify>().single.session, 'a');
+
+      final watching = reduce(state, SessionOpened(home.url, 'a')).$1;
+      expect(reduce(watching, done).$2.whereType<Notify>(), isEmpty);
+      expect(reduce(background(watching), done).$2.whereType<Notify>(), hasLength(1));
+
+      // Idle to idle, or the list arriving after a reconnect: nothing.
+      state = withSessions(loaded([home]), [info('a', TurnState.idle)]);
+      expect(reduce(state, done).$2.whereType<Notify>(), isEmpty);
+      // Workers are reported by worker.status instead.
+      state = withSessions(loaded([home]), [info('w', TurnState.running, ticket: '0001')]);
+      expect(
+        reduce(state, ServerEvent(home.url, ServerMessageSessionUpdated(session: info('w', TurnState.idle, ticket: '0001')))).$2,
+        isEmpty,
+      );
+    });
+
+    test('a finished worker leads to its orchestrator', () {
+      final status = ServerEvent(
+        home.url,
+        const ServerMessageWorkerStatus(worker: 'w', ticket: '0001', parent: 'o', state: WorkerState.done),
+      );
+      final note = reduce(loaded([home]), status).$2.whereType<Notify>().single;
+      expect((note.title, note.session), ('Worker finished ticket 0001', 'o'));
+      final running = ServerEvent(
+        home.url,
+        const ServerMessageWorkerStatus(worker: 'w', ticket: '0001', parent: 'o', state: WorkerState.running),
+      );
+      expect(reduce(loaded([home]), running).$2, isEmpty);
+    });
+
+    test('Android keeps running while there are servers', () {
+      expect(reduce(AppState.initial, const ServersLoaded([home, work], StorageKind.keyring)).$2.whereType<KeepAlive>().single.servers, 2);
+      expect(reduce(loaded([home]), ServerRemoved(home.url)).$2.whereType<KeepAlive>().single.servers, 0);
     });
   });
 }

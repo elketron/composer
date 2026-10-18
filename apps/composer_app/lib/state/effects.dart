@@ -55,6 +55,32 @@ final class CreateSession extends AppEffect {
   final String agent;
 }
 
+/// A system notification; `key` identifies it (to replace or withdraw it).
+final class Notify extends AppEffect {
+  const Notify({required this.key, required this.title, required this.body, required this.url, this.session, this.approval});
+  final String key;
+  final String title;
+  final String body;
+
+  /// Where tapping it leads: the server, and the session if any.
+  final String url;
+  final String? session;
+
+  /// An approval request id: the notification gets Approve / Deny.
+  final String? approval;
+}
+
+final class CancelNotification extends AppEffect {
+  const CancelNotification(this.key);
+  final String key;
+}
+
+/// Android: keep the app running in the background while there are servers to stay connected to.
+final class KeepAlive extends AppEffect {
+  const KeepAlive(this.servers);
+  final int servers;
+}
+
 final class FetchPage extends AppEffect {
   const FetchPage(this.url, this.page);
   final String url;

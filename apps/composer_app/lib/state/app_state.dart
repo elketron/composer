@@ -13,6 +13,8 @@ class AppState {
     this.active,
     this.pairing = const PairingState(),
     this.notice,
+    this.foreground = true,
+    this.notifiedApprovals = const {},
   });
 
   static const initial = AppState();
@@ -35,6 +37,12 @@ class AppState {
   /// The latest thing to tell you (a failed command).
   final Notice? notice;
 
+  /// The app is in front (and, on desktop, focused): no notifications for what is on screen.
+  final bool foreground;
+
+  /// Approval requests already notified (not again after a reconnect re-sends them).
+  final Set<String> notifiedApprovals;
+
   ServerEntry? get activeServer => servers.where((s) => s.url == active).firstOrNull;
 
   ServerStatus statusOf(String url) => status[url] ?? ServerStatus.initial;
@@ -47,6 +55,8 @@ class AppState {
     Object? active = _keep,
     PairingState? pairing,
     Notice? notice,
+    bool? foreground,
+    Set<String>? notifiedApprovals,
   }) =>
       AppState(
         loaded: loaded ?? this.loaded,
@@ -56,5 +66,7 @@ class AppState {
         active: identical(active, _keep) ? this.active : active as String?,
         pairing: pairing ?? this.pairing,
         notice: notice ?? this.notice,
+        foreground: foreground ?? this.foreground,
+        notifiedApprovals: notifiedApprovals ?? this.notifiedApprovals,
       );
 }

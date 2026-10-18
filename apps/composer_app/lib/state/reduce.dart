@@ -14,10 +14,11 @@ import 'types.dart';
 /// The app's reducer: pure, so it is tested without IO.
 (AppState, List<AppEffect>) reduce(AppState s, AppAction action) => switch (action) {
       AppStarted() => (s, const [LoadServers()]),
-      AppResumed() => (
-          s,
+      ForegroundChanged(foreground: true) => (
+          s.copyWith(foreground: true),
           [for (final server in s.servers) if (s.statusOf(server.url).link == LinkState.offline) Reconnect(server.url)],
         ),
+      ForegroundChanged(foreground: false) => _pendingApprovals(s.copyWith(foreground: false)),
       ServersLoaded(:final servers, :final storage) => (
           s.copyWith(
             loaded: true,
@@ -26,7 +27,7 @@ import 'types.dart';
             status: {for (final server in servers) server.url: ServerStatus.initial},
             active: servers.firstOrNull?.url,
           ),
-          [for (final server in servers) Connect(server)],
+          [for (final server in servers) Connect(server), KeepAlive(servers.length)],
         ),
       ServerSelected(:final url) => s.servers.any((x) => x.url == url) ? (s.copyWith(active: url), const []) : (s, const []),
       PairingReset() => (s.copyWith(pairing: const PairingState()), const []),
@@ -53,6 +54,7 @@ import 'types.dart';
               url,
               ClientCommandApprovalRespond(request: request, decision: approve ? ApprovalDecision.approve : ApprovalDecision.deny),
             ),
+            CancelNotification('approval:$request'),
           ],
         ),
       CommandFailed(:final message) => (s.copyWith(notice: Notice((s.notice?.id ?? 0) + 1, message)), const []),
@@ -117,7 +119,7 @@ import 'types.dart';
       active: server.url,
       pairing: const PairingState(),
     ),
-    [SaveServers(servers), Connect(server)],
+    [SaveServers(servers), Connect(server), KeepAlive(servers.length)],
   );
 }
 
@@ -126,7 +128,7 @@ import 'types.dart';
   final active = s.active == url ? servers.firstOrNull?.url : s.active;
   return (
     s.copyWith(servers: servers, status: {...s.status}..remove(url), active: active),
-    [Disconnect(url), SaveServers(servers)],
+    [Disconnect(url), SaveServers(servers), KeepAlive(servers.length)],
   );
 }
 
@@ -186,7 +188,12 @@ import 'types.dart';
 }
 
 (AppState, List<AppEffect>) _serverEvent(AppState s, String url, ServerMessage message) {
-  final next = _event(s, url, message);
+  final (next, notes) = _notifications(s, _event(s, url, message), url, message);
+  final (state, effects) = _pageEffects(s, next, url, message);
+  return (state, [...notes, ...effects]);
+}
+
+(AppState, List<AppEffect>) _pageEffects(AppState s, AppState next, String url, ServerMessage message) {
   final status = s.status[url];
   if (status == null) return (next, const []);
   final page = status.page;
@@ -201,6 +208,73 @@ import 'types.dart';
       _withPage(next, url, (p) => _navigate(url, p, target)),
     _ => (next, const []),
   };
+}
+
+/// What deserves a system notification: approvals while the app is in the background, and
+/// finished turns and workers you are not looking at.
+(AppState, List<AppEffect>) _notifications(AppState before, AppState s, String url, ServerMessage message) {
+  final status = before.status[url];
+  if (status == null) return (s, const []);
+  final server = s.servers.where((x) => x.url == url).firstOrNull?.name ?? url;
+  bool viewing(String? session) => s.foreground && s.active == url && session != null && status.chat?.session == session;
+  switch (message) {
+    case ServerMessageApprovalRequest(:final request) when !s.foreground && !s.notifiedApprovals.contains(request):
+      return (s.copyWith(notifiedApprovals: {...s.notifiedApprovals, request}), [_approvalNote(url, server, message)]);
+    case ServerMessageApprovalResolved(:final request):
+      return (s, [CancelNotification('approval:$request')]);
+    case ServerMessageWorkerStatus(:final worker, :final ticket, :final parent, state: final state)
+        when (state == WorkerState.done || state == WorkerState.failed) && !viewing(parent):
+      return (
+        s,
+        [
+          Notify(
+            key: 'worker:$worker',
+            title: state == WorkerState.done ? 'Worker finished ticket $ticket' : 'Worker failed on ticket $ticket',
+            body: 'on $server',
+            url: url,
+            session: parent,
+          ),
+        ],
+      );
+    case ServerMessageSessionUpdated(:final session)
+        when session.state == TurnState.idle && session.ticket == null && !viewing(session.id):
+      final previous = status.session(session.id);
+      if (previous == null || previous.state == TurnState.idle) return (s, const []);
+      return (
+        s,
+        [
+          Notify(
+            key: 'turn:${session.id}',
+            title: '${session.agent} #${session.id} finished',
+            body: session.preview ?? 'on $server',
+            url: url,
+            session: session.id,
+          ),
+        ],
+      );
+    default:
+      return (s, const []);
+  }
+}
+
+Notify _approvalNote(String url, String server, ServerMessageApprovalRequest a) => Notify(
+      key: 'approval:${a.request}',
+      title: 'Run ${[a.site, '›', a.recipe, ...a.args].join(' ')}?',
+      body: 'Recipe approval for #${a.session} on $server',
+      url: url,
+      session: a.session,
+      approval: a.request,
+    );
+
+/// Going to the background: approvals still open get their notification now.
+(AppState, List<AppEffect>) _pendingApprovals(AppState s) {
+  final notes = [
+    for (final server in s.servers)
+      for (final a in s.statusOf(server.url).approvals)
+        if (!s.notifiedApprovals.contains(a.request)) _approvalNote(server.url, server.name, a),
+  ];
+  if (notes.isEmpty) return (s, const []);
+  return (s.copyWith(notifiedApprovals: {...s.notifiedApprovals, for (final n in notes) n.approval!}), notes);
 }
 
 (PageState, List<AppEffect>) _navigate(String url, PageState p, String target) {
