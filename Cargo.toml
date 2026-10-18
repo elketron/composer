@@ -10,8 +10,10 @@ license = "MIT"
 [workspace.dependencies]
 composer-core = { path = "crates/core" }
 composer-protocol = { path = "crates/protocol" }
+composer-server = { path = "crates/server" }
+composer-tui = { path = "crates/tui" }
 serde = { version = "1.0.229", features = ["derive"] }
-serde_json = "1.0.154"
+serde_json = { version = "1.0.154", features = ["preserve_order"] }
 serde_norway = "0.9.42"
 pulldown-cmark = { version = "0.13.4", default-features = false }
 thiserror = "2.0.21"
@@ -36,3 +38,6 @@ base64 = "0.22"
 anyhow = "1.0.104"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+ratatui = "0.30.2"
+crossterm = { version = "0.29.0", features = ["event-stream"] }
+unicode-width = "0.2.2"

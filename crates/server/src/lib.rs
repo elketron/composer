@@ -24,7 +24,7 @@ pub use error::{Result, ServerError};
 pub use hash::content_hash;
 pub use home::Home;
 pub use hub::EventHub;
-pub use init::init_home;
+pub use init::{init_home, local_token};
 pub use server::Server;
 pub use slot_guard::SlotGuard;
 pub use slot_pool::SlotPool;

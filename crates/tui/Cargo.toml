@@ -1,0 +1,22 @@
+[package]
+name = "composer-tui"
+description = "The composer terminal UI: Flux state, Ratatui components"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+composer-core.workspace = true
+composer-protocol.workspace = true
+anyhow.workspace = true
+crossterm.workspace = true
+futures.workspace = true
+pulldown-cmark.workspace = true
+ratatui.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
+tokio.workspace = true
+tokio-tungstenite.workspace = true
+unicode-width.workspace = true

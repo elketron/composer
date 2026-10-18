@@ -1,0 +1,170 @@
+//! Builds the chat as lines: message blocks with one background per speaker.
+
+use ratatui::style::{Modifier, Style};
+use ratatui::text::{Line, Span};
+
+use crate::components::widgets::band;
+use crate::markdown;
+use crate::store::AppState;
+use crate::store::types::ChatItem;
+use crate::theme;
+
+enum Speaker {
+    You,
+    Agent,
+    System,
+}
+
+/// All chat lines for `width` columns (including the 1-column padding inside bands).
+pub fn chat_lines(state: &AppState, width: u16) -> Vec<Line<'static>> {
+    let inner = width.saturating_sub(2);
+    let agent_name = state
+        .session
+        .current_info()
+        .map(|s| s.agent.clone())
+        .unwrap_or_else(|| "agent".into());
+    let mut blocks: Vec<(Speaker, Vec<Line<'static>>)> = Vec::new();
+
+    let agent_block = |blocks: &mut Vec<(Speaker, Vec<Line<'static>>)>| -> usize {
+        if !matches!(blocks.last(), Some((Speaker::Agent, _))) {
+            blocks.push((
+                Speaker::Agent,
+                vec![Line::from(Span::styled(
+                    agent_name.clone(),
+                    Style::new().fg(theme::INFO),
+                ))],
+            ));
+        }
+        blocks.len() - 1
+    };
+
+    for item in &state.session.items {
+        match item {
+            ChatItem::User { text, source } => {
+                let mut label = vec![Span::styled("you", Style::new().fg(theme::ACCENT))];
+                if let Some(source) = source {
+                    label.push(Span::styled(format!(" · {source}"), theme::faint()));
+                }
+                let mut lines = vec![Line::from(label)];
+                // Your newlines are meant literally: make them markdown hard breaks.
+                let text = text.replace('\n', "  \n");
+                lines.extend(markdown::render(&text, inner, None, theme::text()).lines);
+                blocks.push((Speaker::You, lines));
+            }
+            ChatItem::Thinking { text } => {
+                let i = agent_block(&mut blocks);
+                blocks[i]
+                    .1
+                    .extend(thinking_lines(text, state.ui.show_thinking, inner, false));
+            }
+            ChatItem::Text { text } => {
+                let i = agent_block(&mut blocks);
+                blocks[i]
+                    .1
+                    .extend(markdown::render(text, inner, None, theme::text()).lines);
+            }
+            ChatItem::Tool {
+                name,
+                summary,
+                result,
+                is_error,
+                ..
+            } => {
+                let i = agent_block(&mut blocks);
+                let status = match (result, is_error) {
+                    (None, _) => Span::styled(" …", theme::faint()),
+                    (Some(_), true) => Span::styled(" ✗", Style::new().fg(theme::ERR)),
+                    (Some(_), false) => Span::raw(""),
+                };
+                blocks[i].1.push(Line::from(vec![
+                    Span::styled("▸ ", theme::faint()),
+                    Span::styled(format!("{name:<8}"), Style::new().fg(theme::INFO)),
+                    Span::styled(summary.clone(), theme::muted()),
+                    status,
+                ]));
+                if let Some(result) = result
+                    .as_ref()
+                    .filter(|_| state.ui.show_tool_details || *is_error)
+                {
+                    let style = if *is_error {
+                        Style::new().fg(theme::ERR)
+                    } else {
+                        theme::faint()
+                    };
+                    for line in result.lines().take(8) {
+                        let text: String = line
+                            .chars()
+                            .take(inner.saturating_sub(4) as usize)
+                            .collect();
+                        blocks[i].1.push(Line::from(vec![
+                            Span::styled("  │ ", theme::faint()),
+                            Span::styled(text, style),
+                        ]));
+                    }
+                }
+            }
+            ChatItem::System { text } => {
+                blocks.push((
+                    Speaker::System,
+                    vec![Line::from(Span::styled(
+                        text.clone(),
+                        Style::new().fg(theme::WARN),
+                    ))],
+                ));
+            }
+        }
+    }
+
+    if let Some(streaming) = &state.session.streaming {
+        let i = agent_block(&mut blocks);
+        if !streaming.thinking.is_empty() {
+            blocks[i].1.extend(thinking_lines(
+                &streaming.thinking,
+                state.ui.show_thinking,
+                inner,
+                streaming.content.is_empty(),
+            ));
+        }
+        if !streaming.content.is_empty() {
+            let mut lines = markdown::render(&streaming.content, inner, None, theme::text()).lines;
+            if let Some(last) = lines.last_mut() {
+                last.spans
+                    .push(Span::styled("▍", Style::new().fg(theme::ACCENT)));
+            }
+            blocks[i].1.extend(lines);
+        }
+    }
+
+    let mut out = Vec::new();
+    for (speaker, lines) in blocks {
+        let bg = match speaker {
+            Speaker::You => theme::YOU,
+            Speaker::Agent => theme::SURFACE,
+            Speaker::System => theme::BG,
+        };
+        out.extend(lines.into_iter().map(|l| band(l, width, bg)));
+        out.push(Line::raw(""));
+    }
+    out
+}
+
+/// Collapsed: one `▸ thinking · N words` row. Expanded: dim italic text behind a bar.
+fn thinking_lines(text: &str, expanded: bool, width: u16, live: bool) -> Vec<Line<'static>> {
+    let words = text.split_whitespace().count();
+    let marker = if expanded { "▾ " } else { "▸ " };
+    let suffix = if live { " …" } else { "" };
+    let mut lines = vec![Line::from(vec![
+        Span::styled(marker, theme::faint()),
+        Span::styled("thinking", theme::muted()),
+        Span::styled(format!(" · {words} words{suffix}"), theme::faint()),
+    ])];
+    if expanded {
+        let style = Style::new().fg(theme::FAINT).add_modifier(Modifier::ITALIC);
+        for line in markdown::render(text, width.saturating_sub(2), None, style).lines {
+            let mut spans = vec![Span::styled("│ ", theme::faint())];
+            spans.extend(line.spans);
+            lines.push(Line::from(spans));
+        }
+    }
+    lines
+}

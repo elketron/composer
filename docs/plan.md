@@ -199,10 +199,10 @@ Everything else lives in floating windows (fuzzy finder, telescope-style) instea
 | `H` / `L` | back / forward in page viewer |
 | `F` | toggle follow agent (**on by default**) |
 | `i`, `Esc` | compose / back to Normal |
-| `Enter` / `Alt-Enter` | send / newline |
+| `Enter` | Insert: newline · Normal: send the draft (empty draft: start typing) |
 | `Ctrl-c` | cancel current turn |
 | `t` | toggle thinking |
-| `Space` on `▸` row | expand / collapse |
+| `t` / `T` | expand all thinking / tool results (per-row `Space` later) |
 | `e` | edit current page in nvim |
 | `gd` | changes view of active project; `Enter` on hunk → nvim at line |
 | `a` | open current site's micro app |
@@ -240,7 +240,7 @@ Commands: `:new [agent]`, `:attach <id>`, `:project <path>`, `:open <url>`, `:ap
 - **Components** implement one trait:
   ```rust
   trait Component {
-      fn handle_key(&mut self, key: KeyEvent, state: &AppState) -> Option<Action>;
+      fn handle_key(&mut self, key: KeyEvent, state: &AppState) -> Vec<Action>;
       fn render(&self, frame: &mut Frame, area: Rect, state: &AppState);
   }
   ```
@@ -307,7 +307,7 @@ Attaching to a worker **replaces** the main chat; the title shows a breadcrumb (
 
 1. ✅ **core + protocol** — Cargo workspace; site model, URL resolution, link + frontmatter parsing, in-memory index; shared message types.
 2. ✅ **server** — provider, agent loop, page tools (`open`, `search`, `list_sites`, `write`, `edit`, `set_project`), sessions, WS + HTTP API, token auth, file watcher, `composer init / serve / ask`.
-3. **tui** — chat + page viewer against the server; nvim suspend.
+3. ✅ **tui** — chat + page viewer against the server, pickers, hints, `:` commands, nvim round trip, headless script mode for testing.
 4. **actions** — justfile listing/running, hashed approvals, TUI prompt.
 5. **memory** — memory site conventions, compaction.
 6. **micro apps** — static serving, sdk, template, `new_app`, push messages; first app (ticket board or mockup tool).
