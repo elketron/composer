@@ -1,6 +1,7 @@
 //! Plain data held by the stores.
 
 use composer_protocol::ClientCommand;
+use composer_protocol::http::{SearchHit, SiteSummary};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
@@ -165,4 +166,11 @@ pub struct DiffLine {
     pub file: Option<String>,
     /// Line in the new version of the file.
     pub line: Option<u32>,
+}
+
+/// What `:` commands complete from: the sites and their pages, refreshed when command mode opens.
+#[derive(Debug, Clone, Default)]
+pub struct Catalog {
+    pub sites: Vec<SiteSummary>,
+    pub pages: Vec<SearchHit>,
 }

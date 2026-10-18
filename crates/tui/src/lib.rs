@@ -10,6 +10,7 @@ mod action;
 mod api_client;
 mod app;
 mod commands;
+mod completion;
 pub mod components;
 mod diff_parse;
 mod dispatcher;

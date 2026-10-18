@@ -78,6 +78,11 @@ pub enum Action {
         hits: Vec<SearchHit>,
     },
     SitesLoaded(Vec<SiteSummary>),
+    /// Sites and pages for `:` completion.
+    CatalogLoaded {
+        sites: Vec<SiteSummary>,
+        pages: Vec<SearchHit>,
+    },
 }
 
 /// Result of feeding a key to the keymap. Short-lived, so its size does not matter.

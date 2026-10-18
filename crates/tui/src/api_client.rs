@@ -60,6 +60,11 @@ impl ApiClient {
         self.get(&format!("/api/search?limit=60&q={query}")).await
     }
 
+    /// Every page (title and URL), for completion.
+    pub async fn all_pages(&self) -> Result<Vec<SearchHit>, String> {
+        self.get("/api/search?limit=5000&q=").await
+    }
+
     pub async fn project_diff(&self, session: &str) -> Result<ProjectDiff, String> {
         self.get(&format!("/api/sessions/{session}/project/diff"))
             .await

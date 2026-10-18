@@ -62,6 +62,15 @@ impl EffectRunner {
                     dispatcher.dispatch(Action::SitesLoaded(api.sites().await.unwrap_or_default()));
                 });
             }
+            Effect::LoadCatalog => {
+                tokio::spawn(async move {
+                    let (sites, pages) = tokio::join!(api.sites(), api.all_pages());
+                    dispatcher.dispatch(Action::CatalogLoaded {
+                        sites: sites.unwrap_or_default(),
+                        pages: pages.unwrap_or_default(),
+                    });
+                });
+            }
             Effect::EditPage(_)
             | Effect::ViewText { .. }
             | Effect::OpenBrowser(_)

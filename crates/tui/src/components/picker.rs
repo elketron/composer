@@ -8,7 +8,7 @@ use unicode_width::UnicodeWidthStr;
 
 use crate::action::Action;
 use crate::components::Component;
-use crate::components::widgets::{centered, dim};
+use crate::components::widgets::{centered, dim, fit, pad, pad_left};
 use crate::store::AppState;
 use crate::store::types::PickerKind;
 use crate::theme;
@@ -132,27 +132,4 @@ impl Component for Picker {
             footer_area,
         );
     }
-}
-
-fn fit(text: &str, width: usize) -> String {
-    if text.width() <= width {
-        return text.to_string();
-    }
-    let mut out = String::new();
-    for c in text.chars() {
-        if out.width() + 2 > width {
-            break;
-        }
-        out.push(c);
-    }
-    out.push('…');
-    out
-}
-
-fn pad(text: &str, width: usize) -> String {
-    format!("{text}{}", " ".repeat(width.saturating_sub(text.width())))
-}
-
-fn pad_left(text: &str, width: usize) -> String {
-    format!("{}{text}", " ".repeat(width.saturating_sub(text.width())))
 }

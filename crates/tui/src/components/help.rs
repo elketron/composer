@@ -23,7 +23,10 @@ const MODES: [(&str, &str); 4] = [
         "INSERT",
         "write a message: enter is a newline; esc, then enter, sends it",
     ),
-    ("COMMAND", "a : command; enter runs it, esc cancels"),
+    (
+        "COMMAND",
+        "a : command; tab completes (tab / shift-tab cycle), enter runs it, esc cancels",
+    ),
     (
         "HINT",
         "links on the page get labels; type one to follow it, esc cancels",

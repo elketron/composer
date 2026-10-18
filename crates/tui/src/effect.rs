@@ -8,6 +8,8 @@ pub enum Effect {
     FetchPage(String),
     Search(String),
     LoadSites,
+    /// Sites and every page, for completing `:` commands.
+    LoadCatalog,
     /// Fetch the active project's git changes for a session.
     FetchDiff(String),
     /// Suspend the TUI and open a project file in the editor at a line. Run by the app loop.

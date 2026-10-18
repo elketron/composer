@@ -3,7 +3,8 @@ use composer_protocol::{ClientCommand, CommandResult, ServerMessage};
 use crate::action::Action;
 use crate::effect::Effect;
 use crate::store::types::{
-    ConnState, FlashLevel, Mode, Outgoing, Pane, Pending, PendingApproval, PickerTarget, Startup,
+    Catalog, ConnState, FlashLevel, Mode, Outgoing, Pane, Pending, PendingApproval, PickerTarget,
+    Startup,
 };
 use crate::store::{
     ApprovalStore, ConnectionStore, PageStore, PickerStore, ProjectStore, SessionStore, UiStore,
@@ -19,6 +20,7 @@ pub struct AppState {
     pub picker: PickerStore,
     pub approvals: ApprovalStore,
     pub project: ProjectStore,
+    pub catalog: Catalog,
     startup: Option<Startup>,
     default_agent: String,
 }
@@ -33,6 +35,7 @@ impl AppState {
             picker: PickerStore::new(),
             approvals: ApprovalStore::default(),
             project: ProjectStore::default(),
+            catalog: Catalog::default(),
             default_agent: startup.agent.clone(),
             startup: Some(startup),
         }
@@ -46,7 +49,12 @@ impl AppState {
             }
             Action::SetMode(mode) => {
                 self.ui.set_mode(mode);
-                vec![]
+                // Fresh sites and pages to complete from.
+                if mode == Mode::Command {
+                    vec![Effect::LoadCatalog]
+                } else {
+                    vec![]
+                }
             }
             Action::FocusPane(pane) => {
                 self.ui.focus = pane;
@@ -277,6 +285,10 @@ impl AppState {
             }
             Action::SitesLoaded(sites) => {
                 self.picker.sites(sites);
+                vec![]
+            }
+            Action::CatalogLoaded { sites, pages } => {
+                self.catalog = Catalog { sites, pages };
                 vec![]
             }
         }

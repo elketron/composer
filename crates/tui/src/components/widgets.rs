@@ -5,6 +5,7 @@ use ratatui::layout::Rect;
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Borders};
+use unicode_width::UnicodeWidthStr;
 
 use crate::theme;
 
@@ -64,4 +65,30 @@ pub fn band(mut line: Line<'static>, width: u16, bg: ratatui::style::Color) -> L
             .push(Span::raw(" ".repeat((width - used - 1) as usize)));
     }
     line.style(Style::new().bg(bg))
+}
+
+/// `text`, cut to `width` columns with an ellipsis.
+pub fn fit(text: &str, width: usize) -> String {
+    if text.width() <= width {
+        return text.to_string();
+    }
+    let mut out = String::new();
+    for c in text.chars() {
+        if out.width() + 2 > width {
+            break;
+        }
+        out.push(c);
+    }
+    out.push('…');
+    out
+}
+
+/// `text` padded with spaces to `width` columns.
+pub fn pad(text: &str, width: usize) -> String {
+    format!("{text}{}", " ".repeat(width.saturating_sub(text.width())))
+}
+
+/// `text` padded on the left to `width` columns.
+pub fn pad_left(text: &str, width: usize) -> String {
+    format!("{}{text}", " ".repeat(width.saturating_sub(text.width())))
 }
