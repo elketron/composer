@@ -41,6 +41,6 @@ void main() {
     await tester.tap(find.byKey(const Key('pair')));
     await pumpUntil(tester, find.text('online'));
     expect(find.textContaining('slots 2', findRichText: true), findsOneWidget);
-    expect(find.text('SESSIONS'), findsOneWidget);
+    expect(find.text('SESSIONS'), findsWidgets); // the rail and the server page
   });
 }

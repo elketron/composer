@@ -3,11 +3,11 @@
 Target: https://github.com/pichillilorenzo/flutter_inappwebview — as an issue, or as a pull request with
 [`flutter_inappwebview_linux.patch`](flutter_inappwebview_linux.patch) (against the pub.dev
 `flutter_inappwebview_linux` 0.1.0-beta.1 sources; apply with `patch -p1` from the repository root,
-and check it against current `main` first). Could also be split into two issues.
+and check it against current `main` first). Could also be split into separate issues.
 
 ---
 
-**Title:** [Linux] Build fails with WPE WebKit 2.54, and the view stays blank with GPU rendering (EGLImage bound on another EGL display)
+**Title:** [Linux] Build fails with WPE WebKit 2.54 (renamed setting; libwpe required), and the view stays blank with GPU rendering (EGLImage bound on another EGL display)
 
 **Environment**
 
@@ -44,6 +44,17 @@ populate callback imports them with `eglCreateImage(EGL_LINUX_DMA_BUF_EXT)` on t
 current there (Flutter's). Still zero-copy; the existing path stays as the fallback if the import fails.
 With it, pages render with hardware acceleration on the setup above, and Flutter widgets draw over the
 view as expected.
+
+**3. CMake requires libwpe even with WPEPlatform**
+
+```
+CMake Error at .../flutter_inappwebview_linux/linux/CMakeLists.txt:125 (message):
+  libwpe (wpe-1.0) not found.  Please install libwpe-1.0-dev.
+```
+
+Arch's `wpewebkit` 2.54 is built with WPEPlatform only and no longer pulls in libwpe, but the
+CMakeLists requires (and links) `wpe-1.0` unconditionally, although only the legacy FDO backend
+uses it. Fix: require it only when falling back to WPEBackend-FDO, and link it when found.
 
 **Also seen:** `initialUrlRequest` is ignored on Linux (as in #2903); calling `loadUrl` from
 `onWebViewCreated` works around it.

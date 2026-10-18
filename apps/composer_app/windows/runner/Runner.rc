@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "dev.composer" "\0"
-            VALUE "FileDescription", "composer_app" "\0"
+            VALUE "FileDescription", "composer" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "composer_app" "\0"
+            VALUE "InternalName", "composer" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 dev.composer. All rights reserved." "\0"
-            VALUE "OriginalFilename", "composer_app.exe" "\0"
-            VALUE "ProductName", "composer_app" "\0"
+            VALUE "OriginalFilename", "composer.exe" "\0"
+            VALUE "ProductName", "composer" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

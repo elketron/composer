@@ -120,8 +120,10 @@ if(NOT HAVE_WPE_PLATFORM AND NOT HAVE_WPE_FDO)
 endif()
 
 # Check for libwpe
+# composer patch: only the legacy FDO backend uses libwpe; WPEPlatform-only WebKit builds
+# (Arch's wpewebkit 2.54) don't ship it.
 pkg_check_modules(LIBWPE QUIET IMPORTED_TARGET wpe-1.0)
-if(NOT LIBWPE_FOUND)
+if(NOT LIBWPE_FOUND AND HAVE_WPE_FDO)
   message(FATAL_ERROR "libwpe (wpe-1.0) not found. Please install libwpe-1.0-dev.")
 endif()
 
@@ -277,7 +279,9 @@ target_link_libraries(${PLUGIN_NAME} PRIVATE PkgConfig::GTK)
 target_link_libraries(${PLUGIN_NAME} PRIVATE PkgConfig::EPOXY)
 target_link_libraries(${PLUGIN_NAME} PRIVATE nlohmann_json::nlohmann_json)
 target_link_libraries(${PLUGIN_NAME} PRIVATE PkgConfig::WPE_WEBKIT)
-target_link_libraries(${PLUGIN_NAME} PRIVATE PkgConfig::LIBWPE)
+if(LIBWPE_FOUND)  # composer patch
+  target_link_libraries(${PLUGIN_NAME} PRIVATE PkgConfig::LIBWPE)
+endif()
 target_link_libraries(${PLUGIN_NAME} PRIVATE PkgConfig::WAYLAND_SERVER)
 target_link_libraries(${PLUGIN_NAME} PRIVATE PkgConfig::LIBSECRET)
 
@@ -410,7 +414,9 @@ target_link_libraries(${TEST_RUNNER} PRIVATE PkgConfig::GTK)
 target_link_libraries(${TEST_RUNNER} PRIVATE PkgConfig::EPOXY)
 target_link_libraries(${TEST_RUNNER} PRIVATE nlohmann_json::nlohmann_json)
 target_link_libraries(${TEST_RUNNER} PRIVATE PkgConfig::WPE_WEBKIT)
-target_link_libraries(${TEST_RUNNER} PRIVATE PkgConfig::LIBWPE)
+if(LIBWPE_FOUND)  # composer patch
+  target_link_libraries(${TEST_RUNNER} PRIVATE PkgConfig::LIBWPE)
+endif()
 target_link_libraries(${TEST_RUNNER} PRIVATE PkgConfig::WAYLAND_SERVER)
 target_link_libraries(${TEST_RUNNER} PRIVATE PkgConfig::LIBSECRET)
 if(HAVE_WPE_PLATFORM)

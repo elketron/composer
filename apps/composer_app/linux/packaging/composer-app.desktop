@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=composer
+Comment=Chat with your agents and browse their sites
+Exec=composer-app
+Icon=composer-app
+Terminal=false
+Categories=Development;Utility;
+StartupWMClass=dev.composer.composer_app

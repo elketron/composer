@@ -11,5 +11,8 @@ Vendored from pub.dev (`flutter_inappwebview_linux-0.1.0-beta.1`), used through
    Mesa (AMD, Hyprland/Wayland and headless Weston) shows nothing. The texture now imports the
    frame's DMA-BUF (`GetCurrentDmaBuf`) as an EGLImage on Flutter's current display in its
    populate callback, still zero-copy; the old path remains the fallback.
+3. **WPEPlatform-only WebKit** (`linux/CMakeLists.txt`): libwpe was required even though only
+   the legacy FDO backend uses it; Arch's wpewebkit 2.54 no longer ships it. Now required (and
+   linked) only for that backend.
 
-Drop this copy once upstream ships both fixes.
+Drop this copy once upstream ships these fixes.

@@ -1,3 +1,40 @@
+diff --color -ruN a/flutter_inappwebview_linux/linux/CMakeLists.txt b/flutter_inappwebview_linux/linux/CMakeLists.txt
+--- a/flutter_inappwebview_linux/linux/CMakeLists.txt	2026-10-18 14:32:02.940130357 +0200
++++ b/flutter_inappwebview_linux/linux/CMakeLists.txt	2026-10-18 21:12:15.584580890 +0200
+@@ -120,8 +120,10 @@
+ endif()
+ 
+ # Check for libwpe
++# Only the legacy FDO backend uses libwpe; WPEPlatform-only WebKit builds
++# (Arch's wpewebkit 2.54) don't ship it.
+ pkg_check_modules(LIBWPE QUIET IMPORTED_TARGET wpe-1.0)
+-if(NOT LIBWPE_FOUND)
++if(NOT LIBWPE_FOUND AND HAVE_WPE_FDO)
+   message(FATAL_ERROR "libwpe (wpe-1.0) not found. Please install libwpe-1.0-dev.")
+ endif()
+ 
+@@ -277,7 +279,9 @@
+ target_link_libraries(${PLUGIN_NAME} PRIVATE PkgConfig::EPOXY)
+ target_link_libraries(${PLUGIN_NAME} PRIVATE nlohmann_json::nlohmann_json)
+ target_link_libraries(${PLUGIN_NAME} PRIVATE PkgConfig::WPE_WEBKIT)
+-target_link_libraries(${PLUGIN_NAME} PRIVATE PkgConfig::LIBWPE)
++if(LIBWPE_FOUND)
++  target_link_libraries(${PLUGIN_NAME} PRIVATE PkgConfig::LIBWPE)
++endif()
+ target_link_libraries(${PLUGIN_NAME} PRIVATE PkgConfig::WAYLAND_SERVER)
+ target_link_libraries(${PLUGIN_NAME} PRIVATE PkgConfig::LIBSECRET)
+ 
+@@ -410,7 +414,9 @@
+ target_link_libraries(${TEST_RUNNER} PRIVATE PkgConfig::EPOXY)
+ target_link_libraries(${TEST_RUNNER} PRIVATE nlohmann_json::nlohmann_json)
+ target_link_libraries(${TEST_RUNNER} PRIVATE PkgConfig::WPE_WEBKIT)
+-target_link_libraries(${TEST_RUNNER} PRIVATE PkgConfig::LIBWPE)
++if(LIBWPE_FOUND)
++  target_link_libraries(${TEST_RUNNER} PRIVATE PkgConfig::LIBWPE)
++endif()
+ target_link_libraries(${TEST_RUNNER} PRIVATE PkgConfig::WAYLAND_SERVER)
+ target_link_libraries(${TEST_RUNNER} PRIVATE PkgConfig::LIBSECRET)
+ if(HAVE_WPE_PLATFORM)
 diff --color -ruN a/flutter_inappwebview_linux/linux/in_app_webview/in_app_webview.cc b/flutter_inappwebview_linux/linux/in_app_webview/in_app_webview.cc
 --- a/flutter_inappwebview_linux/linux/in_app_webview/in_app_webview.cc	2026-10-18 14:32:02.939627211 +0200
 +++ b/flutter_inappwebview_linux/linux/in_app_webview/in_app_webview.cc	2026-10-18 14:32:12.014435149 +0200

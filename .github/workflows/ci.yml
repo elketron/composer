@@ -1,0 +1,87 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  FLUTTER_VERSION: 3.47.7
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      # The action tests run real recipes; without just they are skipped.
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - run: cargo test --workspace
+
+  # The seed micro apps and the app template build against the sdk, as after `composer init`.
+  apps:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
+      - uses: oven-sh/setup-bun@v2
+      - name: Build every micro app in a fresh composer home
+        run: |
+          export COMPOSER_HOME="$RUNNER_TEMP/home"
+          cargo run -q -p composer-cli -- init
+          for justfile in "$COMPOSER_HOME"/sites/*/justfile; do
+            site=$(dirname "$justfile")
+            if grep -q '^ui-build:' "$justfile"; then
+              echo "::group::$(basename "$site")"
+              (cd "$site" && just ui-build)
+              echo "::endgroup::"
+            fi
+          done
+          # A new app is the template copied into a site's ui/.
+          mkdir -p "$COMPOSER_HOME/sites/template-check"
+          cp -r "$COMPOSER_HOME/templates/app" "$COMPOSER_HOME/sites/template-check/ui"
+          (cd "$COMPOSER_HOME/sites/template-check/ui" && bun install && bun run build)
+
+  protocol:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: dart-lang/setup-dart@v1
+      - name: Dart models are up to date with crates/protocol
+        run: cargo run -q -p composer-protocol --features schema --bin dartgen -- --check
+      - working-directory: apps/composer_protocol
+        run: dart pub get && dart analyze --fatal-infos && dart test
+
+  flutter:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/composer_app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze --fatal-infos
+      - run: flutter test
