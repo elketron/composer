@@ -39,3 +39,26 @@ async fn round_trip(api: &ApiClient, url: &str) -> Result<Option<String>, String
     let saved = api.put_page(&page.url, edited, Some(page.hash)).await?;
     Ok(Some(saved.url))
 }
+
+/// Opens `text` read-only in `$EDITOR` (nvim gets `-R`). Nothing is saved.
+pub fn view_text(name: &str, text: &str) -> Action {
+    let result = (|| -> Result<(), String> {
+        let dir = tempfile::tempdir().map_err(|e| e.to_string())?;
+        let path = dir.path().join(name);
+        std::fs::write(&path, text).map_err(|e| e.to_string())?;
+        let editor = std::env::var("EDITOR").unwrap_or_else(|_| "nvim".into());
+        let mut command = Command::new(&editor);
+        if editor.ends_with("vim") {
+            command.arg("-R");
+        }
+        command
+            .arg(&path)
+            .status()
+            .map_err(|e| format!("{editor}: {e}"))?;
+        Ok(())
+    })();
+    match result {
+        Ok(()) => Action::Flash("y approves · n denies".into(), FlashLevel::Info),
+        Err(error) => Action::Flash(error, FlashLevel::Error),
+    }
+}

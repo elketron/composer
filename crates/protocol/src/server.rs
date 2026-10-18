@@ -98,6 +98,14 @@ pub enum ServerMessage {
         hash: String,
     },
 
+    /// Someone answered an approval request; clients close their prompt.
+    #[serde(rename = "approval.resolved")]
+    ApprovalResolved {
+        request: String,
+        session: SessionId,
+        approved: bool,
+    },
+
     #[serde(rename = "session.updated")]
     SessionUpdated { session: SessionInfo },
 

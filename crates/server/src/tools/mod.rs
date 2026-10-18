@@ -1,9 +1,11 @@
 //! The agent's tools: browsing and editing the web of pages.
 
+mod actions_tool;
 mod args;
 mod edit_tool;
 mod list_sites_tool;
 mod open_tool;
+mod run_tool;
 mod search_tool;
 mod set_project_tool;
 mod tool_context;

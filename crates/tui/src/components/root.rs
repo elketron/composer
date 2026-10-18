@@ -5,7 +5,9 @@ use ratatui::style::Style;
 use ratatui::widgets::Block;
 
 use crate::action::Action;
-use crate::components::{ChatPane, CommandLine, Component, PageViewer, Picker, StatusBar};
+use crate::components::{
+    ApprovalPopup, ChatPane, CommandLine, Component, PageViewer, Picker, StatusBar,
+};
 use crate::store::AppState;
 use crate::store::types::{Mode, Pane};
 use crate::theme;
@@ -20,6 +22,7 @@ pub struct Root {
     status: StatusBar,
     command: CommandLine,
     picker: Picker,
+    approval: ApprovalPopup,
 }
 
 impl Root {
@@ -30,6 +33,7 @@ impl Root {
             status: StatusBar,
             command: CommandLine::new(),
             picker: Picker,
+            approval: ApprovalPopup,
         }
     }
 }
@@ -37,6 +41,9 @@ impl Root {
 impl Component for Root {
     /// Routes a key the keymap didn't take: overlay, then the mode's owner, then the focused pane.
     fn handle_key(&mut self, key: KeyEvent, state: &AppState) -> Vec<Action> {
+        if state.approvals.current().is_some() {
+            return self.approval.handle_key(key, state);
+        }
         if state.ui.picker_open {
             return self.picker.handle_key(key, state);
         }
@@ -89,6 +96,9 @@ impl Component for Root {
         }
         if state.ui.picker_open {
             self.picker.render(frame, area, state);
+        }
+        if state.approvals.current().is_some() {
+            self.approval.render(frame, area, state);
         }
     }
 }

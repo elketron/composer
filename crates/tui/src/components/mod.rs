@@ -1,5 +1,6 @@
 //! UI components. Each renders from `AppState` and turns keys into actions.
 
+mod approval_popup;
 mod chat_lines;
 mod chat_pane;
 mod command_line;
@@ -11,6 +12,7 @@ mod root;
 mod status_bar;
 mod widgets;
 
+pub use approval_popup::ApprovalPopup;
 pub use chat_pane::ChatPane;
 pub use command_line::CommandLine;
 pub use component::Component;

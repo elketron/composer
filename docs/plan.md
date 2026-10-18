@@ -25,7 +25,7 @@ The workspace is the web; each top-level folder is a **site**.
     orchestration/
   state/                 NOT a site — agent cannot read or write
     sessions/<id>/       transcript.jsonl, meta.toml
-    approvals.toml
+    approvals.json
     index.db             (later) frontmatter/link index
   templates/
     app/                 micro app scaffold, copied into <site>/ui/
@@ -94,8 +94,11 @@ The agent reads raw markdown; the server parses links on the side (back-links, T
 ### Recipe approval
 
 - First use of a recipe requires approval in the TUI (shows the recipe body; approve / deny / view in nvim).
-- Approval is keyed by `site + recipe name + hash of recipe body`. If the recipe changes (the agent can edit justfiles), it needs approval again.
-- Stored in `state/approvals.toml`, outside agent reach.
+- Approval is keyed by `site + recipe + hash`. The hash covers the recipe, its dependencies (transitively) and the justfile's variables and settings, from `just --dump --dump-format json`. Any change (the agent can edit justfiles) needs approval again; adding unrelated recipes does not.
+- The hash is checked again right before running, so a justfile edited while the prompt was open is not run.
+- Recipes run in their site folder with `COMPOSER_SITE`, `COMPOSER_SESSION`, `COMPOSER_PROJECT`; stdout and stderr share one pipe (true order); killed after `agent.recipe_timeout_secs` or on cancel.
+- The request goes to every client attached to the session (and is re-sent on attach); `approval.resolved` closes it everywhere.
+- Stored in `state/approvals.json`, outside agent reach.
 
 ### Agent definitions
 
@@ -308,7 +311,7 @@ Attaching to a worker **replaces** the main chat; the title shows a breadcrumb (
 1. ✅ **core + protocol** — Cargo workspace; site model, URL resolution, link + frontmatter parsing, in-memory index; shared message types.
 2. ✅ **server** — provider, agent loop, page tools (`open`, `search`, `list_sites`, `write`, `edit`, `set_project`), sessions, WS + HTTP API, token auth, file watcher, `composer init / serve / ask`.
 3. ✅ **tui** — chat + page viewer against the server, pickers, hints, `:` commands, nvim round trip, headless script mode for testing.
-4. **actions** — justfile listing/running, hashed approvals, TUI prompt.
+4. ✅ **actions** — `actions` / `run` tools, approvals per recipe version (recipe + dependencies + variables/settings hashed), approval popup, seed recipes pre-approved by `init`.
 5. **memory** — memory site conventions, compaction.
 6. **micro apps** — static serving, sdk, template, `new_app`, push messages; first app (ticket board or mockup tool).
 7. **orchestration** — tickets, worker mode, `spawn_worker`, worker view in TUI.

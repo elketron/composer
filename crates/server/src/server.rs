@@ -3,9 +3,11 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
 
 use composer_core::{Index, Page, SiteUrl, Workspace};
-use composer_protocol::{ChangedBy, PageChangeKind, ServerMessage};
+use composer_protocol::{ApprovalDecision, ChangedBy, PageChangeKind, ServerMessage, TurnState};
 use tokio::net::TcpListener;
+use tokio_util::sync::CancellationToken;
 
+use crate::actions::{Approvals, PendingApprovals};
 use crate::config::Config;
 use crate::error::{Result, ServerError};
 use crate::hash::content_hash;
@@ -13,7 +15,7 @@ use crate::home::Home;
 use crate::hub::EventHub;
 use crate::init::local_token;
 use crate::provider::{OpenAiProvider, Provider};
-use crate::session::SessionManager;
+use crate::session::{Session, SessionManager};
 use crate::slot_pool::SlotPool;
 use crate::tools::ToolRegistry;
 
@@ -28,6 +30,8 @@ pub struct Server {
     pub hub: EventHub,
     pub sessions: SessionManager,
     pub tools: ToolRegistry,
+    pub approvals: Approvals,
+    pub pending_approvals: PendingApprovals,
     /// Required on every request (header or `?token=`).
     pub token: String,
     /// Hash of each file as we last saw or wrote it; tells the watcher which changes are ours.
@@ -62,6 +66,8 @@ impl Server {
             sessions: SessionManager::load(&home.sessions())?,
             slots: SlotPool::new(config.agent.slots, hub.clone()),
             tools: ToolRegistry::standard(),
+            approvals: Approvals::load(&home.approvals_file())?,
+            pending_approvals: PendingApprovals::default(),
             index: RwLock::new(index),
             known_hashes: Mutex::new(HashMap::new()),
             watcher: Mutex::new(None),
@@ -152,6 +158,46 @@ impl Server {
             kind,
             by: ChangedBy::External,
         });
+    }
+
+    /// Asks attached clients to approve a recipe version and waits for the answer.
+    /// The session shows `needs approval` meanwhile. `None` if the turn was cancelled.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn request_approval(
+        &self,
+        session: &Session,
+        site: &str,
+        recipe: &str,
+        args: &[String],
+        body: String,
+        hash: &str,
+        cancel: &CancellationToken,
+    ) -> Option<ApprovalDecision> {
+        let request = format!("{:08x}", rand::random::<u32>());
+        let message = ServerMessage::ApprovalRequest {
+            request: request.clone(),
+            session: session.id().to_string(),
+            site: site.to_string(),
+            recipe: recipe.to_string(),
+            args: args.to_vec(),
+            body,
+            hash: hash.to_string(),
+        };
+        let answer = self.pending_approvals.add(&request, message.clone());
+        session.update_info(&self.hub, |info| info.state = TurnState::AwaitingApproval);
+        self.hub.send(message);
+        let decision = tokio::select! {
+            decision = answer => decision.ok(),
+            _ = cancel.cancelled() => None,
+        };
+        self.pending_approvals.remove(&request);
+        self.hub.send(ServerMessage::ApprovalResolved {
+            request,
+            session: session.id().to_string(),
+            approved: decision == Some(ApprovalDecision::Approve),
+        });
+        session.update_info(&self.hub, |info| info.state = TurnState::Running);
+        decision
     }
 
     /// Hash of a page as last seen by the server, reading it if unknown.

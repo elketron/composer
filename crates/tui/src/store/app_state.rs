@@ -3,9 +3,9 @@ use composer_protocol::{ClientCommand, CommandResult, ServerMessage};
 use crate::action::Action;
 use crate::effect::Effect;
 use crate::store::types::{
-    ConnState, FlashLevel, Mode, Outgoing, Pane, Pending, PickerTarget, Startup,
+    ConnState, FlashLevel, Mode, Outgoing, Pane, Pending, PendingApproval, PickerTarget, Startup,
 };
-use crate::store::{ConnectionStore, PageStore, PickerStore, SessionStore, UiStore};
+use crate::store::{ApprovalStore, ConnectionStore, PageStore, PickerStore, SessionStore, UiStore};
 
 /// All shared state. `reduce` is the only way it changes; it does no IO.
 #[derive(Debug)]
@@ -15,6 +15,7 @@ pub struct AppState {
     pub page: PageStore,
     pub ui: UiStore,
     pub picker: PickerStore,
+    pub approvals: ApprovalStore,
     startup: Option<Startup>,
     default_agent: String,
 }
@@ -27,6 +28,7 @@ impl AppState {
             page: PageStore::new(),
             ui: UiStore::new(),
             picker: PickerStore::new(),
+            approvals: ApprovalStore::default(),
             default_agent: startup.agent.clone(),
             startup: Some(startup),
         }
@@ -144,6 +146,27 @@ impl AppState {
                 None => vec![],
             },
 
+            Action::ApprovalDecide(decision) => {
+                let Some(approval) = self.approvals.current().cloned() else {
+                    return vec![];
+                };
+                // Closed right away; the server's `approval.resolved` confirms it.
+                self.approvals.resolve(&approval.request);
+                self.send(
+                    ClientCommand::ApprovalRespond {
+                        request: approval.request,
+                        decision,
+                    },
+                    Pending::Ignore,
+                )
+            }
+            Action::ApprovalView => match self.approvals.current() {
+                Some(a) => vec![Effect::ViewText {
+                    name: format!("{}-{}.just", a.site, a.recipe),
+                    text: a.body.clone(),
+                }],
+                None => vec![],
+            },
             Action::OpenPicker(kind) => {
                 self.ui.picker_open = true;
                 self.picker.open(kind, &self.session.sessions)
@@ -265,11 +288,28 @@ impl AppState {
                 self.page.reload().into_iter().collect()
             }
             ServerMessage::PageChanged { .. } | ServerMessage::WorkerStatus { .. } => vec![],
-            ServerMessage::ApprovalRequest { recipe, .. } => {
-                self.ui.flash(
-                    format!("recipe `{recipe}` needs approval (milestone 4)"),
-                    FlashLevel::Warn,
-                );
+            ServerMessage::ApprovalRequest {
+                request,
+                session,
+                site,
+                recipe,
+                args,
+                body,
+                hash,
+            } => {
+                self.approvals.add(PendingApproval {
+                    request,
+                    session,
+                    site,
+                    recipe,
+                    args,
+                    body,
+                    hash,
+                });
+                vec![]
+            }
+            ServerMessage::ApprovalResolved { request, .. } => {
+                self.approvals.resolve(&request);
                 vec![]
             }
             ServerMessage::AgentNavigated { ref url, .. } => {
@@ -531,5 +571,44 @@ mod tests {
         state.session.current = Some("s".into());
         assert!(state.reduce(Action::SendMessage("hi".into())).is_empty());
         assert!(state.ui.flash.is_some());
+    }
+
+    #[test]
+    fn approvals_queue_answer_and_close() {
+        let (mut state, _) = connected();
+        let request = |id: &str| {
+            Action::Server(ServerMessage::ApprovalRequest {
+                request: id.into(),
+                session: "s".into(),
+                site: "tools".into(),
+                recipe: "hello".into(),
+                args: vec![],
+                body: "hello:\n    echo hi".into(),
+                hash: "abc".into(),
+            })
+        };
+        state.reduce(request("r1"));
+        state.reduce(request("r2"));
+        state.reduce(request("r1")); // replayed on re-attach: not duplicated
+        assert_eq!(state.approvals.count(), 2);
+
+        let effects = state.reduce(Action::ApprovalDecide(
+            composer_protocol::ApprovalDecision::Approve,
+        ));
+        assert_eq!(
+            sent(&effects)[0].1,
+            ClientCommand::ApprovalRespond {
+                request: "r1".into(),
+                decision: composer_protocol::ApprovalDecision::Approve
+            }
+        );
+        assert_eq!(state.approvals.current().unwrap().request, "r2");
+        // Answered elsewhere (another client): closes here too.
+        state.reduce(Action::Server(ServerMessage::ApprovalResolved {
+            request: "r2".into(),
+            session: "s".into(),
+            approved: false,
+        }));
+        assert!(state.approvals.current().is_none());
     }
 }

@@ -10,5 +10,10 @@ pub enum Effect {
     LoadSites,
     /// Suspend the TUI and edit the page in nvim (temp file round trip). Run by the app loop.
     EditPage(String),
+    /// Show text read-only in the editor (e.g. a recipe awaiting approval). Run by the app loop.
+    ViewText {
+        name: String,
+        text: String,
+    },
     Quit,
 }

@@ -48,6 +48,11 @@ impl Home {
         self.state().join("sessions")
     }
 
+    /// Approved recipe versions.
+    pub fn approvals_file(&self) -> PathBuf {
+        self.state().join("approvals.json")
+    }
+
     /// The local client token (`state/token`). Devices get their own tokens later (pairing).
     pub fn token_file(&self) -> PathBuf {
         self.state().join("token")

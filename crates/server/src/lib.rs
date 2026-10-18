@@ -1,5 +1,6 @@
 //! The composer harness: runs agents, owns sessions, serves the WS/HTTP API.
 
+pub mod actions;
 pub mod agent;
 pub mod api;
 pub mod client;

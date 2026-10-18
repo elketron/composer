@@ -127,3 +127,16 @@ pub struct Startup {
     pub agent: String,
     pub project: Option<String>,
 }
+
+/// A recipe waiting for your approval.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PendingApproval {
+    pub request: String,
+    pub session: String,
+    pub site: String,
+    pub recipe: String,
+    pub args: Vec<String>,
+    /// The recipe source (with dependencies) as `just --show` prints it.
+    pub body: String,
+    pub hash: String,
+}

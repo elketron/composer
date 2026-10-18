@@ -28,7 +28,7 @@ pub async fn start(
 ) {
     let dir = tempfile::tempdir().unwrap();
     let home = Home::new(dir.path());
-    init_home(&home).unwrap();
+    init_home(&home).await.unwrap();
     let provider = Arc::new(MockProvider::new(scripts));
     let server = Server::new(home, Config::defaults(), provider.clone()).unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();

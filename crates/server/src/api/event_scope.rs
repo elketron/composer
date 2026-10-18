@@ -27,7 +27,7 @@ pub fn scope(message: &ServerMessage) -> EventScope<'_> {
             id: session,
             seq: Some(*seq),
         },
-        ApprovalRequest { session, .. } => EventScope::Session {
+        ApprovalRequest { session, .. } | ApprovalResolved { session, .. } => EventScope::Session {
             id: session,
             seq: None,
         },

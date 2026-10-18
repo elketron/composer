@@ -110,6 +110,7 @@ async fn run_turn(
         server: server.clone(),
         session: session.clone(),
         agent: agent.clone(),
+        cancel: cancel.clone(),
     };
 
     for _ in 0..server.config.agent.max_steps {

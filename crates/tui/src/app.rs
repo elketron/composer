@@ -44,7 +44,9 @@ impl App {
     /// Turns a key into actions: overlays and non-Normal modes go straight to their
     /// component; in Normal mode the keymap goes first.
     pub fn handle_key(&mut self, key: KeyEvent) {
-        let normal = self.state.mode() == Mode::Normal && !self.state.ui.picker_open;
+        let normal = self.state.mode() == Mode::Normal
+            && !self.state.ui.picker_open
+            && self.state.approvals.current().is_none();
         let actions = if normal {
             match self.keymap.feed(key) {
                 KeyOutcome::Action(action) => vec![action],
@@ -69,7 +71,9 @@ impl App {
         let mut deferred = Vec::new();
         for effect in effects {
             match effect {
-                Effect::EditPage(_) | Effect::Quit => deferred.push(effect),
+                Effect::EditPage(_) | Effect::ViewText { .. } | Effect::Quit => {
+                    deferred.push(effect)
+                }
                 other => self.runner.run(other),
             }
         }
@@ -82,6 +86,13 @@ impl App {
         let deadline = tokio::time::Instant::now() + duration;
         while let Ok(Some(action)) = tokio::time::timeout_at(deadline, self.actions.recv()).await {
             for effect in self.process(action) {
+                if let Effect::ViewText { name, text } = &effect {
+                    if std::env::var_os("EDITOR").is_some() {
+                        let result = editor::view_text(name, text);
+                        self.dispatcher.dispatch(result);
+                    }
+                    continue;
+                }
                 if let Effect::EditPage(url) = effect {
                     let result = if std::env::var_os("EDITOR").is_some() {
                         editor::edit_page(self.runner.api(), &url).await
@@ -126,6 +137,15 @@ impl App {
                     for effect in self.process(action) {
                         match effect {
                             Effect::Quit => return Ok(()),
+                            Effect::ViewText { name, text } => {
+                                drop(events);
+                                ratatui::restore();
+                                let result = editor::view_text(&name, &text);
+                                terminal = ratatui::init();
+                                terminal.clear()?;
+                                events = EventStream::new();
+                                self.dispatcher.dispatch(result);
+                            }
                             Effect::EditPage(url) => {
                                 // Stop reading the terminal so nvim gets every key.
                                 drop(events);

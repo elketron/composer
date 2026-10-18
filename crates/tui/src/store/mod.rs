@@ -1,6 +1,7 @@
 //! Flux stores: all state shared between components lives here.
 
 mod app_state;
+mod approval_store;
 mod connection_store;
 mod page_store;
 mod picker_store;
@@ -9,6 +10,7 @@ pub mod types;
 mod ui_store;
 
 pub use app_state::AppState;
+pub use approval_store::ApprovalStore;
 pub use connection_store::ConnectionStore;
 pub use page_store::PageStore;
 pub use picker_store::PickerStore;

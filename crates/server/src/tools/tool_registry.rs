@@ -2,9 +2,11 @@ use std::sync::Arc;
 
 use crate::agent::AgentDefinition;
 use crate::provider::{ModelToolCall, ToolSpec};
+use crate::tools::actions_tool::ActionsTool;
 use crate::tools::edit_tool::EditTool;
 use crate::tools::list_sites_tool::ListSitesTool;
 use crate::tools::open_tool::OpenTool;
+use crate::tools::run_tool::RunTool;
 use crate::tools::search_tool::SearchTool;
 use crate::tools::set_project_tool::SetProjectTool;
 use crate::tools::write_tool::WriteTool;
@@ -25,6 +27,8 @@ impl ToolRegistry {
                 Arc::new(WriteTool),
                 Arc::new(EditTool),
                 Arc::new(SetProjectTool),
+                Arc::new(ActionsTool),
+                Arc::new(RunTool),
             ],
         }
     }

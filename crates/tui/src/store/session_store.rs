@@ -162,8 +162,20 @@ impl SessionStore {
 
 /// The interesting argument of a tool call, on one line.
 fn summarize_args(args: &serde_json::Value) -> String {
-    for key in ["url", "query", "path"] {
-        if let Some(value) = args.get(key).and_then(|v| v.as_str()) {
+    let get = |key: &str| args.get(key).and_then(|v| v.as_str());
+    if let (Some(site), Some(recipe)) = (get("site"), get("recipe")) {
+        let extra: Vec<&str> = args["args"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|a| a.as_str())
+            .collect();
+        return format!("{site} › {recipe} {}", extra.join(" "))
+            .trim_end()
+            .to_string();
+    }
+    for key in ["url", "query", "path", "site"] {
+        if let Some(value) = get(key) {
             return value.to_string();
         }
     }

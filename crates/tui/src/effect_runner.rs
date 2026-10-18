@@ -27,7 +27,7 @@ impl EffectRunner {
         &self.api
     }
 
-    /// Runs an effect. `EditPage` and `Quit` belong to the app loop and are ignored here.
+    /// Runs an effect. `EditPage`, `ViewText` and `Quit` belong to the app loop and are ignored here.
     pub fn run(&self, effect: Effect) {
         let api = self.api.clone();
         let dispatcher = self.dispatcher.clone();
@@ -54,7 +54,7 @@ impl EffectRunner {
                     dispatcher.dispatch(Action::SitesLoaded(api.sites().await.unwrap_or_default()));
                 });
             }
-            Effect::EditPage(_) | Effect::Quit => {}
+            Effect::EditPage(_) | Effect::ViewText { .. } | Effect::Quit => {}
         }
     }
 }

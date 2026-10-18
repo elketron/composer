@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use composer_core::SiteUrl;
+use tokio_util::sync::CancellationToken;
 
 use crate::agent::AgentDefinition;
 use crate::server::Server;
@@ -12,6 +13,8 @@ pub struct ToolContext {
     pub server: Arc<Server>,
     pub session: Arc<Session>,
     pub agent: Arc<AgentDefinition>,
+    /// Cancelled when the user cancels the turn.
+    pub cancel: CancellationToken,
 }
 
 impl ToolContext {

@@ -33,3 +33,16 @@ pub struct SetProjectArgs {
     /// Empty or missing clears the active project.
     pub path: Option<String>,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct ActionsArgs {
+    pub site: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RunArgs {
+    pub site: String,
+    pub recipe: String,
+    #[serde(default)]
+    pub args: Vec<String>,
+}

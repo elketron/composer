@@ -33,6 +33,9 @@ pub struct AgentConfig {
     /// Prompt tokens at which compaction starts (milestone 5).
     #[serde(default = "default_compaction_threshold")]
     pub compaction_threshold: u32,
+    /// A recipe run is killed after this many seconds.
+    #[serde(default = "default_recipe_timeout")]
+    pub recipe_timeout_secs: u64,
 }
 
 fn default_base_url() -> String {
@@ -53,4 +56,8 @@ fn default_max_steps() -> u32 {
 
 fn default_compaction_threshold() -> u32 {
     160_000
+}
+
+fn default_recipe_timeout() -> u64 {
+    300
 }

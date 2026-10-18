@@ -81,7 +81,7 @@ async fn main() -> anyhow::Result<()> {
             .await?
         }
         Some(Command::Init) => {
-            let created = init_home(&home)?;
+            let created = init_home(&home).await?;
             println!("composer home: {}", home.root().display());
             if created.is_empty() {
                 println!("already initialized, nothing created");

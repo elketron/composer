@@ -104,6 +104,9 @@ impl Connection {
                             .insert(session.clone(), last);
                     })
                     .map_err(|e| e.to_string())?;
+                for request in server.pending_approvals.for_session(&session) {
+                    self.send(Arc::new(request));
+                }
                 Ok(CommandResult::Session { session: s.info() })
             }
             ClientCommand::SessionDetach { session } => {
@@ -150,8 +153,12 @@ impl Connection {
                 s.update_info(&server.hub, |info| info.project = project);
                 Ok(CommandResult::Session { session: s.info() })
             }
-            ClientCommand::ApprovalRespond { .. } => {
-                Err("recipe approvals arrive in milestone 4".into())
+            ClientCommand::ApprovalRespond { request, decision } => {
+                if server.pending_approvals.resolve(&request, decision) {
+                    Ok(CommandResult::Done)
+                } else {
+                    Err(format!("approval request `{request}` is no longer open"))
+                }
             }
             ClientCommand::Subscribe { urls } => {
                 *self.subscriptions.lock().expect("subs lock") = urls;

@@ -1,7 +1,7 @@
 //! Everything that changes state is an `Action`.
 
-use composer_protocol::ServerMessage;
 use composer_protocol::http::{SearchHit, SiteSummary};
+use composer_protocol::{ApprovalDecision, ServerMessage};
 
 use crate::store::types::{FlashLevel, Mode, PageView, Pane, PickerKind};
 
@@ -35,6 +35,11 @@ pub enum Action {
     ToggleFollow,
     EditPage,
     ReloadPage,
+
+    // ---- approvals ----
+    ApprovalDecide(ApprovalDecision),
+    /// Read the recipe in the editor before deciding.
+    ApprovalView,
 
     // ---- picker ----
     OpenPicker(PickerKind),
