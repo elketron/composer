@@ -5,6 +5,7 @@ use crate::provider::{ModelToolCall, ToolSpec};
 use crate::tools::actions_tool::ActionsTool;
 use crate::tools::edit_tool::EditTool;
 use crate::tools::list_sites_tool::ListSitesTool;
+use crate::tools::new_app_tool::NewAppTool;
 use crate::tools::open_tool::OpenTool;
 use crate::tools::run_tool::RunTool;
 use crate::tools::search_tool::SearchTool;
@@ -29,6 +30,7 @@ impl ToolRegistry {
                 Arc::new(SetProjectTool),
                 Arc::new(ActionsTool),
                 Arc::new(RunTool),
+                Arc::new(NewAppTool),
             ],
         }
     }

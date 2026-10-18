@@ -36,6 +36,8 @@ pub enum Action {
     PageForward,
     ToggleFollow,
     EditPage,
+    /// Open a site's app in the browser: the given site, or the current page's.
+    OpenApp(Option<String>),
     ReloadPage,
 
     // ---- approvals ----

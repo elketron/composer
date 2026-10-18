@@ -96,14 +96,24 @@ impl Server {
         content: &str,
         by: ChangedBy,
     ) -> Result<(SiteUrl, bool)> {
+        self.write_file(url, content.as_bytes(), by)
+    }
+
+    /// Like [`Server::write_page`] for any file; markdown files are indexed.
+    pub fn write_file(
+        &self,
+        url: &SiteUrl,
+        content: &[u8],
+        by: ChangedBy,
+    ) -> Result<(SiteUrl, bool)> {
         let created = self.workspace.locate(url).is_err();
-        let written = self.workspace.write_page(url, content)?;
+        let written = self.workspace.write_file(url, content)?;
         let path = self.workspace.locate(&written)?;
         self.known_hashes
             .lock()
             .expect("hashes lock")
-            .insert(path, content_hash(content.as_bytes()));
-        self.index_page(&written, content);
+            .insert(path, content_hash(content));
+        self.index_page(&written, &String::from_utf8_lossy(content));
         let kind = if created {
             PageChangeKind::Created
         } else {

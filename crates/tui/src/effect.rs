@@ -15,5 +15,7 @@ pub enum Effect {
         name: String,
         text: String,
     },
+    /// Open a URL in the browser (an app). Run by the app loop.
+    OpenBrowser(String),
     Quit,
 }

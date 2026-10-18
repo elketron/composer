@@ -54,7 +54,10 @@ impl EffectRunner {
                     dispatcher.dispatch(Action::SitesLoaded(api.sites().await.unwrap_or_default()));
                 });
             }
-            Effect::EditPage(_) | Effect::ViewText { .. } | Effect::Quit => {}
+            Effect::EditPage(_)
+            | Effect::ViewText { .. }
+            | Effect::OpenBrowser(_)
+            | Effect::Quit => {}
         }
     }
 }

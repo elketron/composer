@@ -62,3 +62,18 @@ pub fn view_text(name: &str, text: &str) -> Action {
         Err(error) => Action::Flash(error, FlashLevel::Error),
     }
 }
+
+/// Opens `url` in the browser (`$BROWSER`, else `xdg-open`), without waiting for it.
+pub fn open_browser(url: &str) -> Action {
+    let opener = std::env::var("BROWSER").unwrap_or_else(|_| "xdg-open".into());
+    let spawned = Command::new(&opener)
+        .arg(url)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn();
+    match spawned {
+        Ok(_) => Action::Flash("app opened in the browser".into(), FlashLevel::Info),
+        Err(e) => Action::Flash(format!("{opener}: {e}"), FlashLevel::Error),
+    }
+}

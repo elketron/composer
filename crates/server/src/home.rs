@@ -40,6 +40,11 @@ impl Home {
         self.root.join("sites")
     }
 
+    /// App scaffold (`app/`) and the shared sdk (`sdk/`).
+    pub fn templates(&self) -> PathBuf {
+        self.root.join("templates")
+    }
+
     pub fn state(&self) -> PathBuf {
         self.root.join("state")
     }

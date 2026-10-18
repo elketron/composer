@@ -151,6 +151,28 @@ impl AppState {
                 self.ui.flash(text, FlashLevel::Info);
                 vec![]
             }
+            Action::OpenApp(site) => {
+                let from_page = || {
+                    let url = self.page.current.as_ref()?.url.clone();
+                    url.strip_prefix("site://")?
+                        .split('/')
+                        .next()
+                        .map(str::to_string)
+                };
+                let Some(site) = site.or_else(from_page) else {
+                    self.ui.flash(
+                        "open a page of the site first, or :app <site>",
+                        FlashLevel::Warn,
+                    );
+                    return vec![];
+                };
+                let session = self.session.current.clone().unwrap_or_default();
+                let url = format!(
+                    "{}/{site}/?token={}&session={session}",
+                    self.conn.server_url, self.conn.token
+                );
+                vec![Effect::OpenBrowser(url)]
+            }
             Action::EditPage => match &self.page.current {
                 Some(page) => vec![Effect::EditPage(page.url.clone())],
                 None => vec![],

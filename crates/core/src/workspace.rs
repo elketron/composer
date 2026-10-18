@@ -73,6 +73,11 @@ impl Workspace {
     /// An existing file is overwritten; otherwise extensionless URLs get `.md`.
     /// Returns the canonical URL of the written file.
     pub fn write_page(&self, url: &SiteUrl, content: &str) -> Result<SiteUrl> {
+        self.write_file(url, content.as_bytes())
+    }
+
+    /// Like [`Workspace::write_page`], for any file (JSON, images, ...).
+    pub fn write_file(&self, url: &SiteUrl, content: &[u8]) -> Result<SiteUrl> {
         let path = match self.locate(url) {
             Ok(path) => path,
             Err(CoreError::PageNotFound(_)) => {

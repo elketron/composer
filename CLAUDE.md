@@ -30,3 +30,9 @@ snap chat
 
 Use a scratch `COMPOSER_HOME` (`composer init`, set another port in its config.toml) so ~/.composer stays untouched.
 Set `EDITOR` to a non-interactive script to exercise the `e` (edit page) round trip headlessly.
+
+## Seeing an app
+
+Apps are served at `http://<bind>/<site>/?token=<state/token>&session=<id>` (`:app <site>` in a headless
+script shows the URL in the status bar). Open that URL with Playwright to screenshot or drive the app.
+The app template and sdk live in `templates/` and are embedded in the binary; `composer init` installs them.

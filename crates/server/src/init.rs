@@ -9,8 +9,9 @@ use crate::error::{Result, ServerError};
 use crate::home::Home;
 
 static SEED: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/../../seed/sites");
+static TEMPLATES: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/../../templates");
 
-/// Creates the home folder: seed sites, default config, state folders, local token.
+/// Creates the home folder: seed sites, app templates, default config, state folders, local token.
 /// Never overwrites existing files. Recipes of newly created seed justfiles are
 /// pre-approved (needs `just`; otherwise they are approved on first use).
 /// Returns the paths it created.
@@ -20,6 +21,7 @@ pub async fn init_home(home: &Home) -> Result<Vec<String>> {
         fs::create_dir_all(&dir).map_err(|e| ServerError::io(&dir, e))?;
     }
     copy_seed(&SEED, &home.sites(), &mut created)?;
+    copy_seed(&TEMPLATES, &home.templates(), &mut created)?;
     write_new(
         &home.config_file(),
         &Config::defaults().to_toml(),

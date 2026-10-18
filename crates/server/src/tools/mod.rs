@@ -4,6 +4,7 @@ mod actions_tool;
 mod args;
 mod edit_tool;
 mod list_sites_tool;
+mod new_app_tool;
 mod open_tool;
 mod run_tool;
 mod search_tool;

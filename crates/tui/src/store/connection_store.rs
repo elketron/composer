@@ -14,6 +14,9 @@ pub struct ConnectionStore {
     pub slots_waiting: u32,
     /// Compaction threshold, for `ctx 38K/160K`.
     pub context_limit: u32,
+    /// Where apps are served (`http://host:port`), and the token that opens them.
+    pub server_url: String,
+    pub token: String,
     next_id: u64,
     pending: HashMap<u64, Pending>,
 }
@@ -26,6 +29,8 @@ impl ConnectionStore {
             slots_total: 0,
             slots_waiting: 0,
             context_limit,
+            server_url: String::new(),
+            token: String::new(),
             next_id: 0,
             pending: HashMap::new(),
         }

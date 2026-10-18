@@ -30,6 +30,7 @@ impl Keymap {
             (vec![key('F')], Action::ToggleFollow),
             (vec![key('r')], Action::ReloadPage),
             (vec![key('e')], Action::EditPage),
+            (vec![key('a')], Action::OpenApp(None)),
             (vec![key('t')], Action::ToggleThinking),
             (vec![key('T')], Action::ToggleToolDetails),
             (vec![ctrl('c')], Action::CancelTurn),

@@ -46,3 +46,8 @@ pub struct RunArgs {
     #[serde(default)]
     pub args: Vec<String>,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct NewAppArgs {
+    pub site: String,
+}

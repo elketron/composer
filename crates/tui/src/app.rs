@@ -31,8 +31,11 @@ impl App {
     /// Must be called inside a tokio runtime: starts the server connection.
     pub fn new(options: &TuiOptions) -> Self {
         let (dispatcher, actions) = Dispatcher::new();
+        let mut state = AppState::new(options.startup.clone(), options.context_limit);
+        state.conn.server_url = options.server_url.trim_end_matches('/').to_string();
+        state.conn.token = options.token.clone();
         Self {
-            state: AppState::new(options.startup.clone(), options.context_limit),
+            state,
             root: Root::new(),
             keymap: Keymap::defaults(),
             runner: EffectRunner::new(&options.server_url, &options.token, dispatcher.clone()),
@@ -71,9 +74,10 @@ impl App {
         let mut deferred = Vec::new();
         for effect in effects {
             match effect {
-                Effect::EditPage(_) | Effect::ViewText { .. } | Effect::Quit => {
-                    deferred.push(effect)
-                }
+                Effect::EditPage(_)
+                | Effect::ViewText { .. }
+                | Effect::OpenBrowser(_)
+                | Effect::Quit => deferred.push(effect),
                 other => self.runner.run(other),
             }
         }
@@ -86,6 +90,11 @@ impl App {
         let deadline = tokio::time::Instant::now() + duration;
         while let Ok(Some(action)) = tokio::time::timeout_at(deadline, self.actions.recv()).await {
             for effect in self.process(action) {
+                if let Effect::OpenBrowser(url) = &effect {
+                    self.dispatcher
+                        .dispatch(Action::Flash(format!("would open {url}"), FlashLevel::Info));
+                    continue;
+                }
                 if let Effect::ViewText { name, text } = &effect {
                     if std::env::var_os("EDITOR").is_some() {
                         let result = editor::view_text(name, text);
@@ -137,6 +146,7 @@ impl App {
                     for effect in self.process(action) {
                         match effect {
                             Effect::Quit => return Ok(()),
+                            Effect::OpenBrowser(url) => self.dispatcher.dispatch(editor::open_browser(&url)),
                             Effect::ViewText { name, text } => {
                                 drop(events);
                                 ratatui::restore();

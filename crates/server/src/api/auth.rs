@@ -1,14 +1,17 @@
 use std::sync::Arc;
 
 use axum::extract::{Request, State};
-use axum::http::{StatusCode, header};
+use axum::http::{HeaderValue, StatusCode, header};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 
 use crate::server::Server;
 
-/// Requires the token (`Authorization: Bearer <t>` or `?token=<t>`), and that
-/// browser requests come from our own origin (blocks other sites reaching localhost).
+const COOKIE: &str = "composer_token";
+
+/// Requires the token: `Authorization: Bearer <t>`, `?token=<t>`, or the cookie that a
+/// `?token=` request sets (so an app opened with the token can load its scripts and call
+/// the API). Browser requests must also come from our own origin.
 pub async fn require_token(
     State(server): State<Arc<Server>>,
     request: Request,
@@ -27,7 +30,14 @@ pub async fn require_token(
         .split('&')
         .filter_map(|pair| pair.split_once('='))
         .any(|(k, v)| k == "token" && v == server.token);
-    if !(bearer || query) {
+    let cookie = headers
+        .get_all(header::COOKIE)
+        .iter()
+        .filter_map(|v| v.to_str().ok())
+        .flat_map(|v| v.split(';'))
+        .filter_map(|pair| pair.trim().split_once('='))
+        .any(|(k, v)| k == COOKIE && v == server.token);
+    if !(bearer || query || cookie) {
         return (StatusCode::UNAUTHORIZED, "missing or wrong token").into_response();
     }
 
@@ -43,5 +53,16 @@ pub async fn require_token(
             return (StatusCode::FORBIDDEN, "cross-origin request").into_response();
         }
     }
-    next.run(request).await
+
+    let mut response = next.run(request).await;
+    if query && !cookie {
+        let value = format!(
+            "{COOKIE}={}; Path=/; HttpOnly; SameSite=Strict",
+            server.token
+        );
+        if let Ok(value) = HeaderValue::from_str(&value) {
+            response.headers_mut().append(header::SET_COOKIE, value);
+        }
+    }
+    response
 }

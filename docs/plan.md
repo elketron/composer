@@ -297,7 +297,10 @@ Attaching to a worker **replaces** the main chat; the title shows a breadcrumb (
 ## Micro apps (Svelte)
 
 - Belong to a site, live in `<site>/ui/`, each a standalone Svelte app.
-- Created by copying `templates/app/`; the scaffold imports theme, shared components and the server client from `templates/sdk`, so styling stays consistent and fixes land everywhere.
+- Created by `new_app <site>`: copies `~/.composer/templates/app` into `<site>/ui/` and adds a `ui-build` recipe (`bun install && bun run build`) to the site's justfile, so building goes through the approval flow. The scaffold imports theme, components (`AppShell`, `Button`, `Kbd`, `Badge`) and the client from `$sdk` (a Vite alias to `~/.composer/templates/sdk`), so fixes land in every app on its next build.
+- Served by the server at `/<site>/` from `<site>/ui/dist`. Opening with `?token=` sets an HttpOnly, SameSite=Strict cookie that authenticates the app's assets and API calls; the client removes the token from the address bar.
+- sdk client: `page`, `putPage` (hash check), `file`, `putFile` (`/api/files/...`, any bytes), `search`, `send(text, {pages, images})`, `onChange(patterns, cb)`, `isConnected()`, `site`, `session`.
+- Approving `ui-build` approves the recipe, not the app's code: a build runs `vite.config` and packages the agent may have edited (as with any approved recipe that runs project code).
 - **Shared workspace:** app state is stored as files in the site, never hidden in the app. Example:
   ```
   design/mockups/login/
@@ -315,7 +318,7 @@ Attaching to a worker **replaces** the main chat; the title shows a breadcrumb (
 3. ✅ **tui** — chat + page viewer against the server, pickers, hints, `:` commands, nvim round trip, headless script mode for testing.
 4. ✅ **actions** — `actions` / `run` tools, approvals per recipe version (recipe + dependencies + variables/settings hashed), approval popup, seed recipes pre-approved by `init`.
 5. ✅ **memory** — compaction (memory pass → summary → history replaced, old history archived), `:compact`, memory page list and agent identity in the prompt.
-6. **micro apps** — static serving, sdk, template, `new_app`, push messages; first app (ticket board or mockup tool).
+6. ✅ **micro apps** — `templates/sdk` + `templates/app` (Svelte 5 + Vite, bun), `new_app` + `ui-build` action, apps served at `/<site>/` with cookie auth, files API, `a` / `:app` in the TUI, messages from apps. The first real app (ticket board) comes with milestone 7.
 7. **orchestration** — tickets, worker mode, `spawn_worker`, worker view in TUI.
 8. **workflow views** — changes view for the active project.
 9. **remote** — device pairing + tokens, `tailscale serve` setup, remote nvim round trip, `site://chat` phone app.

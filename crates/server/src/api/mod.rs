@@ -1,6 +1,7 @@
 //! The WS/HTTP API. Every route requires the token.
 
 mod api_error;
+mod app_routes;
 mod auth;
 mod connection;
 mod event_scope;
@@ -36,6 +37,14 @@ pub fn router(server: Arc<Server>) -> Router {
             "/api/sessions/{id}/messages",
             post(http_routes::post_message),
         )
+        .route(
+            "/api/files/{site}/{*path}",
+            get(app_routes::get_file).put(app_routes::put_file),
+        )
+        // Built micro apps; routes with a fixed first segment (/api, /ws) take precedence.
+        .route("/{site}", get(app_routes::app_redirect))
+        .route("/{site}/", get(app_routes::app_index))
+        .route("/{site}/{*path}", get(app_routes::app_file))
         .layer(middleware::from_fn_with_state(
             server.clone(),
             auth::require_token,
