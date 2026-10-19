@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
 use serde_json::{Value, json};
@@ -51,13 +51,7 @@ impl Tool for SetProjectTool {
 
 /// Expands `~`, requires an existing directory, returns the canonical path.
 pub fn resolve_project(path: &str) -> Result<String, String> {
-    let expanded = match path.strip_prefix("~/") {
-        Some(rest) => std::env::var_os("HOME")
-            .map(PathBuf::from)
-            .unwrap_or_default()
-            .join(rest),
-        None => PathBuf::from(path),
-    };
+    let expanded = expand_home(path);
     let canonical = expanded
         .canonicalize()
         .map_err(|e| format!("{path}: {e}"))?;
@@ -65,4 +59,27 @@ pub fn resolve_project(path: &str) -> Result<String, String> {
         return Err(format!("{path} is not a directory"));
     }
     Ok(canonical.display().to_string())
+}
+
+/// `~` and `~/x` → under `$HOME`.
+pub fn expand_home(path: &str) -> PathBuf {
+    let home = || {
+        std::env::var_os("HOME")
+            .map(PathBuf::from)
+            .unwrap_or_default()
+    };
+    match path.strip_prefix("~/") {
+        Some(rest) => home().join(rest),
+        None if path == "~" => home(),
+        None => PathBuf::from(path),
+    }
+}
+
+/// The reverse, for showing paths: under `$HOME` → `~/x`.
+pub fn tilde(path: &Path) -> String {
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    match home.as_deref().and_then(|h| path.strip_prefix(h).ok()) {
+        Some(rest) if !rest.as_os_str().is_empty() => format!("~/{}", rest.display()),
+        _ => path.display().to_string(),
+    }
 }

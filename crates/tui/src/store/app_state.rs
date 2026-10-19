@@ -214,7 +214,7 @@ impl AppState {
                     "{}/{site}/?token={}&session={session}",
                     self.conn.server_url, self.conn.token
                 );
-                vec![Effect::OpenBrowser(url)]
+                vec![Effect::CheckApp { site, url }]
             }
             Action::EditPage => match &self.page.current {
                 Some(page) => vec![Effect::EditPage(page.url.clone())],
@@ -290,6 +290,31 @@ impl AppState {
             Action::CatalogLoaded { sites, pages } => {
                 self.catalog = Catalog { sites, pages };
                 vec![]
+            }
+            Action::AppChecked { site, url, sites } => {
+                let found = sites
+                    .as_ref()
+                    .map(|all| all.iter().find(|s| s.name == site));
+                let problem = match found {
+                    // Couldn't ask (an older server, a network error): let the browser show it.
+                    None => None,
+                    Some(None) => Some(format!("there is no site://{site}")),
+                    Some(Some(s)) if !s.has_ui => Some(format!(
+                        "site://{site} has no app (no {site}/ui/ folder); new_app creates one"
+                    )),
+                    Some(Some(s)) if !s.app_built => Some(format!(
+                        "site://{site}'s app is not built ({site}/ui/dist/index.html is missing): \
+                         run its ui-build action"
+                    )),
+                    Some(Some(_)) => None,
+                };
+                match problem {
+                    Some(text) => {
+                        self.ui.flash(text, FlashLevel::Warn);
+                        vec![]
+                    }
+                    None => vec![Effect::OpenBrowser(url)],
+                }
             }
         }
     }
@@ -732,5 +757,43 @@ mod tests {
             approved: false,
         }));
         assert!(state.approvals.current().is_none());
+    }
+
+    #[test]
+    fn an_app_opens_only_when_built() {
+        let (mut state, _) = connected();
+        let effects = state.reduce(Action::OpenApp(Some("orchestration".into())));
+        let [Effect::CheckApp { site, url }] = effects.as_slice() else {
+            panic!("{effects:?}")
+        };
+        assert_eq!(site, "orchestration");
+        let site = |name: &str, has_ui, app_built| composer_protocol::http::SiteSummary {
+            name: name.into(),
+            title: name.into(),
+            has_justfile: true,
+            has_ui,
+            app_built,
+        };
+        let mut check = |sites| {
+            state.reduce(Action::AppChecked {
+                site: "orchestration".into(),
+                url: url.clone(),
+                sites,
+            })
+        };
+        assert!(check(Some(vec![site("orchestration", true, false)])).is_empty());
+        assert_eq!(
+            check(Some(vec![site("orchestration", true, true)])),
+            [Effect::OpenBrowser(url.clone())]
+        );
+        assert_eq!(check(None), [Effect::OpenBrowser(url.clone())]);
+        assert!(check(Some(vec![site("orchestration", false, false)])).is_empty());
+        assert!(check(Some(vec![])).is_empty());
+        let flash = state.ui.flash.as_ref().unwrap();
+        assert!(
+            flash.text.contains("no site://orchestration"),
+            "{}",
+            flash.text
+        );
     }
 }

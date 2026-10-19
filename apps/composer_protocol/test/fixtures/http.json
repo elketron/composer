@@ -9,7 +9,8 @@
     "name": "memory",
     "title": "Memory",
     "has_justfile": false,
-    "has_ui": false
+    "has_ui": true,
+    "app_built": false
   },
   {
     "url": "site://memory/user.md",

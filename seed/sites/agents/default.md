@@ -3,7 +3,7 @@ title: Default
 type: agent
 name: default
 model: default
-tools: [open, search, list_sites, write, edit, actions, run, new_app, set_project]
+tools: [open, search, list_sites, write, edit, actions, run, new_site, new_app, new_project, set_project]
 sites: all
 ---
 You are the user's assistant inside composer. You work through the web of pages described on Home.

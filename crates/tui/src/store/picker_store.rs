@@ -93,8 +93,10 @@ impl PickerStore {
                 if s.has_justfile {
                     right.push("actions");
                 }
-                if s.has_ui {
+                if s.app_built {
                     right.push("app");
+                } else if s.has_ui {
+                    right.push("app (not built)");
                 }
                 PickerItem {
                     detail: format!("site://{}", s.name),

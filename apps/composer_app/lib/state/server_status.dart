@@ -36,7 +36,7 @@ class ServerStatus {
   /// From `/api/sites`, for the site list and the "App" button.
   final List<SiteSummary> sites;
 
-  bool hasApp(String site) => sites.any((s) => s.name == site && s.hasUi);
+  bool hasApp(String site) => sites.any((s) => s.name == site && s.appBuilt);
 
   SessionInfo? session(String id) => sessions.where((s) => s.id == id).firstOrNull;
 

@@ -2,7 +2,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use crate::config_sections::{AgentConfig, ProviderConfig, ServerConfig};
+use crate::config_sections::{AgentConfig, ProjectsConfig, ProviderConfig, ServerConfig};
 use crate::error::{Result, ServerError};
 
 /// `config.toml`.
@@ -14,9 +14,14 @@ pub struct Config {
     pub server: ServerConfig,
     #[serde(default = "section")]
     pub agent: AgentConfig,
+    #[serde(default = "section")]
+    pub projects: ProjectsConfig,
 }
 
 impl Config {
+    /// What `composer init` writes: every setting at its default, with what it does.
+    pub const TEMPLATE: &str = include_str!("config_template.toml");
+
     /// All defaults.
     pub fn defaults() -> Self {
         Self::parse("").expect("empty config is valid")
@@ -55,6 +60,11 @@ mod tests {
         assert_eq!(c.agent.slots, 2);
         assert_eq!(c.server.bind, "127.0.0.1:7420");
         assert!(c.provider.model.is_empty());
+    }
+
+    #[test]
+    fn template_is_the_defaults() {
+        assert_eq!(Config::parse(Config::TEMPLATE).unwrap(), Config::defaults());
     }
 
     #[test]

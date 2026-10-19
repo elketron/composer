@@ -11,6 +11,11 @@ use crate::home::Home;
 static SEED: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/../../seed/sites");
 static TEMPLATES: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/../../templates");
 
+/// The stock folders this binary carries: (name under the home and `state/seed/`, contents).
+pub(crate) fn stock() -> [(&'static str, &'static Dir<'static>); 2] {
+    [("sites", &SEED), ("templates", &TEMPLATES)]
+}
+
 /// Creates the home folder: seed sites, app templates, default config, state folders, local token.
 /// Never overwrites existing files. Recipes of newly created seed justfiles are
 /// pre-approved (needs `just`; otherwise they are approved on first use).
@@ -20,13 +25,10 @@ pub async fn init_home(home: &Home) -> Result<Vec<String>> {
     for dir in [home.sites(), home.sessions()] {
         fs::create_dir_all(&dir).map_err(|e| ServerError::io(&dir, e))?;
     }
-    copy_seed(&SEED, &home.sites(), &mut created)?;
-    copy_seed(&TEMPLATES, &home.templates(), &mut created)?;
-    write_new(
-        &home.config_file(),
-        &Config::defaults().to_toml(),
-        &mut created,
-    )?;
+    for (name, dir) in stock() {
+        copy_seed(dir, home, name, &mut created)?;
+    }
+    write_new(&home.config_file(), Config::TEMPLATE, &mut created)?;
     write_new(&home.token_file(), &new_token(), &mut created)?;
     approve_seed_recipes(home, &created).await?;
     Ok(created)
@@ -44,7 +46,8 @@ pub fn local_token(home: &Home) -> Result<String> {
         .map_err(|e| ServerError::io(&path, e))
 }
 
-async fn approve_seed_recipes(home: &Home, created: &[String]) -> Result<()> {
+/// Pre-approves the recipes of the stock justfiles among `paths` (as `init` and `update` install them).
+pub(crate) async fn approve_seed_recipes(home: &Home, created: &[String]) -> Result<()> {
     let approvals = Approvals::load(&home.approvals_file())?;
     for path in created.iter().filter(|p| p.ends_with("/justfile")) {
         let Some(site_dir) = Path::new(path).parent() else {
@@ -63,21 +66,30 @@ async fn approve_seed_recipes(home: &Home, created: &[String]) -> Result<()> {
     Ok(())
 }
 
-fn copy_seed(dir: &Dir<'_>, dest_root: &Path, created: &mut Vec<String>) -> Result<()> {
+/// Writes the files that don't exist yet, recording each as the base for `update`.
+fn copy_seed(dir: &Dir<'_>, home: &Home, name: &str, created: &mut Vec<String>) -> Result<()> {
     for file in dir.files() {
-        let dest = dest_root.join(file.path());
-        if let Some(parent) = dest.parent() {
-            fs::create_dir_all(parent).map_err(|e| ServerError::io(parent, e))?;
-        }
+        let dest = home.root().join(name).join(file.path());
         if !dest.exists() {
-            fs::write(&dest, file.contents()).map_err(|e| ServerError::io(&dest, e))?;
+            write_creating_dirs(&dest, file.contents())?;
+            write_creating_dirs(
+                &home.seed_base().join(name).join(file.path()),
+                file.contents(),
+            )?;
             created.push(dest.display().to_string());
         }
     }
     for sub in dir.dirs() {
-        copy_seed(sub, dest_root, created)?;
+        copy_seed(sub, home, name, created)?;
     }
     Ok(())
+}
+
+pub(crate) fn write_creating_dirs(path: &Path, content: &[u8]) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| ServerError::io(parent, e))?;
+    }
+    fs::write(path, content).map_err(|e| ServerError::io(path, e))
 }
 
 fn write_new(path: &Path, content: &str, created: &mut Vec<String>) -> Result<()> {

@@ -1566,6 +1566,7 @@ class SiteSummary {
     required this.title,
     required this.hasJustfile,
     required this.hasUi,
+    this.appBuilt = false,
   });
 
   final String name;
@@ -1574,13 +1575,18 @@ class SiteSummary {
 
   final bool hasJustfile;
 
+  /// Has a `ui/` folder: an app, built or not.
   final bool hasUi;
+
+  /// The app is built (`ui/dist/index.html`) and can be opened. Older servers leave it out.
+  final bool appBuilt;
 
   factory SiteSummary.fromJson(Map<String, Object?> json) => SiteSummary(
         name: json['name'] as String,
         title: json['title'] as String,
         hasJustfile: json['has_justfile'] as bool,
         hasUi: json['has_ui'] as bool,
+        appBuilt: json['app_built'] == null ? false : json['app_built'] as bool,
       );
 
   Map<String, Object?> toJson() => {
@@ -1588,6 +1594,7 @@ class SiteSummary {
         'title': title,
         'has_justfile': hasJustfile,
         'has_ui': hasUi,
+        'app_built': appBuilt,
       };
 }
 

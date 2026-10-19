@@ -769,7 +769,8 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
             name: "memory".into(),
             title: "Memory".into(),
             has_justfile: false,
-            has_ui: false,
+            has_ui: true,
+            app_built: false,
         }),
         serde_json::to_value(PageResponse {
             url: "site://memory/user.md".into(),

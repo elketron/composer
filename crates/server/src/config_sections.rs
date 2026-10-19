@@ -26,6 +26,13 @@ pub struct ServerConfig {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ProjectsConfig {
+    /// Where `new_project` creates projects (`~` is your home folder).
+    #[serde(default = "default_projects_dir")]
+    pub dir: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentConfig {
     /// Concurrent model requests across all sessions (the provider's parallelism).
     #[serde(default = "default_slots")]
@@ -44,8 +51,13 @@ pub struct AgentConfig {
     pub max_workers: u32,
 }
 
+/// llama.cpp's `llama-server` on this machine; set your own in config.toml.
 fn default_base_url() -> String {
-    "https://ai.ts.elketron.com/v1".into()
+    "http://127.0.0.1:8080/v1".into()
+}
+
+fn default_projects_dir() -> String {
+    "~/Projects".into()
 }
 
 fn default_bind() -> String {

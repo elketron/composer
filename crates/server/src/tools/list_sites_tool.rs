@@ -33,8 +33,10 @@ impl Tool for ListSitesTool {
                 if s.has_justfile {
                     line.push_str(" [actions]");
                 }
-                if s.has_ui {
+                if s.app_built {
                     line.push_str(" [app]");
+                } else if s.has_ui {
+                    line.push_str(" [app, not built: run its ui-build action]");
                 }
                 if !s.has_index {
                     line.push_str(" [no index.md]");

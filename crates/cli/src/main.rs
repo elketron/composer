@@ -5,7 +5,9 @@ use std::path::PathBuf;
 use clap::{Parser, Subcommand};
 use composer_server::client::{AskOptions, ask};
 use composer_server::worker::{WorkerOptions, run_worker};
-use composer_server::{Config, Home, Server, init_home};
+use composer_server::{
+    Config, Home, Server, UpdateOutcome, init_home, pending_updates, update_home,
+};
 use composer_tui::{Startup, TuiOptions};
 
 #[derive(Parser)]
@@ -32,6 +34,14 @@ struct Cli {
 enum Command {
     /// Create ~/.composer (or $COMPOSER_HOME): seed sites, config, token. Never overwrites.
     Init,
+    /// Bring the stock sites and templates up to this version. Your changes are kept: files
+    /// you changed are merged, and what can't be merged is left for you in state/updates/.
+    /// Stop the server first.
+    Update {
+        /// Only list what would change.
+        #[arg(long)]
+        dry_run: bool,
+    },
     /// Run the server.
     Serve {
         /// Overrides `server.bind` from config.toml.
@@ -125,7 +135,14 @@ async fn main() -> anyhow::Result<()> {
                 println!("  created {path}");
             }
         }
+        Some(Command::Update { dry_run }) => update(&home, dry_run).await?,
         Some(Command::Serve { bind }) => {
+            let pending = pending_updates(&home);
+            if pending > 0 {
+                tracing::info!(
+                    "{pending} stock files have newer versions: stop the server and run `composer update`"
+                );
+            }
             let server = Server::start(home.clone()).await?;
             let bind = bind.unwrap_or_else(|| server.config.server.bind.clone());
             let listener = tokio::net::TcpListener::bind(&bind).await?;
@@ -180,6 +197,52 @@ async fn main() -> anyhow::Result<()> {
                 println!("{}", snapshot.display());
             }
         }
+    }
+    Ok(())
+}
+
+async fn update(home: &Home, dry_run: bool) -> anyhow::Result<()> {
+    if !home.config_file().exists() {
+        anyhow::bail!(
+            "{} is not set up yet: run `composer init`",
+            home.root().display()
+        );
+    }
+    let bind = Config::load(&home.config_file())?.server.bind;
+    if !dry_run && std::net::TcpStream::connect(&bind).is_ok() {
+        // It keeps recipe approvals in memory and would write over the ones added here.
+        anyhow::bail!("a server is running on {bind}: stop it, update, then start it again");
+    }
+    let items = update_home(home, dry_run).await?;
+    if items.is_empty() {
+        println!("up to date");
+        return Ok(());
+    }
+    let mut review = Vec::new();
+    for item in &items {
+        let (what, path) = match &item.outcome {
+            UpdateOutcome::Added => ("added", None),
+            UpdateOutcome::Replaced => ("updated", None),
+            UpdateOutcome::Merged => ("merged with your changes", None),
+            UpdateOutcome::Conflict { review } => {
+                ("conflicts with your changes, kept yours", Some(review))
+            }
+            UpdateOutcome::Review { review } => ("differs from yours, kept yours", Some(review)),
+        };
+        println!("  {}  {what}", item.path);
+        review.extend(path.map(|p| (home.root().join(&item.path), p)));
+    }
+    if dry_run {
+        println!("(dry run: nothing changed)");
+    } else if !review.is_empty() {
+        println!(
+            "\nThe new versions of the files kept as yours are in {}:",
+            home.updates().display()
+        );
+        for (yours, new) in review {
+            println!("  diff {} {}", yours.display(), new.display());
+        }
+        println!("Take what you want from them, then delete them; they are not reported again.");
     }
     Ok(())
 }

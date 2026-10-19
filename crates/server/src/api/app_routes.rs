@@ -74,12 +74,22 @@ fn serve_app(server: &Server, site: &str, path: &str) -> Response {
         .join("ui")
         .join("dist");
     if !dist.join("index.html").is_file() {
+        let site = url.site();
+        let message = if dist.parent().is_some_and(|ui| ui.is_dir()) {
+            format!(
+                "site://{site} has an app, but it is not built: <code>{site}/ui/dist/index.html</code> \
+                 is missing. Ask the agent to run the site's <code>ui-build</code> action."
+            )
+        } else {
+            format!(
+                "site://{site} has no app: there is no <code>{site}/ui/</code> folder. \
+                 The agent can create one with <code>new_app</code>."
+            )
+        };
         return (
             StatusCode::NOT_FOUND,
             Html(format!(
-                "<!doctype html><meta charset=utf-8><body style=\"background:#0c0d0f;color:#868c96;font:14px monospace;padding:40px\">\
-                 site://{site} has no built app. Ask the agent to run its <code>ui-build</code> action \
-                 (or create one with <code>new_app</code>).</body>"
+                "<!doctype html><meta charset=utf-8><body style=\"background:#0c0d0f;color:#868c96;font:14px monospace;padding:40px\">{message}</body>"
             )),
         )
             .into_response();

@@ -11,7 +11,10 @@ pub struct SiteInfo {
     pub title: String,
     pub has_index: bool,
     pub has_justfile: bool,
+    /// Has a `ui/` folder: an app, built or not.
     pub has_ui: bool,
+    /// `ui/dist/index.html` exists: the app can be opened.
+    pub app_built: bool,
 }
 
 /// What the index keeps per page.

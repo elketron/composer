@@ -19,6 +19,10 @@ composer serve &                  # http://127.0.0.1:7420
 composer                          # the TUI
 ```
 
+After installing a new version, stop the server and run `composer update`: it brings the stock
+sites, agents and templates up to date, merges them with your changes, and leaves what it can't
+merge in `~/.composer/state/updates/` for you to look at.
+
 Other devices: expose the server to your tailnet (`tailscale serve --bg http://127.0.0.1:7420`)
 and pair them with `composer pair --name <device>`.
 

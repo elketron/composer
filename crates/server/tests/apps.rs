@@ -182,15 +182,49 @@ async fn apps_are_served_with_cookie_auth() {
         .unwrap();
     assert!(escape.status().is_client_error(), "{}", escape.status());
 
-    // A site without a built app explains itself.
-    let missing = client
-        .get(format!("{base}/memory/"))
+    // A site without an app, or with one that isn't built, says what it looked for.
+    let page = |site: &'static str| {
+        let request = client
+            .get(format!("{base}/{site}/"))
+            .header("cookie", &cookie);
+        async move {
+            let response = request.send().await.unwrap();
+            assert_eq!(response.status(), 404);
+            response.text().await.unwrap()
+        }
+    };
+    let none = page("memory").await;
+    assert!(
+        none.contains("no app") && none.contains("memory/ui/"),
+        "{none}"
+    );
+    // The seeded orchestration site has ui/ sources but nothing built.
+    let unbuilt = page("orchestration").await;
+    assert!(
+        unbuilt.contains("not built") && unbuilt.contains("orchestration/ui/dist/index.html"),
+        "{unbuilt}"
+    );
+
+    // The site list tells the two apart.
+    let sites: Vec<serde_json::Value> = client
+        .get(format!("{base}/api/sites"))
         .header("cookie", &cookie)
         .send()
         .await
+        .unwrap()
+        .json()
+        .await
         .unwrap();
-    assert_eq!(missing.status(), 404);
-    assert!(missing.text().await.unwrap().contains("ui-build"));
+    let app = |name: &str| {
+        let site = sites.iter().find(|s| s["name"] == name).unwrap();
+        (
+            site["has_ui"].as_bool().unwrap(),
+            site["app_built"].as_bool().unwrap(),
+        )
+    };
+    assert_eq!(app("plans"), (true, true));
+    assert_eq!(app("orchestration"), (true, false));
+    assert_eq!(app("memory"), (false, false));
 }
 
 #[tokio::test]

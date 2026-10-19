@@ -5,9 +5,13 @@ mod args;
 mod edit_tool;
 mod finish_tool;
 mod list_sites_tool;
+mod markdown_sections;
 mod new_app_tool;
+mod new_project_tool;
+mod new_site_tool;
 mod open_tool;
 mod run_tool;
+mod scaffold;
 mod search_tool;
 mod set_project_tool;
 mod spawn_worker_tool;
@@ -18,7 +22,7 @@ mod write_tool;
 use async_trait::async_trait;
 use serde_json::Value;
 
-pub(crate) use set_project_tool::resolve_project;
+pub(crate) use set_project_tool::{expand_home, resolve_project, tilde};
 pub use tool_context::ToolContext;
 pub use tool_registry::ToolRegistry;
 

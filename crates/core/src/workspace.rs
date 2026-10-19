@@ -43,6 +43,7 @@ impl Workspace {
                 has_index: dir.join("index.md").is_file(),
                 has_justfile: dir.join("justfile").is_file(),
                 has_ui: dir.join("ui").is_dir(),
+                app_built: dir.join("ui/dist/index.html").is_file(),
                 name,
             });
         }

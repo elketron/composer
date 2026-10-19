@@ -258,6 +258,7 @@ mod tests {
             title: title.into(),
             has_justfile: false,
             has_ui,
+            app_built: has_ui,
         };
         let page = |url: &str, title: &str| SearchHit {
             url: url.into(),

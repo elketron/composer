@@ -1,0 +1,32 @@
+# composer settings. Every field is optional; these are the defaults.
+
+[provider]
+# An OpenAI-compatible API, including /v1 (llama.cpp's llama-server, vLLM, Ollama at
+# http://127.0.0.1:11434/v1, a hosted provider...).
+base_url = "http://127.0.0.1:8080/v1"
+# Sent as a bearer token when set.
+api_key = ""
+# Empty: the first model listed by GET /models.
+model = ""
+
+[server]
+# Keep it on localhost; reach it from other devices with `tailscale serve` (see `composer pair`).
+bind = "127.0.0.1:7420"
+# How this server introduces itself to the app; empty: the hostname.
+name = ""
+
+[agent]
+# Model requests at once, across all sessions (your model server's parallelism).
+slots = 2
+# Model calls per turn before the turn is stopped.
+max_steps = 40
+# Prompt tokens at which a session is compacted.
+compaction_threshold = 160000
+# A recipe run is killed after this many seconds.
+recipe_timeout_secs = 300
+# Worker processes running at once.
+max_workers = 1
+
+[projects]
+# Where new_project creates project folders.
+dir = "~/Projects"

@@ -10,6 +10,11 @@ pub enum Effect {
     LoadSites,
     /// Sites and every page, for completing `:` commands.
     LoadCatalog,
+    /// Look up the site before opening its app (answered by `AppChecked`).
+    CheckApp {
+        site: String,
+        url: String,
+    },
     /// Fetch the active project's git changes for a session.
     FetchDiff(String),
     /// Suspend the TUI and open a project file in the editor at a line. Run by the app loop.

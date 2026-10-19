@@ -1,9 +1,8 @@
-use std::path::Path;
-
 use async_trait::async_trait;
 use serde_json::{Value, json};
 
 use crate::tools::args::NewAppArgs;
+use crate::tools::scaffold::copy_template;
 use crate::tools::{Tool, ToolContext};
 
 /// Replaced by the site name in every scaffold file.
@@ -57,7 +56,8 @@ impl Tool for NewAppTool {
             return Err("the app template is missing; run `composer init`".into());
         }
 
-        copy_template(&template, &ui, &site).map_err(|e| format!("copying the template: {e}"))?;
+        copy_template(&template, &ui, PLACEHOLDER, &site)
+            .map_err(|e| format!("copying the template: {e}"))?;
 
         let justfile = site_dir.join("justfile");
         let existing = std::fs::read_to_string(&justfile).unwrap_or_default();
@@ -80,27 +80,4 @@ impl Tool for NewAppTool {
              The user opens it with `a` in the TUI (or :app {site})."
         ))
     }
-}
-
-/// Copies the scaffold, replacing the placeholder in text files. Skips build output.
-fn copy_template(from: &Path, to: &Path, site: &str) -> std::io::Result<()> {
-    std::fs::create_dir_all(to)?;
-    for entry in std::fs::read_dir(from)? {
-        let entry = entry?;
-        let name = entry.file_name();
-        if name == "node_modules" || name == "dist" {
-            continue;
-        }
-        let target = to.join(&name);
-        if entry.file_type()?.is_dir() {
-            copy_template(&entry.path(), &target, site)?;
-            continue;
-        }
-        let bytes = std::fs::read(entry.path())?;
-        match String::from_utf8(bytes) {
-            Ok(text) => std::fs::write(&target, text.replace(PLACEHOLDER, site))?,
-            Err(binary) => std::fs::write(&target, binary.into_bytes())?,
-        }
-    }
-    Ok(())
 }

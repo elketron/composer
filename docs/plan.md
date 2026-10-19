@@ -66,7 +66,7 @@ Plus `templates/sdk` (TS) and `templates/app` (Svelte scaffold).
 
 ### Server / harness
 
-- **Provider:** OpenAI-compatible `/v1/chat/completions` at `ai.ts.elketron.com`, tool calling + streaming + images. Behind a small `Provider` trait.
+- **Provider:** OpenAI-compatible `/v1/chat/completions` on your own model server (`provider.base_url` in config.toml), tool calling + streaming + images. Behind a small `Provider` trait.
   - Model: `qwen3.8 flash next` — the only model on the server, so the id is taken from `GET /v1/models` at startup (overridable in config).
   - Context: 256K. Compaction threshold configurable, default well below max (e.g. 160K) since long contexts are slow locally.
   - **Parallelism 2:** ~40–50 t/s with one stream, ~20–30 t/s each with two. The parent server owns a **global slot limiter** (default 2 slots) shared by all sessions, workers and compaction turns.
@@ -85,7 +85,9 @@ Plus `templates/sdk` (TS) and `templates/app` (Svelte scaffold).
 | `actions(site)` | list justfile recipes |
 | `run(site, recipe, args)` | run a recipe (approval rules below) |
 | `spawn_worker(ticket)` | orchestrator only |
+| `new_site(name, title, about)` | create `<name>/index.md` (stub layout, page format, rules) and list it on Home |
 | `new_app(site)` | copy app scaffold into `<site>/ui/` |
+| `new_project(name, about, template?)` | create `<projects.dir>/<name>` (README, or a copy of `<template site>/templates/project/`), its memory page and registry entry |
 | `set_project(path)` | set the session's active project (shown in the TUI) |
 | `finish(status, summary)` | worker only: ends the worker, sets ticket status, notifies the orchestrator |
 

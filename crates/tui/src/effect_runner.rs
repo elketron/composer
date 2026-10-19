@@ -71,6 +71,12 @@ impl EffectRunner {
                     });
                 });
             }
+            Effect::CheckApp { site, url } => {
+                tokio::spawn(async move {
+                    let sites = api.sites().await.ok();
+                    dispatcher.dispatch(Action::AppChecked { site, url, sites });
+                });
+            }
             Effect::EditPage(_)
             | Effect::ViewText { .. }
             | Effect::OpenBrowser(_)

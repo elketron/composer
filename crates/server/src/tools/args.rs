@@ -53,6 +53,24 @@ pub struct NewAppArgs {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct NewSiteArgs {
+    pub name: String,
+    /// Defaults to the name.
+    pub title: Option<String>,
+    /// One line: what the site is for.
+    pub about: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct NewProjectArgs {
+    pub name: String,
+    /// One line: what the project is.
+    pub about: String,
+    /// A site whose `templates/project/` folder the project starts from.
+    pub template: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct SpawnWorkerArgs {
     pub ticket: String,
 }

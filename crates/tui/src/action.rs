@@ -83,6 +83,12 @@ pub enum Action {
         sites: Vec<SiteSummary>,
         pages: Vec<SearchHit>,
     },
+    /// The sites, fetched before opening `site`'s app at `url`; `None` if that failed.
+    AppChecked {
+        site: String,
+        url: String,
+        sites: Option<Vec<SiteSummary>>,
+    },
 }
 
 /// Result of feeding a key to the keymap. Short-lived, so its size does not matter.

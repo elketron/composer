@@ -110,7 +110,8 @@ impl SiteUrl {
             return vec!["index.md".to_string()];
         }
         let last = path.rsplit('/').next().unwrap_or(path);
-        if last.contains('.') {
+        // A site's actions file has no extension and is no page.
+        if last.contains('.') || last == "justfile" {
             vec![path.to_string()]
         } else {
             vec![
@@ -200,6 +201,7 @@ mod tests {
         assert_eq!(url("site://memory").path(), "");
         assert_eq!(url("site://memory/").to_string(), "site://memory");
         assert_eq!(url("site://memory").candidates(), ["index.md"]);
+        assert_eq!(url("site://plans/justfile").file_for_write(), "justfile");
     }
 
     #[test]

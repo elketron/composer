@@ -30,7 +30,12 @@ class SiteList extends StatelessWidget {
                   ])),
                 ),
               ),
-              if (site.hasUi)
+              if (site.hasUi && !site.appBuilt)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+                  child: Text('app not built', style: mono(size: 11, color: t.faint)),
+                ),
+              if (site.appBuilt)
                 InkWell(
                   key: Key('app-${site.name}'),
                   onTap: () => openApp(context, url, site.name),

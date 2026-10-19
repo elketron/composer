@@ -7,6 +7,8 @@ use crate::tools::edit_tool::EditTool;
 use crate::tools::finish_tool::FinishTool;
 use crate::tools::list_sites_tool::ListSitesTool;
 use crate::tools::new_app_tool::NewAppTool;
+use crate::tools::new_project_tool::NewProjectTool;
+use crate::tools::new_site_tool::NewSiteTool;
 use crate::tools::open_tool::OpenTool;
 use crate::tools::run_tool::RunTool;
 use crate::tools::search_tool::SearchTool;
@@ -32,7 +34,9 @@ impl ToolRegistry {
                 Arc::new(SetProjectTool),
                 Arc::new(ActionsTool),
                 Arc::new(RunTool),
+                Arc::new(NewSiteTool),
                 Arc::new(NewAppTool),
+                Arc::new(NewProjectTool),
                 Arc::new(SpawnWorkerTool),
                 Arc::new(FinishTool),
             ],

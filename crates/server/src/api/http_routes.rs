@@ -35,6 +35,7 @@ pub async fn sites(State(server): State<Arc<Server>>) -> Result<Json<Vec<SiteSum
                 title: s.title,
                 has_justfile: s.has_justfile,
                 has_ui: s.has_ui,
+                app_built: s.app_built,
             })
             .collect(),
     ))

@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 /// ```text
 /// config.toml
 /// sites/            the web (agent-visible)
-/// state/            sessions, token, approvals (never agent-visible)
+/// state/            sessions, token, approvals, stock file bases (never agent-visible)
 /// ```
 #[derive(Debug, Clone)]
 pub struct Home {
@@ -56,6 +56,16 @@ impl Home {
     /// Approved recipe versions.
     pub fn approvals_file(&self) -> PathBuf {
         self.state().join("approvals.json")
+    }
+
+    /// The stock files as last installed by `init` or `update`: the base `update` merges from.
+    pub fn seed_base(&self) -> PathBuf {
+        self.state().join("seed")
+    }
+
+    /// New stock versions `update` could not apply, for the user to look at.
+    pub fn updates(&self) -> PathBuf {
+        self.state().join("updates")
     }
 
     /// The local client token (`state/token`). Devices get their own tokens later (pairing).

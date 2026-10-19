@@ -14,6 +14,12 @@ Design and decisions: [docs/plan.md](docs/plan.md) (phase 1), [docs/plan-app.md]
 regenerate the Dart models and fixtures: `cargo run -p composer-protocol --features schema --bin dartgen`
 (`-- --check` fails when they are stale), then `dart test` in `apps/composer_protocol`.
 
+## Stock sites and templates
+
+`seed/sites` and `templates/` are embedded in the binary: `composer init` installs them, `composer update`
+brings an existing home up to date (three-way merge against the copies kept in `state/seed/`). Changing them
+reaches users through `update`, so keep each change mergeable: small edits rather than rewrites.
+
 ## TUI
 
 - Flux: all state changes go through `Action` → stores' `reduce` → `AppState`. Reducers do no IO; they return `Effect`s, which the `EffectRunner` executes.

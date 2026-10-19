@@ -27,7 +27,11 @@ pub struct SiteSummary {
     pub name: String,
     pub title: String,
     pub has_justfile: bool,
+    /// Has a `ui/` folder: an app, built or not.
     pub has_ui: bool,
+    /// The app is built (`ui/dist/index.html`) and can be opened. Older servers leave it out.
+    #[serde(default)]
+    pub app_built: bool,
 }
 
 /// `GET /api/pages/{site}/{path}`. The `ETag` header carries `hash`.

@@ -19,11 +19,12 @@ pub mod session;
 mod slot_guard;
 mod slot_pool;
 pub mod tools;
+mod update;
 mod watcher;
 pub mod worker;
 
 pub use config::Config;
-pub use config_sections::{AgentConfig, ProviderConfig, ServerConfig};
+pub use config_sections::{AgentConfig, ProjectsConfig, ProviderConfig, ServerConfig};
 pub use error::{Result, ServerError};
 pub use hash::content_hash;
 pub use home::Home;
@@ -32,3 +33,4 @@ pub use init::{init_home, local_token};
 pub use server::Server;
 pub use slot_guard::SlotGuard;
 pub use slot_pool::SlotPool;
+pub use update::{UpdateItem, UpdateOutcome, pending_updates, update_home};
