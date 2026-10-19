@@ -30,3 +30,7 @@ max_workers = 1
 [projects]
 # Where new_project creates project folders.
 dir = "~/Projects"
+
+[reminders]
+# When a reminder page with a due date but no time goes off (local time).
+default_time = "09:00"

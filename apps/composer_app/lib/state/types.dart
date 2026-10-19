@@ -29,10 +29,11 @@ class PairingState {
 
 /// A tapped notification (or one of its buttons).
 class NotificationTap {
-  const NotificationTap({required this.url, this.session, this.approval, this.action});
+  const NotificationTap({required this.url, this.session, this.approval, this.page, this.action});
   final String url;
   final String? session;
   final String? approval;
+  final String? page;
 
   /// `approve` / `deny`; null for the notification itself.
   final String? action;

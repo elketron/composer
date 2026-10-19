@@ -209,5 +209,29 @@
     "used": 1,
     "total": 2,
     "waiting": 0
+  },
+  {
+    "type": "reminder.due",
+    "url": "site://calendar/reminders/call.md",
+    "title": "Call",
+    "due": "2026-10-19 20:00",
+    "late": false
+  },
+  {
+    "type": "reminder.due",
+    "url": "site://calendar/reminders/review.md",
+    "title": "Review",
+    "due": "2026-10-19 08:00",
+    "late": true,
+    "session": "a3f1"
+  },
+  {
+    "type": "turn.queued",
+    "session": "a3f1",
+    "seq": 4,
+    "source": {
+      "kind": "reminder",
+      "url": "site://calendar/reminders/review.md"
+    }
   }
 ]

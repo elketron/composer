@@ -72,6 +72,10 @@ pub enum MessageSource {
         session: SessionId,
     },
     Server,
+    /// A reminder page came due (`action: agent`).
+    Reminder {
+        url: Url,
+    },
 }
 
 /// A complete chat message, as stored in the transcript.

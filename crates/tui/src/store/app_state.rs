@@ -402,6 +402,26 @@ impl AppState {
                 self.page.reload().into_iter().collect()
             }
             ServerMessage::PageChanged { .. } => vec![],
+            ServerMessage::ReminderDue {
+                url,
+                title,
+                due,
+                late,
+                session,
+            } => {
+                let when = if late { "was due" } else { "due" };
+                let path = url.strip_prefix("site://").unwrap_or(&url);
+                let path = path.strip_suffix(".md").unwrap_or(path);
+                let next = match session {
+                    Some(session) => format!(":attach {session}"),
+                    None => format!(":open {path}"),
+                };
+                self.ui.flash(
+                    format!("⏰ {title} ({when} {due}) · {next}"),
+                    FlashLevel::Warn,
+                );
+                vec![]
+            }
             ServerMessage::WorkerStatus {
                 worker,
                 ticket,

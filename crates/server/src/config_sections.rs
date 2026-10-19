@@ -33,6 +33,13 @@ pub struct ProjectsConfig {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RemindersConfig {
+    /// When a reminder with a `due` date but no `time` goes off (local time, `HH:MM`).
+    #[serde(default = "default_reminder_time")]
+    pub default_time: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentConfig {
     /// Concurrent model requests across all sessions (the provider's parallelism).
     #[serde(default = "default_slots")]
@@ -58,6 +65,10 @@ fn default_base_url() -> String {
 
 fn default_projects_dir() -> String {
     "~/Projects".into()
+}
+
+fn default_reminder_time() -> String {
+    "09:00".into()
 }
 
 fn default_bind() -> String {

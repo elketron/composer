@@ -93,6 +93,16 @@ Plus `templates/sdk` (TS) and `templates/app` (Svelte scaffold).
 
 The agent reads raw markdown; the server parses links on the side (back-links, TUI navigation).
 
+### Reminders
+
+A page with `type: reminder` goes off when it is due: `due: 2026-10-19` (+ `time: "20:00"`, or
+`due: 2026-10-19 20:00`; without a time, `[reminders] default_time`, 09:00), local time, `status: open`.
+The server checks its index every 30 s, so edits count right away and anything missed while it was off
+or asleep fires on the first check (marked late). Each one fires once: the server writes `notified:` into
+the page. Delivery: a `reminder.due` event to every client (system notification in the app, the status
+bar in the TUI); with `action: agent` also a message (source `reminder`) into `session:`, or a new session
+for `agent:` (default `default`).
+
 ### Recipe approval
 
 - First use of a recipe requires approval in the TUI (shows the recipe body; approve / deny / view in nvim).

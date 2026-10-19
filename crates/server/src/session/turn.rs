@@ -75,8 +75,12 @@ fn accept_user_message(server: &Arc<Server>, session: &Arc<Session>, message: Ch
             content.push_str(&format!("- {page}\n"));
         }
     }
-    if let Some(MessageSource::App { site }) = &message.source {
-        content = format!("[from the {site} app]\n{content}");
+    match &message.source {
+        Some(MessageSource::App { site }) => content = format!("[from the {site} app]\n{content}"),
+        Some(MessageSource::Reminder { url }) => {
+            content = format!("[reminder {url} is due]\n{content}")
+        }
+        _ => {}
     }
     let stored = session.push_history(ModelMessage::User {
         content,

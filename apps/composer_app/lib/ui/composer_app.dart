@@ -8,6 +8,7 @@ import '../state/types.dart';
 import '../theme/composer_theme.dart';
 import 'chat/chat_page.dart';
 import 'chat/navigation.dart';
+import 'pages/page_navigation.dart';
 import 'shell.dart';
 import 'store_scope.dart';
 
@@ -59,7 +60,13 @@ class _ComposerAppState extends State<ComposerApp> {
     }
     store.dispatch(ServerSelected(tap.url));
     final session = tap.session;
-    if (session == null) return;
+    final page = tap.page;
+    if (session == null) {
+      // A reminder: its page.
+      final context = _navigator.currentContext;
+      if (page != null && context != null) openPage(context, tap.url, page);
+      return;
+    }
     store.dispatch(SessionOpened(tap.url, session));
     final context = _navigator.currentContext;
     if (context != null && !isWide(context)) {

@@ -640,6 +640,7 @@ sealed class MessageSource {
         'app' => MessageSourceApp.fromJson(json),
         'worker' => MessageSourceWorker.fromJson(json),
         'server' => MessageSourceServer.fromJson(json),
+        'reminder' => MessageSourceReminder.fromJson(json),
         _ => MessageSourceUnknown(json),
       };
 
@@ -701,6 +702,24 @@ final class MessageSourceServer extends MessageSource {
 
   Map<String, Object?> toJson() => {
         'kind': 'server',
+      };
+}
+
+/// A reminder page came due (`action: agent`).
+final class MessageSourceReminder extends MessageSource {
+  const MessageSourceReminder({
+    required this.url,
+  });
+
+  final String url;
+
+  factory MessageSourceReminder.fromJson(Map<String, Object?> json) => MessageSourceReminder(
+        url: json['url'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'kind': 'reminder',
+        'url': url,
       };
 }
 
@@ -957,6 +976,7 @@ sealed class ServerMessage {
         'session.updated' => ServerMessageSessionUpdated.fromJson(json),
         'page.changed' => ServerMessagePageChanged.fromJson(json),
         'worker.status' => ServerMessageWorkerStatus.fromJson(json),
+        'reminder.due' => ServerMessageReminderDue.fromJson(json),
         'slots' => ServerMessageSlots.fromJson(json),
         _ => ServerMessageUnknown(json),
       };
@@ -1451,6 +1471,47 @@ final class ServerMessageWorkerStatus extends ServerMessage {
         'ticket': ticket,
         'parent': parent,
         'state': state.toJson(),
+      };
+}
+
+/// A reminder page (`type: reminder`) came due. Sent once per reminder, to every client.
+final class ServerMessageReminderDue extends ServerMessage {
+  const ServerMessageReminderDue({
+    required this.url,
+    required this.title,
+    required this.due,
+    required this.late,
+    this.session,
+  });
+
+  final String url;
+
+  final String title;
+
+  /// When it was due, local time: `2026-10-19 20:00`.
+  final String due;
+
+  /// Delivered well after it was due (the server was off).
+  final bool late;
+
+  /// The session it was posted to (`action: agent`).
+  final String? session;
+
+  factory ServerMessageReminderDue.fromJson(Map<String, Object?> json) => ServerMessageReminderDue(
+        url: json['url'] as String,
+        title: json['title'] as String,
+        due: json['due'] as String,
+        late: json['late'] as bool,
+        session: json['session'] == null ? null : json['session'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'reminder.due',
+        'url': url,
+        'title': title,
+        'due': due,
+        'late': late,
+        if (session != null) 'session': session,
       };
 }
 

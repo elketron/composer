@@ -277,6 +277,17 @@ void main() {
       expect(reduce(next, ApprovalAnswered(home.url, 'r2', approve: false)).$2.whereType<CancelNotification>(), hasLength(1));
     });
 
+    test('reminders: always notified, leading to the page or the session', () {
+      const due = ServerMessageReminderDue(
+          url: 'site://calendar/reminders/call.md', title: 'Call', due: '2026-10-19 20:00', late: false);
+      final note = reduce(loaded([home]), ServerEvent(home.url, due)).$2.whereType<Notify>().single;
+      expect((note.title, note.body, note.page, note.session), ('Call', 'due 2026-10-19 20:00 · home', 'site://calendar/reminders/call.md', null));
+      const late = ServerMessageReminderDue(
+          url: 'site://calendar/reminders/r.md', title: 'Review', due: '2026-10-19 08:00', late: true, session: 'ab12');
+      final agent = reduce(background(loaded([home])), ServerEvent(home.url, late)).$2.whereType<Notify>().single;
+      expect((agent.body, agent.session), ('was due 2026-10-19 08:00 · home', 'ab12'));
+    });
+
     test('going to the background notifies approvals still open', () {
       var state = reduce(loaded([home]), ServerEvent(home.url, approval('r1'))).$1;
       final (next, effects) = reduce(state, const ForegroundChanged(false));

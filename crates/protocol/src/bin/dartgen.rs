@@ -695,6 +695,27 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
             total: 2,
             waiting: 0,
         },
+        ServerMessage::ReminderDue {
+            url: "site://calendar/reminders/call.md".into(),
+            title: "Call".into(),
+            due: "2026-10-19 20:00".into(),
+            late: false,
+            session: None,
+        },
+        ServerMessage::ReminderDue {
+            url: "site://calendar/reminders/review.md".into(),
+            title: "Review".into(),
+            due: "2026-10-19 08:00".into(),
+            late: true,
+            session: Some(s()),
+        },
+        ServerMessage::TurnQueued {
+            session: s(),
+            seq: 4,
+            source: MessageSource::Reminder {
+                url: "site://calendar/reminders/review.md".into(),
+            },
+        },
     ];
     let commands = vec![
         ClientCommand::SessionCreate {

@@ -87,6 +87,7 @@ impl SessionStore {
                         Some(MessageSource::Worker { session }) => {
                             Some(format!("worker #{session}"))
                         }
+                        Some(MessageSource::Reminder { .. }) => Some("reminder".into()),
                         _ => None,
                     },
                 }),

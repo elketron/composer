@@ -57,7 +57,15 @@ final class CreateSession extends AppEffect {
 
 /// A system notification; `key` identifies it (to replace or withdraw it).
 final class Notify extends AppEffect {
-  const Notify({required this.key, required this.title, required this.body, required this.url, this.session, this.approval});
+  const Notify({
+    required this.key,
+    required this.title,
+    required this.body,
+    required this.url,
+    this.session,
+    this.approval,
+    this.page,
+  });
   final String key;
   final String title;
   final String body;
@@ -68,6 +76,9 @@ final class Notify extends AppEffect {
 
   /// An approval request id: the notification gets Approve / Deny.
   final String? approval;
+
+  /// A page to open when there is no session (a reminder).
+  final String? page;
 }
 
 final class CancelNotification extends AppEffect {

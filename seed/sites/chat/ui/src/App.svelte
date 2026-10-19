@@ -113,6 +113,11 @@
         approvals = approvals.filter((a) => a.request !== m.request);
         return;
       }
+      if (m.type === 'reminder.due') {
+        items.push({ kind: 'note', text: `⏰ ${m.title} · ${m.late ? 'was due' : 'due'} ${m.due}` });
+        scrollDown();
+        return;
+      }
       if (m.session !== current || typeof m.seq !== 'number' || m.seq <= lastSeq) return;
       lastSeq = m.seq;
       switch (m.type) {
@@ -121,7 +126,7 @@
         case 'message.done': {
           const msg = m.message;
           if (msg.role === 'user') {
-            const source = msg.source?.kind === 'app' ? `${msg.source.site} app` : msg.source?.kind === 'worker' ? `worker #${msg.source.session}` : '';
+            const source = msg.source?.kind === 'app' ? `${msg.source.site} app` : msg.source?.kind === 'worker' ? `worker #${msg.source.session}` : msg.source?.kind === 'reminder' ? 'reminder' : '';
             items.push({ kind: 'you', text: msg.content, source });
           } else if (msg.role === 'assistant') {
             streaming = '';

@@ -210,8 +210,8 @@ import 'types.dart';
   };
 }
 
-/// What deserves a system notification: approvals while the app is in the background, and
-/// finished turns and workers you are not looking at.
+/// What deserves a system notification: approvals while the app is in the background,
+/// finished turns and workers you are not looking at, and reminders always.
 (AppState, List<AppEffect>) _notifications(AppState before, AppState s, String url, ServerMessage message) {
   final status = before.status[url];
   if (status == null) return (s, const []);
@@ -220,6 +220,20 @@ import 'types.dart';
   switch (message) {
     case ServerMessageApprovalRequest(:final request) when !s.foreground && !s.notifiedApprovals.contains(request):
       return (s.copyWith(notifiedApprovals: {...s.notifiedApprovals, request}), [_approvalNote(url, server, message)]);
+    case ServerMessageReminderDue(url: final page, :final title, :final due, :final late, :final session):
+      return (
+        s,
+        [
+          Notify(
+            key: 'reminder:$page',
+            title: title,
+            body: '${late ? 'was due' : 'due'} $due · $server',
+            url: url,
+            session: session,
+            page: page,
+          ),
+        ],
+      );
     case ServerMessageApprovalResolved(:final request):
       return (s, [CancelNotification('approval:$request')]);
     case ServerMessageWorkerStatus(:final worker, :final ticket, :final parent, state: final state)

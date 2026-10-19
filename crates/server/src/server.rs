@@ -173,6 +173,7 @@ impl Server {
             let _ = self.listen_addr.set(addr);
         }
         *self.watcher.lock().expect("watcher lock") = Some(crate::watcher::watch(self)?);
+        tokio::spawn(crate::reminders::run_reminders(self.clone()));
         let router = crate::api::router(self.clone());
         axum::serve(listener, router)
             .await

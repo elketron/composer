@@ -2,7 +2,9 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use crate::config_sections::{AgentConfig, ProjectsConfig, ProviderConfig, ServerConfig};
+use crate::config_sections::{
+    AgentConfig, ProjectsConfig, ProviderConfig, RemindersConfig, ServerConfig,
+};
 use crate::error::{Result, ServerError};
 
 /// `config.toml`.
@@ -16,6 +18,8 @@ pub struct Config {
     pub agent: AgentConfig,
     #[serde(default = "section")]
     pub projects: ProjectsConfig,
+    #[serde(default = "section")]
+    pub reminders: RemindersConfig,
 }
 
 impl Config {

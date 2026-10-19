@@ -136,6 +136,20 @@ pub enum ServerMessage {
         state: WorkerState,
     },
 
+    /// A reminder page (`type: reminder`) came due. Sent once per reminder, to every client.
+    #[serde(rename = "reminder.due")]
+    ReminderDue {
+        url: Url,
+        title: String,
+        /// When it was due, local time: `2026-10-19 20:00`.
+        due: String,
+        /// Delivered well after it was due (the server was off).
+        late: bool,
+        /// The session it was posted to (`action: agent`).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        session: Option<SessionId>,
+    },
+
     /// Model slot usage, shared by all sessions and workers.
     #[serde(rename = "slots")]
     Slots { used: u32, total: u32, waiting: u32 },

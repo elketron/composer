@@ -75,6 +75,7 @@ class Notifier {
       url: json['url'] as String,
       session: json['session'] as String?,
       approval: json['approval'] as String?,
+      page: json['page'] as String?,
       action: action == null || action.isEmpty ? null : action,
     ));
   }
@@ -117,7 +118,7 @@ class Notifier {
             : const [],
       ),
     );
-    final payload = jsonEncode({'url': note.url, 'session': note.session, 'approval': note.approval});
+    final payload = jsonEncode({'url': note.url, 'session': note.session, 'approval': note.approval, 'page': note.page});
     await _plugin.show(id: idOf(note.key), title: note.title, body: note.body, notificationDetails: details, payload: payload);
   }
 
