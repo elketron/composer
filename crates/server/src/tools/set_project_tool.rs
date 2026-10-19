@@ -17,13 +17,16 @@ impl Tool for SetProjectTool {
     fn description(&self) -> &'static str {
         "Set the session's active project: a code directory on disk the user is working on. \
          Its memory page (site://memory/projects/<folder name>) is then loaded into your context. \
-         An empty path clears it."
+         A plain name is a folder in the user's projects directory. An empty path clears it."
     }
 
     fn parameters(&self) -> Value {
         json!({
             "type": "object",
-            "properties": { "path": { "type": "string", "description": "absolute path or ~/..." } }
+            "properties": { "path": {
+                "type": "string",
+                "description": "a project name (folder in the projects directory), an absolute path, or ~/..."
+            } }
         })
     }
 
@@ -36,7 +39,7 @@ impl Tool for SetProjectTool {
             .filter(|p| !p.is_empty())
         {
             None => None,
-            Some(path) => Some(resolve_project(path)?),
+            Some(path) => Some(resolve_project(path, &context.server.config.projects.dir)?),
         };
         let message = match &project {
             Some(path) => format!("active project: {path}"),
@@ -49,12 +52,18 @@ impl Tool for SetProjectTool {
     }
 }
 
-/// Expands `~`, requires an existing directory, returns the canonical path.
-pub fn resolve_project(path: &str) -> Result<String, String> {
+/// A project directory: absolute, `~/...`, or a name (or relative path) inside
+/// `projects_dir`. Requires an existing directory, returns the canonical path.
+pub fn resolve_project(path: &str, projects_dir: &str) -> Result<String, String> {
     let expanded = expand_home(path);
+    let expanded = if expanded.is_relative() {
+        expand_home(projects_dir).join(expanded)
+    } else {
+        expanded
+    };
     let canonical = expanded
         .canonicalize()
-        .map_err(|e| format!("{path}: {e}"))?;
+        .map_err(|e| format!("{}: {e}", tilde(&expanded)))?;
     if !canonical.is_dir() {
         return Err(format!("{path} is not a directory"));
     }
@@ -81,5 +90,34 @@ pub fn tilde(path: &Path) -> String {
     match home.as_deref().and_then(|h| path.strip_prefix(h).ok()) {
         Some(rest) if !rest.as_os_str().is_empty() => format!("~/{}", rest.display()),
         _ => path.display().to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn names_are_folders_in_the_projects_directory() {
+        let projects = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(projects.path().join("work/api")).unwrap();
+        let dir = projects.path().to_str().unwrap();
+        let canonical = |p: &str| {
+            projects
+                .path()
+                .join(p)
+                .canonicalize()
+                .unwrap()
+                .display()
+                .to_string()
+        };
+        assert_eq!(resolve_project("work", dir), Ok(canonical("work")));
+        assert_eq!(resolve_project("work/api", dir), Ok(canonical("work/api")));
+        let absolute = canonical("work/api");
+        assert_eq!(
+            resolve_project(&absolute, "/elsewhere"),
+            Ok(absolute.clone())
+        );
+        assert!(resolve_project("nope", dir).unwrap_err().contains("nope"));
     }
 }

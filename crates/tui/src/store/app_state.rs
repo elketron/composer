@@ -3,8 +3,8 @@ use composer_protocol::{ClientCommand, CommandResult, ServerMessage};
 use crate::action::Action;
 use crate::effect::Effect;
 use crate::store::types::{
-    Catalog, ConnState, FlashLevel, Mode, Outgoing, Pane, Pending, PendingApproval, PickerTarget,
-    Startup,
+    Catalog, ConnState, FlashLevel, Mode, Outgoing, Pane, Pending, PendingApproval, PickerKind,
+    PickerTarget, Startup,
 };
 use crate::store::{
     ApprovalStore, ConnectionStore, PageStore, PickerStore, ProjectStore, SessionStore, UiStore,
@@ -23,6 +23,8 @@ pub struct AppState {
     pub catalog: Catalog,
     startup: Option<Startup>,
     default_agent: String,
+    /// Where project names point (`:project composer`), when known.
+    pub projects_dir: Option<String>,
 }
 
 impl AppState {
@@ -37,6 +39,7 @@ impl AppState {
             project: ProjectStore::default(),
             catalog: Catalog::default(),
             default_agent: startup.agent.clone(),
+            projects_dir: startup.projects_dir.clone(),
             startup: Some(startup),
         }
     }
@@ -136,8 +139,27 @@ impl AppState {
                     vec![]
                 }
             },
+            Action::CycleOrchestration(delta) => {
+                let members = self.session.orchestration();
+                let Some(here) = members
+                    .iter()
+                    .position(|s| Some(&s.id) == self.session.current.as_ref())
+                else {
+                    self.no_orchestration();
+                    return vec![];
+                };
+                let next = (here as i32 + delta).rem_euclid(members.len() as i32) as usize;
+                let id = members[next].id.clone();
+                self.attach(&id, true)
+            }
             Action::SetProject(path) => match self.session.current.clone() {
                 Some(session) => {
+                    if path.is_none() {
+                        self.ui.flash(
+                            "project unset (new sessions from here start without one)",
+                            FlashLevel::Info,
+                        );
+                    }
                     self.send(ClientCommand::ProjectSet { session, path }, Pending::Ignore)
                 }
                 None => vec![],
@@ -242,9 +264,15 @@ impl AppState {
                 }],
                 None => vec![],
             },
+            Action::OpenPicker(PickerKind::Orchestration)
+                if self.session.orchestration().is_empty() =>
+            {
+                self.no_orchestration();
+                vec![]
+            }
             Action::OpenPicker(kind) => {
                 self.ui.picker_open = true;
-                self.picker.open(kind, &self.session.sessions)
+                self.picker.open(kind, &self.session)
             }
             Action::PickerQuery(query) => self.picker.set_query(query),
             Action::PickerMove(delta) => {
@@ -349,6 +377,13 @@ impl AppState {
         )
     }
 
+    fn no_orchestration(&mut self) {
+        self.ui.flash(
+            "this session has no workers or orchestrator · space w lists every session",
+            FlashLevel::Info,
+        );
+    }
+
     fn connected(&mut self) -> Vec<Effect> {
         self.conn.state = ConnState::Connected;
         let mut effects = self.send(
@@ -425,9 +460,10 @@ impl AppState {
             ServerMessage::WorkerStatus {
                 worker,
                 ticket,
+                parent,
                 state,
-                ..
             } => {
+                self.session.workers.insert(worker.clone(), state);
                 let (text, level) = match state {
                     composer_protocol::WorkerState::Starting => (
                         format!("worker #{worker} started on ticket {ticket} · space w to watch"),
@@ -443,6 +479,23 @@ impl AppState {
                         FlashLevel::Warn,
                     ),
                 };
+                // Watching it finish: back to the orchestrator, which gets its result next.
+                // Not while you're typing, or the message would go to the orchestrator.
+                let finished = matches!(
+                    state,
+                    composer_protocol::WorkerState::Done | composer_protocol::WorkerState::Failed
+                );
+                if finished
+                    && self.session.current.as_deref() == Some(worker.as_str())
+                    && self.ui.mode != Mode::Insert
+                {
+                    let effects = self.attach(&parent, true);
+                    self.ui.flash(
+                        format!("{text} · back to the orchestrator (ctrl-o: the worker)"),
+                        level,
+                    );
+                    return effects;
+                }
                 self.ui.flash(text, level);
                 vec![]
             }
@@ -552,7 +605,7 @@ mod tests {
     use composer_protocol::{ChatMessage, Role, SessionInfo, TurnState};
 
     use super::*;
-    use crate::store::types::{ChatItem, PickerKind};
+    use crate::store::types::ChatItem;
 
     fn info(id: &str, parent: Option<&str>) -> SessionInfo {
         SessionInfo {
@@ -729,6 +782,117 @@ mod tests {
                 since: None
             }
         );
+    }
+
+    fn attached(effects: &[Effect]) -> Option<String> {
+        sent(effects).into_iter().find_map(|(_, c)| match c {
+            ClientCommand::SessionAttach { session, .. } => Some(session),
+            _ => None,
+        })
+    }
+
+    /// An orchestrator `o` with workers `w1` (idle) and `w2` (running); `x` is unrelated.
+    fn orchestration() -> AppState {
+        let (mut state, _) = connected();
+        state.session.upsert(info("x", None));
+        state.session.upsert(info("o", None));
+        state.session.upsert(info("w1", Some("o")));
+        state.session.upsert(SessionInfo {
+            state: TurnState::Running,
+            ..info("w2", Some("o"))
+        });
+        state
+    }
+
+    #[test]
+    fn the_orchestration_picker_offers_the_likely_switch() {
+        let mut state = orchestration();
+        state.reduce(Action::AttachSession("o".into()));
+        state.reduce(Action::OpenPicker(PickerKind::Orchestration));
+        let rows: Vec<(&str, &str)> = state
+            .picker
+            .items
+            .iter()
+            .map(|i| (i.title.as_str(), i.right.as_str()))
+            .collect();
+        // Session list order is newest first; the orchestrator heads its workers.
+        assert_eq!(
+            rows,
+            [
+                ("default #o ◂", ""),
+                ("  default #w2", "● running"),
+                ("  default #w1", ""),
+            ]
+        );
+        assert_eq!(state.picker.selected, 1, "the busy worker");
+        assert_eq!(
+            attached(&state.reduce(Action::PickerAccept)).as_deref(),
+            Some("w2")
+        );
+
+        // From a worker, Enter goes back to the orchestrator.
+        state.reduce(Action::OpenPicker(PickerKind::Orchestration));
+        assert_eq!(state.picker.selected, 0);
+
+        // A session without workers has nothing to show.
+        state.reduce(Action::AttachSession("x".into()));
+        state.ui.picker_open = false;
+        state.reduce(Action::OpenPicker(PickerKind::Orchestration));
+        assert!(!state.ui.picker_open);
+    }
+
+    #[test]
+    fn stepping_through_the_orchestration_wraps() {
+        let mut state = orchestration();
+        state.reduce(Action::AttachSession("o".into()));
+        let mut step = |delta| attached(&state.reduce(Action::CycleOrchestration(delta)));
+        assert_eq!(step(1).as_deref(), Some("w2"));
+        assert_eq!(step(1).as_deref(), Some("w1"));
+        assert_eq!(step(1).as_deref(), Some("o"));
+        assert_eq!(step(-1).as_deref(), Some("w1"));
+    }
+
+    #[test]
+    fn a_finished_worker_hands_back_to_its_orchestrator() {
+        let mut state = orchestration();
+        let status = |worker: &str, state| {
+            Action::Server(ServerMessage::WorkerStatus {
+                worker: worker.into(),
+                ticket: "0003".into(),
+                parent: "o".into(),
+                state,
+            })
+        };
+        state.reduce(Action::AttachSession("o".into()));
+        state.reduce(Action::AttachSession("w2".into()));
+        // Another worker finishing doesn't move you.
+        assert!(
+            attached(&state.reduce(status("w1", composer_protocol::WorkerState::Done))).is_none()
+        );
+        assert_eq!(state.session.status(&info("w1", Some("o"))), "done");
+
+        let effects = state.reduce(status("w2", composer_protocol::WorkerState::Done));
+        assert_eq!(attached(&effects).as_deref(), Some("o"));
+        assert!(
+            state
+                .ui
+                .flash
+                .as_ref()
+                .unwrap()
+                .text
+                .contains("back to the orchestrator")
+        );
+        // ctrl-o returns to the worker.
+        assert_eq!(
+            attached(&state.reduce(Action::JumpBack)).as_deref(),
+            Some("w2")
+        );
+
+        // Typing a message: stay put.
+        state.reduce(Action::SetMode(Mode::Insert));
+        let effects = state.reduce(status("w2", composer_protocol::WorkerState::Failed));
+        assert!(attached(&effects).is_none());
+        assert_eq!(state.session.current.as_deref(), Some("w2"));
     }
 
     #[test]

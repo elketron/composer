@@ -183,7 +183,8 @@ async fn new_project_makes_the_folder_and_registers_it() {
         results[5].0
     );
     assert!(
-        results[0].0.contains("registered it in the memory index"),
+        results[0].0.contains("registered it in the memory index")
+            && results[0].0.contains("now this session's active project"),
         "{}",
         results[0].0
     );

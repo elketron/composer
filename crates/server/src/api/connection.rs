@@ -220,7 +220,10 @@ impl Connection {
         match command {
             ClientCommand::SessionCreate { agent, project } => {
                 AgentDefinition::load(&server.workspace, &agent).map_err(|e| e.to_string())?;
-                let project = project.as_deref().map(resolve_project).transpose()?;
+                let project = project
+                    .as_deref()
+                    .map(|p| resolve_project(p, &server.config.projects.dir))
+                    .transpose()?;
                 let session = server
                     .sessions
                     .create(&agent, project)
@@ -298,7 +301,7 @@ impl Connection {
                 let project = path
                     .as_deref()
                     .filter(|p| !p.trim().is_empty())
-                    .map(resolve_project)
+                    .map(|p| resolve_project(p, &server.config.projects.dir))
                     .transpose()?;
                 s.update_info(&server.hub, |info| info.project = project);
                 Ok(CommandResult::Session { session: s.info() })

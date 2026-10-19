@@ -28,7 +28,8 @@ recipe_timeout_secs = 300
 max_workers = 1
 
 [projects]
-# Where new_project creates project folders.
+# Where your projects live. new_project creates folders here, and a project given by name
+# (`:project composer`, `composer --project composer`, a ticket's `project:`) is a folder here.
 dir = "~/Projects"
 
 [reminders]

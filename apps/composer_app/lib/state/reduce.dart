@@ -46,6 +46,11 @@ import 'types.dart';
       SessionClosed(:final url) => _close(s, url),
       NewSessionRequested(:final url, :final agent) => (s, [CreateSession(url, agent)]),
       MessageSubmitted(:final url, :final text) => _toChat(s, url, (session) => ClientCommandMessageSend(session: session, text: text)),
+      DraftChanged(:final url, :final drafting) => (
+          _updateStatus(s, url, (x) => x.chat == null ? x : x.copyWith(chat: x.chat!.copyWith(drafting: drafting))),
+          const [],
+        ),
+      ProjectCleared(:final url) => _toChat(s, url, (session) => ClientCommandProjectSet(session: session)),
       CancelRequested(:final url) => _toChat(s, url, (session) => ClientCommandTurnCancel(session: session)),
       ApprovalAnswered(:final url, :final request, :final approve) => (
           _updateStatus(s, url, (x) => x.copyWith(approvals: [for (final a in x.approvals) if (a.request != request) a])),
@@ -188,9 +193,24 @@ import 'types.dart';
 }
 
 (AppState, List<AppEffect>) _serverEvent(AppState s, String url, ServerMessage message) {
-  final (next, notes) = _notifications(s, _event(s, url, message), url, message);
+  final (handedBack, switches) = _handBack(_event(s, url, message), url, message);
+  final (next, notes) = _notifications(s, handedBack, url, message);
   final (state, effects) = _pageEffects(s, next, url, message);
-  return (state, [...notes, ...effects]);
+  return (state, [...switches, ...notes, ...effects]);
+}
+
+/// The worker you were watching finished: back to its orchestrator, which gets the result
+/// next. Not while you're writing a message.
+(AppState, List<AppEffect>) _handBack(AppState s, String url, ServerMessage message) {
+  if (message case ServerMessageWorkerStatus(:final worker, :final ticket, :final parent, :final state)
+      when state == WorkerState.done || state == WorkerState.failed) {
+    final chat = s.status[url]?.chat;
+    if (chat == null || chat.session != worker || chat.drafting) return (s, const []);
+    final (opened, effects) = _open(s, url, parent);
+    final what = state == WorkerState.done ? 'finished' : 'failed';
+    return (opened.copyWith(notice: Notice((s.notice?.id ?? 0) + 1, 'Worker #$worker $what ticket $ticket: back to the orchestrator')), effects);
+  }
+  return (s, const []);
 }
 
 (AppState, List<AppEffect>) _pageEffects(AppState s, AppState next, String url, ServerMessage message) {
@@ -216,7 +236,9 @@ import 'types.dart';
   final status = before.status[url];
   if (status == null) return (s, const []);
   final server = s.servers.where((x) => x.url == url).firstOrNull?.name ?? url;
-  bool viewing(String? session) => s.foreground && s.active == url && session != null && status.chat?.session == session;
+  // After this event: a worker handing back has already switched the chat to its orchestrator.
+  bool viewing(String? session) =>
+      s.foreground && s.active == url && session != null && s.status[url]?.chat?.session == session;
   switch (message) {
     case ServerMessageApprovalRequest(:final request) when !s.foreground && !s.notifiedApprovals.contains(request):
       return (s.copyWith(notifiedApprovals: {...s.notifiedApprovals, request}), [_approvalNote(url, server, message)]);
@@ -328,6 +350,8 @@ AppState _event(AppState s, String url, ServerMessage message) => switch (messag
         ),
       ServerMessageApprovalResolved(:final request) =>
         _updateStatus(s, url, (x) => x.copyWith(approvals: [for (final a in x.approvals) if (a.request != request) a])),
+      ServerMessageWorkerStatus(:final worker, :final state) =>
+        _updateStatus(s, url, (x) => x.copyWith(workers: {...x.workers, worker: state})),
       _ when sessionEvent(message) != null => _updateStatus(s, url, (x) {
           final chat = x.chat;
           if (chat == null) return x;

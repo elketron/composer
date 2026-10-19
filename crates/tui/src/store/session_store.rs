@@ -1,4 +1,8 @@
-use composer_protocol::{MessageSource, Role, Seq, ServerMessage, SessionInfo, TurnState};
+use std::collections::HashMap;
+
+use composer_protocol::{
+    MessageSource, Role, Seq, ServerMessage, SessionInfo, TurnState, WorkerState,
+};
 
 use crate::store::types::{ChatItem, Streaming};
 
@@ -14,6 +18,8 @@ pub struct SessionStore {
     pub last_seq: Seq,
     /// Turns finished in the current session since attaching (scripts wait on this).
     pub turns_done: u64,
+    /// Workers' last `worker.status`, by session id (seen since the TUI started).
+    pub workers: HashMap<String, WorkerState>,
 }
 
 impl SessionStore {
@@ -25,6 +31,36 @@ impl SessionStore {
     pub fn is_busy(&self) -> bool {
         self.current_info()
             .is_some_and(|s| s.state != TurnState::Idle)
+    }
+
+    /// The current session's orchestration: its orchestrator first, then the workers it
+    /// spawned. Empty for a session without workers or orchestrator.
+    pub fn orchestration(&self) -> Vec<&SessionInfo> {
+        let Some(current) = self.current_info() else {
+            return vec![];
+        };
+        let root = current.parent.as_deref().unwrap_or(&current.id);
+        let workers = self
+            .sessions
+            .iter()
+            .filter(|s| s.parent.as_deref() == Some(root));
+        let root = self.sessions.iter().find(|s| s.id == root);
+        let members: Vec<&SessionInfo> = root.into_iter().chain(workers).collect();
+        if members.len() > 1 { members } else { vec![] }
+    }
+
+    /// What a session is doing, for lists: `running`, `waiting`, `approval`, `idle`, or a
+    /// worker's `starting` / `done` / `failed`.
+    pub fn status(&self, session: &SessionInfo) -> &'static str {
+        match (session.state, self.workers.get(&session.id)) {
+            (TurnState::Running, _) => "running",
+            (TurnState::Waiting, _) => "waiting",
+            (TurnState::AwaitingApproval, _) => "approval",
+            (TurnState::Idle, Some(WorkerState::Starting)) => "starting",
+            (TurnState::Idle, Some(WorkerState::Done)) => "done",
+            (TurnState::Idle, Some(WorkerState::Failed)) => "failed",
+            (TurnState::Idle, _) => "idle",
+        }
     }
 
     /// Switches to `id`; the chat refills from the attach replay.

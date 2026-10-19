@@ -50,7 +50,23 @@ pub fn complete(line: &str, state: &AppState) -> Completions {
         "new" => agents(arg, state),
         "open" | "o" => pages(arg, state),
         "app" => app_sites(arg, state),
-        "project" | "p" if is_local(&state.conn.server_url) => directories(arg),
+        "project" | "p" => {
+            let unset = state
+                .session
+                .current_info()
+                .and_then(|s| s.project.as_deref())
+                .filter(|_| starts_with("none", arg))
+                .map(|project| Candidate {
+                    text: "none".into(),
+                    detail: format!("unset {project}"),
+                });
+            let folders = if is_local(&state.conn.server_url) {
+                projects(arg, state.projects_dir.as_deref())
+            } else {
+                Vec::new()
+            };
+            unset.into_iter().chain(folders).collect()
+        }
         _ => Vec::new(),
     };
     Completions {
@@ -191,6 +207,30 @@ fn is_local(server_url: &str) -> bool {
         .next()
         .unwrap_or("");
     matches!(host, "127.0.0.1" | "localhost" | "[")
+}
+
+/// As the server reads it: `~/...` and `/...` are paths; anything else (`comp`, `work/api`)
+/// is inside the projects directory.
+fn projects(arg: &str, projects_dir: Option<&str>) -> Vec<Candidate> {
+    let is_path = arg.starts_with(['~', '/']);
+    let Some(dir) = projects_dir.filter(|_| !is_path) else {
+        return directories(arg);
+    };
+    let base = format!("{}/", dir.trim_end_matches('/'));
+    directories(&format!("{base}{arg}"))
+        .into_iter()
+        .filter_map(|c| {
+            let name = c
+                .text
+                .strip_prefix(&base)?
+                .trim_end_matches('/')
+                .to_string();
+            Some(Candidate {
+                detail: format!("{base}{name}"),
+                text: name,
+            })
+        })
+        .collect()
 }
 
 /// Directories, like vim's file completion: `~/Pro` → `~/Projects/`. Hidden ones only after a `.`.
@@ -337,6 +377,23 @@ mod tests {
     }
 
     #[test]
+    fn a_project_can_be_unset() {
+        let mut state = state();
+        state.conn.server_url = "https://home.tail1234.ts.net".into();
+        assert!(
+            complete("project n", &state).items.is_empty(),
+            "no project yet"
+        );
+        state.session.sessions[0].project = Some("/home/u/Projects/composer".into());
+        state.session.current = Some("a3f1".into());
+        let items = complete("project n", &state).items;
+        assert_eq!(
+            (items[0].text.as_str(), items[0].detail.as_str()),
+            ("none", "unset /home/u/Projects/composer")
+        );
+    }
+
+    #[test]
     fn project_directories_only_for_a_local_server() {
         assert!(is_local("http://127.0.0.1:7420"));
         assert!(is_local("http://localhost:7420"));
@@ -354,5 +411,15 @@ mod tests {
             directories(&format!("{base}a"))[0].text,
             format!("{base}alpha/")
         );
+
+        // Names come from the projects directory; paths still complete as paths.
+        let projects_dir = Some(dir.path().to_str().unwrap());
+        let names: Vec<(String, String)> = projects("b", projects_dir)
+            .into_iter()
+            .map(|c| (c.text, c.detail))
+            .collect();
+        assert_eq!(names, [("beta".to_string(), format!("{base}beta"))]);
+        assert_eq!(projects(&base, projects_dir).len(), 2);
+        assert_eq!(projects("b", None), directories("b"));
     }
 }

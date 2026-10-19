@@ -110,6 +110,19 @@ final class MessageSubmitted extends AppAction {
   final String text;
 }
 
+/// The composer went from empty to holding a draft, or back.
+final class DraftChanged extends AppAction {
+  const DraftChanged(this.url, {required this.drafting});
+  final String url;
+  final bool drafting;
+}
+
+/// Unset the open session's project.
+final class ProjectCleared extends AppAction {
+  const ProjectCleared(this.url);
+  final String url;
+}
+
 final class CancelRequested extends AppAction {
   const CancelRequested(this.url);
   final String url;

@@ -8,7 +8,7 @@ const _keep = Object();
 
 /// What the app knows about a server right now (not persisted).
 class ServerStatus {
-  const ServerStatus({this.link = LinkState.connecting, this.error, this.retryAt, this.info, this.sessions = const [], this.approvals = const [], this.chat, this.page = const PageState(), this.sites = const []});
+  const ServerStatus({this.link = LinkState.connecting, this.error, this.retryAt, this.info, this.sessions = const [], this.approvals = const [], this.chat, this.page = const PageState(), this.sites = const [], this.workers = const {}});
 
   static const initial = ServerStatus();
 
@@ -36,9 +36,34 @@ class ServerStatus {
   /// From `/api/sites`, for the site list and the "App" button.
   final List<SiteSummary> sites;
 
+  /// Workers' last `worker.status`, by session id (seen since the app connected).
+  final Map<String, WorkerState> workers;
+
   bool hasApp(String site) => sites.any((s) => s.name == site && s.appBuilt);
 
   SessionInfo? session(String id) => sessions.where((s) => s.id == id).firstOrNull;
+
+  /// The orchestration `id` belongs to: its orchestrator first, then the workers it spawned.
+  /// Empty for a session without workers or orchestrator.
+  List<SessionInfo> orchestration(String id) {
+    final rootId = session(id)?.parent ?? id;
+    final root = session(rootId);
+    if (root == null) return const [];
+    final members = [root, ...sessions.where((s) => s.parent == rootId)];
+    return members.length > 1 ? members : const [];
+  }
+
+  /// What a session is doing: `running`, `waiting`, `approval`, `idle`, or a worker's
+  /// `starting` / `done` / `failed`.
+  String activity(SessionInfo s) => switch ((s.state, workers[s.id])) {
+        (TurnState.running, _) => 'running',
+        (TurnState.waiting, _) => 'waiting',
+        (TurnState.awaitingApproval, _) => 'approval',
+        (TurnState.idle, WorkerState.starting) => 'starting',
+        (TurnState.idle, WorkerState.done) => 'done',
+        (TurnState.idle, WorkerState.failed) => 'failed',
+        _ => 'idle',
+      };
 
   ServerStatus copyWith({
     LinkState? link,
@@ -50,6 +75,7 @@ class ServerStatus {
     Object? chat = _keep,
     PageState? page,
     List<SiteSummary>? sites,
+    Map<String, WorkerState>? workers,
   }) =>
       ServerStatus(
         link: link ?? this.link,
@@ -61,5 +87,6 @@ class ServerStatus {
         chat: identical(chat, _keep) ? this.chat : chat as ChatState?,
         page: page ?? this.page,
         sites: sites ?? this.sites,
+        workers: workers ?? this.workers,
       );
 }

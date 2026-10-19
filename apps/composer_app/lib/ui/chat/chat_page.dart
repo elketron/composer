@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../state/actions.dart';
 import '../../theme/composer_theme.dart';
 import '../../theme/tokens.dart' as t;
 import '../pages/page_navigation.dart';
@@ -25,6 +26,12 @@ class ChatPage extends StatelessWidget {
           if (chat != null) TextSpan(text: '  #${chat.session}', style: mono(size: 12, color: t.faint)),
         ])),
         actions: [
+          if (session?.project != null)
+            IconButton(
+              tooltip: 'Unset the project (${session!.project!.split('/').last})',
+              onPressed: () => StoreScope.read(context).dispatch(ProjectCleared(url)),
+              icon: const Icon(Icons.folder_off_outlined, size: 20, color: t.muted),
+            ),
           IconButton(
             tooltip: 'Sites',
             onPressed: () => openPage(context, url, 'site://home'),

@@ -23,11 +23,20 @@ class MessageComposer extends StatefulWidget {
 class _MessageComposerState extends State<MessageComposer> {
   final _text = TextEditingController();
   final _focus = FocusNode();
+  bool _drafting = false;
 
   @override
   void initState() {
     super.initState();
-    _text.addListener(() => setState(() {}));
+    _text.addListener(() {
+      setState(() {});
+      // Only the change matters (a worker finishing doesn't switch the chat away from a draft).
+      final drafting = _text.text.trim().isNotEmpty;
+      if (drafting != _drafting) {
+        _drafting = drafting;
+        StoreScope.read(context).dispatch(DraftChanged(widget.url, drafting: drafting));
+      }
+    });
     if (Platform.isLinux || Platform.isWindows || Platform.isMacOS) _focus.requestFocus();
   }
 

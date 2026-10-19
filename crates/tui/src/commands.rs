@@ -1,17 +1,22 @@
 //! `:` commands.
 
 use crate::action::Action;
+use crate::store::types::PickerKind;
 
 /// Every command, as shown by help: (usage, what it does).
-pub const COMMANDS: [(&str, &str); 10] = [
+pub const COMMANDS: [(&str, &str); 11] = [
     (
         ":new [agent]",
         "start a new session (default agent, or e.g. orchestrator)",
     ),
     (":attach <id>", "switch to a session by id (or Space w)"),
     (
-        ":project [path]",
-        "set the active project; without a path, clear it",
+        ":workers",
+        "this orchestration's sessions (Space o; ]w / [w step through them)",
+    ),
+    (
+        ":project [name|none]",
+        "set the active project: a folder in the projects dir (or ~/path); `none` unsets it",
     ),
     (":open <url>", "open a page, e.g. :open memory/user"),
     (
@@ -39,7 +44,8 @@ pub fn parse_command(line: &str) -> Result<Action, String> {
         "attach" | "a" => arg
             .map(Action::AttachSession)
             .ok_or_else(|| "usage: :attach <session id>".into()),
-        "project" | "p" => Ok(Action::SetProject(arg)),
+        "workers" => Ok(Action::OpenPicker(PickerKind::Orchestration)),
+        "project" | "p" => Ok(Action::SetProject(arg.filter(|a| a != "none"))),
         "open" | "o" => arg
             .map(|url| {
                 Action::OpenUrl(if url.starts_with("site://") {
@@ -81,6 +87,7 @@ mod tests {
             Ok(Action::OpenUrl("site://memory/user".into()))
         );
         assert_eq!(parse_command("project"), Ok(Action::SetProject(None)));
+        assert_eq!(parse_command("project none"), Ok(Action::SetProject(None)));
         assert!(parse_command("attach").is_err());
         assert!(parse_command("frobnicate").is_err());
     }

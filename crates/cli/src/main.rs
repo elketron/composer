@@ -25,7 +25,8 @@ struct Cli {
     /// Agent for new sessions.
     #[arg(long, default_value = "default", global = true)]
     agent: String,
-    /// Active project directory for a new session.
+    /// Active project for a new session: a name in the projects directory (`[projects] dir`,
+    /// default ~/Projects), `.` for this directory, or a path.
     #[arg(long, short, global = true)]
     project: Option<String>,
 }
@@ -106,8 +107,9 @@ enum DevicesAction {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let cli = Cli::parse();
+    let mut cli = Cli::parse();
     let home = Home::from_env();
+    cli.project = cli.project.map(project_arg);
     let tui_command = cli.command.is_none();
     if !tui_command {
         // Logging would garble the TUI, so only the other commands log to stderr.
@@ -247,6 +249,19 @@ async fn update(home: &Home, dry_run: bool) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// `.`, `./x` and `../x` are this machine's current directory: made absolute here. Names and
+/// other paths go to the server as they are (a name is a folder in its projects directory).
+fn project_arg(project: String) -> String {
+    let relative = project == "."
+        || project == ".."
+        || project.starts_with("./")
+        || project.starts_with("../");
+    match std::env::current_dir() {
+        Ok(cwd) if relative => cwd.join(&project).display().to_string(),
+        _ => project,
+    }
+}
+
 /// Connects to the remote server from `composer login`, or the local one.
 fn tui_options(
     home: &Home,
@@ -265,6 +280,7 @@ fn tui_options(
             new,
             agent: agent.to_string(),
             project,
+            projects_dir: Some(config.projects.dir.clone()),
         },
         context_limit: config.agent.compaction_threshold,
     })

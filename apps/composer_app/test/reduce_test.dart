@@ -132,6 +132,13 @@ void main() {
       expect(attach.since, 7);
     });
 
+    test('unsetting the project goes to the open session', () {
+      expect(reduce(loaded([home]), ProjectCleared(home.url)).$2, isEmpty);
+      final state = reduce(loaded([home]), SessionOpened(home.url, 'a')).$1;
+      final command = (reduce(state, ProjectCleared(home.url)).$2.single as SendCommand).command as ClientCommandProjectSet;
+      expect((command.session, command.path), ('a', null));
+    });
+
     test('messages and cancel go to the open session only', () {
       expect(reduce(loaded([home]), MessageSubmitted(home.url, 'x')).$2, isEmpty);
       final state = reduce(loaded([home]), SessionOpened(home.url, 'a')).$1;
@@ -329,6 +336,34 @@ void main() {
         const ServerMessageWorkerStatus(worker: 'w', ticket: '0001', parent: 'o', state: WorkerState.running),
       );
       expect(reduce(loaded([home]), running).$2, isEmpty);
+    });
+
+    test('the worker you watch finishing hands back to its orchestrator, unless you are writing', () {
+      SessionInfo member(String id, {String? parent, TurnState state = TurnState.idle}) =>
+          SessionInfo(id: id, agent: 'default', state: state, lastSeq: 0, updated: '', parent: parent, ticket: parent == null ? null : '0001');
+      final sessions = [member('x'), member('o'), member('w1', parent: 'o'), member('w2', parent: 'o', state: TurnState.running)];
+      var state = reduce(withSessions(loaded([home]), sessions), SessionOpened(home.url, 'w1')).$1;
+      final status = state.statusOf(home.url);
+      expect(status.orchestration('w1').map((s) => s.id), ['o', 'w1', 'w2']);
+      expect(status.orchestration('o').map((s) => s.id), ['o', 'w1', 'w2']);
+      expect(status.orchestration('x'), isEmpty);
+      expect(status.activity(status.session('w2')!), 'running');
+
+      ServerEvent finished(String worker, WorkerState state) =>
+          ServerEvent(home.url, ServerMessageWorkerStatus(worker: worker, ticket: '0001', parent: 'o', state: state));
+      // Another worker: you stay, and it shows as done.
+      var (next, effects) = reduce(state, finished('w2', WorkerState.done));
+      expect(next.statusOf(home.url).chat!.session, 'w1');
+      expect(next.statusOf(home.url).activity(member('w2', parent: 'o')), 'done');
+
+      (next, effects) = reduce(next, finished('w1', WorkerState.done));
+      expect(next.statusOf(home.url).chat!.session, 'o');
+      expect((effects.whereType<SendCommand>().last.command as ClientCommandSessionAttach).session, 'o');
+      expect(next.notice!.text, contains('back to the orchestrator'));
+      expect(effects.whereType<Notify>(), isEmpty, reason: 'you are looking at the orchestrator now');
+
+      state = reduce(state, DraftChanged(home.url, drafting: true)).$1;
+      expect(reduce(state, finished('w1', WorkerState.failed)).$1.statusOf(home.url).chat!.session, 'w1');
     });
 
     test('Android keeps running while there are servers', () {

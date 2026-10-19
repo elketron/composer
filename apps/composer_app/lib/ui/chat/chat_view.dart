@@ -6,12 +6,15 @@ import '../../state/server_status.dart';
 import '../../theme/composer_theme.dart';
 import '../../theme/tokens.dart' as t;
 import '../pages/page_navigation.dart';
+import '../../state/actions.dart';
+import '../store_scope.dart';
 import 'agent_text.dart';
 import 'approval_card.dart';
 import 'chat_header.dart';
 import 'chat_item_view.dart';
 import 'collapsible_row.dart';
 import 'message_composer.dart';
+import 'orchestration_bar.dart';
 
 /// A session's chat: transcript (newest at the bottom, following the stream), its approvals,
 /// and the composer.
@@ -57,7 +60,9 @@ class ChatView extends StatelessWidget {
           parent: parent,
           onClose: onClose,
           onBrowse: () => openPage(context, url, 'site://home'),
+          onClearProject: () => StoreScope.read(context).dispatch(ProjectCleared(url)),
         ),
+      OrchestrationBar(url: url, status: status, session: chat.session),
       Expanded(
         child: rows.isEmpty
             ? Center(child: Text(chat.lastSeq == 0 ? 'Say something to start.' : '', style: const TextStyle(color: t.faint)))

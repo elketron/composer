@@ -75,6 +75,25 @@ impl ChatPane {
             spans.push(sep());
             spans.push(Span::styled(label, Style::new().fg(color)));
         }
+        let members = state.session.orchestration();
+        if let Some(workers) = members.get(1..).filter(|w| !w.is_empty()) {
+            let busy = workers
+                .iter()
+                .filter(|w| {
+                    matches!(
+                        state.session.status(w),
+                        "running" | "waiting" | "approval" | "starting"
+                    )
+                })
+                .count();
+            spans.push(sep());
+            let color = if busy > 0 { theme::WARN } else { theme::FAINT };
+            spans.push(Span::styled(
+                format!("{busy}/{} workers busy", workers.len()),
+                Style::new().fg(color),
+            ));
+            spans.push(Span::styled(" (space o)", theme::faint()));
+        }
         spans.push(Span::raw(" "));
         Line::from(spans)
     }

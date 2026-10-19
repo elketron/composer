@@ -76,7 +76,7 @@ impl WorkerRegistry {
             .frontmatter
             .get_str("project")
             .filter(|p| !p.is_empty())
-            .and_then(|p| resolve_project(&p).ok())
+            .and_then(|p| resolve_project(&p, &server.config.projects.dir).ok())
             .or_else(|| parent.info().project);
         let listen = server
             .listen_addr()

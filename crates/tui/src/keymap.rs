@@ -57,6 +57,21 @@ impl Keymap {
                 Action::OpenPicker(PickerKind::Sessions),
                 "sessions and workers",
             ),
+            (
+                vec![space, key('o')],
+                Action::OpenPicker(PickerKind::Orchestration),
+                "this orchestration: orchestrator and workers, with what each is doing",
+            ),
+            (
+                vec![key(']'), key('w')],
+                Action::CycleOrchestration(1),
+                "next session of this orchestration",
+            ),
+            (
+                vec![key('['), key('w')],
+                Action::CycleOrchestration(-1),
+                "previous session of this orchestration",
+            ),
             (vec![tab], Action::FocusNext, "switch pane"),
             (
                 vec![ctrl('w'), key('h')],

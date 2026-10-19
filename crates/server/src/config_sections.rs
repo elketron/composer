@@ -27,7 +27,8 @@ pub struct ServerConfig {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ProjectsConfig {
-    /// Where `new_project` creates projects (`~` is your home folder).
+    /// Where your projects live (`~` is your home folder): `new_project` creates them here,
+    /// and a project given by name (`:project composer`, `--project composer`) is a folder here.
     #[serde(default = "default_projects_dir")]
     pub dir: String,
 }

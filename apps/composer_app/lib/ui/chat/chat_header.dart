@@ -6,7 +6,7 @@ import '../../theme/tokens.dart' as t;
 
 /// Agent, id, state and context use of the open session.
 class ChatHeader extends StatelessWidget {
-  const ChatHeader({super.key, required this.sessionId, this.session, this.parent, this.onClose, this.onBrowse});
+  const ChatHeader({super.key, required this.sessionId, this.session, this.parent, this.onClose, this.onBrowse, this.onClearProject});
 
   final String sessionId;
   final SessionInfo? session;
@@ -17,6 +17,9 @@ class ChatHeader extends StatelessWidget {
 
   /// Open the sites (site://home) in the reader.
   final VoidCallback? onBrowse;
+
+  /// Unset the session's project.
+  final VoidCallback? onClearProject;
 
   @override
   Widget build(BuildContext context) {
@@ -47,6 +50,14 @@ class ChatHeader extends StatelessWidget {
         if (s?.project != null) ...[
           const SizedBox(width: 10),
           Tooltip(message: s!.project!, child: Text(s.project!.split('/').last, style: mono(size: 11, color: t.faint))),
+          if (onClearProject != null)
+            IconButton(
+              key: const Key('clear-project'),
+              tooltip: 'Unset the project',
+              visualDensity: VisualDensity.compact,
+              onPressed: onClearProject,
+              icon: const Icon(Icons.close, size: 13, color: t.faint),
+            ),
         ],
         if (onBrowse != null)
           IconButton(

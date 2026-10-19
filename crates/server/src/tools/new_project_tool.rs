@@ -23,8 +23,8 @@ impl Tool for NewProjectTool {
         "Create a project: a new folder in the user's projects directory, its memory page \
          (site://memory/projects/<name>) and its entry in the memory index's registry. With \
          `template`, the folder starts as a copy of that site's templates/project/ folder; \
-         otherwise it gets a README. Never touches an existing folder. Afterwards `set_project` \
-         makes it the active project."
+         otherwise it gets a README. Never touches an existing folder. It becomes this session's \
+         active project."
     }
 
     fn parameters(&self) -> Value {
@@ -103,9 +103,17 @@ impl Tool for NewProjectTool {
         let from = workflow
             .map(|s| format!(" from site://{s}'s template"))
             .unwrap_or_default();
+        let active = folder
+            .canonicalize()
+            .unwrap_or(folder)
+            .display()
+            .to_string();
+        context
+            .session
+            .update_info(&server.hub, |info| info.project = Some(active));
         Ok(format!(
             "created {path}{from} and {page_url}{registered}.\n\
-             Next: `set_project {path}` to work in it."
+             It is now this session's active project."
         ))
     }
 }

@@ -70,7 +70,7 @@ Plus `templates/sdk` (TS) and `templates/app` (Svelte scaffold).
   - Model: `qwen3.8 flash next` — the only model on the server, so the id is taken from `GET /v1/models` at startup (overridable in config).
   - Context: 256K. Compaction threshold configurable, default well below max (e.g. 160K) since long contexts are slow locally.
   - **Parallelism 2:** ~40–50 t/s with one stream, ~20–30 t/s each with two. The parent server owns a **global slot limiter** (default 2 slots) shared by all sessions, workers and compaction turns.
-- **Sessions:** free-form, many per project. A session may have an **active project** (a real code directory outside the workspace), set with `:project <path>` in the TUI or by the agent via `set_project(path)`. Persisted in `state/sessions/`.
+- **Sessions:** free-form, many per project. A session may have an **active project** (a real code directory outside the workspace), set with `:project <name>` in the TUI, `composer --project <name>`, or by the agent via `set_project(path)`. A name (or relative path) is a folder in the projects directory (`[projects] dir` in config.toml, default `~/Projects`, also where `new_project` creates projects); `~/...` and absolute paths are taken as they are, and the CLI's `--project .` is the current directory. `:project none` (or the × by the project in the app's chat header) unsets it; `new_project` makes the new project active. A new session (`:new`) starts in the current session's project. Persisted in `state/sessions/`.
 - **File watcher:** keeps the index fresh, pushes page changes to connected clients.
 - **Static serving:** built micro apps at `http://localhost:PORT/<site>/`, opened with `xdg-open`.
 
@@ -196,6 +196,7 @@ Everything else lives in floating windows (fuzzy finder, telescope-style) instea
 | `Space p` | pages (fuzzy over all URLs + titles) |
 | `Space /` | search (full text + frontmatter filters) |
 | `Space w` | sessions + workers |
+| `Space o` | this orchestration: the orchestrator and its workers, with what each is doing (also `:workers`) |
 | `Space t` | tickets |
 
 ### Modes
@@ -226,9 +227,10 @@ Everything else lives in floating windows (fuzzy finder, telescope-style) instea
 | `gd` | changes view of the active project (toggle); `j`/`k`, `{`/`}` files, `Enter` → editor at that line |
 | `a` | open current site's micro app |
 | `Ctrl-o` | back to the previous chat (e.g. from a worker to the main chat) |
+| `]w` / `[w` | next / previous session of this orchestration |
 | `?` | help overlay (also `:help`): modes, every binding (generated from the keymap), pane keys, commands |
 
-Commands: `:new [agent]`, `:attach <id>`, `:project <path>`, `:open <url>`, `:app [site]`, `:search <q>`, `:pair`, `:q`.
+Commands: `:new [agent]`, `:attach <id>`, `:project <name>`, `:open <url>`, `:app [site]`, `:search <q>`, `:pair`, `:q`.
 
 ### Architecture: Flux state + components
 
@@ -300,6 +302,13 @@ crates/tui/src/
 ### Worker sessions
 
 Attaching to a worker **replaces** the main chat; the title shows a breadcrumb (`orchestrator › worker #0001`). `Ctrl-o` jumps back (a jumplist, like vim).
+
+Switching within an orchestration: the title shows `1/3 workers busy`; `Space o` lists the orchestrator and its workers
+with their state (running, waiting, approval, idle, done, failed) and starts on the likely switch (from the orchestrator,
+the first busy worker; from a worker, the orchestrator), so `Space o Enter` flips between them. `]w` / `[w` step through.
+When the worker you are watching finishes, the chat goes back to the orchestrator, which gets the worker's result next
+(`Ctrl-o` returns to the worker); not while you are in Insert mode. The app does the same with a bar of the
+orchestration's sessions under the chat header, and stays put while the composer holds a draft.
 
 ### Other behaviour
 

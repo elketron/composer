@@ -29,6 +29,8 @@ pub enum Action {
     AttachSession(String),
     /// Back to the previous session (worker → orchestrator).
     JumpBack,
+    /// The next (1) or previous (-1) session of this orchestration: orchestrator, workers.
+    CycleOrchestration(i32),
     SetProject(Option<String>),
 
     // ---- pages ----

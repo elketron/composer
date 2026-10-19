@@ -45,12 +45,13 @@ impl Component for Picker {
         let picker = &state.picker;
         dim(frame.buffer_mut(), area);
         let list_height = picker.items.len().clamp(3, 14) as u16;
-        let rect = centered(area, 88, list_height + 5);
+        let rect = centered(area, 88, list_height + 6);
         frame.render_widget(Clear, rect);
         let title = match picker.kind {
             PickerKind::Pages => " pages ",
             PickerKind::Sites => " sites ",
             PickerKind::Sessions => " sessions ",
+            PickerKind::Orchestration => " orchestration ",
         };
         let block = Block::new()
             .borders(Borders::ALL)

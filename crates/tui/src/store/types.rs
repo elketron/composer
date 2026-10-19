@@ -22,6 +22,8 @@ pub enum PickerKind {
     Pages,
     Sites,
     Sessions,
+    /// The current session's orchestrator and its workers.
+    Orchestration,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -132,6 +134,8 @@ pub struct Startup {
     pub new: bool,
     pub agent: String,
     pub project: Option<String>,
+    /// `[projects] dir` from the config (`~/Projects`): `:project <name>` completes from it.
+    pub projects_dir: Option<String>,
 }
 
 /// A recipe waiting for your approval.
