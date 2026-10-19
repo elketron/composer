@@ -16,13 +16,17 @@ impl Tool for SpawnWorkerTool {
     fn description(&self) -> &'static str {
         "Start a worker agent on a ticket (site://orchestration/tickets/<id>). The ticket becomes \
          `claimed`; the worker runs in its own session and process. You get a message when it \
-         finishes; then read the ticket's Result. Returns immediately."
+         finishes; then read the ticket's Result. Returns immediately. `agent` picks which worker \
+         agent (listed in your Environment); default: the ticket's `agent:`, else `worker`."
     }
 
     fn parameters(&self) -> Value {
         json!({
             "type": "object",
-            "properties": { "ticket": { "type": "string", "description": "ticket id, e.g. 0003" } },
+            "properties": {
+                "ticket": { "type": "string", "description": "ticket id, e.g. 0003" },
+                "agent": { "type": "string", "description": "worker agent, e.g. coder (optional)" }
+            },
             "required": ["ticket"]
         })
     }
@@ -33,13 +37,21 @@ impl Tool for SpawnWorkerTool {
         if context.server.parent.is_some() {
             return Err("workers cannot start workers".into());
         }
-        let worker = context
+        let worker = context.server.workers.spawn(
+            &context.server,
+            &context.session,
+            &ticket,
+            args.agent.as_deref(),
+        )?;
+        let agent = context
             .server
-            .workers
-            .spawn(&context.server, &context.session, &ticket)?;
+            .sessions
+            .get(&worker)
+            .map(|s| s.info().agent)
+            .unwrap_or_default();
         Ok(format!(
-            "worker #{worker} started on ticket {ticket} (now claimed). You will get a message when it \
-             finishes; don't wait for it in this turn."
+            "worker #{worker} ({agent}) started on ticket {ticket} (now claimed). You will get a \
+             message when it finishes; don't wait for it in this turn."
         ))
     }
 }

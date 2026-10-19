@@ -35,6 +35,20 @@ pub fn system_prompt(
         )),
         None => env.push_str("\n- active project: none (set one with `set_project`)"),
     }
+    if agent.allows_tool("spawn_worker") {
+        let workers: Vec<String> = AgentDefinition::workers(workspace, index)
+            .into_iter()
+            .map(|w| format!("\n  - `{}`: {}", w.name, w.description))
+            .collect();
+        env.push_str(&format!(
+            "\n- worker agents (`spawn_worker`'s `agent`):{}",
+            if workers.is_empty() {
+                " none".to_string()
+            } else {
+                workers.concat()
+            }
+        ));
+    }
     sections.push(env);
 
     let mut memory = Vec::new();

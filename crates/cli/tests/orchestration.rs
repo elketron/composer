@@ -134,7 +134,9 @@ async fn orchestrator_runs_a_worker_process_on_a_ticket() {
     let base_url = fake_model(Scripts {
         orchestrator: VecDeque::from([
             Reply::Call("run", json!({ "site": "orchestration", "recipe": "new-ticket", "args": ["Write a note"] })),
-            Reply::Call("spawn_worker", json!({ "ticket": "1" })),
+            // Not a worker agent: refused, with the ones there are.
+            Reply::Call("spawn_worker", json!({ "ticket": "1", "agent": "default" })),
+            Reply::Call("spawn_worker", json!({ "ticket": "1", "agent": "reviewer" })),
             Reply::Text("worker started"),
             // after the worker's finish message:
             Reply::Text("ticket 0001 is done"),
@@ -150,6 +152,15 @@ async fn orchestrator_runs_a_worker_process_on_a_ticket() {
     let dir = tempfile::tempdir().unwrap();
     let home = Home::new(dir.path());
     init_home(&home).await.unwrap();
+    let worker = std::fs::read_to_string(dir.path().join("sites/agents/worker.md")).unwrap();
+    std::fs::write(
+        dir.path().join("sites/agents/reviewer.md"),
+        worker.replace("name: worker", "name: reviewer").replace(
+            "description: general worker; carries out any ticket",
+            "description: reviews",
+        ),
+    )
+    .unwrap();
     std::fs::write(
         home.config_file(),
         format!("[provider]\nbase_url = \"{base_url}\"\n"),
@@ -234,6 +245,14 @@ async fn orchestrator_runs_a_worker_process_on_a_ticket() {
         ("0001", orchestrator.as_str())
     );
     let worker = worker.clone();
+    assert!(events.iter().any(|e| matches!(e, ServerMessage::ToolResult { result, is_error: true, .. }
+        if result.contains("`default` is not a worker agent") && result.contains("worker agents: reviewer, worker"))));
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e, ServerMessage::SessionUpdated { session }
+        if session.id == worker && session.agent == "reviewer"))
+    );
     let ticket_file = dir.path().join("sites/orchestration/tickets/0001.md");
     assert!(
         std::fs::read_to_string(&ticket_file)

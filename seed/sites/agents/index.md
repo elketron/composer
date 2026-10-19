@@ -14,6 +14,10 @@ Agent definitions. Each page is one agent: frontmatter configures it, the body i
 | [orchestrator](orchestrator.md) | breaks plans into tickets and runs workers |
 | [worker](worker.md) | carries out one ticket |
 
+Worker agents (`role: worker`) are the ones `spawn_worker` can start. Add more for specific jobs
+(a `coder`, a `reviewer`, a `tester`): copy [worker](worker.md), change its prompt and tools, keep
+`role: worker` and the `finish` tool, and give it a `description:`. Orchestrators see the list.
+
 ## Page format
 
 ```markdown
@@ -21,6 +25,8 @@ Agent definitions. Each page is one agent: frontmatter configures it, the body i
 title: Worker
 type: agent
 name: worker
+role: worker            # spawn_worker can start it (needs the finish tool)
+description: carries out one ticket   # shown to orchestrators
 model: default          # "default" = the provider's model
 tools: [open, search, list_sites, write, edit, actions, run, finish]
 sites: all              # or a list: [memory, plans]

@@ -84,7 +84,7 @@ Plus `templates/sdk` (TS) and `templates/app` (Svelte scaffold).
 | `write(url, content)` / `edit(url, ...)` | create/modify pages (incl. memory, during a session) |
 | `actions(site)` | list justfile recipes |
 | `run(site, recipe, args)` | run a recipe (approval rules below) |
-| `spawn_worker(ticket)` | orchestrator only |
+| `spawn_worker(ticket, agent?)` | orchestrator only |
 | `new_site(name, title, about)` | create `<name>/index.md` (stub layout, page format, rules) and list it on Home |
 | `new_app(site)` | copy app scaffold into `<site>/ui/` |
 | `new_project(name, about, template?)` | create `<projects.dir>/<name>` (README, or a copy of `<template site>/templates/project/`), its memory page and registry entry |
@@ -151,6 +151,7 @@ Each site's `index.md` explains its purpose and conventions; the agent opens it 
 
 - Orchestrator writes a ticket: `site://orchestration/tickets/0001.md`.
 - `spawn_worker(ticket)` creates the worker session (ticket + parent set, visible at once), sets the ticket `claimed` and starts `composer worker --session … --ticket … --agent … --parent http://…` as a child process (`agent.max_workers`, default 1). Its log: `state/workers/<id>.log`.
+- Worker agents: an agent page with `role: worker` (or, from before `role:`, no role and the `finish` tool) is one `spawn_worker` can start, e.g. a `coder`, `reviewer` or `tester`. Which one: `spawn_worker`'s `agent`, else the ticket's `agent:`, else `worker`; anything else is refused with the list. Agents that may call `spawn_worker` get the worker agents and their `description:` in their Environment.
 - The worker process is a server instance without an API: model slots are lent by the parent (`slot.acquire`/`slot.release`), recipe approvals are asked through the parent (`approval.ask`; approval prompts reach every client), and its session events go to the parent (`worker.event`), which re-sequences them into the worker session's transcript. The worker keeps its model history in `state/workers/sessions/<id>/`.
 - `finish(done|failed, summary)` (worker only) ends it: the server sets the ticket status and sends the orchestrator a message (source: the worker), which starts its next turn. A worker that ends its turn without `finish` is reminded once; a process that exits without it fails the ticket.
 - **Plans vs tickets:** plans in `site://plans` hold longer-lived intent; tickets are units of work that link back to a plan.

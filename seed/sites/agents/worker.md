@@ -2,6 +2,8 @@
 title: Worker
 type: agent
 name: worker
+role: worker
+description: general worker; carries out any ticket
 model: default
 tools: [open, search, list_sites, write, edit, actions, run, finish]
 sites: all

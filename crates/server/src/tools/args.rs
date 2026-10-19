@@ -73,6 +73,8 @@ pub struct NewProjectArgs {
 #[derive(Debug, Deserialize)]
 pub struct SpawnWorkerArgs {
     pub ticket: String,
+    #[serde(default)]
+    pub agent: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

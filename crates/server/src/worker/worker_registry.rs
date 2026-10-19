@@ -29,13 +29,14 @@ impl WorkerRegistry {
             .collect()
     }
 
-    /// Starts a worker process on ticket `id` for the orchestrator `parent`.
-    /// Returns the worker's session id.
+    /// Starts a worker process on ticket `id` for the orchestrator `parent`, running
+    /// `agent` (else the ticket's `agent:`, else `worker`). Returns the worker's session id.
     pub fn spawn(
         &self,
         server: &Arc<Server>,
         parent: &Arc<Session>,
         id: &str,
+        agent: Option<&str>,
     ) -> Result<String, String> {
         let running = self.running();
         if running.len() >= server.config.agent.max_workers as usize {
@@ -66,12 +67,28 @@ impl WorkerRegistry {
             }
             _ => {}
         }
-        let agent = page
-            .frontmatter
-            .get_str("agent")
+        let agent = agent
+            .map(|a| a.trim().to_string())
             .filter(|a| !a.is_empty())
+            .or_else(|| page.frontmatter.get_str("agent").filter(|a| !a.is_empty()))
             .unwrap_or_else(|| "worker".into());
-        AgentDefinition::load(&server.workspace, &agent).map_err(|e| e.to_string())?;
+        let definition =
+            AgentDefinition::load(&server.workspace, &agent).map_err(|e| e.to_string())?;
+        if !definition.is_worker() {
+            let index = server.index.read().expect("index lock");
+            let workers: Vec<String> = AgentDefinition::workers(&server.workspace, &index)
+                .into_iter()
+                .map(|w| w.name)
+                .collect();
+            return Err(format!(
+                "`{agent}` is not a worker agent (its page needs `role: worker`); worker agents: {}",
+                if workers.is_empty() {
+                    "none".to_string()
+                } else {
+                    workers.join(", ")
+                }
+            ));
+        }
         let project = page
             .frontmatter
             .get_str("project")

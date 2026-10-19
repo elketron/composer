@@ -25,7 +25,7 @@ title: Implement HTTP page endpoints
 type: ticket
 id: "0003"
 status: open          # open | claimed | done | failed
-agent: worker         # agent definition in site://agents
+agent: worker         # a worker agent (role: worker) in site://agents; spawn_worker's agent overrides
 plan: site://plans/server-api
 project: ~/Projects/composer
 created: 2026-10-18
