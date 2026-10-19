@@ -3,7 +3,7 @@
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use composer_core::{Frontmatter, Index};
 
-use crate::reminders::{DueReminder, ReminderAction};
+use crate::reminders::DueReminder;
 
 /// Open, undelivered reminders due at or before `now` (local time), oldest first.
 /// `due` is a date, optionally with a time (`2026-10-19 20:00`); `time:` sets the time
@@ -27,7 +27,17 @@ pub fn due_reminders(
                 url: e.url.clone(),
                 title: e.title.clone(),
                 due_at,
-                action: action(&e.frontmatter),
+                session: e
+                    .frontmatter
+                    .get_str("session")
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty()),
+                agent: e
+                    .frontmatter
+                    .get_str("agent")
+                    .map(|a| a.trim().to_string())
+                    .filter(|a| !a.is_empty())
+                    .unwrap_or_else(|| "default".into()),
             })
         })
         .collect();
@@ -61,24 +71,29 @@ pub(crate) fn parse_time(text: &str) -> Option<NaiveTime> {
         .ok()
 }
 
-fn action(frontmatter: &Frontmatter) -> ReminderAction {
-    match frontmatter.get_str("action").as_deref().map(str::trim) {
-        Some("agent") => ReminderAction::Agent {
-            session: frontmatter
-                .get_str("session")
-                .filter(|s| !s.trim().is_empty()),
-            agent: frontmatter
-                .get_str("agent")
-                .filter(|a| !a.trim().is_empty())
-                .unwrap_or_else(|| "default".into()),
-        },
-        _ => ReminderAction::Notify,
-    }
-}
-
 /// The page with `notified: <stamp>` set in its frontmatter (replacing an empty one).
 /// `None` if the page has no frontmatter.
 pub fn mark_notified(raw: &str, stamp: &str) -> Option<String> {
+    set_field(raw, "notified", stamp)
+}
+
+/// A reminder page written in a session without saying whose it is: the page with
+/// `session: <session>` added, so it is delivered back there. `None` for anything else.
+pub fn claim_reminder(raw: &str, session: &str) -> Option<String> {
+    let (Some(yaml), _) = Frontmatter::split(raw) else {
+        return None;
+    };
+    let frontmatter = Frontmatter::parse(yaml).ok()?;
+    let unclaimed = frontmatter
+        .get_str("session")
+        .is_none_or(|s| s.trim().is_empty());
+    (frontmatter.matches("type", "reminder") && unclaimed)
+        .then(|| set_field(raw, "session", session))
+        .flatten()
+}
+
+/// Sets `key: value` in the frontmatter, replacing the key's line if there is one.
+fn set_field(raw: &str, key: &str, value: &str) -> Option<String> {
     let newline = if raw.contains("\r\n") { "\r\n" } else { "\n" };
     let first = raw.find(newline)?;
     if raw[..first].trim_end() != "---" {
@@ -86,8 +101,9 @@ pub fn mark_notified(raw: &str, stamp: &str) -> Option<String> {
     }
     let mut lines: Vec<&str> = raw.split(newline).collect();
     let close = lines.iter().skip(1).position(|l| l.trim_end() == "---")? + 1;
-    let line = format!("notified: {stamp}");
-    match (1..close).find(|&i| lines[i].starts_with("notified:")) {
+    let line = format!("{key}: {value}");
+    let prefix = format!("{key}:");
+    match (1..close).find(|&i| lines[i].starts_with(&prefix)) {
         Some(i) => lines[i] = &line,
         None => lines.insert(close, &line),
     }
@@ -150,13 +166,21 @@ mod tests {
         );
         assert_eq!(names("2026-10-19 20:00").len(), 4);
         let ask = due_reminders(&index, at("2026-10-19 09:00"), nine).remove(0);
+        assert_eq!(ask.session.as_deref(), Some("ab12"));
+        assert_eq!(ask.agent, "default");
+    }
+
+    #[test]
+    fn reminders_written_in_a_session_belong_to_it() {
+        let page = "---\ntitle: x\ntype: reminder\nsession:\n---\n# x\n";
         assert_eq!(
-            ask.action,
-            ReminderAction::Agent {
-                session: Some("ab12".into()),
-                agent: "default".into()
-            }
+            claim_reminder(page, "ab12").unwrap(),
+            "---\ntitle: x\ntype: reminder\nsession: ab12\n---\n# x\n"
         );
+        let mine = "---\ntype: reminder\nsession: cd34\n---\n";
+        assert!(claim_reminder(mine, "ab12").is_none(), "already someone's");
+        assert!(claim_reminder("---\ntype: note\n---\n", "ab12").is_none());
+        assert!(claim_reminder("no frontmatter", "ab12").is_none());
     }
 
     #[test]

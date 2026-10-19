@@ -16,7 +16,11 @@ fn at(text: &str) -> NaiveDateTime {
 
 #[tokio::test]
 async fn a_due_reminder_is_delivered_once() {
-    let (dir, server, _p, addr) = start(vec![]).await;
+    let (dir, server, _p, addr) = start(vec![vec![
+        ModelEvent::Content("Time to call.".into()),
+        finished(vec![]),
+    ]])
+    .await;
     let url = SiteUrl::new("plans", "reminders/call.md").unwrap();
     server
         .write_page(
@@ -34,16 +38,28 @@ async fn a_due_reminder_is_delivered_once() {
         matches!(e, ServerMessage::ReminderDue { .. })
     })
     .await;
+    // No session of its own: a new one for the default agent.
+    let ServerMessage::ReminderDue {
+        url,
+        title,
+        due,
+        late: false,
+        session: Some(session),
+    } = event.last().unwrap()
+    else {
+        panic!("{event:?}")
+    };
     assert_eq!(
-        event.last().unwrap(),
-        &ServerMessage::ReminderDue {
-            url: "site://plans/reminders/call.md".into(),
-            title: "Call the printer shop".into(),
-            due: "2099-10-19 20:00".into(),
-            late: false,
-            session: None,
-        }
+        (url.as_str(), title.as_str(), due.as_str()),
+        (
+            "site://plans/reminders/call.md",
+            "Call the printer shop",
+            "2099-10-19 20:00"
+        )
     );
+    assert!(event.iter().any(
+        |e| matches!(e, ServerMessage::SessionUpdated { session: s } if &s.id == session && s.agent == "default")
+    ));
     let page = std::fs::read_to_string(dir.path().join("sites/plans/reminders/call.md")).unwrap();
     assert!(
         page.contains("status: open\nnotified: 2099-10-19 20:00\n---"),
@@ -66,7 +82,7 @@ async fn an_agent_reminder_starts_a_turn() {
     server
         .write_page(
             &url,
-            "---\ntitle: Review the tickets\ntype: reminder\ndue: 2099-10-19 08:00\naction: agent\n---\n",
+            "---\ntitle: Review the tickets\ntype: reminder\ndue: 2099-10-19 08:00\nagent: default\n---\n",
             ChangedBy::Agent,
         )
         .unwrap();
@@ -120,4 +136,82 @@ async fn an_agent_reminder_starts_a_turn() {
         "{}",
         message.content
     );
+}
+
+#[tokio::test]
+async fn a_reminder_comes_back_to_the_session_that_wrote_it() {
+    let page = "---\ntitle: Start ticket 0002\ntype: reminder\ndue: 2099-10-19\ntime: \"20:05\"\nstatus: open\naction: notify\n---\n";
+    let (dir, server, _p, addr) = start(vec![
+        // Turn 1: the agent writes the reminder.
+        vec![finished(vec![tool_call(
+            "w",
+            "write",
+            serde_json::json!({ "url": "site://plans/reminders/start.md", "content": page }),
+        )])],
+        vec![ModelEvent::Content("Noted.".into()), finished(vec![])],
+        // Turn 2: the reminder arrives.
+        vec![ModelEvent::Content("Starting it.".into()), finished(vec![])],
+    ])
+    .await;
+    let mut socket = connect(addr, &server.token).await;
+    send(
+        &mut socket,
+        1,
+        ClientCommand::SessionCreate {
+            agent: "default".into(),
+            project: None,
+        },
+    )
+    .await;
+    let reply = until(&mut socket, |e| {
+        matches!(e, ServerMessage::Ok { id: 1, .. })
+    })
+    .await;
+    let Some(ServerMessage::Ok {
+        result: composer_protocol::CommandResult::Session { session },
+        ..
+    }) = reply.last()
+    else {
+        panic!()
+    };
+    let id = session.id.clone();
+    send(
+        &mut socket,
+        2,
+        ClientCommand::SessionAttach {
+            session: id.clone(),
+            since: None,
+        },
+    )
+    .await;
+    send(
+        &mut socket,
+        3,
+        ClientCommand::MessageSend {
+            session: id.clone(),
+            text: "remind me at 20:05".into(),
+            pages: vec![],
+            images: vec![],
+        },
+    )
+    .await;
+    let events = until(&mut socket, |e| matches!(e, ServerMessage::TurnDone { .. })).await;
+    assert!(events.iter().any(|e| matches!(e, ServerMessage::ToolResult { result, .. } if result.contains("session:` set to this session"))));
+    let written =
+        std::fs::read_to_string(dir.path().join("sites/plans/reminders/start.md")).unwrap();
+    assert!(
+        written.contains(&format!("action: notify\nsession: {id}\n---")),
+        "{written}"
+    );
+
+    let delivered = check_reminders(&server, at("2099-10-19 20:05"));
+    assert_eq!(delivered.len(), 1);
+    let events = until(&mut socket, |e| matches!(e, ServerMessage::TurnDone { .. })).await;
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e, ServerMessage::ReminderDue { session: Some(s), .. } if *s == id))
+    );
+    assert!(events.iter().any(|e| matches!(e, ServerMessage::MessageDone { message, .. }
+        if matches!(message.source, Some(MessageSource::Reminder { .. })) && message.content.starts_with("Start ticket 0002"))));
 }

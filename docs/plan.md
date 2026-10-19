@@ -100,8 +100,9 @@ A page with `type: reminder` goes off when it is due: `due: 2026-10-19` (+ `time
 The server checks its index every 30 s, so edits count right away and anything missed while it was off
 or asleep fires on the first check (marked late). Each one fires once: the server writes `notified:` into
 the page. Delivery: a `reminder.due` event to every client (system notification in the app, the status
-bar in the TUI); with `action: agent` also a message (source `reminder`) into `session:`, or a new session
-for `agent:` (default `default`).
+bar in the TUI), and a message (source `reminder`, starts a turn) into the reminder's session. A reminder
+belongs to the session that wrote it: `write` / `edit` fill in `session:` when a reminder page has none.
+Without a session (or when it's gone), a new session is started for it, for `agent:` (default `default`).
 
 ### Recipe approval
 

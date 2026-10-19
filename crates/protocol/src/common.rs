@@ -72,7 +72,7 @@ pub enum MessageSource {
         session: SessionId,
     },
     Server,
-    /// A reminder page came due (`action: agent`).
+    /// A reminder page came due.
     Reminder {
         url: Url,
     },

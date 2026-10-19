@@ -705,7 +705,7 @@ final class MessageSourceServer extends MessageSource {
       };
 }
 
-/// A reminder page came due (`action: agent`).
+/// A reminder page came due.
 final class MessageSourceReminder extends MessageSource {
   const MessageSourceReminder({
     required this.url,
@@ -1494,7 +1494,7 @@ final class ServerMessageReminderDue extends ServerMessage {
   /// Delivered well after it was due (the server was off).
   final bool late;
 
-  /// The session it was posted to (`action: agent`).
+  /// The session it was posted to: its own, or a new one. None if that failed.
   final String? session;
 
   factory ServerMessageReminderDue.fromJson(Map<String, Object?> json) => ServerMessageReminderDue(

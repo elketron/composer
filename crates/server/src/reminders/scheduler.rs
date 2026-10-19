@@ -7,7 +7,7 @@ use chrono::{NaiveDateTime, NaiveTime};
 use composer_protocol::{ChangedBy, ChatMessage, MessageSource, Role, ServerMessage};
 
 use crate::reminders::due::parse_time;
-use crate::reminders::{DueReminder, ReminderAction, due_reminders, mark_notified};
+use crate::reminders::{DueReminder, due_reminders, mark_notified};
 use crate::server::Server;
 use crate::session::submit;
 
@@ -60,12 +60,7 @@ fn deliver(server: &Arc<Server>, reminder: &DueReminder, now: NaiveDateTime) -> 
     }
 
     let due = reminder.due_at.format("%Y-%m-%d %H:%M").to_string();
-    let session = match &reminder.action {
-        ReminderAction::Notify => None,
-        ReminderAction::Agent { session, agent } => {
-            post_to_agent(server, reminder, &due, session.as_deref(), agent)
-        }
-    };
+    let session = post_to_session(server, reminder, &due);
     tracing::info!("reminder {url} (due {due}) delivered");
     server.hub.send(ServerMessage::ReminderDue {
         url: url.to_string(),
@@ -77,18 +72,16 @@ fn deliver(server: &Arc<Server>, reminder: &DueReminder, now: NaiveDateTime) -> 
     true
 }
 
-/// Posts the reminder into its session (or a new one); returns the session id.
-fn post_to_agent(
-    server: &Arc<Server>,
-    reminder: &DueReminder,
-    due: &str,
-    session: Option<&str>,
-    agent: &str,
-) -> Option<String> {
-    let existing = session.and_then(|id| server.sessions.get(id).ok());
+/// Posts the reminder into its session; without one (or if it's gone), into a new session
+/// for its agent. Returns the session id.
+fn post_to_session(server: &Arc<Server>, reminder: &DueReminder, due: &str) -> Option<String> {
+    let existing = reminder
+        .session
+        .as_deref()
+        .and_then(|id| server.sessions.get(id).ok());
     let session = match existing {
         Some(session) => session,
-        None => match server.sessions.create(agent, None) {
+        None => match server.sessions.create(&reminder.agent, None) {
             Ok(session) => {
                 server.hub.send(ServerMessage::SessionUpdated {
                     session: session.info(),

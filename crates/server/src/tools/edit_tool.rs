@@ -2,7 +2,9 @@ use async_trait::async_trait;
 use composer_protocol::ChangedBy;
 use serde_json::{Value, json};
 
+use crate::reminders::claim_reminder;
 use crate::tools::args::EditArgs;
+use crate::tools::write_tool::CLAIMED;
 use crate::tools::{Tool, ToolContext};
 
 pub struct EditTool;
@@ -60,15 +62,21 @@ impl Tool for EditTool {
                 ));
             }
         };
+        let claimed = claim_reminder(&updated, context.session.id());
         context
             .server
-            .write_page(&page.url, &updated, ChangedBy::Agent)
+            .write_page(
+                &page.url,
+                claimed.as_deref().unwrap_or(&updated),
+                ChangedBy::Agent,
+            )
             .map_err(|e| e.to_string())?;
         Ok(format!(
-            "edited {} ({} replacement{})",
+            "edited {} ({} replacement{}){}",
             page.url,
             count,
-            if count == 1 { "" } else { "s" }
+            if count == 1 { "" } else { "s" },
+            if claimed.is_some() { CLAIMED } else { "" }
         ))
     }
 }

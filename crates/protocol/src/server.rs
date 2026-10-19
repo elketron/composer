@@ -145,7 +145,7 @@ pub enum ServerMessage {
         due: String,
         /// Delivered well after it was due (the server was off).
         late: bool,
-        /// The session it was posted to (`action: agent`).
+        /// The session it was posted to: its own, or a new one. None if that failed.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         session: Option<SessionId>,
     },

@@ -1,17 +1,6 @@
 use chrono::NaiveDateTime;
 use composer_core::SiteUrl;
 
-/// What a due reminder does besides notifying every client (`action:` in its frontmatter).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ReminderAction {
-    Notify,
-    /// Also posts it into a session for the agent: `session:`, else a new one with `agent:`.
-    Agent {
-        session: Option<String>,
-        agent: String,
-    },
-}
-
 /// A reminder whose time has come and that hasn't been delivered.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DueReminder {
@@ -19,5 +8,8 @@ pub struct DueReminder {
     pub title: String,
     /// Local time.
     pub due_at: NaiveDateTime,
-    pub action: ReminderAction,
+    /// The session it belongs to (`session:`; the write tools fill in the writer's).
+    pub session: Option<String>,
+    /// Who gets a new session for it when it has none (`agent:`, default `default`).
+    pub agent: String,
 }
