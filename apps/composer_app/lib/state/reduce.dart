@@ -4,6 +4,7 @@ import 'actions.dart';
 import 'approval_text.dart';
 import 'app_state.dart';
 import 'chat_events.dart';
+import 'chat_items.dart';
 import 'chat_state.dart';
 import 'effects.dart';
 import 'page_state.dart';
@@ -287,8 +288,31 @@ AppState _withUpload(AppState s, String url, int id, Upload Function(Upload uplo
 (AppState, List<AppEffect>) _serverEvent(AppState s, String url, ServerMessage message) {
   final (handedBack, switches) = _handBack(_event(s, url, message), url, message);
   final (next, notes) = _notifications(s, handedBack, url, message);
-  final (state, effects) = _pageEffects(s, next, url, message);
-  return (state, [...switches, ...notes, ...effects]);
+  final (paged, effects) = _pageEffects(s, next, url, message);
+  final (state, reviews) = _reviewEffects(paged, url, message);
+  return (state, [...switches, ...notes, ...effects, ...reviews]);
+}
+
+/// Tools after which a ticket's files may differ.
+const _changingTools = {'Edit', 'MultiEdit', 'Write', 'NotebookEdit', 'Bash'};
+
+/// An open review follows its worker: refreshed after it changes files (live events of the
+/// open chat) and when its run ends.
+(AppState, List<AppEffect>) _reviewEffects(AppState s, String url, ServerMessage message) {
+  final status = s.status[url];
+  if (status == null) return (s, const []);
+  final ticket = switch (message) {
+    ServerMessageToolResult(:final session, :final seq, :final callId)
+        when status.chat?.session == session &&
+            seq > status.chat!.liveAfter &&
+            status.chat!.items.any((i) => i is ToolItem && i.callId == callId && _changingTools.contains(i.name)) =>
+      status.session(session)?.ticket,
+    ServerMessageWorkerStatus(:final ticket, :final state) when stopped(state) => ticket,
+    _ => null,
+  };
+  final review = ticket == null ? null : status.reviews[ticket];
+  if (review == null || review.busy || review.merged != null || review.discarded) return (s, const []);
+  return _ticketCommand(s, url, ticket!, ClientCommandTicketChanges(ticket: ticket));
 }
 
 /// A worker that ended its run: finished, failed, or paused until later.

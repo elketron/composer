@@ -30,12 +30,18 @@ final class TextItem extends ChatItem {
 }
 
 final class ToolItem extends ChatItem {
-  const ToolItem({required this.callId, required this.name, required this.summary, this.result, this.isError = false});
+  const ToolItem({required this.callId, required this.name, required this.summary, this.detail, this.nested = false, this.result, this.isError = false});
   final String callId;
   final String name;
 
   /// The interesting argument, on one line.
   final String summary;
+
+  /// What it changes (an edit's diff, a to-do list), shown with the result.
+  final String? detail;
+
+  /// Made inside another call (a Claude Code sub-agent's).
+  final bool nested;
 
   /// Null while it runs.
   final String? result;

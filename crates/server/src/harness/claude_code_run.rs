@@ -159,7 +159,22 @@ fn apply(
             seq: 0,
             message: assistant(String::new(), Some(thinking)),
         }),
-        StreamEvent::ToolUse { id, name, input } => sink.event(ServerMessage::ToolCallStarted {
+        StreamEvent::TextDelta(text) => sink.event(ServerMessage::MessageDelta {
+            session,
+            seq: 0,
+            text,
+        }),
+        StreamEvent::ThinkingDelta(text) => sink.event(ServerMessage::ThinkingDelta {
+            session,
+            seq: 0,
+            text,
+        }),
+        StreamEvent::ToolUse {
+            id,
+            name,
+            input,
+            parent,
+        } => sink.event(ServerMessage::ToolCallStarted {
             session,
             seq: 0,
             call_id: id,
@@ -169,6 +184,7 @@ fn apply(
                 .unwrap_or(&name)
                 .to_string(),
             args: input,
+            parent,
         }),
         StreamEvent::ToolResult {
             id,
@@ -198,8 +214,26 @@ fn apply(
             is_error,
             text,
             api_error_status,
+            turns,
+            duration_ms,
+            cost_usd,
             ..
         } => {
+            let stats = [
+                turns.map(|t| ("turns", t.to_string())),
+                duration_ms.map(|ms| ("duration", duration(ms))),
+                cost_usd.map(|c| ("cost_usd", format!("{c:.4}"))),
+            ];
+            let stats: Vec<(&str, &str)> = stats
+                .iter()
+                .flatten()
+                .map(|(k, v)| (*k, v.as_str()))
+                .collect();
+            if !stats.is_empty()
+                && let Err(e) = set_ticket_fields(server, ticket, &stats)
+            {
+                tracing::warn!("recording the stats of ticket {ticket}: {e}");
+            }
             {
                 let mut seen = seen.lock().expect("seen lock");
                 let limited = api_error_status == Some(429)
@@ -233,6 +267,16 @@ fn assistant(content: String, thinking: Option<String>) -> ChatMessage {
         images: vec![],
         attachments: vec![],
         source: None,
+    }
+}
+
+/// `14s`, `3m 20s`, `1h 05m`.
+fn duration(ms: i64) -> String {
+    let secs = ms / 1000;
+    match secs {
+        s if s < 60 => format!("{s}s"),
+        s if s < 3600 => format!("{}m {:02}s", s / 60, s % 60),
+        s => format!("{}h {:02}m", s / 3600, s % 3600 / 60),
     }
 }
 

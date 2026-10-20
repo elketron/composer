@@ -60,6 +60,10 @@ pub enum ChatItem {
         call_id: String,
         name: String,
         summary: String,
+        /// What it changes (an edit's diff, a to-do list), shown with the details.
+        detail: Option<String>,
+        /// Made inside another call (a Claude Code sub-agent's).
+        nested: bool,
         result: Option<String>,
         is_error: bool,
     },

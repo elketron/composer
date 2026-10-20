@@ -51,6 +51,13 @@ String stepsSummary(List<ChatItem> steps) {
         'actions' => 'looked at actions',
         'set_project' => 'set the project',
         'finish' => 'finished',
+        // Claude Code's.
+        'Read' => 'read ${_count(t.length, 'file')}',
+        'Edit' || 'MultiEdit' || 'Write' => t.length == 1 ? 'edited ${_file(t.single.summary)}' : 'edited ${t.length} files',
+        'Bash' => t.length == 1 ? 'ran ${t.single.summary.split(' ').first}' : 'ran ${t.length} commands',
+        'Grep' || 'Glob' => t.length == 1 ? 'searched' : 'searched ${t.length} times',
+        'Agent' || 'Task' => 'ran ${t.length == 1 ? 'a sub-agent' : '${t.length} sub-agents'}',
+        'TaskCreate' || 'TaskUpdate' || 'TodoWrite' => 'updated the to-dos',
         _ => t.length == 1 ? name.replaceAll('_', ' ') : '${name.replaceAll('_', ' ')} ×${t.length}',
       },
   ];

@@ -25,6 +25,7 @@ pub mod snapshot;
 pub mod store;
 mod terminal;
 mod theme;
+mod tool_text;
 mod ws_link;
 
 pub use action::Action;

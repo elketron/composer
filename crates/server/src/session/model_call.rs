@@ -97,6 +97,7 @@ pub async fn tool_step(
             call_id: call.id.clone(),
             name: call.name.clone(),
             args: parse_args(&call.arguments),
+            parent: None,
         });
         server.tools.call(context, call).await
     };

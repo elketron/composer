@@ -34,12 +34,15 @@ home=$(pick '"COMPOSER_HOME":')
 echo '{"type":"system","subtype":"init","session_id":"x","model":"fake-model"}'
 echo '{"type":"assistant","message":{"content":[{"type":"text","text":"On it."},{"type":"tool_use","id":"t1","name":"mcp__composer__open","input":{"url":"site://home"}}]}}'
 echo '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"Home"}]}}'
+echo '{"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Look"}},"parent_tool_use_id":null}'
+echo '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"a1","name":"Agent","input":{"description":"Look around"}}]},"parent_tool_use_id":null}'
+echo '{"type":"assistant","message":{"content":[{"type":"text","text":"inside"},{"type":"tool_use","id":"r1","name":"Read","input":{"file_path":"README.md"}}]},"parent_tool_use_id":"a1"}'
 case "$mode" in
   finish)
     { echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{}}}'
       echo '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"finish","arguments":{"status":"done","summary":"the fake did it"}}}'
       sleep 1; } | COMPOSER_HOME="$home" "$exe" mcp --session "$sid" --parent "$parent" > "$here/mcp.txt"
-    echo '{"type":"result","subtype":"success","is_error":false,"result":"done"}' ;;
+    echo '{"type":"result","subtype":"success","is_error":false,"result":"done","num_turns":7,"duration_ms":200500,"total_cost_usd":0.01234}' ;;
   limit)
     echo '{"type":"rate_limit_event","rate_limit_info":{"status":"rejected","resetsAt":4102444800}}'
     echo '{"type":"result","subtype":"error_during_execution","is_error":true,"result":"usage limit reached","api_error_status":429}'
@@ -254,6 +257,9 @@ async fn claude_code_works_tickets() {
     // The exit is recorded once the process has ended, after `finish`.
     let text = until_field(&root, "0002", "exit: ", &text).await;
     for field in [
+        "turns: 7",
+        "duration: 3m 20s",
+        "cost_usd: 0.0123",
         "harness: claude-code",
         "branch: ticket/0002",
         "model: fake-model",
@@ -277,6 +283,7 @@ async fn claude_code_works_tickets() {
     let args = std::fs::read_to_string(bin.join("args.txt")).unwrap();
     for arg in [
         "stream-json",
+        "--include-partial-messages",
         "--strict-mcp-config",
         "--session-id",
         "--plugin-dir",
@@ -309,6 +316,12 @@ async fn claude_code_works_tickets() {
         std::fs::read_to_string(root.join(format!("state/sessions/{worker}/events.jsonl")))
             .unwrap();
     assert!(events.contains(r#""name":"open""#), "{events}");
+    // A sub-agent's call shows under it; its text stays inside.
+    assert!(
+        events.contains(r#""name":"Read","args":{"file_path":"README.md"},"parent":"a1""#),
+        "{events}"
+    );
+    assert!(!events.contains("inside"));
     assert!(events.contains("On it."));
     assert_eq!(
         server.sessions.get(&worker).unwrap().info().worker,

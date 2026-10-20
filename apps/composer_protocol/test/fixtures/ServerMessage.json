@@ -196,6 +196,17 @@
     }
   },
   {
+    "type": "tool.call",
+    "session": "a3f1",
+    "seq": 8,
+    "call_id": "c2",
+    "name": "Read",
+    "args": {
+      "file_path": "a.txt"
+    },
+    "parent": "agent1"
+  },
+  {
     "type": "tool.result",
     "session": "a3f1",
     "seq": 8,

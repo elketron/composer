@@ -1,4 +1,5 @@
 import 'package:composer_app/state/chat_events.dart';
+import 'package:composer_app/state/tool_text.dart';
 import 'package:composer_app/state/chat_items.dart';
 import 'package:composer_app/state/chat_state.dart';
 import 'package:composer_protocol/composer_protocol.dart';
@@ -75,5 +76,34 @@ void main() {
     expect(summarizeArgs({'url': 'site://home'}), 'site://home');
     expect(summarizeArgs(<String, Object?>{}), '');
     expect(summarizeArgs({'x': 1}), '{"x":1}');
+  });
+
+  test("Claude Code's tools: what they touch, edits as diffs, sub-agents nested", () {
+    const wt = '/home/me/.composer/state/worktrees/0007/src/main.rs';
+    expect(toolSummary('Edit', {'file_path': wt}), 'src/main.rs');
+    expect(toolSummary('Bash', {'command': 'cargo test\necho'}), 'cargo test');
+    expect(toolSummary('Grep', {'pattern': 'fn main', 'path': wt}), 'fn main in src/main.rs');
+    expect(toolSummary('Agent', {'description': 'Read a.txt'}), 'Read a.txt');
+    expect(toolSummary('TaskUpdate', {'taskId': '1', 'status': 'completed'}), '#1 completed');
+    expect(toolSummary('open', {'url': 'site://home'}), 'site://home');
+    expect(toolDetail('Edit', {'old_string': 'one', 'new_string': 'two\nthree'}), '- one\n+ two\n+ three');
+    expect(
+      toolDetail('TodoWrite', {
+        'todos': [
+          {'content': 'a', 'status': 'completed'},
+          {'content': 'b', 'status': 'pending'},
+        ],
+      }),
+      '[x] a\n[ ] b',
+    );
+    expect(toolDetail('Read', {'file_path': 'x'}), isNull);
+
+    final chat = play([
+      const ServerMessageToolCall(session: 'a', seq: 1, callId: 'a1', name: 'Agent', args: {'description': 'Look'}),
+      const ServerMessageToolCall(session: 'a', seq: 2, callId: 'r1', name: 'Read', args: {'file_path': 'x'}, parent: 'a1'),
+      const ServerMessageToolResult(session: 'a', seq: 3, callId: 'r1', result: 'ok', isError: false),
+    ]);
+    final read = chat.items[1] as ToolItem;
+    expect(((chat.items[0] as ToolItem).nested, read.nested, read.result), (false, true, 'ok'));
   });
 }

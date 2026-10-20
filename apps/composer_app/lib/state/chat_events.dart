@@ -1,11 +1,11 @@
 // Turns a session's events into chat items (the TUI's SessionStore::apply, in Dart).
 
-import 'dart:convert';
 
 import 'package:composer_protocol/composer_protocol.dart';
 
 import 'chat_items.dart';
 import 'chat_state.dart';
+import 'tool_text.dart';
 
 /// The session and seq of a transcript event; null for other messages.
 (String, int)? sessionEvent(ServerMessage message) => switch (message) {
@@ -35,8 +35,10 @@ ChatState applyChatEvent(ChatState chat, ServerMessage message) {
     ServerMessageMessageDelta(:final text) =>
       next.copyWith(streaming: Streaming(thinking: streaming.thinking, content: streaming.content + text)),
     ServerMessageMessageDone(:final message) => _done(next, message),
-    ServerMessageToolCall(:final callId, :final name, :final args) =>
-      next.copyWith(items: [...chat.items, ToolItem(callId: callId, name: name, summary: summarizeArgs(args))]),
+    ServerMessageToolCall(:final callId, :final name, :final args, :final parent) => next.copyWith(items: [
+        ...chat.items,
+        ToolItem(callId: callId, name: name, summary: toolSummary(name, args), detail: toolDetail(name, args), nested: parent != null),
+      ]),
     ServerMessageToolResult(:final callId, :final result, :final isError) => next.copyWith(items: _withResult(chat.items, callId, result, isError)),
     ServerMessageSessionCompacted(:final summary, :final messages) =>
       next.copyWith(items: [...chat.items, CompactedItem(summary, messages)]),
@@ -69,21 +71,7 @@ List<ChatItem> _withResult(List<ChatItem> items, String callId, String result, b
   final index = items.lastIndexWhere((i) => i is ToolItem && i.callId == callId);
   if (index < 0) return items;
   final tool = items[index] as ToolItem;
-  return [...items]..[index] = ToolItem(callId: callId, name: tool.name, summary: tool.summary, result: result, isError: isError);
+  return [...items]..[index] = ToolItem(
+      callId: callId, name: tool.name, summary: tool.summary, detail: tool.detail, nested: tool.nested, result: result, isError: isError);
 }
 
-/// The interesting argument of a tool call, on one line (as the TUI shows it).
-String summarizeArgs(Object? args) {
-  if (args is! Map) return args == null ? '' : jsonEncode(args);
-  String? get(String key) => args[key] is String ? args[key] as String : null;
-  final site = get('site'), recipe = get('recipe');
-  if (site != null && recipe != null) {
-    final extra = (args['args'] is List ? args['args'] as List : const []).whereType<String>().join(' ');
-    return '$site › $recipe $extra'.trimRight();
-  }
-  for (final key in ['url', 'query', 'path', 'ticket', 'status', 'site']) {
-    final value = get(key);
-    if (value != null) return value;
-  }
-  return args.isEmpty ? '' : jsonEncode(args);
-}

@@ -5,6 +5,7 @@ use composer_protocol::{
 };
 
 use crate::store::types::{ChatItem, Streaming};
+use crate::tool_text::{tool_detail, tool_summary};
 
 /// Sessions and the chat of the current one.
 #[derive(Debug, Default)]
@@ -155,11 +156,14 @@ impl SessionStore {
                 call_id,
                 name,
                 args,
+                parent,
                 ..
             } => self.items.push(ChatItem::Tool {
                 call_id: call_id.clone(),
                 name: name.clone(),
-                summary: summarize_args(args),
+                summary: tool_summary(name, args),
+                detail: tool_detail(name, args),
+                nested: parent.is_some(),
                 result: None,
                 is_error: false,
             }),
@@ -206,30 +210,5 @@ impl SessionStore {
             _ => {}
         }
         true
-    }
-}
-
-/// The interesting argument of a tool call, on one line.
-fn summarize_args(args: &serde_json::Value) -> String {
-    let get = |key: &str| args.get(key).and_then(|v| v.as_str());
-    if let (Some(site), Some(recipe)) = (get("site"), get("recipe")) {
-        let extra: Vec<&str> = args["args"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(|a| a.as_str())
-            .collect();
-        return format!("{site} › {recipe} {}", extra.join(" "))
-            .trim_end()
-            .to_string();
-    }
-    for key in ["url", "query", "path", "ticket", "status", "site"] {
-        if let Some(value) = get(key) {
-            return value.to_string();
-        }
-    }
-    match args {
-        serde_json::Value::Object(map) if map.is_empty() => String::new(),
-        other => other.to_string(),
     }
 }

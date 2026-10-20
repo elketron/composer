@@ -309,6 +309,30 @@ void main() {
       expect(reduce(state, nav(7, 'a')).$2, isEmpty);
     });
 
+    test("an open review refreshes after its worker changes files, and when it stops", () {
+      final sessions = ServerEvent(
+        home.url,
+        ServerMessageOk(
+          id: 1,
+          result: CommandResultSessions(sessions: [SessionInfo(id: 'w', agent: 'worker', ticket: '0007', state: TurnState.running, lastSeq: 5, updated: '')]),
+        ),
+      );
+      var state = reduce(loaded([home]), sessions).$1;
+      state = reduce(state, SessionOpened(home.url, 'w')).$1;
+      state = reduce(state, const ReviewRequested('https://home.ts.net', '0007')).$1;
+      state = reduce(state, const TicketReplied('https://home.ts.net', '0007', result: CommandResultChanges(changes: ProjectDiff(path: '/', files: [], diff: '')))).$1;
+      ServerEvent event(ServerMessage m) => ServerEvent(home.url, m);
+      state = reduce(state, event(const ServerMessageToolCall(session: 'w', seq: 6, callId: 'e', name: 'Edit', args: {}))).$1;
+      state = reduce(state, event(const ServerMessageToolCall(session: 'w', seq: 7, callId: 'r', name: 'Read', args: {}))).$1;
+      expect(reduce(state, event(const ServerMessageToolResult(session: 'w', seq: 8, callId: 'r', result: '', isError: false))).$2, isEmpty);
+      final (refreshing, effects) = reduce(state, event(const ServerMessageToolResult(session: 'w', seq: 9, callId: 'e', result: '', isError: false)));
+      expect((effects.single as TicketCommand).command, isA<ClientCommandTicketChanges>());
+      expect(refreshing.statusOf(home.url).reviews['0007']!.busy, isTrue);
+      final done = event(const ServerMessageWorkerStatus(worker: 'w', ticket: '0007', parent: 'o', state: WorkerState.done));
+      expect(reduce(refreshing, done).$2.whereType<TicketCommand>(), isEmpty, reason: 'one at a time');
+      expect(reduce(state, done).$2.whereType<TicketCommand>(), hasLength(1));
+    });
+
     test('apps show in the reader; closing keeps the follow choice', () {
       var state = reduce(opened('site://orchestration'), AppRequested(home.url, 'orchestration')).$1;
       expect(state.statusOf(home.url).page.appSite, 'orchestration');

@@ -22,7 +22,7 @@ class ChatItemView extends StatelessWidget {
         UserItem() => UserBubble(item as UserItem, url: url),
         TextItem(:final text) => AgentText(text, url: url),
         ThinkingItem(:final text) => CollapsibleRow(label: TextSpan(text: 'thinking · ${_words(text)} words'), body: text),
-        ToolItem(:final name, :final summary, :final result, :final isError) => CollapsibleRow(
+        ToolItem(:final name, :final summary, :final detail, :final result, :final isError) => CollapsibleRow(
             label: TextSpan(children: [
               TextSpan(text: name, style: const TextStyle(color: t.info)),
               TextSpan(text: summary.isEmpty ? '' : ' $summary'),
@@ -40,7 +40,7 @@ class ChatItemView extends StatelessWidget {
                             ),
                           )
                         : null,
-            body: result,
+            body: detail == null ? result : [detail, ?result].join('\n\n'),
           ),
         NoteItem(:final text) => Text(text, style: mono(size: 12, color: t.warn)),
         CompactedItem(:final summary, :final messages) =>

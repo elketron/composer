@@ -681,7 +681,16 @@ second run that wasn't asked.
 - **Changes as they happen:** after a file tool's result in the session you're looking at, an open
   changes view (TUI `gd`, the app's review screen) refreshes.
 - **Run stats:** the result's turns, duration and cost go into the ticket (`turns:`, `duration:`,
-  `cost:`) and on the worker card.
+  `cost_usd:`, at API prices; a subscription isn't billed per run).
+
+Built (milestone 18): `tool.call` has an optional `parent`. Current CLIs call the sub-agent tool `Agent`
+(older: `Task`) and keep to-dos with `TaskCreate` / `TaskUpdate` (older: `TodoWrite`); all are
+summarised. Thinking arrives redacted, so only text streams. A sub-agent's own text stays inside it
+(its report is the `Agent` call's result). Summaries and details live in `crates/tui/src/tool_text.rs`
+and `apps/composer_app/lib/state/tool_text.dart` (the same rules). The TUI's changes view already
+refreshed after every tool result; the app's review screen refreshes after a file-changing tool in the
+open chat and when the worker stops. Claude Code's system prompt names composer's tool parameters (its
+MCP schemas load lazily, and it guessed `open(target)` once).
 
 ### Desktop app polish
 
@@ -692,7 +701,7 @@ The desktop (wide) layout of the app, mockups first (`docs/mockups/`), then buil
 16. ✅ **ticket merging** — review diff against the merge base, merge / discard with checks, CLI, TUI, app
     review screen; generalised approvals and the orchestrator's `merge_ticket`.
 17. ✅ **Claude Code approvals** — `permission` MCP tool, tool approvals in both clients, `always` rules.
-18. **following Claude Code** — partial messages, tool summaries and diffs, sub-agent nesting, live
+18. ✅ **following Claude Code** — partial messages, tool summaries and diffs, sub-agent nesting, live
     changes, run stats.
 19. **desktop app** — mockups, then the wide layout.
 

@@ -75,6 +75,7 @@ class _StepsViewState extends State<StepsView> {
   }
 
   Widget _step(BuildContext context, int i, ChatItem step) {
+    final nested = step is ToolItem && step.nested;
     final (name, arg, mark) = switch (step) {
       ToolItem(:final name, :final summary, :final result, :final isError) => (
           name,
@@ -92,9 +93,11 @@ class _StepsViewState extends State<StepsView> {
     return InkWell(
       onTap: () => setState(() => _detail = _detail == i ? null : i),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 3),
+        // A sub-agent's calls sit under the call that started it.
+        padding: EdgeInsets.fromLTRB(nested ? 16 : 0, 3, 0, 3),
         child: Row(children: [
-          SizedBox(width: 96, child: Text(name, style: mono(size: 12, color: step is ThinkingItem ? t.faint : t.info))),
+          if (nested) Text('↳ ', style: mono(size: 12, color: t.faint)),
+          SizedBox(width: nested ? 80 : 96, child: Text(name, style: mono(size: 12, color: step is ThinkingItem ? t.faint : t.info))),
           Expanded(
             child: page == null
                 ? Text(arg, maxLines: 1, overflow: TextOverflow.ellipsis, style: mono(size: 12))
@@ -111,7 +114,8 @@ class _StepsViewState extends State<StepsView> {
 
   Widget _body(ChatItem step) {
     final text = switch (step) {
-      ToolItem(:final summary, :final result) => '$summary\n\n${result ?? '(running)'}',
+      ToolItem(:final summary, :final detail, :final result) =>
+        [summary, if (detail != null && detail.isNotEmpty) detail, result ?? '(running)'].join('\n\n'),
       ThinkingItem(:final text) => text,
       _ => '',
     };

@@ -1618,6 +1618,7 @@ final class ServerMessageToolCall extends ServerMessage {
     required this.callId,
     required this.name,
     this.args,
+    this.parent,
   });
 
   final String session;
@@ -1630,12 +1631,16 @@ final class ServerMessageToolCall extends ServerMessage {
 
   final Object? args;
 
+  /// The call this one runs inside of: a sub-agent's (Claude Code's `Agent` tool).
+  final String? parent;
+
   factory ServerMessageToolCall.fromJson(Map<String, Object?> json) => ServerMessageToolCall(
         session: json['session'] as String,
         seq: (json['seq'] as num).toInt(),
         callId: json['call_id'] as String,
         name: json['name'] as String,
         args: json['args'],
+        parent: json['parent'] == null ? null : json['parent'] as String,
       );
 
   Map<String, Object?> toJson() => {
@@ -1645,6 +1650,7 @@ final class ServerMessageToolCall extends ServerMessage {
         'call_id': callId,
         'name': name,
         'args': args,
+        if (parent != null) 'parent': parent,
       };
 }
 

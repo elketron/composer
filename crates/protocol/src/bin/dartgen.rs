@@ -686,6 +686,15 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
             call_id: "c1".into(),
             name: "open".into(),
             args: json!({ "url": "x" }),
+            parent: None,
+        },
+        ServerMessage::ToolCallStarted {
+            session: s(),
+            seq: 8,
+            call_id: "c2".into(),
+            name: "Read".into(),
+            args: json!({ "file_path": "a.txt" }),
+            parent: Some("agent1".into()),
         },
         ServerMessage::ToolResult {
             session: s(),

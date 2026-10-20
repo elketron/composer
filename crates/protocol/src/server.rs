@@ -69,6 +69,9 @@ pub enum ServerMessage {
         call_id: String,
         name: String,
         args: serde_json::Value,
+        /// The call this one runs inside of: a sub-agent's (Claude Code's `Agent` tool).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        parent: Option<String>,
     },
 
     #[serde(rename = "tool.result")]

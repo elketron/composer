@@ -78,6 +78,8 @@ pub fn chat_lines(state: &AppState, width: u16) -> Vec<Line<'static>> {
             ChatItem::Tool {
                 name,
                 summary,
+                detail,
+                nested,
                 result,
                 is_error,
                 ..
@@ -88,13 +90,38 @@ pub fn chat_lines(state: &AppState, width: u16) -> Vec<Line<'static>> {
                     (Some(_), true) => Span::styled(" ✗", Style::new().fg(theme::ERR)),
                     (Some(_), false) => Span::raw(""),
                 };
+                // A sub-agent's calls sit under the call that started it.
+                let (marker, bar) = if *nested {
+                    ("  ↳ ", "    │ ")
+                } else {
+                    ("▸ ", "  │ ")
+                };
                 blocks[i].1.push(Line::from(vec![
-                    Span::styled("▸ ", theme::faint()),
+                    Span::styled(marker, theme::faint()),
                     // Long names keep a space before the summary.
                     Span::styled(format!("{name:<7} "), Style::new().fg(theme::INFO)),
                     Span::styled(summary.clone(), theme::muted()),
                     status,
                 ]));
+                if let Some(detail) = detail.as_ref().filter(|_| state.ui.show_tool_details) {
+                    for line in detail.lines().take(40) {
+                        // The terminal widget drops tabs.
+                        let line = line.replace('\t', "  ");
+                        let style = match line.chars().next() {
+                            Some('+') => Style::new().fg(theme::OK),
+                            Some('-') => Style::new().fg(theme::ERR),
+                            _ => theme::muted(),
+                        };
+                        let text: String = line
+                            .chars()
+                            .take(inner.saturating_sub(bar.len() as u16 + 2) as usize)
+                            .collect();
+                        blocks[i].1.push(Line::from(vec![
+                            Span::styled(bar, theme::faint()),
+                            Span::styled(text, style),
+                        ]));
+                    }
+                }
                 if let Some(result) = result
                     .as_ref()
                     .filter(|_| state.ui.show_tool_details || *is_error)
@@ -106,11 +133,12 @@ pub fn chat_lines(state: &AppState, width: u16) -> Vec<Line<'static>> {
                     };
                     for line in result.lines().take(8) {
                         let text: String = line
+                            .replace('\t', "  ")
                             .chars()
                             .take(inner.saturating_sub(4) as usize)
                             .collect();
                         blocks[i].1.push(Line::from(vec![
-                            Span::styled("  │ ", theme::faint()),
+                            Span::styled(bar, theme::faint()),
                             Span::styled(text, style),
                         ]));
                     }
