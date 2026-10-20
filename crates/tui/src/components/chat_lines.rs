@@ -90,7 +90,8 @@ pub fn chat_lines(state: &AppState, width: u16) -> Vec<Line<'static>> {
                 };
                 blocks[i].1.push(Line::from(vec![
                     Span::styled("▸ ", theme::faint()),
-                    Span::styled(format!("{name:<8}"), Style::new().fg(theme::INFO)),
+                    // Long names keep a space before the summary.
+                    Span::styled(format!("{name:<7} "), Style::new().fg(theme::INFO)),
                     Span::styled(summary.clone(), theme::muted()),
                     status,
                 ]));

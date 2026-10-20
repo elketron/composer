@@ -44,7 +44,7 @@ async fn modified_deleted_and_untracked_files() {
     std::fs::remove_file(dir.path().join("old.rs")).unwrap();
     std::fs::write(dir.path().join("new.rs"), "fn new() {}\n").unwrap();
 
-    let diff = project_diff(dir.path()).await.unwrap();
+    let diff = project_diff(dir.path(), None).await.unwrap();
     assert_eq!(diff.branch.as_deref(), Some("main"));
     let files: Vec<(&str, &str, u32, u32)> = diff
         .files
@@ -78,7 +78,7 @@ async fn repository_without_commits() {
     git(dir.path(), &["init", "-q"]);
     std::fs::write(dir.path().join("a.txt"), "hello\n").unwrap();
     git(dir.path(), &["add", "a.txt"]);
-    let diff = project_diff(dir.path()).await.unwrap();
+    let diff = project_diff(dir.path(), None).await.unwrap();
     assert_eq!(diff.files.len(), 1);
     assert_eq!(diff.files[0].status, "A");
     assert!(diff.diff.contains("+hello"));
@@ -88,7 +88,7 @@ async fn repository_without_commits() {
 async fn not_a_repository() {
     let dir = tempfile::tempdir().unwrap();
     assert!(
-        project_diff(dir.path())
+        project_diff(dir.path(), None)
             .await
             .unwrap_err()
             .contains("not a git checkout")

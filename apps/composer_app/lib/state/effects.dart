@@ -49,6 +49,14 @@ final class SendCommand extends AppEffect {
   final ClientCommand command;
 }
 
+/// A `ticket.*` command; the reply comes back as `TicketReplied`.
+final class TicketCommand extends AppEffect {
+  const TicketCommand(this.url, this.ticket, this.command);
+  final String url;
+  final String ticket;
+  final ClientCommand command;
+}
+
 /// `session.create`, then open it.
 final class CreateSession extends AppEffect {
   const CreateSession(this.url, this.agent, {this.project});

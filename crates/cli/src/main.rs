@@ -92,6 +92,18 @@ enum Command {
         #[arg(default_value = "claude-code")]
         entry: String,
     },
+    /// A ticket's branch: its changes against the project's branch, merging it, or discarding it.
+    ///
+    /// `composer ticket changes 7` shows the commits, files and diff; `merge` merges the branch
+    /// into the project's checked-out branch and removes the worktree; `discard --yes` deletes them.
+    Ticket {
+        #[arg(value_parser = ["changes", "merge", "discard"])]
+        action: String,
+        ticket: String,
+        /// Needed to discard.
+        #[arg(long)]
+        yes: bool,
+    },
     /// Run a worker on a ticket (started by the server for `spawn_worker`).
     #[command(hide = true)]
     Worker {
@@ -206,6 +218,20 @@ async fn main() -> anyhow::Result<()> {
             let (server_url, token) = remote::client(&home)?;
             let change = state.map(|s| (entry, s == "on"));
             composer_server::client::harness(&server_url, &token, project, change).await?;
+        }
+        Some(Command::Ticket {
+            action,
+            ticket,
+            yes,
+        }) => {
+            use composer_server::client::TicketAction;
+            let action = match action.as_str() {
+                "merge" => TicketAction::Merge,
+                "discard" => TicketAction::Discard,
+                _ => TicketAction::Changes,
+            };
+            let (server_url, token) = remote::client(&home)?;
+            composer_server::client::ticket(&server_url, &token, action, ticket, yes).await?;
         }
         Some(Command::Pair { name }) => remote::pair(&home, &name)?,
         Some(Command::Devices { action }) => {

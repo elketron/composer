@@ -13,8 +13,8 @@ const UNTRACKED_MAX_FILES: usize = 30;
 /// The diff is cut beyond this, so a huge change doesn't flood the client.
 const DIFF_MAX_BYTES: usize = 512 * 1024;
 
-/// Changes of the working tree (staged or not) against HEAD, plus untracked files.
-pub async fn project_diff(path: &Path) -> Result<ProjectDiff, String> {
+/// Changes of the working tree (staged or not) against HEAD (or `base`), plus untracked files.
+pub async fn project_diff(path: &Path, base: Option<&str>) -> Result<ProjectDiff, String> {
     if !path.join(".git").exists() {
         let inside = git(path, &["rev-parse", "--is-inside-work-tree"]).await;
         if inside.as_deref().map(str::trim) != Ok("true") {
@@ -25,7 +25,9 @@ pub async fn project_diff(path: &Path) -> Result<ProjectDiff, String> {
         .await
         .ok()
         .map(|b| b.trim().to_string());
-    let base = if git(path, &["rev-parse", "--verify", "--quiet", "HEAD"])
+    let base = if let Some(base) = base {
+        base
+    } else if git(path, &["rev-parse", "--verify", "--quiet", "HEAD"])
         .await
         .is_ok()
     {
@@ -104,6 +106,7 @@ pub async fn project_diff(path: &Path) -> Result<ProjectDiff, String> {
         branch,
         files,
         diff,
+        ticket: None,
     })
 }
 

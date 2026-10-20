@@ -4,7 +4,7 @@ import '../theme/tokens.dart' as t;
 import 'chat/approval_card.dart';
 import 'store_scope.dart';
 
-/// Shown on every screen while any server has a recipe waiting for you; opens the list.
+/// Shown on every screen while any server has an approval waiting for you; opens the list.
 class ApprovalBar extends StatelessWidget {
   const ApprovalBar({super.key});
 
@@ -26,7 +26,7 @@ class ApprovalBar extends StatelessWidget {
             const Icon(Icons.gpp_maybe_outlined, size: 16, color: t.warn),
             const SizedBox(width: 8),
             Text(
-              count == 1 ? 'A recipe needs your approval' : '$count recipes need your approval',
+              count == 1 ? 'Something needs your approval' : '$count things need your approval',
               style: const TextStyle(color: t.warn, fontSize: 13),
             ),
             const Spacer(),

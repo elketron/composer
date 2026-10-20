@@ -80,6 +80,11 @@ pub struct SpawnWorkerArgs {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct MergeTicketArgs {
+    pub ticket: String,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct FinishArgs {
     /// `done` or `failed`.
     pub status: String,

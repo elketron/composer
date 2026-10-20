@@ -5,7 +5,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
 
 use composer_core::{Index, Page, SiteUrl, Workspace};
-use composer_protocol::{ApprovalDecision, ChangedBy, PageChangeKind, ServerMessage, TurnState};
+use composer_protocol::{
+    ApprovalDecision, ApprovalKind, ChangedBy, PageChangeKind, ServerMessage, TurnState,
+};
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
@@ -305,17 +307,67 @@ impl Server {
                 }
             });
         }
+        self.ask_clients(
+            session,
+            |request| ServerMessage::ApprovalRequest {
+                request,
+                session: session.id().to_string(),
+                kind: ApprovalKind::Recipe,
+                title: String::new(),
+                site: site.to_string(),
+                recipe: recipe.to_string(),
+                args: args.to_vec(),
+                body,
+                hash: hash.to_string(),
+                rule: None,
+            },
+            cancel,
+        )
+        .await
+    }
+
+    /// Asks this server's clients to approve something other than a recipe (a ticket merge, an
+    /// external harness's tool) and waits. `None` if `cancel` fired first.
+    pub async fn ask_approval(
+        &self,
+        session: &Session,
+        kind: ApprovalKind,
+        title: String,
+        body: String,
+        rule: Option<String>,
+        cancel: &CancellationToken,
+    ) -> Option<ApprovalDecision> {
+        self.ask_clients(
+            session,
+            |request| ServerMessage::ApprovalRequest {
+                request,
+                session: session.id().to_string(),
+                kind,
+                title,
+                site: String::new(),
+                recipe: String::new(),
+                args: vec![],
+                body,
+                hash: String::new(),
+                rule,
+            },
+            cancel,
+        )
+        .await
+    }
+
+    /// Sends the approval request `message` (given its id) to every client and waits for an
+    /// answer; the session shows `needs approval` meanwhile.
+    async fn ask_clients(
+        &self,
+        session: &Session,
+        message: impl FnOnce(String) -> ServerMessage,
+        cancel: &CancellationToken,
+    ) -> Option<ApprovalDecision> {
         let request = format!("{:08x}", rand::random::<u32>());
-        let message = ServerMessage::ApprovalRequest {
-            request: request.clone(),
-            session: session.id().to_string(),
-            site: site.to_string(),
-            recipe: recipe.to_string(),
-            args: args.to_vec(),
-            body,
-            hash: hash.to_string(),
-        };
+        let message = message(request.clone());
         let answer = self.pending_approvals.add(&request, message.clone());
+        let before = session.info().state;
         session.update_info(&self.hub, |info| info.state = TurnState::AwaitingApproval);
         self.hub.send(message);
         let decision = tokio::select! {
@@ -326,9 +378,18 @@ impl Server {
         self.hub.send(ServerMessage::ApprovalResolved {
             request,
             session: session.id().to_string(),
-            approved: decision == Some(ApprovalDecision::Approve),
+            approved: matches!(
+                decision,
+                Some(ApprovalDecision::Approve | ApprovalDecision::Always)
+            ),
         });
-        session.update_info(&self.hub, |info| info.state = TurnState::Running);
+        // Back to what it was doing (an idle orchestrator stays idle).
+        let after = if before == TurnState::AwaitingApproval {
+            TurnState::Running
+        } else {
+            before
+        };
+        session.update_info(&self.hub, |info| info.state = after);
         decision
     }
 

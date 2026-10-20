@@ -1,5 +1,6 @@
 use std::cell::Cell;
 
+use composer_protocol::http::TicketReview;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::Frame;
 use ratatui::layout::Rect;
@@ -22,6 +23,8 @@ pub struct ChangesView {
     scroll: Cell<usize>,
     height: Cell<usize>,
     pending_g: bool,
+    /// `X` was pressed once: a second one discards the ticket.
+    pending_discard: bool,
 }
 
 impl ChangesView {
@@ -31,7 +34,70 @@ impl ChangesView {
             scroll: Cell::new(0),
             height: Cell::new(20),
             pending_g: false,
+            pending_discard: false,
         }
+    }
+}
+
+impl ChangesView {
+    /// `ticket/0007 → main · 2 commits · uncommitted`, conflicts, and the keys.
+    fn review_lines(&self, review: &TicketReview) -> Vec<Line<'static>> {
+        let sep = || Span::styled(" · ", theme::faint());
+        let target = review
+            .target
+            .clone()
+            .unwrap_or_else(|| "(detached HEAD)".into());
+        let mut first = vec![
+            Span::styled(review.branch.clone(), Style::new().fg(theme::ACCENT)),
+            Span::styled(" → ", theme::faint()),
+            Span::styled(target.clone(), theme::bold()),
+            sep(),
+            Span::styled(format!("{} commits", review.commits.len()), theme::muted()),
+        ];
+        if review.uncommitted {
+            first.push(sep());
+            first.push(Span::styled(
+                "uncommitted changes",
+                Style::new().fg(theme::WARN),
+            ));
+        }
+        let mut lines = vec![Line::from(first)];
+        for commit in review.commits.iter().take(5) {
+            lines.push(Line::from(Span::styled(
+                format!("  {commit}"),
+                theme::faint(),
+            )));
+        }
+        if review.commits.len() > 5 {
+            lines.push(Line::from(Span::styled(
+                format!("  … {} more", review.commits.len() - 5),
+                theme::faint(),
+            )));
+        }
+        if !review.conflicts.is_empty() {
+            lines.push(Line::from(Span::styled(
+                format!(
+                    "conflicts with {target} in {}: ask the worker to merge {target} and resolve them",
+                    review.conflicts.join(", ")
+                ),
+                Style::new().fg(theme::ERR),
+            )));
+        }
+        let mut keys = vec![
+            Span::styled("m", Style::new().fg(theme::OK)),
+            Span::styled(format!(" merge into {target}   "), theme::faint()),
+            Span::styled("X X", Style::new().fg(theme::ERR)),
+            Span::styled(" discard", theme::faint()),
+        ];
+        if self.pending_discard {
+            keys = vec![Span::styled(
+                "X again discards the branch and worktree; any other key keeps them",
+                Style::new().fg(theme::ERR),
+            )];
+        }
+        lines.push(Line::from(keys));
+        lines.push(Line::raw(""));
+        lines
     }
 }
 
@@ -40,7 +106,21 @@ impl Component for ChangesView {
         let count = state.project.lines.len();
         let page = self.height.get().max(2) / 2;
         let g = std::mem::take(&mut self.pending_g);
+        let discard = std::mem::take(&mut self.pending_discard);
+        let ticket = state
+            .project
+            .diff
+            .as_ref()
+            .and_then(|d| d.ticket.as_ref())
+            .map(|t| t.ticket.clone());
         match (key.code, key.modifiers) {
+            (KeyCode::Char('m'), _) if ticket.is_some() => {
+                return vec![Action::TicketMerge(ticket)];
+            }
+            (KeyCode::Char('X'), _) if discard => {
+                return ticket.map(Action::TicketDiscard).into_iter().collect();
+            }
+            (KeyCode::Char('X'), _) if ticket.is_some() => self.pending_discard = true,
             (KeyCode::Char('j') | KeyCode::Down, _) => self.cursor += 1,
             (KeyCode::Char('k') | KeyCode::Up, _) => self.cursor = self.cursor.saturating_sub(1),
             (KeyCode::Char('d'), KeyModifiers::CONTROL) => self.cursor += page,
@@ -130,6 +210,9 @@ impl Component for ChangesView {
         let message = match (&project.diff, &project.error) {
             (_, Some(error)) => Some(Span::styled(error.clone(), Style::new().fg(theme::ERR))),
             (None, None) => Some(Span::styled("loading…", theme::faint())),
+            (Some(diff), None) if diff.files.is_empty() && diff.ticket.is_some() => Some(
+                Span::styled("no changes on the ticket's branch yet", theme::faint()),
+            ),
             (Some(diff), None) if diff.files.is_empty() => Some(Span::styled(
                 "no changes: the working tree matches HEAD",
                 theme::faint(),
@@ -142,32 +225,34 @@ impl Component for ChangesView {
         }
         let Some(diff) = &project.diff else { return };
 
-        // Changed files on top, then the diff (the cursor moves through the diff).
+        // A ticket's branch first: where it goes and what merging it does.
         let mut header: Vec<Line> = diff
-            .files
-            .iter()
-            .map(|f| {
-                let color = match f.status.as_str() {
-                    "A" | "?" => theme::OK,
-                    "D" => theme::ERR,
-                    _ => theme::WARN,
-                };
-                let counts = format!("+{} -{}", f.added, f.removed);
-                let path: String = f
-                    .path
-                    .chars()
-                    .take(width.saturating_sub(counts.len() + 4))
-                    .collect();
-                let pad = width.saturating_sub(path.chars().count() + counts.len() + 3);
-                Line::from(vec![
-                    Span::styled(format!("{} ", f.status), Style::new().fg(color)),
-                    Span::styled(path, theme::text()),
-                    Span::raw(" ".repeat(pad)),
-                    Span::styled(format!("+{}", f.added), Style::new().fg(theme::OK)),
-                    Span::styled(format!(" -{}", f.removed), Style::new().fg(theme::ERR)),
-                ])
-            })
-            .collect();
+            .ticket
+            .as_ref()
+            .map(|review| self.review_lines(review))
+            .unwrap_or_default();
+        // Changed files, then the diff (the cursor moves through the diff).
+        header.extend(diff.files.iter().map(|f| {
+            let color = match f.status.as_str() {
+                "A" | "?" => theme::OK,
+                "D" => theme::ERR,
+                _ => theme::WARN,
+            };
+            let counts = format!("+{} -{}", f.added, f.removed);
+            let path: String = f
+                .path
+                .chars()
+                .take(width.saturating_sub(counts.len() + 4))
+                .collect();
+            let pad = width.saturating_sub(path.chars().count() + counts.len() + 3);
+            Line::from(vec![
+                Span::styled(format!("{} ", f.status), Style::new().fg(color)),
+                Span::styled(path, theme::text()),
+                Span::raw(" ".repeat(pad)),
+                Span::styled(format!("+{}", f.added), Style::new().fg(theme::OK)),
+                Span::styled(format!(" -{}", f.removed), Style::new().fg(theme::ERR)),
+            ])
+        }));
         header.push(Line::raw(""));
         let header_height = header.len().min(inner.height as usize / 3);
 

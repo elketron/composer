@@ -1,4 +1,4 @@
-use composer_protocol::ApprovalDecision;
+use composer_protocol::{ApprovalDecision, ApprovalKind};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::Frame;
 use ratatui::layout::Rect;
@@ -12,15 +12,24 @@ use crate::components::widgets::{centered, dim};
 use crate::store::AppState;
 use crate::theme;
 
-/// Asks to run a recipe that wasn't approved (in this version). Modal: it takes
+/// Asks to run a recipe that wasn't approved (in this version), to merge a ticket an agent
+/// asked to merge, or to let Claude Code use a tool outside its allowlist. Modal: it takes
 /// every key until answered. Drawn in the warn colour, never the accent.
 pub struct ApprovalPopup;
 
 impl Component for ApprovalPopup {
-    fn handle_key(&mut self, key: KeyEvent, _state: &AppState) -> Vec<Action> {
+    fn handle_key(&mut self, key: KeyEvent, state: &AppState) -> Vec<Action> {
         match (key.code, key.modifiers) {
             (KeyCode::Char('y'), _) => vec![Action::ApprovalDecide(ApprovalDecision::Approve)],
             (KeyCode::Char('n'), _) => vec![Action::ApprovalDecide(ApprovalDecision::Deny)],
+            (KeyCode::Char('a'), _)
+                if state
+                    .approvals
+                    .current()
+                    .is_some_and(|a| a.kind == ApprovalKind::Tool && a.rule.is_some()) =>
+            {
+                vec![Action::ApprovalDecide(ApprovalDecision::Always)]
+            }
             (KeyCode::Char('e'), _) => vec![Action::ApprovalView],
             (KeyCode::Char('c'), KeyModifiers::CONTROL) => vec![Action::CancelTurn],
             _ => vec![],
@@ -42,10 +51,15 @@ impl Component for ApprovalPopup {
         frame.render_widget(Clear, rect);
 
         let more = state.approvals.count().saturating_sub(1);
+        let question = match approval.kind {
+            ApprovalKind::Recipe => "run recipe?",
+            ApprovalKind::Merge => "merge?",
+            ApprovalKind::Tool => "allow tool?",
+        };
         let title = if more > 0 {
-            format!(" run recipe? (+{more} more) ")
+            format!(" {question} (+{more} more) ")
         } else {
-            " run recipe? ".to_string()
+            format!(" {question} ")
         };
         let block = Block::new()
             .borders(Borders::ALL)
@@ -64,13 +78,16 @@ impl Component for ApprovalPopup {
 
         let label = |text: &'static str| Span::styled(text, theme::muted());
         let value = |text: String| Span::styled(text, theme::bold());
-        let mut header = vec![
-            label("site "),
-            value(approval.site.clone()),
-            Span::raw("   "),
-            label("recipe "),
-            value(approval.recipe.clone()),
-        ];
+        let mut header = match approval.kind {
+            ApprovalKind::Recipe => vec![
+                label("site "),
+                value(approval.site.clone()),
+                Span::raw("   "),
+                label("recipe "),
+                value(approval.recipe.clone()),
+            ],
+            _ => vec![value(approval.title.clone())],
+        };
         if !approval.args.is_empty() {
             header.push(Span::raw("   "));
             header.push(label("args "));
@@ -98,23 +115,39 @@ impl Component for ApprovalPopup {
             )));
         }
         lines.push(Line::raw(""));
-        let short_hash: String = approval.hash.chars().take(8).collect();
-        lines.push(Line::from(Span::styled(
-            format!(
-                "sha256 {short_hash} · new or changed · approval lasts until the recipe changes"
-            ),
-            theme::faint(),
-        )));
-        lines.push(Line::from(vec![
+        let note = match approval.kind {
+            ApprovalKind::Recipe => {
+                let short_hash: String = approval.hash.chars().take(8).collect();
+                format!(
+                    "sha256 {short_hash} · new or changed · approval lasts until the recipe changes"
+                )
+            }
+            ApprovalKind::Merge => {
+                "merges into the project's branch, then removes the worktree and branch".to_string()
+            }
+            ApprovalKind::Tool => match &approval.rule {
+                Some(rule) => format!("a always: allow {rule} in this project from now on"),
+                None => "outside its allowlist".to_string(),
+            },
+        };
+        lines.push(Line::from(Span::styled(note, theme::faint())));
+        let mut keys = vec![
             Span::styled("y", Style::new().fg(theme::OK)),
             Span::styled(" approve   ", theme::faint()),
+        ];
+        if approval.kind == ApprovalKind::Tool && approval.rule.is_some() {
+            keys.push(Span::styled("a", Style::new().fg(theme::OK)));
+            keys.push(Span::styled(" always   ", theme::faint()));
+        }
+        keys.extend([
             Span::styled("n", Style::new().fg(theme::ERR)),
             Span::styled(" deny   ", theme::faint()),
             Span::styled("e", theme::muted()),
             Span::styled(" view in nvim   ", theme::faint()),
             Span::styled("ctrl-c", theme::muted()),
             Span::styled(" cancel the turn", theme::faint()),
-        ]));
+        ]);
+        lines.push(Line::from(keys));
         frame.render_widget(Paragraph::new(lines), inner);
     }
 }

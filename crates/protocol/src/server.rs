@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::common::{
-    ChangedBy, ChatMessage, HarnessSwitch, MessageSource, PageChangeKind, Seq, SessionId,
-    SessionInfo, ToolInfo, Url, WorkerState,
+    ApprovalKind, ChangedBy, ChatMessage, HarnessSwitch, MessageSource, PageChangeKind, Seq,
+    SessionId, SessionInfo, ToolInfo, Url, WorkerState,
 };
 
 /// Everything the server sends over `/ws`.
@@ -98,15 +98,26 @@ pub enum ServerMessage {
         url: Url,
     },
 
+    /// Something waits for the user's yes: a recipe's first run (`site`, `recipe`, `args`,
+    /// `hash`), a ticket merge an agent asked for, or a tool an external harness wants. `body`
+    /// is what to look at (the recipe, the changes, the tool's input).
     #[serde(rename = "approval.request")]
     ApprovalRequest {
         request: String,
         session: SessionId,
+        #[serde(default)]
+        kind: ApprovalKind,
+        /// One line saying what is asked (empty for recipes: clients show site and recipe).
+        #[serde(default)]
+        title: String,
         site: String,
         recipe: String,
         args: Vec<String>,
         body: String,
         hash: String,
+        /// For a tool: what `always` would allow from then on in this project (`Bash(npm:*)`).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        rule: Option<String>,
     },
 
     /// Someone answered an approval request; clients close their prompt.
@@ -183,5 +194,11 @@ pub enum CommandResult {
     Harnesses {
         project: String,
         harnesses: Vec<HarnessSwitch>,
+    },
+    Changes {
+        changes: crate::http::ProjectDiff,
+    },
+    Merged {
+        commit: String,
     },
 }

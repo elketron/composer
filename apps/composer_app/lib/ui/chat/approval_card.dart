@@ -2,11 +2,13 @@ import 'package:composer_protocol/composer_protocol.dart';
 import 'package:flutter/material.dart';
 
 import '../../state/actions.dart';
+import '../../state/approval_text.dart';
 import '../../theme/composer_theme.dart';
 import '../../theme/tokens.dart' as t;
 import '../store_scope.dart';
 
-/// A recipe waiting for your answer: what runs, and Approve / Deny.
+/// A recipe, a merge or a tool waiting for your answer: what it is, and Approve / Deny (and
+/// Always, for a tool with a rule).
 class ApprovalCard extends StatelessWidget {
   const ApprovalCard({super.key, required this.url, required this.approval, this.serverName});
 
@@ -19,7 +21,8 @@ class ApprovalCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final store = StoreScope.read(context);
-    final command = [approval.site, '›', approval.recipe, ...approval.args].join(' ');
+    final command = approvalHeadline(approval);
+    void answer(ApprovalDecision decision) => store.dispatch(ApprovalAnswered(url, approval.request, decision));
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -29,7 +32,7 @@ class ApprovalCard extends StatelessWidget {
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Text.rich(TextSpan(children: [
-          const TextSpan(text: 'Run recipe? ', style: TextStyle(color: t.warn, fontSize: 14)),
+          TextSpan(text: '${approvalQuestion(approval)} ', style: const TextStyle(color: t.warn, fontSize: 14)),
           TextSpan(text: command, style: mono(size: 13, color: t.text)),
           TextSpan(text: '  #${approval.session}${serverName == null ? '' : ' on $serverName'}', style: mono(size: 12, color: t.faint)),
         ])),
@@ -40,23 +43,30 @@ class ApprovalCard extends StatelessWidget {
           decoration: BoxDecoration(color: t.bg, border: Border.all(color: t.border), borderRadius: BorderRadius.circular(t.radius)),
           child: SingleChildScrollView(child: SelectableText(approval.body, style: mono(size: 12, color: t.text))),
         ),
-        const Text(
-          'Once approved, this recipe runs without asking until it changes.',
-          style: TextStyle(color: t.faint, fontSize: 12),
-        ),
+        Text(approvalNote(approval), style: const TextStyle(color: t.faint, fontSize: 12)),
         const SizedBox(height: 10),
         Row(children: [
           Expanded(
             child: FilledButton(
               key: Key('approve-${approval.request}'),
-              onPressed: () => store.dispatch(ApprovalAnswered(url, approval.request, approve: true)),
+              onPressed: () => answer(ApprovalDecision.approve),
               child: const Text('Approve'),
             ),
           ),
+          if (approvalCanAlways(approval)) ...[
+            const SizedBox(width: 8),
+            Expanded(
+              child: OutlinedButton(
+                key: Key('always-${approval.request}'),
+                onPressed: () => answer(ApprovalDecision.always),
+                child: const Text('Always'),
+              ),
+            ),
+          ],
           const SizedBox(width: 8),
           Expanded(
             child: OutlinedButton(
-              onPressed: () => store.dispatch(ApprovalAnswered(url, approval.request, approve: false)),
+              onPressed: () => answer(ApprovalDecision.deny),
               child: const Text('Deny'),
             ),
           ),

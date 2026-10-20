@@ -70,5 +70,6 @@ WorkerRow? workerReport(UserItem item) {
   if (!(item.source?.startsWith('worker') ?? false)) return null;
   final m = _report.firstMatch(item.text);
   if (m == null) return null;
-  return WorkerRow(worker: m[1]!, ticket: m[2]!, status: m[3]!, summary: m[4]!.trim(), result: m[5]);
+  final branch = RegExp(r'on branch `([^`]+)`').firstMatch(item.text)?[1];
+  return WorkerRow(worker: m[1]!, ticket: m[2]!, status: m[3]!, summary: m[4]!.trim(), result: m[5], branch: branch);
 }

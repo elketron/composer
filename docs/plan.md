@@ -604,8 +604,90 @@ Built (milestone 15, clients):
 14. ✅ **attachments (server)** — protocol, upload route, storage, resizing, own harness, Claude Code paths, ticket files.
 15. ✅ **attachments (clients)** — app pickers and chips, TUI paths and clipboard.
 
-Later: full stream-json → follow mode, approvals through `--permission-prompt-tool`, more harnesses.
+Later: more harnesses. Following and approvals for Claude Code moved to phase 4.
+
+## Phase 4: finishing tickets, approvals, following Claude Code
+
+What happens after a worker is done (review, merge, clean up), Claude Code asking instead of being
+denied, and watching a Claude Code run as closely as an own worker.
+
+### Merging ticket branches
+
+- **Review:** a ticket's changes are its branch against the project's checked-out branch, from their
+  merge base, plus what the worker left uncommitted in its worktree (own workers don't commit). The
+  worker session's changes view (`gd` in the TUI) shows this instead of "against HEAD", so it is the
+  review while the worker runs and after. HTTP `GET /api/tickets/{id}/changes`: the `ProjectDiff`, the
+  branch, the target branch, commits ahead, and whether it merges cleanly (`git merge-tree --write-tree`,
+  nothing touched) with the conflicting files.
+- **Merge** (`ticket.merge`): only when the ticket is `done` and its run has ended. Uncommitted changes in
+  the worktree are committed first ("ticket <id>: uncommitted changes"). Refused when it would conflict
+  (the conflicting files are listed; send the worker feedback to sort it out) or when the project's
+  checkout has changes in the same files; otherwise `git merge --no-ff ticket/<id>` in the project's
+  checkout, message `Merge ticket <id>: <title>`. Then the worktree is removed, the branch deleted, and
+  the ticket gets `merged: <commit>`; the worker session stays (read-only history).
+- **Discard** (`ticket.discard`): removes the worktree and deletes the branch (`-D`) without merging;
+  the ticket gets `discarded: true`. Asks for confirmation in clients.
+- **Where:** `composer ticket changes|merge|discard <id>`; the TUI's `:merge` / `:discard` in a worker
+  session and `m` in its changes view; the app's worker card and worker chat get "Review", a changes
+  screen (files, diff) with Merge / Discard.
+- **Orchestrator:** a `merge_ticket(ticket)` tool (in the seed orchestrator's `tools:`); every merge it
+  asks for is an approval request (below) showing the diff stat, so the user decides, from the phone too.
+
+Built (milestone 16): `crates/server/src/project/ticket_branch.rs` (review through a temporary index, so
+nothing in the worktree changes; `merge-tree` for conflicts; a failed `git merge` is aborted), WS
+`ticket.changes` / `ticket.merge` / `ticket.discard` (replies `changes`, `merged`), the session diff route
+returning a worker's ticket review, a merged or discarded ticket refusing to resume. The app's review
+screen opens from a worker's report card (`Changes`) or a worker chat's menu; `integration_test/review_test.dart`.
+
+### Approvals, generalised
+
+- `approval.request` gets a `kind`: `recipe` (as now), `merge` (a ticket merge an agent asked for),
+  `tool` (Claude Code wants a tool outside its allowlist), plus a `title` line for clients. Its body is
+  what to look at (recipe body, diff stat, the tool input). Additive: missing `kind` means `recipe`.
+- Decisions: `approve`, `deny`, and `always` (tool requests only: remember the rule for the project).
+- A worker waiting on one is `awaiting approval` (orange in the TUI and the app, a notification on the
+  phone), as recipe approvals are now.
+
+### Claude Code approvals (`--permission-prompt-tool`)
+
+- `composer mcp` offers a `permission` tool; Claude Code runs with `--permission-prompt-tool
+  mcp__composer__permission` (and `--permission-prompts host`) instead of denying everything outside the
+  allowlist. The call becomes a `tool` approval in the worker's session: tool name, its input (the
+  command for Bash, the path and diff for edits), and the rule "always" would add (`Bash(<first word>:*)`,
+  `WebFetch(domain:<host>)`, else the tool name).
+- Approve → `{"behavior":"allow","updatedInput":<input>}`; deny → `{"behavior":"deny","message":"The
+  user denied this."}`; always → allow, and the rule is stored per project in `state/tool_rules.json`
+  (outside agent reach) and added to `--allowedTools` from the next launch on; within the run, the same
+  rule is answered without asking.
+- `[claude_code] ask = true` (default); `false` keeps today's deny-without-asking. Unanswered requests
+  wait (the run's timeout still applies); cancelling the worker closes them.
+
+### Following a Claude Code run
+
+- **Streaming:** `--include-partial-messages`; text and thinking deltas become `message.delta` /
+  `thinking.delta`, so the worker's chat streams like an own worker's.
+- **Tool rows that say what happened:** both clients summarise Claude Code's tools (Read/Write/Edit
+  path, Bash command, Grep/Glob pattern, WebFetch URL, Task description, TodoWrite progress); Edit,
+  MultiEdit and Write show their diff in the details; TodoWrite shows the checklist.
+- **Sub-agents:** calls made inside a Task (`parent_tool_use_id`) show under their Task row, indented.
+- **Changes as they happen:** after a file tool's result in the session you're looking at, an open
+  changes view (TUI `gd`, the app's review screen) refreshes.
+- **Run stats:** the result's turns, duration and cost go into the ticket (`turns:`, `duration:`,
+  `cost:`) and on the worker card.
+
+### Desktop app polish
+
+The desktop (wide) layout of the app, mockups first (`docs/mockups/`), then built.
+
+### Milestones
+
+16. ✅ **ticket merging** — review diff against the merge base, merge / discard with checks, CLI, TUI, app
+    review screen; generalised approvals and the orchestrator's `merge_ticket`.
+17. **Claude Code approvals** — `permission` MCP tool, tool approvals in both clients, `always` rules.
+18. **following Claude Code** — partial messages, tool summaries and diffs, sub-agent nesting, live
+    changes, run stats.
+19. **desktop app** — mockups, then the wide layout.
 
 ## Open questions
 
-- None blocking. Phase 3 is done.
+- None blocking.

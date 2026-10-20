@@ -42,7 +42,18 @@
         "removed": 1
       }
     ],
-    "diff": "+x"
+    "diff": "+x",
+    "ticket": {
+      "ticket": "0007",
+      "branch": "ticket/0007",
+      "target": "main",
+      "ahead": 2,
+      "commits": [
+        "abc1234 Add a"
+      ],
+      "uncommitted": true,
+      "conflicts": []
+    }
   },
   {
     "name": "coder",

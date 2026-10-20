@@ -4,6 +4,7 @@ import '../../state/chat_items.dart';
 import '../../theme/composer_theme.dart';
 import '../../theme/tokens.dart' as t;
 import '../pages/page_navigation.dart';
+import 'review_page.dart';
 
 /// A worker's report to its orchestrator: which ticket, how it went, and its Result.
 class WorkerCard extends StatelessWidget {
@@ -36,6 +37,13 @@ class WorkerCard extends StatelessWidget {
               Text(row.summary, maxLines: 3, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: t.muted)),
           ]),
         ),
+        if (row.branch != null)
+          TextButton(
+            key: Key('review-${row.ticket}'),
+            style: TextButton.styleFrom(foregroundColor: t.muted, visualDensity: VisualDensity.compact),
+            onPressed: () => openReview(context, url, row.ticket),
+            child: Text('Changes', style: mono(size: 12, color: t.accent)),
+          ),
         if (row.result != null)
           TextButton(
             style: TextButton.styleFrom(foregroundColor: t.muted, visualDensity: VisualDensity.compact),

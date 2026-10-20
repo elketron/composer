@@ -122,6 +122,9 @@ pub enum Pending {
     Attach(String),
     /// `harness.list` / `harness.set`: show the result.
     Harnesses,
+    /// `ticket.merge` / `ticket.discard` of this ticket.
+    Merged(String),
+    Discarded(String),
     Ignore,
 }
 
@@ -148,12 +151,18 @@ pub struct Startup {
 pub struct PendingApproval {
     pub request: String,
     pub session: String,
+    pub kind: composer_protocol::ApprovalKind,
+    /// What is asked, for merges and tools.
+    pub title: String,
     pub site: String,
     pub recipe: String,
     pub args: Vec<String>,
-    /// The recipe source (with dependencies) as `just --show` prints it.
+    /// The recipe source (with dependencies) as `just --show` prints it; the changes of a
+    /// merge; a tool's input.
     pub body: String,
     pub hash: String,
+    /// A tool's rule for `always`.
+    pub rule: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

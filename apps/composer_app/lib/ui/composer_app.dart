@@ -1,3 +1,4 @@
+import 'package:composer_protocol/composer_protocol.dart';
 import 'package:flutter/material.dart';
 
 import 'dart:async';
@@ -55,7 +56,7 @@ class _ComposerAppState extends State<ComposerApp> {
     final store = widget.store;
     final approval = tap.approval;
     if (approval != null && (tap.action == 'approve' || tap.action == 'deny')) {
-      store.dispatch(ApprovalAnswered(tap.url, approval, approve: tap.action == 'approve'));
+      store.dispatch(ApprovalAnswered(tap.url, approval, tap.action == 'approve' ? ApprovalDecision.approve : ApprovalDecision.deny));
       return;
     }
     store.dispatch(ServerSelected(tap.url));

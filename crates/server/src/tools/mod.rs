@@ -6,6 +6,7 @@ mod edit_tool;
 mod finish_tool;
 mod list_sites_tool;
 mod markdown_sections;
+mod merge_ticket_tool;
 mod new_app_tool;
 mod new_project_tool;
 mod new_site_tool;

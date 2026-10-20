@@ -71,7 +71,7 @@ impl Tool for RunTool {
                 )
                 .await;
             match decision {
-                Some(ApprovalDecision::Approve) => server
+                Some(ApprovalDecision::Approve | ApprovalDecision::Always) => server
                     .approvals
                     .approve(&site, &recipe.name, &hash)
                     .map_err(|e| e.to_string())?,

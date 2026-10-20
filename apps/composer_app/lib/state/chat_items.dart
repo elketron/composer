@@ -85,7 +85,7 @@ final class StepsRow extends ChatRow {
 
 /// `[worker #96a1 finished ticket 0001: done]` and what follows, as the server writes it.
 final class WorkerRow extends ChatRow {
-  const WorkerRow({required this.worker, required this.ticket, required this.status, required this.summary, this.result});
+  const WorkerRow({required this.worker, required this.ticket, required this.status, required this.summary, this.result, this.branch});
   final String worker;
   final String ticket;
 
@@ -95,4 +95,7 @@ final class WorkerRow extends ChatRow {
 
   /// The ticket page holding the Result.
   final String? result;
+
+  /// `ticket/<id>`, when its changes are on their own branch (a git project).
+  final String? branch;
 }

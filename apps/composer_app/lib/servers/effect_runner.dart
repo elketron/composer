@@ -78,6 +78,16 @@ class EffectRunner {
             onError: (Object e) => dispatch(SearchLoaded(url, query, const [], error: describeError(e))),
           );
         }
+      case TicketCommand(:final url, :final ticket, :final command):
+        final connection = _connections[url];
+        if (connection == null) {
+          dispatch(TicketReplied(url, ticket, error: 'not connected'));
+          return;
+        }
+        connection.request(command).then(
+              (result) => dispatch(TicketReplied(url, ticket, result: result)),
+              onError: (Object e) => dispatch(TicketReplied(url, ticket, error: describeError(e))),
+            );
       case CreateSession(:final url, :final agent, :final project):
         _request(url, ClientCommandSessionCreate(agent: agent, project: project), dispatch).then((result) {
           if (result is CommandResultSession) dispatch(SessionOpened(url, result.session.id));

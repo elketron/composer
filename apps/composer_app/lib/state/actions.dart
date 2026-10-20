@@ -169,6 +169,36 @@ final class HarnessesRequested extends AppAction {
   final String project;
 }
 
+/// Open (or refresh) a ticket's review: its changes against the project's branch.
+final class ReviewRequested extends AppAction {
+  const ReviewRequested(this.url, this.ticket);
+  final String url;
+  final String ticket;
+}
+
+/// Merge a ticket's branch into the project's checked-out branch.
+final class TicketMergeRequested extends AppAction {
+  const TicketMergeRequested(this.url, this.ticket);
+  final String url;
+  final String ticket;
+}
+
+/// Throw a ticket's branch and worktree away.
+final class TicketDiscardRequested extends AppAction {
+  const TicketDiscardRequested(this.url, this.ticket);
+  final String url;
+  final String ticket;
+}
+
+/// The answer to a ticket command: its result, or why it failed.
+final class TicketReplied extends AppAction {
+  const TicketReplied(this.url, this.ticket, {this.result, this.error});
+  final String url;
+  final String ticket;
+  final CommandResult? result;
+  final String? error;
+}
+
 /// Turn an external harness (`claude-code`) on or off for a project.
 final class HarnessToggled extends AppAction {
   const HarnessToggled(this.url, this.project, this.entry, this.on);
@@ -211,10 +241,10 @@ final class CancelRequested extends AppAction {
 }
 
 final class ApprovalAnswered extends AppAction {
-  const ApprovalAnswered(this.url, this.request, {required this.approve});
+  const ApprovalAnswered(this.url, this.request, this.decision);
   final String url;
   final String request;
-  final bool approve;
+  final ApprovalDecision decision;
 }
 
 /// A command the server refused, or that couldn't be sent.

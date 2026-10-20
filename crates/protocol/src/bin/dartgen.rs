@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 
 use composer_protocol::http::{
     AgentSummary, AppMessage, ChangedFile, PageResponse, ProjectDiff, ProjectSummary,
-    PutPageRequest, PutPageResponse, SearchHit, ServerInfo, SiteSummary,
+    PutPageRequest, PutPageResponse, SearchHit, ServerInfo, SiteSummary, TicketReview,
 };
 use composer_protocol::*;
 use serde_json::{Map, Value, json};
@@ -629,6 +629,12 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
             },
         },
         ServerMessage::Ok {
+            id: 52,
+            result: CommandResult::Merged {
+                commit: "abc1234".into(),
+            },
+        },
+        ServerMessage::Ok {
             id: 51,
             result: CommandResult::ToolOutput {
                 output: "# Home".into(),
@@ -702,11 +708,26 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
         ServerMessage::ApprovalRequest {
             request: "r1".into(),
             session: s(),
+            kind: ApprovalKind::Recipe,
+            title: String::new(),
             site: "tools".into(),
             recipe: "hello".into(),
             args: vec!["bob".into()],
             body: "hello name:\n    echo hi".into(),
             hash: "abc".into(),
+            rule: None,
+        },
+        ServerMessage::ApprovalRequest {
+            request: "r2".into(),
+            session: s(),
+            kind: ApprovalKind::Tool,
+            title: "Bash: npm test".into(),
+            site: String::new(),
+            recipe: String::new(),
+            args: vec![],
+            body: "npm test".into(),
+            hash: String::new(),
+            rule: Some("Bash(npm:*)".into()),
         },
         ServerMessage::ApprovalResolved {
             request: "r1".into(),
@@ -781,6 +802,19 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
         ClientCommand::ApprovalRespond {
             request: "r1".into(),
             decision: ApprovalDecision::Approve,
+        },
+        ClientCommand::ApprovalRespond {
+            request: "r2".into(),
+            decision: ApprovalDecision::Always,
+        },
+        ClientCommand::TicketChanges {
+            ticket: "0007".into(),
+        },
+        ClientCommand::TicketMerge {
+            ticket: "0007".into(),
+        },
+        ClientCommand::TicketDiscard {
+            ticket: "0007".into(),
         },
         ClientCommand::Subscribe {
             urls: vec!["*".into()],
@@ -867,6 +901,15 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
                 removed: 1,
             }],
             diff: "+x".into(),
+            ticket: Some(TicketReview {
+                ticket: "0007".into(),
+                branch: "ticket/0007".into(),
+                target: Some("main".into()),
+                ahead: 2,
+                commits: vec!["abc1234 Add a".into()],
+                uncommitted: true,
+                conflicts: vec![],
+            }),
         }),
         serde_json::to_value(AgentSummary {
             name: "coder".into(),

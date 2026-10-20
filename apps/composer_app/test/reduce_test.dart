@@ -181,6 +181,32 @@ void main() {
       expect((toggle.project, toggle.entry, toggle.on), ('/p', 'claude-code', false));
     });
 
+    test('ticket review: changes asked, merged, discarded, failures kept on the review', () {
+      const url = 'https://home.ts.net';
+      final (asking, ask) = reduce(loaded([home]), const ReviewRequested(url, '0007'));
+      final command = ask.single as TicketCommand;
+      expect((command.ticket, (command.command as ClientCommandTicketChanges).ticket), ('0007', '0007'));
+      expect(asking.status[url]!.reviews['0007']!.busy, isTrue);
+
+      const changes = ProjectDiff(path: '/wt', files: [], diff: '');
+      var state = reduce(asking, const TicketReplied(url, '0007', result: CommandResultChanges(changes: changes))).$1;
+      expect((state.status[url]!.reviews['0007']!.busy, state.status[url]!.reviews['0007']!.changes), (false, changes));
+
+      final (merging, merge) = reduce(state, const TicketMergeRequested(url, '0007'));
+      expect((merge.single as TicketCommand).command, isA<ClientCommandTicketMerge>());
+      state = reduce(merging, const TicketReplied(url, '0007', error: 'conflicts with main in: a.rs')).$1;
+      expect(state.status[url]!.reviews['0007']!.error, contains('conflicts'));
+      expect(state.status[url]!.reviews['0007']!.changes, changes, reason: 'still shown');
+      state = reduce(state, const TicketReplied(url, '0007', result: CommandResultMerged(commit: 'abc1234'))).$1;
+      expect((state.status[url]!.reviews['0007']!.merged, state.status[url]!.reviews['0007']!.error), ('abc1234', null));
+      expect(state.notice!.text, 'Ticket 0007 merged as abc1234');
+
+      final discard = reduce(state, const TicketDiscardRequested(url, '0008')).$2.single as TicketCommand;
+      expect(discard.command, isA<ClientCommandTicketDiscard>());
+      state = reduce(state, const TicketReplied(url, '0008', result: CommandResultDone())).$1;
+      expect(state.status[url]!.reviews['0008']!.discarded, isTrue);
+    });
+
     test('messages and cancel go to the open session only', () {
       expect(reduce(loaded([home]), MessageSubmitted(home.url, 'x')).$2, isEmpty);
       final state = reduce(loaded([home]), SessionOpened(home.url, 'a')).$1;
@@ -196,7 +222,7 @@ void main() {
       state = reduce(state, ServerEvent(home.url, approval('r2'))).$1;
       expect(state.statusOf(home.url).approvals.map((a) => a.request), ['r1', 'r2']);
 
-      final (answered, effects) = reduce(state, ApprovalAnswered(home.url, 'r1', approve: true));
+      final (answered, effects) = reduce(state, ApprovalAnswered(home.url, 'r1', ApprovalDecision.approve));
       expect(answered.statusOf(home.url).approvals.map((a) => a.request), ['r2']);
       final respond = effects.whereType<SendCommand>().single.command as ClientCommandApprovalRespond;
       expect(respond.decision, ApprovalDecision.approve);
@@ -314,7 +340,7 @@ void main() {
       state = background(state);
       var (next, effects) = reduce(state, ServerEvent(home.url, approval('r2')));
       final note = effects.whereType<Notify>().single;
-      expect((note.title, note.approval, note.session), ('Run tools › greet bob?', 'r2', 'a'));
+      expect((note.title, note.approval, note.session), ('Run recipe? tools › greet bob', 'r2', 'a'));
       // A reconnect re-sends it: no second notification.
       next = reduce(next, LinkChanged(home.url, LinkState.online)).$1;
       expect(reduce(next, ServerEvent(home.url, approval('r2'))).$2.whereType<Notify>(), isEmpty);
@@ -323,7 +349,7 @@ void main() {
         reduce(next, ServerEvent(home.url, const ServerMessageApprovalResolved(request: 'r2', session: 'a', approved: true))).$2,
         [isA<CancelNotification>().having((c) => c.key, 'key', 'approval:r2')],
       );
-      expect(reduce(next, ApprovalAnswered(home.url, 'r2', approve: false)).$2.whereType<CancelNotification>(), hasLength(1));
+      expect(reduce(next, ApprovalAnswered(home.url, 'r2', ApprovalDecision.deny)).$2.whereType<CancelNotification>(), hasLength(1));
     });
 
     test('reminders: always notified, leading to the page or the session', () {

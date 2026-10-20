@@ -18,6 +18,7 @@ use crate::server::Server;
 use crate::session::{compact_now, submit};
 use crate::slot_guard::SlotGuard;
 use crate::tools::resolve_project;
+use crate::worker::ticket::normalize_id;
 
 /// One client's WebSocket: what it attached to and subscribed to.
 pub struct Connection {
@@ -46,6 +47,17 @@ impl Connection {
 
     pub fn send(&self, message: Arc<ServerMessage>) {
         let _ = self.out.send(message);
+    }
+
+    /// The reply to command `id`.
+    fn reply(&self, id: u64, result: Result<CommandResult, String>) {
+        self.send(Arc::new(match result {
+            Ok(result) => ServerMessage::Ok { id, result },
+            Err(message) => ServerMessage::Error {
+                id: Some(id),
+                message,
+            },
+        }));
     }
 
     /// Whether a broadcast event should go to this client. Marks session events as sent.
@@ -175,6 +187,37 @@ impl Connection {
                 });
                 None
             }
+            ClientCommand::TicketChanges { ticket } => {
+                let (connection, server) = (self.clone(), server.clone());
+                tokio::spawn(async move {
+                    let ticket = normalize_id(&ticket);
+                    let result = crate::worker::ticket_changes(&server, &ticket)
+                        .await
+                        .map(|changes| CommandResult::Changes { changes });
+                    connection.reply(id, result);
+                });
+                None
+            }
+            ClientCommand::TicketMerge { ticket } => {
+                let (connection, server) = (self.clone(), server.clone());
+                tokio::task::spawn_blocking(move || {
+                    let ticket = normalize_id(&ticket);
+                    let result = crate::worker::merge_ticket(&server, &ticket)
+                        .map(|commit| CommandResult::Merged { commit });
+                    connection.reply(id, result);
+                });
+                None
+            }
+            ClientCommand::TicketDiscard { ticket } => {
+                let (connection, server) = (self.clone(), server.clone());
+                tokio::task::spawn_blocking(move || {
+                    let ticket = normalize_id(&ticket);
+                    let result = crate::worker::discard_ticket(&server, &ticket)
+                        .map(|()| CommandResult::Done);
+                    connection.reply(id, result);
+                });
+                None
+            }
             ClientCommand::ToolCall {
                 session,
                 name,
@@ -277,7 +320,13 @@ impl Connection {
                 &CancellationToken::new(),
             )
             .await;
-        let approved = decision == Some(composer_protocol::ApprovalDecision::Approve);
+        let approved = matches!(
+            decision,
+            Some(
+                composer_protocol::ApprovalDecision::Approve
+                    | composer_protocol::ApprovalDecision::Always
+            )
+        );
         if approved {
             server
                 .approvals
@@ -420,6 +469,9 @@ impl Connection {
             }
             ClientCommand::WorkerEvent { .. }
             | ClientCommand::HarnessSet { .. }
+            | ClientCommand::TicketChanges { .. }
+            | ClientCommand::TicketMerge { .. }
+            | ClientCommand::TicketDiscard { .. }
             | ClientCommand::ToolCall { .. }
             | ClientCommand::SlotAcquire
             | ClientCommand::SlotRelease { .. }

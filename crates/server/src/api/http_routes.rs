@@ -218,13 +218,23 @@ pub async fn project_diff(
     Path(id): Path<String>,
 ) -> Result<Json<ProjectDiff>, ApiError> {
     let session = server.sessions.get(&id)?;
+    // A ticket's worker: its changes against the project's branch, while it still has them.
+    if let Some(ticket) = session.info().ticket
+        && (server.home.state().join("worktrees").join(&ticket).exists()
+            || crate::worker::ticket_closed(&server, &ticket).is_some())
+    {
+        let diff = crate::worker::ticket_changes(&server, &ticket)
+            .await
+            .map_err(|e| ApiError(StatusCode::UNPROCESSABLE_ENTITY, e))?;
+        return Ok(Json(diff));
+    }
     let Some(project) = session.info().project else {
         return Err(ApiError(
             StatusCode::NOT_FOUND,
             "no active project; set one with :project <path>".into(),
         ));
     };
-    let diff = crate::project::project_diff(std::path::Path::new(&project))
+    let diff = crate::project::project_diff(std::path::Path::new(&project), None)
         .await
         .map_err(|e| ApiError(StatusCode::UNPROCESSABLE_ENTITY, e))?;
     Ok(Json(diff))

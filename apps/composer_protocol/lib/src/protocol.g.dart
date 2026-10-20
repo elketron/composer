@@ -71,13 +71,29 @@ class AppMessage {
 
 enum ApprovalDecision {
   approve('approve'),
-  deny('deny');
+  deny('deny'),
+  /// Approve, and don't ask again for this rule in this project (tool requests only).
+  always('always');
 
   const ApprovalDecision(this.wire);
   final String wire;
 
   static ApprovalDecision fromJson(Object? json) =>
       values.firstWhere((v) => v.wire == json, orElse: () => throw FormatException('unknown ApprovalDecision: $json'));
+
+  String toJson() => wire;
+}
+
+enum ApprovalKind {
+  recipe('recipe'),
+  merge('merge'),
+  tool('tool');
+
+  const ApprovalKind(this.wire);
+  final String wire;
+
+  static ApprovalKind fromJson(Object? json) =>
+      values.firstWhere((v) => v.wire == json, orElse: () => throw FormatException('unknown ApprovalKind: $json'));
 
   String toJson() => wire;
 }
@@ -233,6 +249,9 @@ sealed class ClientCommand {
         'project.set' => ClientCommandProjectSet.fromJson(json),
         'harness.list' => ClientCommandHarnessList.fromJson(json),
         'harness.set' => ClientCommandHarnessSet.fromJson(json),
+        'ticket.changes' => ClientCommandTicketChanges.fromJson(json),
+        'ticket.merge' => ClientCommandTicketMerge.fromJson(json),
+        'ticket.discard' => ClientCommandTicketDiscard.fromJson(json),
         'approval.respond' => ClientCommandApprovalRespond.fromJson(json),
         'subscribe' => ClientCommandSubscribe.fromJson(json),
         'worker.hello' => ClientCommandWorkerHello.fromJson(json),
@@ -462,6 +481,61 @@ final class ClientCommandHarnessSet extends ClientCommand {
         'project': project,
         'entry': entry,
         'on': on,
+      };
+}
+
+/// A ticket's changes against the branch it would be merged into; the reply is `changes`.
+final class ClientCommandTicketChanges extends ClientCommand {
+  const ClientCommandTicketChanges({
+    required this.ticket,
+  });
+
+  final String ticket;
+
+  factory ClientCommandTicketChanges.fromJson(Map<String, Object?> json) => ClientCommandTicketChanges(
+        ticket: json['ticket'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'ticket.changes',
+        'ticket': ticket,
+      };
+}
+
+/// Merges a ticket's branch into the project's checked-out branch and removes its
+/// worktree; the reply is `merged`.
+final class ClientCommandTicketMerge extends ClientCommand {
+  const ClientCommandTicketMerge({
+    required this.ticket,
+  });
+
+  final String ticket;
+
+  factory ClientCommandTicketMerge.fromJson(Map<String, Object?> json) => ClientCommandTicketMerge(
+        ticket: json['ticket'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'ticket.merge',
+        'ticket': ticket,
+      };
+}
+
+/// Removes a ticket's worktree and branch without merging.
+final class ClientCommandTicketDiscard extends ClientCommand {
+  const ClientCommandTicketDiscard({
+    required this.ticket,
+  });
+
+  final String ticket;
+
+  factory ClientCommandTicketDiscard.fromJson(Map<String, Object?> json) => ClientCommandTicketDiscard(
+        ticket: json['ticket'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'ticket.discard',
+        'ticket': ticket,
       };
 }
 
@@ -719,6 +793,8 @@ sealed class CommandResult {
         'tools' => CommandResultTools.fromJson(json),
         'tool_output' => CommandResultToolOutput.fromJson(json),
         'harnesses' => CommandResultHarnesses.fromJson(json),
+        'changes' => CommandResultChanges.fromJson(json),
+        'merged' => CommandResultMerged.fromJson(json),
         _ => CommandResultUnknown(json),
       };
 
@@ -862,6 +938,40 @@ final class CommandResultHarnesses extends CommandResult {
         'kind': 'harnesses',
         'project': project,
         'harnesses': harnesses.map((e) => e.toJson()).toList(),
+      };
+}
+
+final class CommandResultChanges extends CommandResult {
+  const CommandResultChanges({
+    required this.changes,
+  });
+
+  final ProjectDiff changes;
+
+  factory CommandResultChanges.fromJson(Map<String, Object?> json) => CommandResultChanges(
+        changes: ProjectDiff.fromJson(json['changes'] as Map<String, Object?>),
+      );
+
+  Map<String, Object?> toJson() => {
+        'kind': 'changes',
+        'changes': changes.toJson(),
+      };
+}
+
+final class CommandResultMerged extends CommandResult {
+  const CommandResultMerged({
+    required this.commit,
+  });
+
+  final String commit;
+
+  factory CommandResultMerged.fromJson(Map<String, Object?> json) => CommandResultMerged(
+        commit: json['commit'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'kind': 'merged',
+        'commit': commit,
       };
 }
 
@@ -1074,6 +1184,7 @@ class ProjectDiff {
     this.branch,
     required this.files,
     required this.diff,
+    this.ticket,
   });
 
   final String path;
@@ -1082,14 +1193,19 @@ class ProjectDiff {
 
   final List<ChangedFile> files;
 
-  /// Unified diff of the working tree against HEAD.
+  /// Unified diff of the working tree against HEAD (a ticket's worktree: against where its
+  /// branch left the project's branch).
   final String diff;
+
+  /// Set for a ticket's worktree: what merging it would do.
+  final TicketReview? ticket;
 
   factory ProjectDiff.fromJson(Map<String, Object?> json) => ProjectDiff(
         path: json['path'] as String,
         branch: json['branch'] == null ? null : json['branch'] as String,
         files: (json['files'] as List).map((e) => ChangedFile.fromJson(e as Map<String, Object?>)).toList(),
         diff: json['diff'] as String,
+        ticket: json['ticket'] == null ? null : TicketReview.fromJson(json['ticket'] as Map<String, Object?>),
       );
 
   Map<String, Object?> toJson() => {
@@ -1097,6 +1213,7 @@ class ProjectDiff {
         if (branch != null) 'branch': branch,
         'files': files.map((e) => e.toJson()).toList(),
         'diff': diff,
+        if (ticket != null) 'ticket': ticket?.toJson(),
       };
 }
 
@@ -1630,20 +1747,31 @@ final class ServerMessageAgentNavigated extends ServerMessage {
       };
 }
 
+/// Something waits for the user's yes: a recipe's first run (`site`, `recipe`, `args`,
+/// `hash`), a ticket merge an agent asked for, or a tool an external harness wants. `body`
+/// is what to look at (the recipe, the changes, the tool's input).
 final class ServerMessageApprovalRequest extends ServerMessage {
   const ServerMessageApprovalRequest({
     required this.request,
     required this.session,
+    this.kind,
+    this.title,
     required this.site,
     required this.recipe,
     required this.args,
     required this.body,
     required this.hash,
+    this.rule,
   });
 
   final String request;
 
   final String session;
+
+  final ApprovalKind? kind;
+
+  /// One line saying what is asked (empty for recipes: clients show site and recipe).
+  final String? title;
 
   final String site;
 
@@ -1655,25 +1783,34 @@ final class ServerMessageApprovalRequest extends ServerMessage {
 
   final String hash;
 
+  /// For a tool: what `always` would allow from then on in this project (`Bash(npm:*)`).
+  final String? rule;
+
   factory ServerMessageApprovalRequest.fromJson(Map<String, Object?> json) => ServerMessageApprovalRequest(
         request: json['request'] as String,
         session: json['session'] as String,
+        kind: json['kind'] == null ? null : ApprovalKind.fromJson(json['kind']),
+        title: json['title'] == null ? null : json['title'] as String,
         site: json['site'] as String,
         recipe: json['recipe'] as String,
         args: (json['args'] as List).map((e) => e as String).toList(),
         body: json['body'] as String,
         hash: json['hash'] as String,
+        rule: json['rule'] == null ? null : json['rule'] as String,
       );
 
   Map<String, Object?> toJson() => {
         'type': 'approval.request',
         'request': request,
         'session': session,
+        if (kind != null) 'kind': kind?.toJson(),
+        if (title != null) 'title': title,
         'site': site,
         'recipe': recipe,
         'args': args,
         'body': body,
         'hash': hash,
+        if (rule != null) 'rule': rule,
       };
 }
 
@@ -1982,6 +2119,60 @@ class SiteSummary {
         'app_built': appBuilt,
         if (description != null) 'description': description,
         'pages': pages,
+      };
+}
+
+/// A ticket branch against the branch it would be merged into.
+class TicketReview {
+  const TicketReview({
+    required this.ticket,
+    required this.branch,
+    this.target,
+    required this.ahead,
+    this.commits = const [],
+    required this.uncommitted,
+    required this.conflicts,
+  });
+
+  final String ticket;
+
+  /// `ticket/<id>`.
+  final String branch;
+
+  /// The branch checked out in the project; `None` when its HEAD is detached.
+  final String? target;
+
+  /// Commits on the ticket branch that the target doesn't have (counting uncommitted changes
+  /// as one).
+  final int ahead;
+
+  /// Those commits, `<short hash> <subject>`, newest first.
+  final List<String> commits;
+
+  /// The worktree has changes nobody committed (merging commits them first).
+  final bool uncommitted;
+
+  /// Files that would conflict; empty when it merges cleanly.
+  final List<String> conflicts;
+
+  factory TicketReview.fromJson(Map<String, Object?> json) => TicketReview(
+        ticket: json['ticket'] as String,
+        branch: json['branch'] as String,
+        target: json['target'] == null ? null : json['target'] as String,
+        ahead: (json['ahead'] as num).toInt(),
+        commits: json['commits'] == null ? const [] : (json['commits'] as List).map((e) => e as String).toList(),
+        uncommitted: json['uncommitted'] as bool,
+        conflicts: (json['conflicts'] as List).map((e) => e as String).toList(),
+      );
+
+  Map<String, Object?> toJson() => {
+        'ticket': ticket,
+        'branch': branch,
+        if (target != null) 'target': target,
+        'ahead': ahead,
+        if (commits.isNotEmpty) 'commits': commits,
+        'uncommitted': uncommitted,
+        'conflicts': conflicts,
       };
 }
 

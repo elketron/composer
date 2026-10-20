@@ -24,7 +24,7 @@ use crate::session::{Session, submit};
 use crate::tools::{ToolContext, resolve_project};
 use crate::worker::ending::Ending;
 use crate::worker::ticket::{set_field, set_status, ticket_url};
-use crate::worker::{StopReason, WorkerHandle};
+use crate::worker::{StopReason, WorkerHandle, ticket_closed};
 
 /// How long a worker that called `finish` has to exit before it is stopped.
 const FINISHED_GRACE: Duration = Duration::from_secs(60);
@@ -254,6 +254,9 @@ impl WorkerRegistry {
         let page = ticket_page(server, &id)?;
         if page.frontmatter.get_str("status").as_deref() == Some("claimed") {
             return Err(format!("ticket {id} is claimed by another worker"));
+        }
+        if let Some(closed) = ticket_closed(server, &id) {
+            return Err(format!("{closed}; open a new ticket for more work"));
         }
         let harness_session = page
             .frontmatter
@@ -698,7 +701,12 @@ impl WorkerRegistry {
         }
         if let Ok(orchestrator) = server.sessions.get(&handle.parent) {
             let on_branch = branch
-                .map(|b| format!(" Its changes are on branch `{b}`."))
+                .map(|b| {
+                    format!(
+                        " Its changes are on branch `{b}`; merge them with `merge_ticket` once \
+                         the Result looks right."
+                    )
+                })
                 .unwrap_or_default();
             let content = format!(
                 "[worker #{worker} finished ticket {ticket}: {status}]\n{summary}\n\nIts Result is in site://orchestration/tickets/{ticket}.md.{on_branch}",

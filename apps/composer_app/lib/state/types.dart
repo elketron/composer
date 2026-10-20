@@ -94,3 +94,27 @@ class Upload {
         error: error,
       );
 }
+
+/// A ticket's branch on the review screen: its changes, and what became of it.
+class TicketReviewState {
+  const TicketReviewState({this.changes, this.busy = false, this.error, this.merged, this.discarded = false});
+
+  /// The changes against the project's branch, with what merging does (`ticket.changes`).
+  final ProjectDiff? changes;
+
+  /// A command for it is on its way.
+  final bool busy;
+  final String? error;
+
+  /// The merge commit, once merged.
+  final String? merged;
+  final bool discarded;
+
+  TicketReviewState copyWith({ProjectDiff? changes, bool? busy, String? error, String? merged, bool? discarded}) => TicketReviewState(
+        changes: changes ?? this.changes,
+        busy: busy ?? this.busy,
+        error: error,
+        merged: merged ?? this.merged,
+        discarded: discarded ?? this.discarded,
+      );
+}

@@ -2,11 +2,12 @@ import 'package:composer_protocol/composer_protocol.dart';
 import 'package:flutter/material.dart';
 
 import '../../state/actions.dart';
+import '../../state/approval_text.dart';
 import '../../theme/composer_theme.dart';
 import '../../theme/tokens.dart' as t;
 import '../store_scope.dart';
 
-/// A recipe waiting for you, answered in place; the recipe itself is one tap away.
+/// An approval waiting for you, answered in place; what it is about is one tap away.
 class ApprovalTile extends StatelessWidget {
   const ApprovalTile({super.key, required this.url, required this.approval, this.agent});
 
@@ -19,6 +20,12 @@ class ApprovalTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final store = StoreScope.read(context);
+    void answer(ApprovalDecision decision) => store.dispatch(ApprovalAnswered(url, approval.request, decision));
+    final asks = switch (approval.kind ?? ApprovalKind.recipe) {
+      ApprovalKind.recipe => ' wants to run',
+      ApprovalKind.merge => ' asks to merge',
+      ApprovalKind.tool => ' wants to use a tool',
+    };
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       decoration: BoxDecoration(
@@ -30,36 +37,44 @@ class ApprovalTile extends StatelessWidget {
         Text.rich(TextSpan(style: const TextStyle(fontSize: 12, color: t.muted), children: [
           TextSpan(text: agent ?? 'a session'),
           TextSpan(text: ' #${approval.session}', style: mono(size: 11, color: t.faint)),
-          const TextSpan(text: ' wants to run'),
+          TextSpan(text: asks),
         ])),
         const SizedBox(height: 4),
-        Text([approval.site, '›', approval.recipe, ...approval.args].join(' '), style: mono(size: 13, color: t.text)),
+        Text(approvalHeadline(approval), style: mono(size: 13, color: t.text)),
         const SizedBox(height: 8),
         Row(children: [
           FilledButton(
             key: Key('approve-${approval.request}'),
             style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
-            onPressed: () => store.dispatch(ApprovalAnswered(url, approval.request, approve: true)),
+            onPressed: () => answer(ApprovalDecision.approve),
             child: const Text('Approve'),
           ),
+          if (approvalCanAlways(approval)) ...[
+            const SizedBox(width: 8),
+            OutlinedButton(
+              style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
+              onPressed: () => answer(ApprovalDecision.always),
+              child: const Text('Always'),
+            ),
+          ],
           const SizedBox(width: 8),
           OutlinedButton(
             style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
-            onPressed: () => store.dispatch(ApprovalAnswered(url, approval.request, approve: false)),
+            onPressed: () => answer(ApprovalDecision.deny),
             child: const Text('Deny'),
           ),
           const SizedBox(width: 4),
           TextButton(
             style: TextButton.styleFrom(foregroundColor: t.muted, visualDensity: VisualDensity.compact),
-            onPressed: () => _showRecipe(context),
-            child: const Text('View recipe'),
+            onPressed: () => _showBody(context),
+            child: const Text('View'),
           ),
         ]),
       ]),
     );
   }
 
-  void _showRecipe(BuildContext context) => showModalBottomSheet<void>(
+  void _showBody(BuildContext context) => showModalBottomSheet<void>(
         context: context,
         showDragHandle: true,
         isScrollControlled: true,
@@ -67,7 +82,7 @@ class ApprovalTile extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              Text('${approval.site} › ${approval.recipe}', style: mono(size: 14, color: t.text)),
+              Text(approvalHeadline(approval), style: mono(size: 14, color: t.text)),
               const SizedBox(height: 10),
               Container(
                 constraints: const BoxConstraints(maxHeight: 360),
@@ -76,7 +91,7 @@ class ApprovalTile extends StatelessWidget {
                 child: SingleChildScrollView(child: SelectableText(approval.body, style: mono(size: 12, color: t.text))),
               ),
               const SizedBox(height: 8),
-              const Text('Once approved, this recipe runs without asking until it changes.', style: TextStyle(color: t.faint, fontSize: 12)),
+              Text(approvalNote(approval), style: const TextStyle(color: t.faint, fontSize: 12)),
             ]),
           ),
         ),

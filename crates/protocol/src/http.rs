@@ -137,8 +137,34 @@ pub struct ProjectDiff {
     pub path: String,
     pub branch: Option<String>,
     pub files: Vec<ChangedFile>,
-    /// Unified diff of the working tree against HEAD.
+    /// Unified diff of the working tree against HEAD (a ticket's worktree: against where its
+    /// branch left the project's branch).
     pub diff: String,
+    /// Set for a ticket's worktree: what merging it would do.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ticket: Option<TicketReview>,
+}
+
+/// A ticket branch against the branch it would be merged into.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct TicketReview {
+    pub ticket: String,
+    /// `ticket/<id>`.
+    pub branch: String,
+    /// The branch checked out in the project; `None` when its HEAD is detached.
+    pub target: Option<String>,
+    /// Commits on the ticket branch that the target doesn't have (counting uncommitted changes
+    /// as one).
+    pub ahead: u32,
+    /// Those commits, `<short hash> <subject>`, newest first.
+    #[serde(default)]
+    pub commits: Vec<String>,
+    /// The worktree has changes nobody committed (merging commits them first).
+    pub uncommitted: bool,
+    /// Files that would conflict; empty when it merges cleanly.
+    pub conflicts: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

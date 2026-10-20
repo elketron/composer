@@ -9,6 +9,7 @@ import '../pages/page_navigation.dart';
 import '../store_scope.dart';
 import 'chat_view.dart';
 import 'project_sheet.dart';
+import 'review_page.dart';
 
 /// A chat as its own page (phones): agent, state and project on top; ⋮ for the project,
 /// compacting and stopping.
@@ -64,6 +65,7 @@ class ChatPage extends StatelessWidget {
             },
             onSelected: (choice) => switch (choice) {
               _ when choice.startsWith('harness:') => _toggle(store, url, session?.project, choice),
+              'review' => openReview(context, url, session!.ticket!),
               'project' => showProjectSheet(context, url),
               'unset' => store.dispatch(ProjectChosen(url, null)),
               'compact' => store.dispatch(CompactRequested(url)),
@@ -71,6 +73,7 @@ class ChatPage extends StatelessWidget {
               _ => null,
             },
             itemBuilder: (_) => [
+              if (session?.ticket != null) PopupMenuItem(value: 'review', child: Text('Review changes of ticket ${session!.ticket}')),
               PopupMenuItem(value: 'project', child: Text(project == null ? 'Set project…' : 'Change project…')),
               if (project != null) PopupMenuItem(value: 'unset', child: Text('Unset $project')),
               for (final h in switches)

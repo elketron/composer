@@ -67,6 +67,10 @@ pub enum Action {
     RefreshChanges,
     DiffLoaded(composer_protocol::http::ProjectDiff),
     DiffFailed(String),
+    /// Merge a ticket's branch (the current worker session's ticket when `None`).
+    TicketMerge(Option<String>),
+    /// Delete a ticket's worktree and branch.
+    TicketDiscard(String),
     /// Open a project file in the editor at a line.
     OpenFileAt {
         path: String,

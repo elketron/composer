@@ -43,6 +43,7 @@ void main() {
     );
     final paused = chatRows([onBranch]).single as WorkerRow;
     expect((paused.status, paused.summary, paused.result), ('paused', 'usage limit', 'site://orchestration/tickets/0001.md'));
+    expect((row.branch, paused.branch), (null, 'ticket/0001'));
     expect(chatRows([const UserItem('[worker #1 finished ticket 2: done]')]).single, isA<ItemRow>(), reason: 'yours, not a worker\'s');
   });
 }

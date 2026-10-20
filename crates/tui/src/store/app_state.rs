@@ -1,4 +1,4 @@
-use composer_protocol::{ClientCommand, CommandResult, ServerMessage};
+use composer_protocol::{ApprovalKind, ClientCommand, CommandResult, ServerMessage};
 
 use crate::action::Action;
 use crate::effect::Effect;
@@ -278,6 +278,29 @@ impl AppState {
                 self.refresh_changes()
             }
             Action::RefreshChanges => self.refresh_changes(),
+            Action::TicketMerge(ticket) => {
+                let Some(ticket) =
+                    ticket.or_else(|| self.session.current_info().and_then(|i| i.ticket.clone()))
+                else {
+                    self.ui
+                        .flash("not a worker session: :merge <ticket>", FlashLevel::Warn);
+                    return vec![];
+                };
+                self.ui
+                    .flash(format!("merging ticket {ticket}…"), FlashLevel::Info);
+                self.send(
+                    ClientCommand::TicketMerge {
+                        ticket: ticket.clone(),
+                    },
+                    Pending::Merged(ticket),
+                )
+            }
+            Action::TicketDiscard(ticket) => self.send(
+                ClientCommand::TicketDiscard {
+                    ticket: ticket.clone(),
+                },
+                Pending::Discarded(ticket),
+            ),
             Action::DiffLoaded(diff) => {
                 self.project.loaded(diff);
                 vec![]
@@ -348,7 +371,11 @@ impl AppState {
             }
             Action::ApprovalView => match self.approvals.current() {
                 Some(a) => vec![Effect::ViewText {
-                    name: format!("{}-{}.just", a.site, a.recipe),
+                    name: match a.kind {
+                        ApprovalKind::Recipe => format!("{}-{}.just", a.site, a.recipe),
+                        ApprovalKind::Merge => format!("merge-{}.txt", a.request),
+                        ApprovalKind::Tool => format!("tool-{}.txt", a.request),
+                    },
                     text: a.body.clone(),
                 }],
                 None => vec![],
@@ -605,20 +632,26 @@ impl AppState {
             ServerMessage::ApprovalRequest {
                 request,
                 session,
+                kind,
+                title,
                 site,
                 recipe,
                 args,
                 body,
                 hash,
+                rule,
             } => {
                 self.approvals.add(PendingApproval {
                     request,
                     session,
+                    kind,
+                    title,
                     site,
                     recipe,
                     args,
                     body,
                     hash,
+                    rule,
                 });
                 vec![]
             }
@@ -678,6 +711,20 @@ impl AppState {
                     .collect();
                 self.ui.flash(states.join(" · "), FlashLevel::Info);
                 vec![]
+            }
+            (Pending::Merged(ticket), CommandResult::Merged { commit }) => {
+                self.ui.flash(
+                    format!("ticket {ticket} merged as {commit}; worktree and branch removed"),
+                    FlashLevel::Info,
+                );
+                self.refresh_changes()
+            }
+            (Pending::Discarded(ticket), CommandResult::Done) => {
+                self.ui.flash(
+                    format!("ticket {ticket} discarded: worktree and branch removed"),
+                    FlashLevel::Info,
+                );
+                self.refresh_changes()
             }
             _ => vec![],
         }
@@ -1027,11 +1074,14 @@ mod tests {
             Action::Server(ServerMessage::ApprovalRequest {
                 request: id.into(),
                 session: "s".into(),
+                kind: ApprovalKind::Recipe,
+                title: String::new(),
                 site: "tools".into(),
                 recipe: "hello".into(),
                 args: vec![],
                 body: "hello:\n    echo hi".into(),
                 hash: "abc".into(),
+                rule: None,
             })
         };
         state.reduce(request("r1"));

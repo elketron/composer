@@ -9,6 +9,7 @@ use crate::tools::actions_tool::ActionsTool;
 use crate::tools::edit_tool::EditTool;
 use crate::tools::finish_tool::FinishTool;
 use crate::tools::list_sites_tool::ListSitesTool;
+use crate::tools::merge_ticket_tool::MergeTicketTool;
 use crate::tools::new_app_tool::NewAppTool;
 use crate::tools::new_project_tool::NewProjectTool;
 use crate::tools::new_site_tool::NewSiteTool;
@@ -41,6 +42,7 @@ impl ToolRegistry {
                 Arc::new(NewAppTool),
                 Arc::new(NewProjectTool),
                 Arc::new(SpawnWorkerTool),
+                Arc::new(MergeTicketTool),
                 Arc::new(FinishTool),
             ],
         }

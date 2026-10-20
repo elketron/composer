@@ -8,7 +8,7 @@ const _keep = Object();
 
 /// What the app knows about a server right now (not persisted).
 class ServerStatus {
-  const ServerStatus({this.link = LinkState.connecting, this.error, this.retryAt, this.info, this.sessions = const [], this.approvals = const [], this.chat, this.page = const PageState(), this.sites = const [], this.workers = const {}, this.agents = const [], this.projects = const [], this.unread = const {}, this.recent = const [], this.search = const PageSearch(), this.slotsUsed = 0, this.harnesses = const {}});
+  const ServerStatus({this.link = LinkState.connecting, this.error, this.retryAt, this.info, this.sessions = const [], this.approvals = const [], this.chat, this.page = const PageState(), this.sites = const [], this.workers = const {}, this.agents = const [], this.projects = const [], this.unread = const {}, this.recent = const [], this.search = const PageSearch(), this.slotsUsed = 0, this.harnesses = const {}, this.reviews = const {}});
 
   static const initial = ServerStatus();
 
@@ -59,6 +59,9 @@ class ServerStatus {
   /// External harnesses (Claude Code) per project folder, as last asked (`harness.list`).
   final Map<String, List<HarnessSwitch>> harnesses;
 
+  /// Tickets on the review screen, by id.
+  final Map<String, TicketReviewState> reviews;
+
   bool hasApp(String site) => sites.any((s) => s.name == site && s.appBuilt);
 
   SessionInfo? session(String id) => sessions.where((s) => s.id == id).firstOrNull;
@@ -105,6 +108,7 @@ class ServerStatus {
     PageSearch? search,
     int? slotsUsed,
     Map<String, List<HarnessSwitch>>? harnesses,
+    Map<String, TicketReviewState>? reviews,
   }) =>
       ServerStatus(
         link: link ?? this.link,
@@ -124,5 +128,6 @@ class ServerStatus {
         search: search ?? this.search,
         slotsUsed: slotsUsed ?? this.slotsUsed,
         harnesses: harnesses ?? this.harnesses,
+        reviews: reviews ?? this.reviews,
       );
 }

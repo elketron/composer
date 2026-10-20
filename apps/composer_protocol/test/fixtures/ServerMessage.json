@@ -97,6 +97,14 @@
   },
   {
     "type": "ok",
+    "id": 52,
+    "result": {
+      "kind": "merged",
+      "commit": "abc1234"
+    }
+  },
+  {
+    "type": "ok",
     "id": 51,
     "result": {
       "kind": "tool_output",
@@ -212,6 +220,8 @@
     "type": "approval.request",
     "request": "r1",
     "session": "a3f1",
+    "kind": "recipe",
+    "title": "",
     "site": "tools",
     "recipe": "hello",
     "args": [
@@ -219,6 +229,19 @@
     ],
     "body": "hello name:\n    echo hi",
     "hash": "abc"
+  },
+  {
+    "type": "approval.request",
+    "request": "r2",
+    "session": "a3f1",
+    "kind": "tool",
+    "title": "Bash: npm test",
+    "site": "",
+    "recipe": "",
+    "args": [],
+    "body": "npm test",
+    "hash": "",
+    "rule": "Bash(npm:*)"
   },
   {
     "type": "approval.resolved",

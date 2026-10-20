@@ -1,6 +1,6 @@
 # composer
 
-Design and decisions: [docs/plan.md](docs/plan.md) (phase 1; phase 3: harnesses and attachments), [docs/plan-app.md](docs/plan-app.md) (phase 2: the Flutter app). UI mockups: [docs/mockups/](docs/mockups/).
+Design and decisions: [docs/plan.md](docs/plan.md) (phase 1; phase 3: harnesses and attachments; phase 4: merging, approvals, following Claude Code), [docs/plan-app.md](docs/plan-app.md) (phase 2: the Flutter app). UI mockups: [docs/mockups/](docs/mockups/).
 
 ## Code conventions (Rust)
 
@@ -53,7 +53,8 @@ Snapshots always force a draw, so they can't catch a missing repaint: for that, 
   included) gets its own file; plain data types share `types.dart` / `actions.dart` / `effects.dart`.
 - `flutter analyze` and `flutter test` (reducer, parsing). End to end: `integration_test/pairing_test.dart`
   pairs through the UI with a real server, `chat_test.dart` runs a whole turn with a recipe approval, and
-  `reader_test.dart` covers pages, an app and follow-agent, and `notify_test.dart` approves
+  `reader_test.dart` covers pages, an app and follow-agent, `review_test.dart` merges a ticket from its
+  worker's card, and `notify_test.dart` approves
   from a notification (needs a notification daemon that clicks Approve; see their headers); run them inside headless Weston
   (`weston --backend=headless --renderer=gl --debug`, `WAYLAND_DISPLAY`, `GDK_BACKEND=wayland`).
 - `COMPOSER_APP_DATA=<dir>` keeps the server list in that directory (tests, a second instance).

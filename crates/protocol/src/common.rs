@@ -159,6 +159,19 @@ pub struct ToolInfo {
 pub enum ApprovalDecision {
     Approve,
     Deny,
+    /// Approve, and don't ask again for this rule in this project (tool requests only).
+    Always,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum ApprovalKind {
+    #[default]
+    Recipe,
+    Merge,
+    Tool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

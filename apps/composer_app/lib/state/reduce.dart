@@ -1,6 +1,7 @@
 import 'package:composer_protocol/composer_protocol.dart';
 
 import 'actions.dart';
+import 'approval_text.dart';
 import 'app_state.dart';
 import 'chat_events.dart';
 import 'chat_state.dart';
@@ -77,6 +78,13 @@ import 'types.dart';
         (s, [SendCommand(url, ClientCommandHarnessList(project: project))]),
       HarnessToggled(:final url, :final project, :final entry, :final on) =>
         (s, [SendCommand(url, ClientCommandHarnessSet(project: project, entry: entry, on: on))]),
+      ReviewRequested(:final url, :final ticket) =>
+        _ticketCommand(s, url, ticket, ClientCommandTicketChanges(ticket: ticket)),
+      TicketMergeRequested(:final url, :final ticket) =>
+        _ticketCommand(s, url, ticket, ClientCommandTicketMerge(ticket: ticket)),
+      TicketDiscardRequested(:final url, :final ticket) =>
+        _ticketCommand(s, url, ticket, ClientCommandTicketDiscard(ticket: ticket)),
+      TicketReplied(:final url, :final ticket, :final result, :final error) => _ticketReplied(s, url, ticket, result, error),
       CompactRequested(:final url) => _toChat(s, url, (session) => ClientCommandSessionCompact(session: session)),
       TabSelected(:final tab) => (s.copyWith(tab: tab), const []),
       SearchChanged(:final url, :final query) => (
@@ -91,12 +99,12 @@ import 'types.dart';
       AgentsLoaded(:final url, :final agents) => (_updateStatus(s, url, (x) => x.copyWith(agents: agents)), const []),
       ProjectsLoaded(:final url, :final projects) => (_updateStatus(s, url, (x) => x.copyWith(projects: projects)), const []),
       CancelRequested(:final url) => _toChat(s, url, (session) => ClientCommandTurnCancel(session: session)),
-      ApprovalAnswered(:final url, :final request, :final approve) => (
+      ApprovalAnswered(:final url, :final request, :final decision) => (
           _updateStatus(s, url, (x) => x.copyWith(approvals: [for (final a in x.approvals) if (a.request != request) a])),
           [
             SendCommand(
               url,
-              ClientCommandApprovalRespond(request: request, decision: approve ? ApprovalDecision.approve : ApprovalDecision.deny),
+              ClientCommandApprovalRespond(request: request, decision: decision),
             ),
             CancelNotification('approval:$request'),
           ],
@@ -384,10 +392,41 @@ bool stopped(WorkerState state) => state == WorkerState.done || state == WorkerS
   }
 }
 
+(AppState, List<AppEffect>) _ticketCommand(AppState s, String url, String ticket, ClientCommand command) => (
+      _updateStatus(s, url, (x) {
+        final review = x.reviews[ticket] ?? const TicketReviewState();
+        return x.copyWith(reviews: {...x.reviews, ticket: review.copyWith(busy: true)});
+      }),
+      [TicketCommand(url, ticket, command)],
+    );
+
+(AppState, List<AppEffect>) _ticketReplied(AppState s, String url, String ticket, CommandResult? result, String? error) {
+  final review = (s.statusOf(url).reviews[ticket] ?? const TicketReviewState()).copyWith(busy: false, error: error);
+  final next = switch (result) {
+    CommandResultChanges(:final changes) => review.copyWith(changes: changes),
+    CommandResultMerged(:final commit) => review.copyWith(merged: commit),
+    CommandResultDone() => review.copyWith(discarded: true),
+    _ => review,
+  };
+  final notice = switch (result) {
+    CommandResultMerged(:final commit) => 'Ticket $ticket merged as $commit',
+    CommandResultDone() => 'Ticket $ticket discarded',
+    _ => null,
+  };
+  return (
+    _updateStatus(
+      notice == null ? s : s.copyWith(notice: Notice((s.notice?.id ?? 0) + 1, notice)),
+      url,
+      (x) => x.copyWith(reviews: {...x.reviews, ticket: next}),
+    ),
+    const [],
+  );
+}
+
 Notify _approvalNote(String url, String server, ServerMessageApprovalRequest a) => Notify(
       key: 'approval:${a.request}',
-      title: 'Run ${[a.site, '›', a.recipe, ...a.args].join(' ')}?',
-      body: 'Recipe approval for #${a.session} on $server',
+      title: '${approvalQuestion(a)} ${approvalHeadline(a)}',
+      body: 'Approval for #${a.session} on $server',
       url: url,
       session: a.session,
       approval: a.request,

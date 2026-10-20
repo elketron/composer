@@ -4,7 +4,7 @@ use crate::action::Action;
 use crate::store::types::PickerKind;
 
 /// Every command, as shown by help: (usage, what it does).
-pub const COMMANDS: [(&str, &str); 13] = [
+pub const COMMANDS: [(&str, &str); 15] = [
     (
         ":new [agent]",
         "start a new session (default agent, or e.g. orchestrator)",
@@ -21,6 +21,14 @@ pub const COMMANDS: [(&str, &str); 13] = [
     (
         ":harness [on|off] [name]",
         "the project's external harnesses; turn Claude Code (or claude-code:<model>) on or off",
+    ),
+    (
+        ":merge [ticket]",
+        "merge a ticket's branch into the project (default: this worker's ticket; gd shows it)",
+    ),
+    (
+        ":discard <ticket>",
+        "delete a ticket's branch and worktree without merging",
     ),
     (
         ":file <path>|clear",
@@ -73,6 +81,10 @@ pub fn parse_command(line: &str) -> Result<Action, String> {
                 _ => Err("usage: :harness [on|off] [claude-code[:model]]".into()),
             }
         }
+        "merge" => Ok(Action::TicketMerge(arg)),
+        "discard" => arg
+            .map(Action::TicketDiscard)
+            .ok_or_else(|| "usage: :discard <ticket> (deletes its branch and worktree)".into()),
         "file" => match arg.as_deref() {
             Some("clear") => Ok(Action::ClearAttachments),
             Some(path) => {
@@ -148,6 +160,12 @@ mod tests {
             Ok(Action::Harness { on: None, .. })
         ));
         assert!(parse_command("harness sideways").is_err());
+        assert_eq!(parse_command("merge").unwrap(), Action::TicketMerge(None));
+        assert_eq!(
+            parse_command("discard 7").unwrap(),
+            Action::TicketDiscard("7".into())
+        );
+        assert!(parse_command("discard").is_err());
         assert!(parse_command("attach").is_err());
         assert!(parse_command("frobnicate").is_err());
     }

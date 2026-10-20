@@ -1,7 +1,8 @@
 //! Per-ticket git worktrees, so workers on the same project don't collide.
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
+
+use crate::project::git::git;
 
 /// Where a ticket's worker works.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -103,21 +104,6 @@ pub fn ticket_worktree(
         branch,
         base,
     }))
-}
-
-/// Runs git in `dir`; stdout trimmed, or stderr as the error.
-fn git(dir: &Path, args: &[&str]) -> Result<String, String> {
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(dir)
-        .args(args)
-        .output()
-        .map_err(|e| format!("running git: {e}"))?;
-    if output.status.success() {
-        Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
-    } else {
-        Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
-    }
 }
 
 #[cfg(test)]

@@ -76,6 +76,19 @@ pub enum ClientCommand {
         on: bool,
     },
 
+    /// A ticket's changes against the branch it would be merged into; the reply is `changes`.
+    #[serde(rename = "ticket.changes")]
+    TicketChanges { ticket: String },
+
+    /// Merges a ticket's branch into the project's checked-out branch and removes its
+    /// worktree; the reply is `merged`.
+    #[serde(rename = "ticket.merge")]
+    TicketMerge { ticket: String },
+
+    /// Removes a ticket's worktree and branch without merging.
+    #[serde(rename = "ticket.discard")]
+    TicketDiscard { ticket: String },
+
     #[serde(rename = "approval.respond")]
     ApprovalRespond {
         request: String,

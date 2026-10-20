@@ -55,18 +55,39 @@
   },
   {
     "id": 10,
+    "type": "approval.respond",
+    "request": "r2",
+    "decision": "always"
+  },
+  {
+    "id": 11,
+    "type": "ticket.changes",
+    "ticket": "0007"
+  },
+  {
+    "id": 12,
+    "type": "ticket.merge",
+    "ticket": "0007"
+  },
+  {
+    "id": 13,
+    "type": "ticket.discard",
+    "ticket": "0007"
+  },
+  {
+    "id": 14,
     "type": "subscribe",
     "urls": [
       "*"
     ]
   },
   {
-    "id": 11,
+    "id": 15,
     "type": "worker.hello",
     "session": "a3f1"
   },
   {
-    "id": 12,
+    "id": 16,
     "type": "worker.event",
     "event": {
       "type": "turn.started",
@@ -75,16 +96,16 @@
     }
   },
   {
-    "id": 13,
+    "id": 17,
     "type": "slot.acquire"
   },
   {
-    "id": 14,
+    "id": 18,
     "type": "slot.release",
     "grant": 7
   },
   {
-    "id": 15,
+    "id": 19,
     "type": "approval.ask",
     "site": "t",
     "recipe": "r",
@@ -93,30 +114,30 @@
     "hash": "h"
   },
   {
-    "id": 16,
+    "id": 20,
     "type": "worker.finish",
     "state": "failed",
     "summary": "why"
   },
   {
-    "id": 17,
+    "id": 21,
     "type": "tool.list",
     "session": "a3f1"
   },
   {
-    "id": 18,
+    "id": 22,
     "type": "harness.list",
     "project": "composer"
   },
   {
-    "id": 19,
+    "id": 23,
     "type": "harness.set",
     "project": "composer",
     "entry": "claude-code",
     "on": false
   },
   {
-    "id": 20,
+    "id": 24,
     "type": "tool.call",
     "session": "a3f1",
     "name": "open",
