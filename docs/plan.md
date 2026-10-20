@@ -153,6 +153,7 @@ Each site's `index.md` explains its purpose and conventions; the agent opens it 
 - `spawn_worker(ticket)` creates the worker session (ticket + parent set, visible at once), sets the ticket `claimed` and starts `composer worker --session … --ticket … --agent … --parent http://…` as a child process (`agent.max_workers`, default 1). Its log: `state/workers/<id>.log`.
 - Worker agents: an agent page with `role: worker` (or, from before `role:`, no role and the `finish` tool) is one `spawn_worker` can start, e.g. a `coder`, `reviewer` or `tester`. Which one: `spawn_worker`'s `agent`, else the ticket's `agent:`, else `worker`; anything else is refused with the list. Agents that may call `spawn_worker` get the worker agents and their `description:` in their Environment.
 - The worker process is a server instance without an API: model slots are lent by the parent (`slot.acquire`/`slot.release`), recipe approvals are asked through the parent (`approval.ask`; approval prompts reach every client), and its session events go to the parent (`worker.event`), which re-sequences them into the worker session's transcript. The worker keeps its model history in `state/workers/sessions/<id>/`.
+- **Harnesses** (`crates/server/src/harness/`): the registry claims the ticket and creates the session, then a harness starts the run: `composer` (own agent loop, the default) or the one a ticket's `harness:` names. Runs are child processes in their own process group. Cancelling a worker session (`turn.cancel`) stops the whole group and fails the ticket as "cancelled by the user"; a message to a running worker goes to its harness (own workers refuse it for now).
 - `finish(done|failed, summary)` (worker only) ends it: the server sets the ticket status and sends the orchestrator a message (source: the worker), which starts its next turn. A worker that ends its turn without `finish` is reminded once; a process that exits without it fails the ticket.
 - **Plans vs tickets:** plans in `site://plans` hold longer-lived intent; tickets are units of work that link back to a plan.
 - Ticket frontmatter drives lifecycle: `open → claimed → done | failed`. Worker writes its result into the ticket.
@@ -448,6 +449,122 @@ Mockups: [tui.html](mockups/tui.html), [apps.html](mockups/apps.html). Tokens: [
 
 Seed recipes are pre-approved by `composer init`.
 
+## Phase 3: harnesses and attachments
+
+Tickets can also be worked by the official Claude Code CLI (personal use on this machine, under its own
+login), and messages and tickets can carry files.
+
+### Harness interface
+
+- `crates/server/src/harness/`: a small trait: **start** (ticket, working dir, MCP config) → handle,
+  **send** a message (resume), **events** (a stream of our `ServerMessage`s for the worker session),
+  **interrupt**. Each harness parses its own output into those events, so parsing stays contained.
+- **Own harness:** what `run_worker` / `worker_registry` do today, moved behind the trait first with no
+  change in behaviour.
+- **Claude Code harness:** a `claude -p` child process (below). Others (Codex, Aider, …) are further
+  implementations: a process that speaks MCP plus an output parser.
+- The ticket records `harness:`, `session:` (the harness's own id), `model:` and `exit:`.
+
+### `composer mcp`
+
+- `composer mcp --session <worker> --parent <url>`: a stdio MCP server (`initialize`, `tools/list`,
+  `tools/call`, `ping`), the public contract for any harness. It connects to the running server with the
+  local token and offers that **running** worker's tools: the ones its agent's `tools:` lists, as a native
+  worker gets them, under the same site access rules.
+- Protocol: `tool.list` / `tool.call` (replies `tools` / `tool_output`), refused for any session that isn't
+  a running worker. The server runs the native tool in the worker session: one implementation.
+- The ticket is a page (`site://orchestration/tickets/<id>`), read and written with `open` / `edit`;
+  `finish(done|failed, summary)` works as for own workers: the server sets the ticket status and messages
+  the orchestrator. After `finish` the run has 60s to exit before it is stopped; a run that exits
+  without calling it fails the ticket.
+- Later: a permission tool for `--permission-prompt-tool`, so Claude Code's prompts become composer
+  approvals (phone included).
+
+### Worktrees
+
+- A ticket whose project is a git checkout (with a commit) runs in its own worktree:
+  `state/worktrees/<ticket>` on branch `ticket/<id>`, made from the project's HEAD (uncommitted changes in
+  the project are not in it; `spawn_worker` says so). A project that is a subfolder of a repository maps
+  to the same subfolder of the worktree. Plain folders: the worker works in the folder itself.
+- The worker session's project is the worktree; the ticket gets `branch:`, and the finish message tells
+  the orchestrator which branch holds the changes.
+- A retried ticket reuses its worktree (or checks out its kept branch again); a folder in the way that
+  isn't a worktree of that repository fails the spawn.
+- Merging back and cleanup (`git worktree remove`, deleting the branch): by the user for now; later a
+  tool or command for it.
+
+### Claude Code harness
+
+- **Allowed per project**, default off, in the server's `config.toml` (not in the repo, so a cloned repo
+  can't switch it on for itself):
+  ```toml
+  [projects."~/Projects/composer"]
+  external_harnesses = ["claude-code"]
+  ```
+  `spawn_worker` checks it before launching and fails the ticket with a clear message otherwise.
+- **Models per project:** `models = ["claude-code:sonnet", "local"]` limits which models tickets in the
+  project may use (`--model` for Claude Code, the provider for the own harness; with one provider today,
+  `local` is it). Unset: anything the allowed harnesses offer.
+- **Off switch:** `:harness off [name]` (TUI), a toggle in the app's project sheet, and
+  `composer harness off <project> [name]` turn an external harness (or a model) off for a project at
+  runtime, without editing config. Stored in `state/projects.json`; it can only narrow what config.toml
+  allows, never widen it. Turning it off stops new launches and interrupts running tickets on it: they go
+  to `waiting` ("claude-code turned off for this project") and resume with `--resume` once it is back on.
+- **Login:** only an already logged-in CLI is used; `claude auth status` before launching. Never read or
+  reuse its token. Not logged in or `claude` missing: fail the ticket with the error, no retry.
+- **Environment:** start empty and add only `PATH`, `HOME`, `USER`, `LANG`, `TERM`, `SHELL`, `XDG_*`. A set
+  `ANTHROPIC_API_KEY` would win over the login and bill the API; this also keeps out `ANTHROPIC_*`,
+  `CLAUDE_CODE_USE_*`, the provider key and `COMPOSER_HOME`. Not `--bare` (it ignores the login).
+- **Command:** `claude -p --output-format stream-json --verbose --session-id <uuid>`
+  `--mcp-config <ticket config> --strict-mcp-config --plugin-dir ~/.composer/harness/claude-code`
+  `--permission-mode acceptEdits --permission-prompts none --allowedTools <list>`, `current_dir` = the
+  worktree (or project folder). We choose the session id, so the ticket has it before the first event.
+  Feedback on the ticket: `--resume <id>`. Turn cap: `--max-turns` if this CLI version still takes it
+  (not in 2.1's `--help`), plus a wall-clock timeout of ours.
+- **Process:** its own process group (`process_group(0)`); cancel and server shutdown `killpg` the group.
+- **Output:** every stream-json line goes to `state/workers/<id>.log`. First version maps assistant text,
+  tool names and the final `result` to worker session events, so it shows in the orchestration picker and
+  worker cards; the full follow-mode mapping comes later.
+- **Usage limit hit:** the ticket goes to `waiting` and Claude Code launches pause until the reset time;
+  own-harness tickets keep running. Not marked failed.
+- **Skills:** source in `seed/harness/claude-code/` (so `composer update` merges them), installed as a
+  plugin under `~/.composer/harness/claude-code/`, never written into project repos:
+  `composer-sites` (site folders, `index.md` as the front door, via the MCP page tools),
+  `composer-tickets` (before finishing, write what was done and what is left, then `finish`),
+  `composer-memory`, `composer-apps`.
+
+### Attachments
+
+- **Storage:** `state/sessions/<id>/attachments/<hash>-<name>`. Names sanitized; anything resolving
+  outside the folder is rejected. Messages and tickets hold references `{ path, name, mime, size }`
+  (protocol: `attachments` on `ChatMessage` / `message.send`; `images` kept for a while).
+- **Upload:** `POST /api/sessions/<id>/attachments`, multipart, per-server or device token, size cap,
+  type allowlist (images, PDF, text, common code and doc formats). Clients create the session first
+  (new chats too), upload, and send the message only once every upload is done.
+- **Images:** the server resizes (long edge ~1500px) and re-encodes every image, which also drops EXIF;
+  the phone shrinks before upload to save bandwidth, but the server is the one enforcing it.
+- **Own harness:** images as image parts (needs a vision model; a clear error otherwise), text and code
+  inlined in a marked block with a size cap, PDFs as extracted text (`pdftotext`) or by path with a read tool.
+- **Claude Code:** the path in the prompt, with `--add-dir` on the attachments folder; its Read tool opens
+  it. Only ticket attachments of the ticket's own project are passed, and a Claude Code session only
+  exists in a project that allows it.
+- **Untrusted:** attachment contents are data, never instructions; the prompt says so around them.
+- **App:** `image_picker` (camera, gallery), `file_picker` (documents), chips with per-file progress and retry.
+- **TUI:** a pasted path that exists on disk becomes a chip; a key (e.g. `space a`) reads a clipboard image
+  with `arboard` (Wayland feature). Always uploaded over HTTP: the TUI may not be on the server machine.
+
+### Milestones
+
+10. ✅ **harness trait** — own worker behind it; cancel stops the worker's process group; a ticket's `harness:` picks one.
+11. ✅ **`composer mcp`** — a running worker's tools over MCP, run by the server (`tool.list` / `tool.call`).
+12. ✅ **worktrees** — per-ticket worktrees on `ticket/<id>` branches for both harnesses.
+13. **Claude Code harness** — project switch, per-project models and runtime off switch, auth check, environment, process group, log, basic event
+    mapping, failure handling (missing, logged out, usage limit, no `finish`), skills plugin.
+14. **attachments (server)** — protocol, upload route, storage, resizing, own harness, Claude Code paths.
+15. **attachments (clients)** — app pickers and chips, TUI paths and clipboard.
+
+Later: full stream-json → follow mode, approvals through `--permission-prompt-tool`, more harnesses.
+
 ## Open questions
 
-- None blocking. Next: milestone 1.
+- None blocking. Next: milestone 13.
