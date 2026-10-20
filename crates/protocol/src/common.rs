@@ -99,6 +99,9 @@ pub struct ChatMessage {
     /// Image URLs (site files), sent to the model as images.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub images: Vec<Url>,
+    /// Files uploaded to the session (`POST /api/sessions/{id}/attachments`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attachments: Vec<Attachment>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<MessageSource>,
 }
@@ -110,6 +113,20 @@ pub struct ToolCall {
     pub call_id: String,
     pub name: String,
     pub args: serde_json::Value,
+}
+
+/// A file uploaded to a session, as messages refer to it. The server checks `file` against the
+/// session's attachments and fills in the rest itself.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct Attachment {
+    /// The stored file in the session's attachments folder: `<hash>-<name>`.
+    pub file: String,
+    /// The name it was uploaded with (sanitized).
+    pub name: String,
+    pub mime: String,
+    pub size: u64,
 }
 
 /// An external harness (or one of its models) for a project: allowed by config.toml, and

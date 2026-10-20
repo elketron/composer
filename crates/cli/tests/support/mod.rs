@@ -243,6 +243,7 @@ pub async fn busy_worker(after: &'static str, git_project: bool) -> Option<BusyW
             text: "start something long".into(),
             pages: vec![],
             images: vec![],
+            attachments: vec![],
         },
     )
     .await;

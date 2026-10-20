@@ -8,6 +8,7 @@ use composer_core::SiteUrl;
 use composer_protocol::{ServerMessage, TurnState};
 use tokio_util::sync::CancellationToken;
 
+use crate::attachments::{ATTACHMENT_SCHEME, attachment_data_url};
 use crate::provider::{ModelEvent, ModelMessage, ModelRequest, ModelToolCall};
 use crate::server::Server;
 use crate::session::{Session, StepOutput};
@@ -155,6 +156,9 @@ pub fn estimate_tokens(messages: &[ModelMessage]) -> u32 {
 }
 
 fn data_url(server: &Server, url: &str) -> Option<String> {
+    if url.starts_with(ATTACHMENT_SCHEME) {
+        return attachment_data_url(&server.home, url);
+    }
     let path = server.workspace.locate(&SiteUrl::parse(url).ok()?).ok()?;
     let mime = match path.extension()?.to_str()?.to_ascii_lowercase().as_str() {
         "png" => "image/png",

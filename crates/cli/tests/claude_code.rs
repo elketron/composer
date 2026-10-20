@@ -205,6 +205,40 @@ async fn claude_code_works_tickets() {
     );
     std::fs::remove_file(bin.join("logged-out")).unwrap();
 
+    // Ticket attachments: files from this project's sessions reach it; another project's don't.
+    let mine = composer_server::attachments::save(
+        &Home::new(&root),
+        &server.config.attachments,
+        orchestrator.id(),
+        "spec.md",
+        b"# spec",
+    )
+    .unwrap();
+    let elsewhere = server
+        .sessions
+        .create("default", Some(other.display().to_string()))
+        .unwrap();
+    let theirs = composer_server::attachments::save(
+        &Home::new(&root),
+        &server.config.attachments,
+        elsewhere.id(),
+        "secret.md",
+        b"# secret",
+    )
+    .unwrap();
+    let file = root.join("sites/orchestration/tickets/0002.md");
+    let text = std::fs::read_to_string(&file).unwrap().replace(
+        "agent: worker\n",
+        &format!(
+            "agent: worker\nattachments: [\"{}/{}\", \"{}/{}\"]\n",
+            orchestrator.id(),
+            mine.file,
+            elsewhere.id(),
+            theirs.file
+        ),
+    );
+    std::fs::write(&file, text).unwrap();
+
     // A run that finishes through composer mcp.
     std::fs::write(bin.join("mode"), "finish").unwrap();
     let worker = spawn(&server, &orchestrator, "0002").await.unwrap();
@@ -243,6 +277,20 @@ async fn claude_code_works_tickets() {
         assert!(args.contains(arg), "{arg} in:\n{args}");
     }
     assert!(args.contains("--permission-prompts\nnone\n"));
+    assert!(
+        args.contains(&format!(
+            "--add-dir\n{}",
+            root.join("state/sessions")
+                .join(orchestrator.id())
+                .join("attachments")
+                .display()
+        )),
+        "{args}"
+    );
+    assert!(
+        args.contains(&mine.file) && !args.contains(&theirs.file),
+        "{args}"
+    );
     // The project's models pick the model.
     assert!(args.contains("--model\nsonnet\n"), "{args}");
     let events =
@@ -265,7 +313,7 @@ async fn claude_code_works_tickets() {
     std::fs::write(bin.join("mode"), "finish").unwrap();
     server
         .workers
-        .resume(&server, &session, "try again".into())
+        .resume(&server, &session, "try again".into(), vec![])
         .await
         .unwrap();
     until_status(&root, "0003", "done").await;

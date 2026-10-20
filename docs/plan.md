@@ -553,21 +553,35 @@ Built (13b):
 
 ### Attachments
 
-- **Storage:** `state/sessions/<id>/attachments/<hash>-<name>`. Names sanitized; anything resolving
-  outside the folder is rejected. Messages and tickets hold references `{ path, name, mime, size }`
-  (protocol: `attachments` on `ChatMessage` / `message.send`; `images` kept for a while).
-- **Upload:** `POST /api/sessions/<id>/attachments`, multipart, per-server or device token, size cap,
-  type allowlist (images, PDF, text, common code and doc formats). Clients create the session first
-  (new chats too), upload, and send the message only once every upload is done.
-- **Images:** the server resizes (long edge ~1500px) and re-encodes every image, which also drops EXIF;
-  the phone shrinks before upload to save bandwidth, but the server is the one enforcing it.
-- **Own harness:** images as image parts (needs a vision model; a clear error otherwise), text and code
-  inlined in a marked block with a size cap, PDFs as extracted text (`pdftotext`) or by path with a read tool.
-- **Claude Code:** the path in the prompt, with `--add-dir` on the attachments folder; its Read tool opens
-  it. Only ticket attachments of the ticket's own project are passed, and a Claude Code session only
-  exists in a project that allows it.
-- **Untrusted:** attachment contents are data, never instructions; the prompt says so around them.
-- **App:** `image_picker` (camera, gallery), `file_picker` (documents), chips with per-file progress and retry.
+Built (milestone 14, server):
+
+- **Storage:** `state/sessions/<id>/attachments/<hash>-<name>` (first 12 hex of the SHA-256 of what is
+  stored; the same file is stored once). Names sanitized (`A-Z a-z 0-9 . _ -`, no folders, no leading
+  dot, ≤ 80 chars); a reference resolves only to a file inside that session's folder.
+- **Protocol:** `Attachment { file, name, mime, size }` on `ChatMessage.attachments` and
+  `message.send.attachments`. The server re-reads each referenced file (the client's mime and size are
+  ignored) and refuses references that aren't the session's.
+- **Upload:** `POST /api/sessions/{id}/attachments`, multipart, token or device token; up to 5 files per
+  request, each ≤ `[attachments] max_mb` (20). Allowed: images (PNG, JPEG, GIF, WebP, by content), PDF
+  (by content), text by extension and valid UTF-8 (prose, data, common code). Reply: the stored
+  `Attachment`s. `GET /api/sessions/{id}/attachments/{file}` serves one back (download, `nosniff`).
+  Clients create the session first, upload, then send the message.
+- **Images:** turned upright (EXIF orientation), shrunk to `image_max_edge` (1500) on the long side and
+  re-encoded (JPEG stays JPEG at q85, others become PNG), which drops EXIF and other metadata.
+- **Own harness:** images go to the model as image parts (`attachment://<session>/<file>` in history,
+  a data URL when sent; needs a vision model, otherwise the provider's error ends the turn); text inline
+  and PDFs as `pdftotext` text, cut at `inline_max_kb` (100), each in an `<attachment name type>` block,
+  with a line saying the contents are data, never instructions. The message lists the refs
+  (`<session>/<file>`) so the orchestrator can put them in a ticket's `attachments:`.
+- **Tickets:** `attachments: ["<session>/<file>"]`; only files from sessions in the ticket's own project
+  (or both without one) are passed. Own workers get them in their first message; Claude Code gets their
+  paths in the prompt and `--add-dir` on their folders (also for files sent with a message that resumes
+  it), and reads them with its Read tool.
+
+Next (milestone 15, clients):
+
+- **App:** `image_picker` (camera, gallery), `file_picker` (documents); shrink before upload; chips with
+  per-file progress and retry; thumbnails from the GET route.
 - **TUI:** a pasted path that exists on disk becomes a chip; a key (e.g. `space a`) reads a clipboard image
   with `arboard` (Wayland feature). Always uploaded over HTTP: the TUI may not be on the server machine.
 
@@ -579,11 +593,11 @@ Built (13b):
 13. ✅ **Claude Code harness** — project switch, auth check, cleared environment, process group, log, event
     mapping, failure handling (missing, logged out, usage limit, no `finish`), resume on feedback, skills plugin.
     13b ✅: per-project models, runtime off switch, shutdown, automatic resume after a usage limit.
-14. **attachments (server)** — protocol, upload route, storage, resizing, own harness, Claude Code paths.
+14. ✅ **attachments (server)** — protocol, upload route, storage, resizing, own harness, Claude Code paths, ticket files.
 15. **attachments (clients)** — app pickers and chips, TUI paths and clipboard.
 
 Later: full stream-json → follow mode, approvals through `--permission-prompt-tool`, more harnesses.
 
 ## Open questions
 
-- None blocking. Next: milestone 14.
+- None blocking. Next: milestone 15.

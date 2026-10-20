@@ -4,6 +4,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use composer_protocol::ChatMessage;
 
+use crate::attachments::TicketFile;
 use crate::config_sections::ProjectSettings;
 use crate::server::Server;
 
@@ -21,6 +22,8 @@ pub struct StartRequest {
     pub settings: ProjectSettings,
     /// The model to run (allowed for the project); `None`: the harness's default.
     pub model: Option<String>,
+    /// Files the ticket's `attachments:` refer to (checked: same project).
+    pub files: Vec<TicketFile>,
     /// The run's own output: `state/workers/<session>.log` (appended to).
     pub log: PathBuf,
     /// Continue an earlier run of this ticket (the harness's own session id) with a message
@@ -32,6 +35,8 @@ pub struct StartRequest {
 pub struct Resume {
     pub harness_session: String,
     pub message: String,
+    /// Files attached to the message (in the worker session's attachments folder).
+    pub files: Vec<PathBuf>,
 }
 
 /// Why a run stopped without finishing, to be picked up later.

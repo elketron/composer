@@ -82,6 +82,41 @@ enum ApprovalDecision {
   String toJson() => wire;
 }
 
+/// A file uploaded to a session, as messages refer to it. The server checks `file` against the
+/// session's attachments and fills in the rest itself.
+class Attachment {
+  const Attachment({
+    required this.file,
+    required this.name,
+    required this.mime,
+    required this.size,
+  });
+
+  /// The stored file in the session's attachments folder: `<hash>-<name>`.
+  final String file;
+
+  /// The name it was uploaded with (sanitized).
+  final String name;
+
+  final String mime;
+
+  final int size;
+
+  factory Attachment.fromJson(Map<String, Object?> json) => Attachment(
+        file: json['file'] as String,
+        name: json['name'] as String,
+        mime: json['mime'] as String,
+        size: (json['size'] as num).toInt(),
+      );
+
+  Map<String, Object?> toJson() => {
+        'file': file,
+        'name': name,
+        'mime': mime,
+        'size': size,
+      };
+}
+
 enum ChangedBy {
   agent('agent'),
   app('app'),
@@ -138,6 +173,7 @@ class ChatMessage {
     this.toolCalls = const [],
     this.pages = const [],
     this.images = const [],
+    this.attachments = const [],
     this.source,
   });
 
@@ -155,6 +191,9 @@ class ChatMessage {
   /// Image URLs (site files), sent to the model as images.
   final List<String> images;
 
+  /// Files uploaded to the session (`POST /api/sessions/{id}/attachments`).
+  final List<Attachment> attachments;
+
   final MessageSource? source;
 
   factory ChatMessage.fromJson(Map<String, Object?> json) => ChatMessage(
@@ -164,6 +203,7 @@ class ChatMessage {
         toolCalls: json['tool_calls'] == null ? const [] : (json['tool_calls'] as List).map((e) => ToolCall.fromJson(e as Map<String, Object?>)).toList(),
         pages: json['pages'] == null ? const [] : (json['pages'] as List).map((e) => e as String).toList(),
         images: json['images'] == null ? const [] : (json['images'] as List).map((e) => e as String).toList(),
+        attachments: json['attachments'] == null ? const [] : (json['attachments'] as List).map((e) => Attachment.fromJson(e as Map<String, Object?>)).toList(),
         source: json['source'] == null ? null : MessageSource.fromJson(json['source'] as Map<String, Object?>),
       );
 
@@ -174,6 +214,7 @@ class ChatMessage {
         if (toolCalls.isNotEmpty) 'tool_calls': toolCalls.map((e) => e.toJson()).toList(),
         if (pages.isNotEmpty) 'pages': pages,
         if (images.isNotEmpty) 'images': images,
+        if (attachments.isNotEmpty) 'attachments': attachments.map((e) => e.toJson()).toList(),
         if (source != null) 'source': source?.toJson(),
       };
 }
@@ -288,6 +329,7 @@ final class ClientCommandMessageSend extends ClientCommand {
     required this.text,
     this.pages = const [],
     this.images = const [],
+    this.attachments = const [],
   });
 
   final String session;
@@ -298,11 +340,15 @@ final class ClientCommandMessageSend extends ClientCommand {
 
   final List<String> images;
 
+  /// Uploaded first, then referred to here.
+  final List<Attachment> attachments;
+
   factory ClientCommandMessageSend.fromJson(Map<String, Object?> json) => ClientCommandMessageSend(
         session: json['session'] as String,
         text: json['text'] as String,
         pages: json['pages'] == null ? const [] : (json['pages'] as List).map((e) => e as String).toList(),
         images: json['images'] == null ? const [] : (json['images'] as List).map((e) => e as String).toList(),
+        attachments: json['attachments'] == null ? const [] : (json['attachments'] as List).map((e) => Attachment.fromJson(e as Map<String, Object?>)).toList(),
       );
 
   Map<String, Object?> toJson() => {
@@ -311,6 +357,7 @@ final class ClientCommandMessageSend extends ClientCommand {
         'text': text,
         if (pages.isNotEmpty) 'pages': pages,
         if (images.isNotEmpty) 'images': images,
+        if (attachments.isNotEmpty) 'attachments': attachments.map((e) => e.toJson()).toList(),
       };
 }
 

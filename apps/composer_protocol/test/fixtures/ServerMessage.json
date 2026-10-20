@@ -163,6 +163,14 @@
           }
         }
       ],
+      "attachments": [
+        {
+          "file": "3f2a9c1b7d4e-notes.md",
+          "name": "notes.md",
+          "mime": "text/markdown",
+          "size": 120
+        }
+      ],
       "source": {
         "kind": "app",
         "site": "design"

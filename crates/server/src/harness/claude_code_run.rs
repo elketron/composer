@@ -231,6 +231,7 @@ fn assistant(content: String, thinking: Option<String>) -> ChatMessage {
         tool_calls: vec![],
         pages: vec![],
         images: vec![],
+        attachments: vec![],
         source: None,
     }
 }

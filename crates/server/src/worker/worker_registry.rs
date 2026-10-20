@@ -7,11 +7,12 @@ use tokio_util::sync::CancellationToken;
 
 use composer_core::Page;
 use composer_protocol::{
-    ChangedBy, ChatMessage, HarnessSwitch, MessageSource, Role, ServerMessage, TurnState,
-    WorkerState,
+    Attachment, ChangedBy, ChatMessage, HarnessSwitch, MessageSource, Role, ServerMessage,
+    TurnState, WorkerState,
 };
 
 use crate::agent::AgentDefinition;
+use crate::attachments::{resolve, ticket_files};
 use crate::config_sections::ProjectSettings;
 use crate::harness::{
     ClaudeCodeHarness, Harness, OwnHarness, Resume, StartRequest, check_harness_allowed,
@@ -196,6 +197,11 @@ impl WorkerRegistry {
             project: place.folder,
             settings: place.settings,
             model: place.model,
+            files: ticket_files(
+                &server.home,
+                page.frontmatter.get("attachments"),
+                place.project.as_deref(),
+            ),
             log: log_path(server, &sid)?,
             resume: None,
         };
@@ -229,12 +235,14 @@ impl WorkerRegistry {
             })
     }
 
-    /// Continues the stopped worker `session` on its ticket with the user's `message`.
+    /// Continues the stopped worker `session` on its ticket with the user's `message` (and the
+    /// files attached to it, already checked against the session).
     pub async fn resume(
         &self,
         server: &Arc<Server>,
         session: &Arc<Session>,
         message: String,
+        attachments: Vec<Attachment>,
     ) -> Result<(), String> {
         let info = session.info();
         let id = info.ticket.clone().ok_or("not a worker session")?;
@@ -272,10 +280,18 @@ impl WorkerRegistry {
             )
             .map_err(|e| e.to_string())?;
         // What it is told shows in the worker's chat, as in any session.
+        let files = attachments
+            .iter()
+            .filter_map(|a| resolve(&server.home, &info.id, a).ok())
+            .map(|(_, path)| path)
+            .collect();
         session.emit(&server.hub, |seq| ServerMessage::MessageDone {
             session: info.id.clone(),
             seq,
-            message: user_message(message.clone(), MessageSource::Tui),
+            message: ChatMessage {
+                attachments,
+                ..user_message(message.clone(), MessageSource::Tui)
+            },
         });
         let request = StartRequest {
             session: info.id.clone(),
@@ -284,10 +300,16 @@ impl WorkerRegistry {
             project: place.folder,
             settings: place.settings,
             model: place.model,
+            files: ticket_files(
+                &server.home,
+                page.frontmatter.get("attachments"),
+                place.project.as_deref(),
+            ),
             log: log_path(server, &info.id)?,
             resume: Some(Resume {
                 harness_session,
                 message,
+                files,
             }),
         };
         self.launch(
@@ -356,7 +378,7 @@ impl WorkerRegistry {
             let ticket_project = page_project(server, &page, &session);
             let ticket_harness = page.frontmatter.get_str("harness").unwrap_or_default();
             if ticket_harness == harness && ticket_project.as_deref() == Some(project) {
-                let resumed = self.resume(server, &session, GO_ON.into()).await;
+                let resumed = self.resume(server, &session, GO_ON.into(), vec![]).await;
                 if let Err(e) = resumed {
                     tracing::warn!("resuming #{}: {e}", session.id());
                 }
@@ -711,7 +733,11 @@ fn go_on_at(server: &Arc<Server>, session: String, until: i64) {
         if worker.info().worker != Some(WorkerState::Paused) {
             return;
         }
-        if let Err(e) = server.workers.resume(&server, &worker, GO_ON.into()).await {
+        if let Err(e) = server
+            .workers
+            .resume(&server, &worker, GO_ON.into(), vec![])
+            .await
+        {
             tracing::warn!("resuming #{session} after its pause: {e}");
         }
     });
@@ -793,6 +819,7 @@ fn user_message(content: String, source: MessageSource) -> ChatMessage {
         tool_calls: vec![],
         pages: vec![],
         images: vec![],
+        attachments: vec![],
         source: Some(source),
     }
 }

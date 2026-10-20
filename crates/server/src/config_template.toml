@@ -56,3 +56,11 @@ max_turns = 60
 timeout_minutes = 60
 # What it may do without asking; anything else is denied. Projects can add to it.
 allowed_tools = ["Read", "Edit", "Write", "Glob", "Grep", "mcp__composer", "Bash(git status:*)", "Bash(git diff:*)", "Bash(git log:*)", "Bash(git add:*)", "Bash(git commit:*)"]
+
+[attachments]
+# Largest upload, in MB.
+max_mb = 20
+# Images are shrunk to this long side (pixels) and re-encoded, which also drops EXIF (location).
+image_max_edge = 1500
+# Text and PDF text beyond this many KB is cut before it reaches the model.
+inline_max_kb = 100

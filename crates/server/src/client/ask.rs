@@ -73,6 +73,7 @@ pub async fn ask(options: AskOptions) -> anyhow::Result<()> {
             text: options.text,
             pages: vec![],
             images: vec![],
+            attachments: vec![],
         }))
         .await?;
 

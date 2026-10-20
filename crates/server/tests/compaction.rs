@@ -62,6 +62,7 @@ async fn say(socket: &mut Socket, session: &str, id: u64, text: &str) -> Vec<Ser
             text: text.into(),
             pages: vec![],
             images: vec![],
+            attachments: vec![],
         },
     )
     .await;

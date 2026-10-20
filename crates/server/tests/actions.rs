@@ -79,6 +79,7 @@ async fn ask(socket: &mut Socket, session: &str, id: u64) {
             text: "go".into(),
             pages: vec![],
             images: vec![],
+            attachments: vec![],
         },
     )
     .await;

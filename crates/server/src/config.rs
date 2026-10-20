@@ -3,7 +3,8 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::config_sections::{
-    AgentConfig, ClaudeCodeConfig, ProjectsConfig, ProviderConfig, RemindersConfig, ServerConfig,
+    AgentConfig, AttachmentsConfig, ClaudeCodeConfig, ProjectsConfig, ProviderConfig,
+    RemindersConfig, ServerConfig,
 };
 use crate::error::{Result, ServerError};
 
@@ -22,6 +23,8 @@ pub struct Config {
     pub reminders: RemindersConfig,
     #[serde(default = "section")]
     pub claude_code: ClaudeCodeConfig,
+    #[serde(default = "section")]
+    pub attachments: AttachmentsConfig,
 }
 
 impl Config {

@@ -60,6 +60,11 @@ impl Harness for OwnHarness {
         if let Some(project) = &request.project {
             command.args(["--project", project]);
         }
+        for file in &request.files {
+            command
+                .arg("--attachment")
+                .arg(format!("{}/{}", file.session, file.attachment.file));
+        }
         let process = ChildProcess::spawn(command)
             .map_err(|e| format!("starting {}: {e}", server.worker_exe.display()))?;
         Ok(Arc::new(process))

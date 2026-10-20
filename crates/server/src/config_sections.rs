@@ -53,6 +53,19 @@ pub struct ProjectSettings {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AttachmentsConfig {
+    /// Largest upload, in MB.
+    #[serde(default = "default_attachment_max_mb")]
+    pub max_mb: u64,
+    /// Images are shrunk to this many pixels on their long side.
+    #[serde(default = "default_image_max_edge")]
+    pub image_max_edge: u32,
+    /// Text (and PDF text) beyond this many KB is cut before it reaches the model.
+    #[serde(default = "default_inline_max_kb")]
+    pub inline_max_kb: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ClaudeCodeConfig {
     /// The Claude Code CLI. It must already be logged in (`claude auth login`).
     #[serde(default = "default_claude_command")]
@@ -104,6 +117,18 @@ fn default_base_url() -> String {
 
 fn default_projects_dir() -> String {
     "~/Projects".into()
+}
+
+fn default_attachment_max_mb() -> u64 {
+    20
+}
+
+fn default_image_max_edge() -> u32 {
+    1500
+}
+
+fn default_inline_max_kb() -> usize {
+    100
 }
 
 fn default_claude_command() -> String {

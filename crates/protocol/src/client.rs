@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::common::{ApprovalDecision, Seq, SessionId, Url, WorkerState};
+use crate::common::{ApprovalDecision, Attachment, Seq, SessionId, Url, WorkerState};
 
 /// A command from a client. The server answers with `ok` or `error` carrying the same `id`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -45,6 +45,9 @@ pub enum ClientCommand {
         pages: Vec<Url>,
         #[serde(default)]
         images: Vec<Url>,
+        /// Uploaded first, then referred to here.
+        #[serde(default)]
+        attachments: Vec<Attachment>,
     },
 
     /// Compact the session now: save memory, then summarize older messages.

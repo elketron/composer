@@ -23,7 +23,7 @@ walkdir = "2.5.0"
 tempfile = "3.27.0"
 tokio = { version = "1.53.3", features = ["full"] }
 tokio-util = "0.7.20"
-axum = { version = "0.8.9", features = ["ws"] }
+axum = { version = "0.8.9", features = ["ws", "multipart"] }
 reqwest = { version = "0.13.5", features = ["json", "stream", "form"] }
 futures = "0.3.34"
 toml = "1.1.8"
@@ -39,8 +39,21 @@ base64 = "0.22"
 qrcode = { version = "0.14.1", default-features = false }
 anyhow = "1.0.104"
 libc = "0.2.191"
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 ratatui = "0.30.2"
 crossterm = { version = "0.29.0", features = ["event-stream"] }
 unicode-width = "0.2.2"
+
+# Image decoding and resizing (attachments) is very slow unoptimized; keep debug builds usable.
+[profile.dev.package.image]
+opt-level = 3
+[profile.dev.package.zune-jpeg]
+opt-level = 3
+[profile.dev.package.png]
+opt-level = 3
+[profile.dev.package.fdeflate]
+opt-level = 3
+[profile.dev.package.image-webp]
+opt-level = 3

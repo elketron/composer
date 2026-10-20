@@ -40,7 +40,8 @@ fn message_send_defaults_attachments() {
             session: "a3f1".into(),
             text: "hi".into(),
             pages: vec![],
-            images: vec![]
+            images: vec![],
+            attachments: vec![]
         }
     );
 }

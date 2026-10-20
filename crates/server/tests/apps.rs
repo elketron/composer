@@ -67,6 +67,7 @@ async fn new_app_scaffolds_the_ui_and_a_build_action() {
             text: "app please".into(),
             pages: vec![],
             images: vec![],
+            attachments: vec![],
         },
     )
     .await;

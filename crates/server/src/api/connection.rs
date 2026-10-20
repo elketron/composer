@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use composer_protocol::{
-    ChatMessage, ClientCommand, ClientRequest, CommandResult, MessageSource, Role, Seq,
+    Attachment, ChatMessage, ClientCommand, ClientRequest, CommandResult, MessageSource, Role, Seq,
     ServerMessage, SessionId,
 };
 use tokio::sync::mpsc;
@@ -12,6 +12,7 @@ use tokio_util::sync::CancellationToken;
 use crate::agent::AgentDefinition;
 use crate::api::event_scope::{EventScope, scope};
 use crate::api::glob::url_matches;
+use crate::attachments::resolve;
 use crate::harness::WorkerSink;
 use crate::server::Server;
 use crate::session::{compact_now, submit};
@@ -115,17 +116,27 @@ impl Connection {
                 None
             }
             // A stopped external worker: the message continues its run (`--resume`).
-            ClientCommand::MessageSend { session, text, .. }
-                if server
-                    .sessions
-                    .get(&session)
-                    .is_ok_and(|s| server.workers.resumable(server, &s)) =>
+            ClientCommand::MessageSend {
+                session,
+                text,
+                attachments,
+                ..
+            } if server
+                .sessions
+                .get(&session)
+                .is_ok_and(|s| server.workers.resumable(server, &s)) =>
             {
                 let (connection, server) = (self.clone(), server.clone());
                 tokio::spawn(async move {
-                    let resumed = match server.sessions.get(&session) {
-                        Ok(s) => server.workers.resume(&server, &s, text).await,
-                        Err(e) => Err(e.to_string()),
+                    let resumed = match (
+                        server.sessions.get(&session),
+                        resolve_attachments(&server, &session, &attachments),
+                    ) {
+                        (Ok(s), Ok(attachments)) => {
+                            server.workers.resume(&server, &s, text, attachments).await
+                        }
+                        (Err(e), _) => Err(e.to_string()),
+                        (_, Err(e)) => Err(e),
                     };
                     connection.send(Arc::new(match resumed {
                         Ok(()) => ServerMessage::Ok {
@@ -329,8 +340,10 @@ impl Connection {
                 text,
                 pages,
                 images,
+                attachments,
             } => {
                 let s = server.sessions.get(&session).map_err(|e| e.to_string())?;
+                let attachments = resolve_attachments(server, &session, &attachments)?;
                 let message = ChatMessage {
                     role: Role::User,
                     content: text,
@@ -338,6 +351,7 @@ impl Connection {
                     tool_calls: vec![],
                     pages,
                     images,
+                    attachments,
                     source: Some(MessageSource::Tui),
                 };
                 // A running worker's turns happen in its harness, not here.
@@ -416,4 +430,16 @@ impl Connection {
             }
         }
     }
+}
+
+/// A client's attachment references, checked against the session's own uploads.
+fn resolve_attachments(
+    server: &Server,
+    session: &str,
+    attachments: &[Attachment],
+) -> Result<Vec<Attachment>, String> {
+    attachments
+        .iter()
+        .map(|a| resolve(&server.home, session, a).map(|(a, _)| a))
+        .collect()
 }

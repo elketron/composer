@@ -2,6 +2,7 @@
 
 mod api_error;
 mod app_routes;
+mod attachment_routes;
 mod auth;
 mod connection;
 mod event_scope;
@@ -13,6 +14,7 @@ mod ws_routes;
 use std::sync::Arc;
 
 use axum::Router;
+use axum::extract::DefaultBodyLimit;
 use axum::middleware;
 use axum::routing::{get, post};
 
@@ -40,6 +42,18 @@ pub fn router(server: Arc<Server>) -> Router {
         .route(
             "/api/sessions/{id}/messages",
             post(http_routes::post_message),
+        )
+        .route(
+            "/api/sessions/{id}/attachments",
+            post(attachment_routes::upload).layer(DefaultBodyLimit::max(
+                ((server.config.attachments.max_mb * attachment_routes::FILES_PER_REQUEST + 1)
+                    * 1024
+                    * 1024) as usize,
+            )),
+        )
+        .route(
+            "/api/sessions/{id}/attachments/{file}",
+            get(attachment_routes::get),
         )
         .route(
             "/api/sessions/{id}/project/diff",

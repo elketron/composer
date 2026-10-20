@@ -107,6 +107,7 @@ async fn orchestrator_runs_a_worker_process_on_a_ticket() {
             text: "get a note written".into(),
             pages: vec![],
             images: vec![],
+            attachments: vec![],
         },
     )
     .await;

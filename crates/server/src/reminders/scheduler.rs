@@ -104,6 +104,7 @@ fn post_to_session(server: &Arc<Server>, reminder: &DueReminder, due: &str) -> O
         tool_calls: vec![],
         pages: vec![],
         images: vec![],
+        attachments: vec![],
         source: Some(MessageSource::Reminder {
             url: reminder.url.to_string(),
         }),

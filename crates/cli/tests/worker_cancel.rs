@@ -28,6 +28,7 @@ async fn cancelling_a_worker_stops_it_and_fails_the_ticket() {
             text: "hurry up".into(),
             pages: vec![],
             images: vec![],
+            attachments: vec![],
         },
     )
     .await;

@@ -192,6 +192,7 @@ async fn a_reminder_comes_back_to_the_session_that_wrote_it() {
             text: "remind me at 20:05".into(),
             pages: vec![],
             images: vec![],
+            attachments: vec![],
         },
     )
     .await;

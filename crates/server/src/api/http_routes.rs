@@ -160,6 +160,7 @@ pub async fn post_message(
         tool_calls: vec![],
         pages: body.pages,
         images: body.images,
+        attachments: vec![],
         source: Some(MessageSource::App {
             site: body.site.unwrap_or_else(|| "unknown".into()),
         }),

@@ -101,6 +101,9 @@ enum Command {
         ticket: String,
         #[arg(long)]
         parent: String,
+        /// `<session>/<file>`: a ticket attachment for the first message (repeatable).
+        #[arg(long = "attachment")]
+        attachments: Vec<String>,
     },
     /// Serve a running worker's tools over MCP on stdin/stdout (started for external harnesses).
     #[command(hide = true)]
@@ -217,6 +220,7 @@ async fn main() -> anyhow::Result<()> {
             session,
             ticket,
             parent,
+            attachments,
         }) => {
             // `--agent` and `--project` are the global flags.
             let options = WorkerOptions {
@@ -225,6 +229,7 @@ async fn main() -> anyhow::Result<()> {
                 agent: cli.agent,
                 project: cli.project,
                 parent_url: parent,
+                attachments,
             };
             run_worker(home, options).await?;
         }

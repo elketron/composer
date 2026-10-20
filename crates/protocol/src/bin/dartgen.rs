@@ -571,6 +571,12 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
         }],
         pages: vec![],
         images: vec![],
+        attachments: vec![Attachment {
+            file: "3f2a9c1b7d4e-notes.md".into(),
+            name: "notes.md".into(),
+            mime: "text/markdown".into(),
+            size: 120,
+        }],
         source: Some(MessageSource::App {
             site: "design".into(),
         }),
@@ -764,6 +770,7 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
             text: "hi".into(),
             pages: vec!["site://home".into()],
             images: vec![],
+            attachments: vec![],
         },
         ClientCommand::SessionCompact { session: s() },
         ClientCommand::TurnCancel { session: s() },

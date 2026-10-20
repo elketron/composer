@@ -79,6 +79,7 @@ async fn turn_with_tool_call() {
             text: "what do you know about me?".into(),
             pages: vec![],
             images: vec![],
+            attachments: vec![],
         },
     )
     .await;
@@ -197,6 +198,7 @@ async fn write_updates_index_and_notifies_subscribers() {
             text: "remember composer".into(),
             pages: vec![],
             images: vec![],
+            attachments: vec![],
         },
     )
     .await;
@@ -250,6 +252,7 @@ async fn reattach_replays_without_deltas() {
             text: "hello".into(),
             pages: vec![],
             images: vec![],
+            attachments: vec![],
         },
     )
     .await;
@@ -307,6 +310,7 @@ async fn earlier_thinking_is_not_resent() {
                 text: text.into(),
                 pages: vec![],
                 images: vec![],
+                attachments: vec![],
             },
         )
         .await;

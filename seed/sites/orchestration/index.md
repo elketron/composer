@@ -28,6 +28,7 @@ status: open          # open | claimed | done | failed
 agent: worker         # a worker agent (role: worker) in site://agents; spawn_worker's agent overrides
 plan: site://plans/server-api
 project: ~/Projects/composer
+attachments: []       # files from the chat, by the refs your message lists: ["<session>/<file>"]
 created: 2026-10-18
 ---
 # Implement HTTP page endpoints

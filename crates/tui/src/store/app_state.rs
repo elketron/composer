@@ -103,6 +103,7 @@ impl AppState {
                         text,
                         pages: vec![],
                         images: vec![],
+                        attachments: vec![],
                     },
                     Pending::Ignore,
                 )
@@ -691,6 +692,7 @@ mod tests {
             tool_calls: vec![],
             pages: vec![],
             images: vec![],
+            attachments: vec![],
             source: None,
         }
     }

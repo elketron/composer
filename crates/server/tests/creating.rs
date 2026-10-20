@@ -57,6 +57,7 @@ async fn run_tools(
             text: "make it".into(),
             pages: vec![],
             images: vec![],
+            attachments: vec![],
         },
     )
     .await;
