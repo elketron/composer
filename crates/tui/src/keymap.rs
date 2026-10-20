@@ -53,6 +53,11 @@ impl Keymap {
                 "sites",
             ),
             (
+                vec![space, key('a')],
+                Action::AttachClipboard,
+                "attach the image on the clipboard (or paste a file's path while writing)",
+            ),
+            (
                 vec![space, key('w')],
                 Action::OpenPicker(PickerKind::Sessions),
                 "sessions and workers",

@@ -70,6 +70,13 @@ impl App {
         }
     }
 
+    /// Pasted text (bracketed paste).
+    pub fn handle_paste(&mut self, text: &str) {
+        for action in self.root.handle_paste(text, &self.state) {
+            self.dispatcher.dispatch(action);
+        }
+    }
+
     /// Reduces one action. Runs effects that don't need the terminal and returns the rest.
     pub fn process(&mut self, action: Action) -> Vec<Effect> {
         let before = self.state.page.current.as_ref().map(|p| p.url.clone());
@@ -157,6 +164,10 @@ impl App {
                         // composer, scrolling), so every key repaints.
                         dirty = true;
                     }
+                    Some(Ok(Event::Paste(text))) => {
+                        self.handle_paste(&text);
+                        dirty = true;
+                    }
                     Some(Ok(Event::Resize(..))) => dirty = true,
                     Some(Ok(_)) => {}
                     Some(Err(e)) => return Err(e.into()),
@@ -169,18 +180,18 @@ impl App {
                             Effect::OpenBrowser(url) => self.dispatcher.dispatch(editor::open_browser(&url)),
                             Effect::OpenFile { path, line } => {
                                 drop(events);
-                                ratatui::restore();
+                                crate::terminal::restore();
                                 let result = editor::open_file(&path, line);
-                                terminal = ratatui::init();
+                                terminal = crate::terminal::init();
                                 terminal.clear()?;
                                 events = EventStream::new();
                                 self.dispatcher.dispatch(result);
                             }
                             Effect::ViewText { name, text } => {
                                 drop(events);
-                                ratatui::restore();
+                                crate::terminal::restore();
                                 let result = editor::view_text(&name, &text);
-                                terminal = ratatui::init();
+                                terminal = crate::terminal::init();
                                 terminal.clear()?;
                                 events = EventStream::new();
                                 self.dispatcher.dispatch(result);
@@ -188,9 +199,9 @@ impl App {
                             Effect::EditPage(url) => {
                                 // Stop reading the terminal so nvim gets every key.
                                 drop(events);
-                                ratatui::restore();
+                                crate::terminal::restore();
                                 let result = editor::edit_page(self.runner.api(), &url).await;
-                                terminal = ratatui::init();
+                                terminal = crate::terminal::init();
                                 terminal.clear()?;
                                 events = EventStream::new();
                                 self.dispatcher.dispatch(result);

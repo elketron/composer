@@ -47,6 +47,8 @@ dependencies:
   url_launcher: ^6.3.3
   flutter_local_notifications: ^22.3.2
   flutter_foreground_task: ^11.0.3
+  image_picker: ^1.2.4
+  file_picker: ^13.1.0
 
 dev_dependencies:
   flutter_test:

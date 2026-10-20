@@ -133,7 +133,7 @@ impl Component for ChatPane {
             ..inner
         };
 
-        let composer_height = self.composer.height(inner.width);
+        let composer_height = self.composer.height(inner.width, state);
         let [messages, input] =
             Layout::vertical([Constraint::Min(1), Constraint::Length(composer_height)])
                 .areas(inner);

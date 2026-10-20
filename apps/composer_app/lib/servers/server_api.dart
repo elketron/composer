@@ -7,6 +7,7 @@ import 'package:composer_protocol/composer_protocol.dart';
 import 'package:http/http.dart' as http;
 
 import '../state/site_url.dart';
+import '../state/types.dart';
 
 const _timeout = Duration(seconds: 10);
 
@@ -133,3 +134,48 @@ String describeError(Object error) => switch (error) {
       _ when error.toString().contains('TimeoutException') => 'the server didn\'t answer in time',
       _ => error.toString(),
     };
+
+/// `POST /api/sessions/{session}/attachments` with one file; `onProgress` gets 0–1 as it is
+/// sent. Returns what the server stored.
+Future<Attachment> uploadAttachment(
+  String url,
+  String token,
+  String session,
+  PickedFile file,
+  void Function(double progress) onProgress,
+) async {
+  final request = http.MultipartRequest('POST', Uri.parse('$url/api/sessions/$session/attachments'));
+  request.files.add(file.bytes != null
+      ? http.MultipartFile.fromBytes('file', file.bytes!, filename: file.name)
+      : await http.MultipartFile.fromPath('file', file.path!, filename: file.name));
+  // Counted on the way out, for the progress bar.
+  final body = request.finalize();
+  final total = request.contentLength;
+  var sent = 0;
+  final streamed = http.StreamedRequest('POST', request.url)
+    ..headers.addAll(request.headers)
+    ..headers[HttpHeaders.authorizationHeader] = 'Bearer $token'
+    ..contentLength = total;
+  body.listen(
+    (chunk) {
+      sent += chunk.length;
+      if (total > 0) onProgress(sent / total);
+      streamed.sink.add(chunk);
+    },
+    onDone: streamed.sink.close,
+    onError: streamed.sink.addError,
+  );
+  final response = await http.Response.fromStream(await streamed.send().timeout(const Duration(minutes: 5)));
+  if (response.statusCode != 200) {
+    String? error;
+    try {
+      error = (jsonDecode(response.body) as Map<String, Object?>)['error'] as String?;
+    } catch (_) {}
+    throw ServerError(error ?? 'server answered ${response.statusCode}');
+  }
+  final stored = (jsonDecode(response.body) as List<Object?>).cast<Map<String, Object?>>();
+  return Attachment.fromJson(stored.last);
+}
+
+/// The URL of a session's stored attachment (needs the token header).
+Uri attachmentUri(String url, String session, String file) => Uri.parse('$url/api/sessions/$session/attachments/${Uri.encodeComponent(file)}');

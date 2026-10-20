@@ -578,12 +578,20 @@ Built (milestone 14, server):
   paths in the prompt and `--add-dir` on their folders (also for files sent with a message that resumes
   it), and reads them with its Read tool.
 
-Next (milestone 15, clients):
+Built (milestone 15, clients):
 
-- **App:** `image_picker` (camera, gallery), `file_picker` (documents); shrink before upload; chips with
-  per-file progress and retry; thumbnails from the GET route.
-- **TUI:** a pasted path that exists on disk becomes a chip; a key (e.g. `space a`) reads a clipboard image
-  with `arboard` (Wayland feature). Always uploaded over HTTP: the TUI may not be on the server machine.
+- **TUI:** a file attaches when its path is pasted while writing (bracketed paste; quoted, `file://` and
+  shell-escaped paths too), with `:file <path>`, or the clipboard image with `space a` (`arboard`, Wayland
+  and X11). Each file uploads over HTTP right away (the TUI may not be on the server machine) and shows
+  as a chip above the input (`…`, `✓`, `✗`); backspace in an empty message removes the last one,
+  `:file clear` all. Enter waits for uploads; files alone can be sent. Sent messages list their files.
+  Switching sessions drops attached files (they belong to the session they went to). Headless scripts:
+  `paste <text>`.
+- **App:** a paperclip beside the input: Take a photo (phones), Photos (`image_picker`, up to 5, shrunk to
+  1500px at quality 85 on the phone), File (`file_picker`; Android `content://` files are read into
+  memory). Chips show upload progress, ✓, retry on failure, and ×. Send waits until every file is
+  uploaded; files alone can be sent. Sent messages show image thumbnails (fetched with the token) and
+  file chips.
 
 ### Milestones
 
@@ -594,10 +602,10 @@ Next (milestone 15, clients):
     mapping, failure handling (missing, logged out, usage limit, no `finish`), resume on feedback, skills plugin.
     13b ✅: per-project models, runtime off switch, shutdown, automatic resume after a usage limit.
 14. ✅ **attachments (server)** — protocol, upload route, storage, resizing, own harness, Claude Code paths, ticket files.
-15. **attachments (clients)** — app pickers and chips, TUI paths and clipboard.
+15. ✅ **attachments (clients)** — app pickers and chips, TUI paths and clipboard.
 
 Later: full stream-json → follow mode, approvals through `--permission-prompt-tool`, more harnesses.
 
 ## Open questions
 
-- None blocking. Next: milestone 15.
+- None blocking. Phase 3 is done.

@@ -1,5 +1,6 @@
 //! Plain data held by the stores.
 
+use composer_protocol::Attachment;
 use composer_protocol::ClientCommand;
 use composer_protocol::http::{SearchHit, SiteSummary};
 
@@ -46,6 +47,8 @@ pub enum ChatItem {
     User {
         text: String,
         source: Option<String>,
+        /// Names of the files attached to it.
+        files: Vec<String>,
     },
     Thinking {
         text: String,
@@ -179,4 +182,30 @@ pub struct DiffLine {
 pub struct Catalog {
     pub sites: Vec<SiteSummary>,
     pub pages: Vec<SearchHit>,
+}
+
+/// A file attached to the message being written: uploaded right away, sent with the message.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PendingFile {
+    pub id: u64,
+    pub name: String,
+    /// The session it was uploaded to.
+    pub session: String,
+    pub state: UploadState,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum UploadState {
+    Uploading,
+    Ready(Attachment),
+    Failed(String),
+}
+
+/// What to upload.
+#[derive(Debug, Clone, PartialEq)]
+pub enum FileSource {
+    /// A file on this machine (pasted path, `:file`).
+    Path(String),
+    /// Bytes already read (a clipboard image).
+    Bytes { name: String, bytes: Vec<u8> },
 }

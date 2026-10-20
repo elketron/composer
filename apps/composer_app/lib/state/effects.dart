@@ -3,6 +3,7 @@
 import 'package:composer_protocol/composer_protocol.dart';
 
 import 'server_entry.dart';
+import 'types.dart';
 
 sealed class AppEffect {
   const AppEffect();
@@ -110,4 +111,13 @@ final class SearchPages extends AppEffect {
   const SearchPages(this.url, this.query);
   final String url;
   final String query;
+}
+
+/// Upload a picked file to a session's attachments (reports `UploadProgressed` and `UploadFinished`).
+final class UploadAttachment extends AppEffect {
+  const UploadAttachment(this.url, this.session, this.id, this.file);
+  final String url;
+  final String session;
+  final int id;
+  final PickedFile file;
 }

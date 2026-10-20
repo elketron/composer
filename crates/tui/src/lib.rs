@@ -23,6 +23,7 @@ pub mod markdown;
 mod options;
 pub mod snapshot;
 pub mod store;
+mod terminal;
 mod theme;
 mod ws_link;
 
@@ -35,8 +36,8 @@ pub use store::types::Startup;
 
 /// Runs the TUI until `:q`.
 pub async fn run(options: TuiOptions) -> anyhow::Result<()> {
-    let terminal = ratatui::init();
+    let terminal = crate::terminal::init();
     let result = App::new(&options).run(terminal).await;
-    ratatui::restore();
+    crate::terminal::restore();
     result
 }

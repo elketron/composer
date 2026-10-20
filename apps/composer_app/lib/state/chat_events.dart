@@ -49,7 +49,7 @@ ChatState applyChatEvent(ChatState chat, ServerMessage message) {
 }
 
 ChatState _done(ChatState chat, ChatMessage message) => switch (message.role) {
-      Role.user => chat.copyWith(items: [...chat.items, UserItem(message.content, source: _source(message.source))]),
+      Role.user => chat.copyWith(items: [...chat.items, UserItem(message.content, source: _source(message.source), attachments: message.attachments)]),
       Role.assistant => chat.copyWith(streaming: null, items: [
           ...chat.items,
           if (message.thinking?.trim().isNotEmpty ?? false) ThinkingItem(message.thinking!),

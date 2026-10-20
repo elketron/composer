@@ -127,6 +127,41 @@ final class ProjectChosen extends AppAction {
   final String? project;
 }
 
+/// Files picked to attach to the open chat's message; each starts uploading.
+final class FilesPicked extends AppAction {
+  const FilesPicked(this.url, this.files);
+  final String url;
+  final List<PickedFile> files;
+}
+
+final class UploadProgressed extends AppAction {
+  const UploadProgressed(this.url, this.id, this.progress);
+  final String url;
+  final int id;
+  final double progress;
+}
+
+/// An upload ended: stored (`attachment`) or not (`error`).
+final class UploadFinished extends AppAction {
+  const UploadFinished(this.url, this.id, {this.attachment, this.error});
+  final String url;
+  final int id;
+  final Attachment? attachment;
+  final String? error;
+}
+
+final class UploadRetried extends AppAction {
+  const UploadRetried(this.url, this.id);
+  final String url;
+  final int id;
+}
+
+final class UploadRemoved extends AppAction {
+  const UploadRemoved(this.url, this.id);
+  final String url;
+  final int id;
+}
+
 /// Ask which external harnesses a project allows and has on (for the chat menu).
 final class HarnessesRequested extends AppAction {
   const HarnessesRequested(this.url, this.project);

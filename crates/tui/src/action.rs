@@ -1,7 +1,7 @@
 //! Everything that changes state is an `Action`.
 
 use composer_protocol::http::{SearchHit, SiteSummary};
-use composer_protocol::{ApprovalDecision, ServerMessage};
+use composer_protocol::{ApprovalDecision, Attachment, ServerMessage};
 
 use crate::store::types::{FlashLevel, Mode, PageView, Pane, PickerKind};
 
@@ -20,6 +20,20 @@ pub enum Action {
 
     // ---- chat & sessions ----
     SendMessage(String),
+    /// Attach a file on this machine (a pasted path, `:file <path>`).
+    AttachPath(String),
+    /// Attach the image on the clipboard (`space a`).
+    AttachClipboard,
+    /// The clipboard image, read off the UI thread: (name, PNG bytes).
+    ClipboardRead(Result<(String, Vec<u8>), String>),
+    FileUploaded {
+        id: u64,
+        result: Result<Attachment, String>,
+    },
+    /// Remove the last attached file (backspace in an empty message).
+    DropAttachment,
+    /// Remove every attached file (`:file clear`).
+    ClearAttachments,
     CancelTurn,
     /// Save memory and summarize older messages now.
     Compact,

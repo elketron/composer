@@ -130,6 +130,7 @@ impl SessionStore {
                         Some(MessageSource::Reminder { .. }) => Some("reminder".into()),
                         _ => None,
                     },
+                    files: message.attachments.iter().map(|a| a.name.clone()).collect(),
                 }),
                 Role::Assistant => {
                     self.streaming = None;

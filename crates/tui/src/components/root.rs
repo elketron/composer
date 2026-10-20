@@ -10,7 +10,7 @@ use crate::components::{
     StatusBar,
 };
 use crate::store::AppState;
-use crate::store::types::{Mode, Pane};
+use crate::store::types::{FlashLevel, Mode, Pane};
 use crate::theme;
 
 /// Below this width only the focused pane is shown.
@@ -51,6 +51,15 @@ impl Root {
             self.page.render(frame, area, state);
         }
     }
+
+    /// Pasted text (bracketed paste): into the message while writing; otherwise ignored.
+    pub fn handle_paste(&mut self, text: &str, state: &AppState) -> Vec<Action> {
+        if state.mode() == Mode::Insert {
+            self.chat.composer.paste(text)
+        } else {
+            vec![]
+        }
+    }
 }
 
 impl Component for Root {
@@ -65,12 +74,22 @@ impl Component for Root {
         if state.ui.picker_open {
             return self.picker.handle_key(key, state);
         }
-        // Normal-mode Enter sends the draft, whichever pane has focus.
-        if state.mode() == Mode::Normal
-            && key.code == KeyCode::Enter
-            && let Some(text) = self.chat.composer.take_draft()
-        {
-            return vec![Action::SendMessage(text)];
+        // Normal-mode Enter sends the draft (and attached files), whichever pane has focus.
+        // Not while a file is still uploading: the draft stays.
+        if state.mode() == Mode::Normal && key.code == KeyCode::Enter {
+            let ready = self.chat.composer.has_draft() || state.attachments.has_ready();
+            if ready && let Some(why) = state.attachments.blocking() {
+                return vec![Action::Flash(
+                    format!("not sent yet: {why}"),
+                    FlashLevel::Warn,
+                )];
+            }
+            if let Some(text) = self.chat.composer.take_draft() {
+                return vec![Action::SendMessage(text)];
+            }
+            if state.attachments.has_ready() {
+                return vec![Action::SendMessage(String::new())];
+            }
         }
         match state.mode() {
             Mode::Insert => self.chat.handle_key(key, state),

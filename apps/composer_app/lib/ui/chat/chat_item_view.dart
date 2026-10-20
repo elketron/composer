@@ -19,7 +19,7 @@ class ChatItemView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => switch (item) {
-        UserItem() => UserBubble(item as UserItem),
+        UserItem() => UserBubble(item as UserItem, url: url),
         TextItem(:final text) => AgentText(text, url: url),
         ThinkingItem(:final text) => CollapsibleRow(label: TextSpan(text: 'thinking · ${_words(text)} words'), body: text),
         ToolItem(:final name, :final summary, :final result, :final isError) => CollapsibleRow(

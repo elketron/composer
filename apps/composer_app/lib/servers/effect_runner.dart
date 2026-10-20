@@ -53,6 +53,23 @@ class EffectRunner {
           fetchAgents(url, server.token).then((agents) => dispatch(AgentsLoaded(url, agents)), onError: (_) {});
           fetchProjects(url, server.token).then((projects) => dispatch(ProjectsLoaded(url, projects)), onError: (_) {});
         }
+      case UploadAttachment(:final url, :final session, :final id, :final file):
+        final server = _connections[url]?.server;
+        if (server == null) {
+          dispatch(UploadFinished(url, id, error: 'not connected'));
+          return;
+        }
+        var shown = 0.0;
+        uploadAttachment(url, server.token, session, file, (progress) {
+          // A few steps are enough for a progress bar.
+          if (progress - shown >= 0.05 || progress >= 1) {
+            shown = progress;
+            dispatch(UploadProgressed(url, id, progress));
+          }
+        }).then(
+          (attachment) => dispatch(UploadFinished(url, id, attachment: attachment)),
+          onError: (Object e) => dispatch(UploadFinished(url, id, error: e is ServerError ? e.message : '$e')),
+        );
       case SearchPages(:final url, :final query):
         final server = _connections[url]?.server;
         if (server != null) {

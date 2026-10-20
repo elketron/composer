@@ -36,6 +36,7 @@ Screenshot the HTML with Playwright to look at it. Script commands (see `crates/
 size 140x40
 wait connected                 # also: session, idle, page, turn [secs], text <substring>
 keys i hello<Esc><Enter>       # vim notation; Enter is a newline in Insert, sends in Normal
+paste /tmp/photo.png           # a bracketed paste: a file's path (while writing) becomes an attachment
 wait turn 240
 snap chat
 ```

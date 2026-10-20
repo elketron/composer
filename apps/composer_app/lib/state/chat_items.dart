@@ -1,3 +1,5 @@
+import 'package:composer_protocol/composer_protocol.dart';
+
 // What a chat shows, built from a session's events (plain data).
 
 sealed class ChatItem {
@@ -6,8 +8,11 @@ sealed class ChatItem {
 
 /// A user-side message: yours, a micro app's, or a finished worker's report.
 final class UserItem extends ChatItem {
-  const UserItem(this.text, {this.source});
+  const UserItem(this.text, {this.source, this.attachments = const []});
   final String text;
+
+  /// Files sent with it.
+  final List<Attachment> attachments;
 
   /// `design app`, `worker #b2c3`; null for your own.
   final String? source;

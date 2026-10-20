@@ -8,6 +8,7 @@
 //! snap chat              # writes chat.html + chat.txt
 //! keys <Space>p
 //! wait text pages
+//! paste /tmp/photo.jpg   # a bracketed paste (a file's path becomes an attachment)
 //! ```
 //!
 //! Keys use vim notation: `<Enter> <Esc> <Space> <Tab> <BS> <Up> <Down> <C-w> <A-Enter> <lt>`.
@@ -80,6 +81,10 @@ pub async fn run_script(
             "sleep" => {
                 app.pump(Duration::from_millis(arg.parse().with_context(context)?))
                     .await
+            }
+            "paste" => {
+                app.handle_paste(arg);
+                app.pump(Duration::from_millis(30)).await;
             }
             "snap" => {
                 app.pump(Duration::from_millis(50)).await;

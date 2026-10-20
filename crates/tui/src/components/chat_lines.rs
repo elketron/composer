@@ -40,7 +40,11 @@ pub fn chat_lines(state: &AppState, width: u16) -> Vec<Line<'static>> {
 
     for item in &state.session.items {
         match item {
-            ChatItem::User { text, source } => {
+            ChatItem::User {
+                text,
+                source,
+                files,
+            } => {
                 let mut label = vec![Span::styled("you", Style::new().fg(theme::ACCENT))];
                 if let Some(source) = source {
                     label.push(Span::styled(format!(" · {source}"), theme::faint()));
@@ -48,7 +52,15 @@ pub fn chat_lines(state: &AppState, width: u16) -> Vec<Line<'static>> {
                 let mut lines = vec![Line::from(label)];
                 // Your newlines are meant literally: make them markdown hard breaks.
                 let text = text.replace('\n', "  \n");
-                lines.extend(markdown::render(&text, inner, None, theme::text()).lines);
+                if !text.trim().is_empty() {
+                    lines.extend(markdown::render(&text, inner, None, theme::text()).lines);
+                }
+                for file in files {
+                    lines.push(Line::from(vec![
+                        Span::styled("▪ ", Style::new().fg(theme::ACCENT)),
+                        Span::styled(file.clone(), theme::muted()),
+                    ]));
+                }
                 blocks.push((Speaker::You, lines));
             }
             ChatItem::Thinking { text } => {

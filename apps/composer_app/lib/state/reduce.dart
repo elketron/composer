@@ -45,7 +45,28 @@ import 'types.dart';
       SessionOpened(:final url, :final session) => _open(s, url, session),
       SessionClosed(:final url) => _close(s, url),
       NewSessionRequested(:final url, :final agent, :final project) => (s, [CreateSession(url, agent, project: project)]),
-      MessageSubmitted(:final url, :final text) => _toChat(s, url, (session) => ClientCommandMessageSend(session: session, text: text)),
+      MessageSubmitted(:final url, :final text) => _submit(s, url, text),
+      FilesPicked(:final url, :final files) => _picked(s, url, files),
+      UploadProgressed(:final url, :final id, :final progress) => (
+          _withUpload(s, url, id, (u) => u.status == UploadStatus.uploading ? u.copyWith(progress: progress) : u),
+          const [],
+        ),
+      UploadFinished(:final url, :final id, :final attachment, :final error) => (
+          _withUpload(
+            s,
+            url,
+            id,
+            (u) => attachment != null
+                ? u.copyWith(status: UploadStatus.ready, attachment: attachment, progress: 1)
+                : u.copyWith(status: UploadStatus.failed, error: error ?? 'upload failed'),
+          ),
+          const [],
+        ),
+      UploadRetried(:final url, :final id) => _retried(s, url, id),
+      UploadRemoved(:final url, :final id) => (
+          _withChat(s, url, (c) => c.copyWith(uploads: [for (final u in c.uploads) if (u.id != id) u])),
+          const [],
+        ),
       DraftChanged(:final url, :final drafting) => (
           _updateStatus(s, url, (x) => x.chat == null ? x : x.copyWith(chat: x.chat!.copyWith(drafting: drafting))),
           const [],
@@ -212,6 +233,44 @@ import 'types.dart';
 }
 
 /// A command for the open session.
+/// Sends the message with its uploaded files; not while one is still uploading or failed.
+(AppState, List<AppEffect>) _submit(AppState s, String url, String text) {
+  final chat = s.status[url]?.chat;
+  if (chat == null || chat.uploads.any((u) => u.status != UploadStatus.ready)) return (s, const []);
+  final attachments = [for (final u in chat.uploads) u.attachment!];
+  if (text.trim().isEmpty && attachments.isEmpty) return (s, const []);
+  return (
+    _withChat(s, url, (c) => c.copyWith(uploads: const [])),
+    [SendCommand(url, ClientCommandMessageSend(session: chat.session, text: text, attachments: attachments))],
+  );
+}
+
+(AppState, List<AppEffect>) _picked(AppState s, String url, List<PickedFile> files) {
+  final chat = s.status[url]?.chat;
+  if (chat == null || files.isEmpty) return (s, const []);
+  final added = [for (var i = 0; i < files.length; i++) Upload(id: chat.nextUpload + i, file: files[i])];
+  return (
+    _withChat(s, url, (c) => c.copyWith(uploads: [...c.uploads, ...added], nextUpload: c.nextUpload + files.length)),
+    [for (final u in added) UploadAttachment(url, chat.session, u.id, u.file)],
+  );
+}
+
+(AppState, List<AppEffect>) _retried(AppState s, String url, int id) {
+  final chat = s.status[url]?.chat;
+  final upload = chat?.uploads.where((u) => u.id == id).firstOrNull;
+  if (chat == null || upload == null || upload.status != UploadStatus.failed) return (s, const []);
+  return (
+    _withUpload(s, url, id, (u) => u.copyWith(status: UploadStatus.uploading, progress: 0)),
+    [UploadAttachment(url, chat.session, id, upload.file)],
+  );
+}
+
+AppState _withChat(AppState s, String url, ChatState Function(ChatState chat) update) =>
+    _updateStatus(s, url, (x) => x.chat == null ? x : x.copyWith(chat: update(x.chat!)));
+
+AppState _withUpload(AppState s, String url, int id, Upload Function(Upload upload) update) =>
+    _withChat(s, url, (c) => c.copyWith(uploads: [for (final u in c.uploads) u.id == id ? update(u) : u]));
+
 (AppState, List<AppEffect>) _toChat(AppState s, String url, ClientCommand Function(String session) command) {
   final chat = s.status[url]?.chat;
   return chat == null ? (s, const []) : (s, [SendCommand(url, command(chat.session))]);

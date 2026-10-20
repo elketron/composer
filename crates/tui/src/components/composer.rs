@@ -9,7 +9,7 @@ use unicode_width::UnicodeWidthChar;
 use crate::action::Action;
 use crate::components::Component;
 use crate::store::AppState;
-use crate::store::types::Mode;
+use crate::store::types::{Mode, UploadState};
 use crate::theme;
 
 /// The message input. The text being typed is local state until it is sent.
@@ -27,12 +27,25 @@ impl Composer {
         }
     }
 
-    /// Height including borders, 1–6 text lines.
-    pub fn height(&self, width: u16) -> u16 {
+    /// Height including borders: 1–6 text lines, plus one for attached files.
+    pub fn height(&self, width: u16, state: &AppState) -> u16 {
         let lines = wrap_positions(&self.text, width.saturating_sub(4) as usize)
             .len()
             .clamp(1, 6) as u16;
-        lines.max(2) + 2
+        let files = u16::from(!state.attachments.files.is_empty());
+        lines.max(2) + 2 + files
+    }
+
+    /// Pasted text (bracketed paste): paths of existing files become attachments, anything
+    /// else is typed in.
+    pub fn paste(&mut self, text: &str) -> Vec<Action> {
+        if let Some(paths) = pasted_paths(text) {
+            return paths.into_iter().map(Action::AttachPath).collect();
+        }
+        for c in text.replace("\r\n", "\n").replace('\r', "\n").chars() {
+            self.insert(c);
+        }
+        vec![]
     }
 
     pub fn has_draft(&self) -> bool {
@@ -85,6 +98,10 @@ impl Component for Composer {
                 self.cursor = start;
             }
             (KeyCode::Char(c), m) if !m.contains(KeyModifiers::CONTROL) => self.insert(c),
+            // Nothing typed: backspace takes back the last attached file.
+            (KeyCode::Backspace, _) if self.text.is_empty() => {
+                return vec![Action::DropAttachment];
+            }
             (KeyCode::Backspace, _) if self.cursor > 0 => {
                 let prev = self.prev_boundary();
                 self.text.drain(prev..self.cursor);
@@ -119,11 +136,17 @@ impl Component for Composer {
             .title_bottom(Line::from(Span::styled(hint, theme::faint())).right_aligned());
         let inner = block.inner(area);
         frame.render_widget(block, area);
-        let inner = Rect {
+        let mut inner = Rect {
             x: inner.x + 1,
             width: inner.width.saturating_sub(2),
             ..inner
         };
+        if !state.attachments.files.is_empty() {
+            let chips = Rect { height: 1, ..inner };
+            frame.render_widget(Paragraph::new(file_chips(state)), chips);
+            inner.y += 1;
+            inner.height = inner.height.saturating_sub(1);
+        }
 
         if self.text.is_empty() && !active {
             let hint = if state.session.is_busy() {
@@ -156,6 +179,75 @@ impl Component for Composer {
             ));
         }
     }
+}
+
+/// The attached files on one line: `▪ photo.jpg ✓  ▪ notes.md …`.
+fn file_chips(state: &AppState) -> Line<'static> {
+    let mut spans = Vec::new();
+    for file in &state.attachments.files {
+        let (mark, style) = match &file.state {
+            UploadState::Uploading => (" …", theme::faint()),
+            UploadState::Ready(_) => (" ✓", Style::new().fg(theme::OK)),
+            UploadState::Failed(_) => (" ✗", Style::new().fg(theme::ERR)),
+        };
+        spans.push(Span::styled("▪ ", Style::new().fg(theme::ACCENT)));
+        spans.push(Span::styled(file.name.clone(), theme::text()));
+        spans.push(Span::styled(mark, style));
+        spans.push(Span::raw("  "));
+    }
+    Line::from(spans)
+}
+
+/// Pasted text that is only paths of existing files (one per line; quoted, `file://` or
+/// `~/` and shell-escaped spaces as terminals and file managers paste them), as paths.
+pub fn pasted_paths(text: &str) -> Option<Vec<String>> {
+    let lines: Vec<&str> = text
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .collect();
+    if lines.is_empty() || lines.len() > 20 {
+        return None;
+    }
+    lines
+        .into_iter()
+        .map(|line| {
+            let line = line
+                .strip_prefix(['\'', '"'])
+                .and_then(|l| l.strip_suffix(['\'', '"']))
+                .unwrap_or(line);
+            let path = match line.strip_prefix("file://") {
+                Some(rest) => percent_decode(rest),
+                None => line.replace("\\ ", " "),
+            };
+            let path = match path.strip_prefix("~/") {
+                Some(rest) => format!("{}/{rest}", std::env::var("HOME").ok()?),
+                None => path,
+            };
+            let candidate = std::path::Path::new(&path);
+            (candidate.is_absolute() && candidate.is_file()).then_some(path)
+        })
+        .collect()
+}
+
+/// `%20` and friends in a `file://` URL.
+fn percent_decode(text: &str) -> String {
+    let bytes = text.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%'
+            && i + 2 < bytes.len()
+            && let Ok(b) = u8::from_str_radix(&text[i + 1..i + 3], 16)
+        {
+            out.push(b);
+            i += 3;
+        } else {
+            out.push(bytes[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
 }
 
 /// Byte ranges of each displayed row (hard newlines and wrapping at `width`).
@@ -192,4 +284,33 @@ fn cursor_position(rows: &[(usize, usize)], text: &str, cursor: usize) -> (usize
         }
     }
     (0, 0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pasted_paths_of_existing_files() {
+        let tmp = tempfile::tempdir().unwrap();
+        let file = tmp.path().join("my notes.md");
+        std::fs::write(&file, "x").unwrap();
+        let plain = file.display().to_string();
+        assert_eq!(pasted_paths(&plain), Some(vec![plain.clone()]));
+        assert_eq!(
+            pasted_paths(&format!("'{plain}'\n")),
+            Some(vec![plain.clone()])
+        );
+        assert_eq!(
+            pasted_paths(&plain.replace(' ', "\\ ")),
+            Some(vec![plain.clone()])
+        );
+        let url = format!("file://{}", plain.replace(' ', "%20"));
+        assert_eq!(pasted_paths(&url), Some(vec![plain.clone()]));
+        // Text, a folder, a missing file, or a mix: typed in as text.
+        assert_eq!(pasted_paths("hello world"), None);
+        assert_eq!(pasted_paths(&tmp.path().display().to_string()), None);
+        assert_eq!(pasted_paths(&format!("{plain}\nand more")), None);
+        assert_eq!(pasted_paths("relative/path.md"), None);
+    }
 }

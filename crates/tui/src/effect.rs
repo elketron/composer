@@ -2,6 +2,8 @@
 
 use composer_protocol::ClientRequest;
 
+use crate::store::types::FileSource;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Effect {
     Send(ClientRequest),
@@ -31,5 +33,13 @@ pub enum Effect {
     },
     /// Open a URL in the browser (an app). Run by the app loop.
     OpenBrowser(String),
+    /// Upload a file to a session (answered by `FileUploaded`).
+    UploadFile {
+        id: u64,
+        session: String,
+        source: FileSource,
+    },
+    /// Read an image from the clipboard (answered by `ClipboardRead`).
+    ReadClipboard,
     Quit,
 }

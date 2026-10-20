@@ -60,3 +60,37 @@ class NotificationTap {
   /// `approve` / `deny`; null for the notification itself.
   final String? action;
 }
+
+/// A file picked to attach: a path on this device, or its bytes (where there is no path).
+class PickedFile {
+  const PickedFile(this.name, {this.path, this.bytes});
+  final String name;
+  final String? path;
+  final List<int>? bytes;
+}
+
+enum UploadStatus { uploading, ready, failed }
+
+/// A file attached to the message being written; it uploads as soon as it is picked.
+class Upload {
+  const Upload({required this.id, required this.file, this.status = UploadStatus.uploading, this.progress = 0, this.attachment, this.error});
+  final int id;
+  final PickedFile file;
+  final UploadStatus status;
+
+  /// 0–1 while uploading.
+  final double progress;
+
+  /// What the server stored (ready).
+  final Attachment? attachment;
+  final String? error;
+
+  Upload copyWith({UploadStatus? status, double? progress, Attachment? attachment, String? error}) => Upload(
+        id: id,
+        file: file,
+        status: status ?? this.status,
+        progress: progress ?? this.progress,
+        attachment: attachment ?? this.attachment,
+        error: error,
+      );
+}

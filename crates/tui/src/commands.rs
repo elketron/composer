@@ -4,7 +4,7 @@ use crate::action::Action;
 use crate::store::types::PickerKind;
 
 /// Every command, as shown by help: (usage, what it does).
-pub const COMMANDS: [(&str, &str); 12] = [
+pub const COMMANDS: [(&str, &str); 13] = [
     (
         ":new [agent]",
         "start a new session (default agent, or e.g. orchestrator)",
@@ -21,6 +21,10 @@ pub const COMMANDS: [(&str, &str); 12] = [
     (
         ":harness [on|off] [name]",
         "the project's external harnesses; turn Claude Code (or claude-code:<model>) on or off",
+    ),
+    (
+        ":file <path>|clear",
+        "attach a file to the message (or paste its path while writing); clear removes them",
     ),
     (":open <url>", "open a page, e.g. :open memory/user"),
     (
@@ -69,6 +73,20 @@ pub fn parse_command(line: &str) -> Result<Action, String> {
                 _ => Err("usage: :harness [on|off] [claude-code[:model]]".into()),
             }
         }
+        "file" => match arg.as_deref() {
+            Some("clear") => Ok(Action::ClearAttachments),
+            Some(path) => {
+                let path = match path.strip_prefix("~/") {
+                    Some(rest) => format!("{}/{rest}", std::env::var("HOME").unwrap_or_default()),
+                    None => path.to_string(),
+                };
+                let path = std::path::absolute(&path)
+                    .map(|p| p.display().to_string())
+                    .unwrap_or(path);
+                Ok(Action::AttachPath(path))
+            }
+            None => Err("usage: :file <path> (or :file clear)".into()),
+        },
         "open" | "o" => arg
             .map(|url| {
                 Action::OpenUrl(if url.starts_with("site://") {

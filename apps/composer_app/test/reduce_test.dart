@@ -139,6 +139,35 @@ void main() {
       expect((command.session, command.path), ('a', null));
     });
 
+    test('attachments: upload as picked, send when ready, retry and remove', () {
+      var state = reduce(loaded([home]), SessionOpened(home.url, 'a')).$1;
+      final (picked, uploads) = reduce(state, FilesPicked(home.url, const [PickedFile('a.png', path: '/tmp/a.png'), PickedFile('b.md', bytes: [35])]));
+      expect([for (final e in uploads) (e as UploadAttachment).id], [1, 2]);
+      expect((uploads.first as UploadAttachment).session, 'a');
+      state = picked;
+      // Not sent while uploading.
+      expect(reduce(state, MessageSubmitted(home.url, 'look')).$2, isEmpty);
+      const stored = Attachment(file: 'abc-a.png', name: 'a.png', mime: 'image/png', size: 9);
+      state = reduce(state, UploadProgressed(home.url, 1, 0.5)).$1;
+      expect(state.status[home.url]!.chat!.uploads.first.progress, 0.5);
+      state = reduce(state, UploadFinished(home.url, 1, attachment: stored)).$1;
+      state = reduce(state, UploadFinished(home.url, 2, error: 'too big')).$1;
+      expect(state.status[home.url]!.chat!.uploads.last.status, UploadStatus.failed);
+      final retry = reduce(state, UploadRetried(home.url, 2));
+      expect((retry.$2.single as UploadAttachment).id, 2);
+      expect(retry.$1.status[home.url]!.chat!.uploads.last.status, UploadStatus.uploading);
+      state = reduce(state, UploadRemoved(home.url, 2)).$1;
+      // Ready: sent with the message (files alone are fine too), and the list empties.
+      final (sent, effects) = reduce(state, MessageSubmitted(home.url, ''));
+      final command = (effects.single as SendCommand).command as ClientCommandMessageSend;
+      expect(command.text, '');
+      expect([for (final a in command.attachments) a.file], ['abc-a.png']);
+      expect(sent.status[home.url]!.chat!.uploads, isEmpty);
+      // Ids keep counting, so a late answer for a removed upload can't hit a new one.
+      final (_, again) = reduce(sent, FilesPicked(home.url, const [PickedFile('c.txt', path: '/tmp/c.txt')]));
+      expect((again.single as UploadAttachment).id, 3);
+    });
+
     test('external harnesses: asked, stored per project, toggled', () {
       final ask = reduce(loaded([home]), const HarnessesRequested('https://home.ts.net', '/p')).$2.single as SendCommand;
       expect((ask.command as ClientCommandHarnessList).project, '/p');

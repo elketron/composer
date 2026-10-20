@@ -1,3 +1,4 @@
+use composer_protocol::Attachment;
 use composer_protocol::http::{
     PageResponse, ProjectDiff, PutPageRequest, PutPageResponse, SearchHit, SiteSummary,
 };
@@ -83,6 +84,29 @@ impl ApiClient {
             .await
             .map_err(|e| e.to_string())?;
         Self::json(response).await
+    }
+
+    /// Uploads one file to a session's attachments.
+    pub async fn upload(
+        &self,
+        session: &str,
+        name: String,
+        bytes: Vec<u8>,
+    ) -> Result<Attachment, String> {
+        let part = reqwest::multipart::Part::bytes(bytes).file_name(name);
+        let form = reqwest::multipart::Form::new().part("file", part);
+        let response = self
+            .http
+            .post(format!("{}/api/sessions/{session}/attachments", self.base))
+            .bearer_auth(&self.token)
+            .multipart(form)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+        let mut stored: Vec<Attachment> = Self::json(response).await?;
+        stored
+            .pop()
+            .ok_or_else(|| "the server stored nothing".into())
     }
 
     async fn json<T: serde::de::DeserializeOwned>(

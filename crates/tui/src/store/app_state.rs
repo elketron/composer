@@ -3,11 +3,12 @@ use composer_protocol::{ClientCommand, CommandResult, ServerMessage};
 use crate::action::Action;
 use crate::effect::Effect;
 use crate::store::types::{
-    Catalog, ConnState, FlashLevel, Mode, Outgoing, Pane, Pending, PendingApproval, PickerKind,
-    PickerTarget, Startup,
+    Catalog, ConnState, FileSource, FlashLevel, Mode, Outgoing, Pane, Pending, PendingApproval,
+    PickerKind, PickerTarget, Startup,
 };
 use crate::store::{
-    ApprovalStore, ConnectionStore, PageStore, PickerStore, ProjectStore, SessionStore, UiStore,
+    ApprovalStore, AttachmentStore, ConnectionStore, PageStore, PickerStore, ProjectStore,
+    SessionStore, UiStore,
 };
 
 /// All shared state. `reduce` is the only way it changes; it does no IO.
@@ -21,6 +22,8 @@ pub struct AppState {
     pub approvals: ApprovalStore,
     pub project: ProjectStore,
     pub catalog: Catalog,
+    /// Files attached to the message being written.
+    pub attachments: AttachmentStore,
     startup: Option<Startup>,
     default_agent: String,
     /// Where project names point (`:project composer`), when known.
@@ -38,6 +41,7 @@ impl AppState {
             approvals: ApprovalStore::default(),
             project: ProjectStore::default(),
             catalog: Catalog::default(),
+            attachments: AttachmentStore::default(),
             default_agent: startup.agent.clone(),
             projects_dir: startup.projects_dir.clone(),
             startup: Some(startup),
@@ -96,17 +100,80 @@ impl AppState {
                     self.ui.flash("no session yet", FlashLevel::Warn);
                     return vec![];
                 };
+                if let Some(why) = self.attachments.blocking() {
+                    self.ui.flash(format!("not sent: {why}"), FlashLevel::Warn);
+                    return vec![];
+                }
                 self.ui.flash = None;
+                let attachments = self.attachments.take_ready(&session);
                 self.send(
                     ClientCommand::MessageSend {
                         session,
                         text,
                         pages: vec![],
                         images: vec![],
-                        attachments: vec![],
+                        attachments,
                     },
                     Pending::Ignore,
                 )
+            }
+            Action::AttachPath(path) => {
+                let Some(session) = self.session.current.clone() else {
+                    self.ui.flash("no session yet", FlashLevel::Warn);
+                    return vec![];
+                };
+                let name = std::path::Path::new(&path)
+                    .file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_else(|| path.clone());
+                let id = self.attachments.add(name, session.clone());
+                vec![Effect::UploadFile {
+                    id,
+                    session,
+                    source: FileSource::Path(path),
+                }]
+            }
+            Action::AttachClipboard => {
+                if self.session.current.is_none() {
+                    self.ui.flash("no session yet", FlashLevel::Warn);
+                    return vec![];
+                }
+                vec![Effect::ReadClipboard]
+            }
+            Action::ClipboardRead(read) => {
+                let (Ok((name, bytes)), Some(session)) =
+                    (read.clone(), self.session.current.clone())
+                else {
+                    if let Err(e) = read {
+                        self.ui.flash(e, FlashLevel::Warn);
+                    }
+                    return vec![];
+                };
+                let id = self.attachments.add(name.clone(), session.clone());
+                vec![Effect::UploadFile {
+                    id,
+                    session,
+                    source: FileSource::Bytes { name, bytes },
+                }]
+            }
+            Action::FileUploaded { id, result } => {
+                if let Err(e) = &result {
+                    self.ui
+                        .flash(format!("upload failed: {e}"), FlashLevel::Error);
+                }
+                self.attachments.uploaded(id, result);
+                vec![]
+            }
+            Action::DropAttachment => {
+                if let Some(file) = self.attachments.remove_last() {
+                    self.ui
+                        .flash(format!("removed {}", file.name), FlashLevel::Info);
+                }
+                vec![]
+            }
+            Action::ClearAttachments => {
+                self.attachments.clear();
+                vec![]
             }
             Action::CancelTurn => match self.session.current.clone() {
                 Some(session) if self.session.is_busy() => {
@@ -389,6 +456,14 @@ impl AppState {
     }
 
     fn attach(&mut self, id: &str, remember: bool) -> Vec<Effect> {
+        // Uploads belong to the session they went to.
+        if self.session.current.as_deref() != Some(id) && !self.attachments.files.is_empty() {
+            self.attachments.clear();
+            self.ui.flash(
+                "attached files dropped: they belonged to the other session",
+                FlashLevel::Info,
+            );
+        }
         self.session.begin_attach(id, remember);
         self.send(
             ClientCommand::SessionAttach {
