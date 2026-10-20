@@ -140,6 +140,30 @@ impl Connection {
                 });
                 None
             }
+            ClientCommand::HarnessSet { project, entry, on } => {
+                let (connection, server) = (self.clone(), server.clone());
+                tokio::spawn(async move {
+                    let result = match resolve_project(&project, &server.config.projects.dir) {
+                        Ok(folder) => server
+                            .workers
+                            .switch(&server, &folder, &entry, on)
+                            .await
+                            .map(|()| CommandResult::Harnesses {
+                                harnesses: server.workers.switches(&server, &folder),
+                                project: folder,
+                            }),
+                        Err(e) => Err(e),
+                    };
+                    connection.send(Arc::new(match result {
+                        Ok(result) => ServerMessage::Ok { id, result },
+                        Err(message) => ServerMessage::Error {
+                            id: Some(id),
+                            message,
+                        },
+                    }));
+                });
+                None
+            }
             ClientCommand::ToolCall {
                 session,
                 name,
@@ -373,7 +397,15 @@ impl Connection {
                     tools: server.tools.infos_for(&context.agent),
                 })
             }
+            ClientCommand::HarnessList { project } => {
+                let folder = resolve_project(&project, &server.config.projects.dir)?;
+                Ok(CommandResult::Harnesses {
+                    harnesses: server.workers.switches(server, &folder),
+                    project: folder,
+                })
+            }
             ClientCommand::WorkerEvent { .. }
+            | ClientCommand::HarnessSet { .. }
             | ClientCommand::ToolCall { .. }
             | ClientCommand::SlotAcquire
             | ClientCommand::SlotRelease { .. }

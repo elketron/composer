@@ -1,5 +1,4 @@
-use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
+use std::sync::{Arc, Mutex};
 
 use composer_protocol::{ClientCommand, CommandResult};
 use tokio::sync::oneshot;
@@ -21,6 +20,23 @@ pub struct WorkerHandle {
     /// The harness working the ticket (`composer`, …).
     pub harness: &'static str,
     pub run: Arc<dyn HarnessRun>,
-    /// Set when the user cancels it, so its end reads as cancelled rather than a crash.
-    pub cancelled: Arc<AtomicBool>,
+    /// Whether the harness can resume a run later (external CLIs, by their session id).
+    pub resumable: bool,
+    /// The ticket's project (not its worktree), for the per-project switches.
+    pub project: Option<String>,
+    /// The model it runs, when the harness says.
+    pub model: Option<String>,
+    /// Set when composer stops it, so its end reads as that rather than a crash.
+    pub stop: Arc<Mutex<Option<StopReason>>>,
+}
+
+/// Why composer stopped a run.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StopReason {
+    /// The user cancelled it.
+    Cancelled,
+    /// Its harness (or model) was turned off for the project.
+    SwitchedOff,
+    /// The server is shutting down.
+    Shutdown,
 }

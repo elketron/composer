@@ -535,16 +535,21 @@ Built (milestone 13):
   with `--plugin-dir`, never written into project repos): `composer-sites`, `composer-tickets`,
   `composer-memory`, `composer-apps`.
 
-Next (13b):
+Built (13b):
 
-- **Models per project:** `models = ["claude-code:sonnet", "local"]` limits which models tickets in the
-  project may use (`--model` for Claude Code, the provider for the own harness). Unset: anything.
-- **Off switch:** `:harness off [name]` (TUI), a toggle in the app's project sheet, and
-  `composer harness off <project> [name]` turn an external harness (or a model) off for a project at
-  runtime. Stored in `state/projects.json`; it can only narrow what config.toml allows. Turning it off
-  stops new launches and interrupts running tickets on it: they pause and resume once it is back on.
-- Stop running external harnesses when the server shuts down; resume paused tickets automatically
-  after the reset time.
+- **Models per project:** `models = ["claude-code:sonnet", "composer"]` in `[projects."…"]`: `"<harness>"`
+  allows any of its models, `"<harness>:<model>"` one. The configured model is used when allowed, else the
+  first allowed one (`--model`); composer's own harness runs the provider's model or is refused. Empty: any.
+- **Off switch:** `composer harness <project> [on|off] [claude-code[:model]]`, `:harness [on|off] [entry]`
+  in the TUI (the session's project), and "Turn off Claude Code for <project>" in the app's chat menu;
+  protocol `harness.list` / `harness.set` (reply `harnesses`). Stored in `state/projects.json`; it only
+  narrows config.toml. Off stops its running tickets in that project (`paused`, `paused_reason: switch`)
+  and refuses new ones; back on, the ones it stopped go on (`--resume`).
+- **Shutdown:** Ctrl-C or SIGTERM stops every worker before the server exits (they run in their own
+  process groups). Claude Code tickets pause (`paused_reason: shutdown`; a message resumes them), own
+  workers fail; orchestrators aren't told.
+- **Automatic resume:** a ticket paused by a usage limit records `paused_until` and goes on by itself a
+  minute after the reset, also after a server restart.
 
 ### Attachments
 
@@ -573,7 +578,7 @@ Next (13b):
 12. ✅ **worktrees** — per-ticket worktrees on `ticket/<id>` branches for both harnesses.
 13. ✅ **Claude Code harness** — project switch, auth check, cleared environment, process group, log, event
     mapping, failure handling (missing, logged out, usage limit, no `finish`), resume on feedback, skills plugin.
-    13b: per-project models, runtime off switch, shutdown and automatic resume.
+    13b ✅: per-project models, runtime off switch, shutdown, automatic resume after a usage limit.
 14. **attachments (server)** — protocol, upload route, storage, resizing, own harness, Claude Code paths.
 15. **attachments (clients)** — app pickers and chips, TUI paths and clipboard.
 
@@ -581,4 +586,4 @@ Later: full stream-json → follow mode, approvals through `--permission-prompt-
 
 ## Open questions
 
-- None blocking. Next: milestone 13b.
+- None blocking. Next: milestone 14.

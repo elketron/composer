@@ -104,6 +104,18 @@
   },
   {
     "id": 18,
+    "type": "harness.list",
+    "project": "composer"
+  },
+  {
+    "id": 19,
+    "type": "harness.set",
+    "project": "composer",
+    "entry": "claude-code",
+    "on": false
+  },
+  {
+    "id": 20,
     "type": "tool.call",
     "session": "a3f1",
     "name": "open",

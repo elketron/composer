@@ -4,7 +4,7 @@ use crate::action::Action;
 use crate::store::types::PickerKind;
 
 /// Every command, as shown by help: (usage, what it does).
-pub const COMMANDS: [(&str, &str); 11] = [
+pub const COMMANDS: [(&str, &str); 12] = [
     (
         ":new [agent]",
         "start a new session (default agent, or e.g. orchestrator)",
@@ -17,6 +17,10 @@ pub const COMMANDS: [(&str, &str); 11] = [
     (
         ":project [name|none]",
         "set the active project: a folder in the projects dir (or ~/path); `none` unsets it",
+    ),
+    (
+        ":harness [on|off] [name]",
+        "the project's external harnesses; turn Claude Code (or claude-code:<model>) on or off",
     ),
     (":open <url>", "open a page, e.g. :open memory/user"),
     (
@@ -46,6 +50,25 @@ pub fn parse_command(line: &str) -> Result<Action, String> {
             .ok_or_else(|| "usage: :attach <session id>".into()),
         "workers" => Ok(Action::OpenPicker(PickerKind::Orchestration)),
         "project" | "p" => Ok(Action::SetProject(arg.filter(|a| a != "none"))),
+        "harness" => {
+            let words: Vec<&str> = arg.as_deref().unwrap_or("").split_whitespace().collect();
+            let (on, rest) = match words.first() {
+                Some(&"on") => (Some(true), &words[1..]),
+                Some(&"off") => (Some(false), &words[1..]),
+                _ => (None, &words[..]),
+            };
+            match rest {
+                [] => Ok(Action::Harness {
+                    on,
+                    entry: "claude-code".into(),
+                }),
+                [entry] if on.is_some() => Ok(Action::Harness {
+                    on,
+                    entry: entry.to_string(),
+                }),
+                _ => Err("usage: :harness [on|off] [claude-code[:model]]".into()),
+            }
+        }
         "open" | "o" => arg
             .map(|url| {
                 Action::OpenUrl(if url.starts_with("site://") {
@@ -88,6 +111,25 @@ mod tests {
         );
         assert_eq!(parse_command("project"), Ok(Action::SetProject(None)));
         assert_eq!(parse_command("project none"), Ok(Action::SetProject(None)));
+        assert_eq!(
+            parse_command("harness off"),
+            Ok(Action::Harness {
+                on: Some(false),
+                entry: "claude-code".into()
+            })
+        );
+        assert_eq!(
+            parse_command("harness on claude-code:opus"),
+            Ok(Action::Harness {
+                on: Some(true),
+                entry: "claude-code:opus".into()
+            })
+        );
+        assert!(matches!(
+            parse_command("harness"),
+            Ok(Action::Harness { on: None, .. })
+        ));
+        assert!(parse_command("harness sideways").is_err());
         assert!(parse_command("attach").is_err());
         assert!(parse_command("frobnicate").is_err());
     }

@@ -138,7 +138,7 @@ pub async fn ask(options: AskOptions) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn next_reply<S>(socket: &mut S) -> anyhow::Result<CommandResult>
+pub(super) async fn next_reply<S>(socket: &mut S) -> anyhow::Result<CommandResult>
 where
     S: futures::Stream<Item = Result<Message, tokio_tungstenite::tungstenite::Error>> + Unpin,
 {

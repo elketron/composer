@@ -139,6 +139,19 @@ void main() {
       expect((command.session, command.path), ('a', null));
     });
 
+    test('external harnesses: asked, stored per project, toggled', () {
+      final ask = reduce(loaded([home]), const HarnessesRequested('https://home.ts.net', '/p')).$2.single as SendCommand;
+      expect((ask.command as ClientCommandHarnessList).project, '/p');
+      final state = reduce(
+        loaded([home]),
+        ServerEvent(home.url, const ServerMessageOk(id: 1, result: CommandResultHarnesses(project: '/p', harnesses: [HarnessSwitch(entry: 'claude-code', allowed: true, on: true)]))),
+      ).$1;
+      expect(state.status[home.url]!.harnesses['/p']!.single.on, isTrue);
+      final toggle = (reduce(state, const HarnessToggled('https://home.ts.net', '/p', 'claude-code', false)).$2.single as SendCommand).command
+          as ClientCommandHarnessSet;
+      expect((toggle.project, toggle.entry, toggle.on), ('/p', 'claude-code', false));
+    });
+
     test('messages and cancel go to the open session only', () {
       expect(reduce(loaded([home]), MessageSubmitted(home.url, 'x')).$2, isEmpty);
       final state = reduce(loaded([home]), SessionOpened(home.url, 'a')).$1;

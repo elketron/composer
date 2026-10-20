@@ -60,6 +60,19 @@ pub enum ClientCommand {
         path: Option<String>,
     },
 
+    /// The external harnesses of a project (a folder, `~/x`, or a name in the projects dir).
+    #[serde(rename = "harness.list")]
+    HarnessList { project: String },
+
+    /// Turns a harness (`claude-code`) or one of its models (`claude-code:opus`) on or off for a
+    /// project. Off stops its running tickets there; on lets the ones it stopped go on.
+    #[serde(rename = "harness.set")]
+    HarnessSet {
+        project: String,
+        entry: String,
+        on: bool,
+    },
+
     #[serde(rename = "approval.respond")]
     ApprovalRespond {
         request: String,

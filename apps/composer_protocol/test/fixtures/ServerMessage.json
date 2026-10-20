@@ -82,6 +82,21 @@
   },
   {
     "type": "ok",
+    "id": 52,
+    "result": {
+      "kind": "harnesses",
+      "project": "/home/me/project",
+      "harnesses": [
+        {
+          "entry": "claude-code",
+          "allowed": true,
+          "on": false
+        }
+      ]
+    }
+  },
+  {
+    "type": "ok",
     "id": 51,
     "result": {
       "kind": "tool_output",

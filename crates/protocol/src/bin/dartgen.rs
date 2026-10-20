@@ -612,6 +612,17 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
             },
         },
         ServerMessage::Ok {
+            id: 52,
+            result: CommandResult::Harnesses {
+                project: "/home/me/project".into(),
+                harnesses: vec![HarnessSwitch {
+                    entry: "claude-code".into(),
+                    allowed: true,
+                    on: false,
+                }],
+            },
+        },
+        ServerMessage::Ok {
             id: 51,
             result: CommandResult::ToolOutput {
                 output: "# Home".into(),
@@ -788,6 +799,14 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
             summary: "why".into(),
         },
         ClientCommand::ToolList { session: s() },
+        ClientCommand::HarnessList {
+            project: "composer".into(),
+        },
+        ClientCommand::HarnessSet {
+            project: "composer".into(),
+            entry: "claude-code".into(),
+            on: false,
+        },
         ClientCommand::ToolCall {
             session: s(),
             name: "open".into(),

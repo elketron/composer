@@ -79,6 +79,19 @@ enum Command {
     },
     /// Forget the remote server; use the local one again.
     Logout,
+    /// Show a project's external harnesses (Claude Code), or turn one on or off for it.
+    ///
+    /// `composer harness composer off` stops Claude Code tickets in ~/Projects/composer;
+    /// `on` lets them go on. A model alone: `composer harness composer off claude-code:opus`.
+    Harness {
+        /// A name in the projects dir, a path, or `.` (this folder).
+        project: String,
+        #[arg(value_parser = ["on", "off"])]
+        state: Option<String>,
+        /// `claude-code` or `claude-code:<model>`.
+        #[arg(default_value = "claude-code")]
+        entry: String,
+    },
     /// Run a worker on a ticket (started by the server for `spawn_worker`).
     #[command(hide = true)]
     Worker {
@@ -176,6 +189,20 @@ async fn main() -> anyhow::Result<()> {
                 token,
             };
             ask(options).await?;
+        }
+        Some(Command::Harness {
+            project,
+            state,
+            entry,
+        }) => {
+            let project = if project == "." {
+                std::env::current_dir()?.display().to_string()
+            } else {
+                project
+            };
+            let (server_url, token) = remote::client(&home)?;
+            let change = state.map(|s| (entry, s == "on"));
+            composer_server::client::harness(&server_url, &token, project, change).await?;
         }
         Some(Command::Pair { name }) => remote::pair(&home, &name)?,
         Some(Command::Devices { action }) => {

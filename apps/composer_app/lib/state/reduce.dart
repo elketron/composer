@@ -52,6 +52,10 @@ import 'types.dart';
         ),
       ProjectChosen(:final url, :final project) =>
         _toChat(s, url, (session) => ClientCommandProjectSet(session: session, path: project)),
+      HarnessesRequested(:final url, :final project) =>
+        (s, [SendCommand(url, ClientCommandHarnessList(project: project))]),
+      HarnessToggled(:final url, :final project, :final entry, :final on) =>
+        (s, [SendCommand(url, ClientCommandHarnessSet(project: project, entry: entry, on: on))]),
       CompactRequested(:final url) => _toChat(s, url, (session) => ClientCommandSessionCompact(session: session)),
       TabSelected(:final tab) => (s.copyWith(tab: tab), const []),
       SearchChanged(:final url, :final query) => (
@@ -377,6 +381,8 @@ AppState _event(AppState s, String url, ServerMessage message) => switch (messag
             unread: finished ? {...x.unread, session.id} : null,
           );
         }),
+      ServerMessageOk(result: CommandResultHarnesses(:final project, :final harnesses)) =>
+        _updateStatus(s, url, (x) => x.copyWith(harnesses: {...x.harnesses, project: harnesses})),
       ServerMessageSlots(:final used) => _updateStatus(s, url, (x) => x.copyWith(slotsUsed: used)),
       ServerMessagePageChanged(url: final page, :final by) when by == ChangedBy.agent || by == ChangedBy.app =>
         _updateStatus(s, url, (x) => x.copyWith(recent: [RecentPage(page, by), ...x.recent.where((r) => r.url != page)].take(12).toList())),

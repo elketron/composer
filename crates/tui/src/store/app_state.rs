@@ -165,6 +165,27 @@ impl AppState {
                 None => vec![],
             },
 
+            Action::Harness { on, entry } => {
+                let project = self
+                    .session
+                    .current
+                    .as_deref()
+                    .and_then(|id| self.session.sessions.iter().find(|s| s.id == id))
+                    .and_then(|s| s.project.clone());
+                let Some(project) = project else {
+                    self.ui.flash(
+                        "no project here (:project <name> sets one)",
+                        FlashLevel::Warn,
+                    );
+                    return vec![];
+                };
+                let command = match on {
+                    Some(on) => ClientCommand::HarnessSet { project, entry, on },
+                    None => ClientCommand::HarnessList { project },
+                };
+                self.send(command, Pending::Harnesses)
+            }
+
             Action::OpenUrl(url) => {
                 if !url.starts_with("site://") {
                     self.ui
@@ -569,6 +590,17 @@ impl AppState {
             }
             (Pending::Attach(_), CommandResult::Session { session }) => {
                 self.session.upsert(session);
+                vec![]
+            }
+            (Pending::Harnesses, CommandResult::Harnesses { harnesses, .. }) => {
+                let states: Vec<String> = harnesses
+                    .iter()
+                    .map(|h| match (h.allowed, h.on) {
+                        (false, _) => format!("{}: not allowed in config.toml", h.entry),
+                        (true, on) => format!("{} {}", h.entry, if on { "on" } else { "off" }),
+                    })
+                    .collect();
+                self.ui.flash(states.join(" · "), FlashLevel::Info);
                 vec![]
             }
             _ => vec![],

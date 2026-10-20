@@ -37,6 +37,9 @@ dir = "~/Projects"
 # [projects."~/Projects/composer"]
 # external_harnesses = ["claude-code"]
 # allowed_tools = ["Bash(cargo test:*)", "Bash(cargo clippy:*)"]
+# Which models its tickets may use ("<harness>" = any of its models); empty: any.
+# models = ["claude-code:sonnet", "composer"]
+# Turn a harness off for a while without editing this: `composer harness <project> off`.
 
 [reminders]
 # When a reminder page with a due date but no time goes off (local time).

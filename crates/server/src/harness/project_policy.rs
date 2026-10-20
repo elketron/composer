@@ -49,6 +49,33 @@ pub fn check_harness_allowed(
     }
 }
 
+/// The model `harness` runs in a project with `settings`: its configured `default` if the
+/// project's `models` allow it, else the first model they allow for it. `None`: the harness's
+/// own default.
+pub fn pick_model(
+    settings: &ProjectSettings,
+    harness: &str,
+    default: Option<&str>,
+) -> Result<Option<String>, String> {
+    let default = default.filter(|m| !m.is_empty()).map(str::to_string);
+    if settings.models.is_empty() || settings.models.iter().any(|m| m == harness) {
+        return Ok(default);
+    }
+    let allowed: Vec<&str> = settings
+        .models
+        .iter()
+        .filter_map(|m| m.strip_prefix(&format!("{harness}:")))
+        .collect();
+    match (&default, allowed.first()) {
+        (Some(d), _) if allowed.contains(&d.as_str()) => Ok(default),
+        (_, Some(first)) => Ok(Some(first.to_string())),
+        (_, None) => Err(format!(
+            "this project allows only these models: {}; none of them runs on `{harness}`",
+            settings.models.join(", ")
+        )),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -74,6 +101,32 @@ mod tests {
         assert!(
             check_harness_allowed(&Config::defaults(), Some(&canon(&outer)), "claude-code")
                 .is_err()
+        );
+    }
+
+    #[test]
+    fn models() {
+        let settings = |models: &[&str]| ProjectSettings {
+            models: models.iter().map(|m| m.to_string()).collect(),
+            ..Default::default()
+        };
+        let pick = |models: &[&str], default: Option<&str>| {
+            pick_model(&settings(models), "claude-code", default)
+        };
+        assert_eq!(pick(&[], Some("opus")), Ok(Some("opus".into())));
+        assert_eq!(pick(&["claude-code"], None), Ok(None));
+        assert_eq!(
+            pick(&["claude-code:sonnet"], Some("opus")),
+            Ok(Some("sonnet".into()))
+        );
+        assert_eq!(
+            pick(&["claude-code:sonnet", "claude-code:opus"], Some("opus")),
+            Ok(Some("opus".into()))
+        );
+        assert!(
+            pick(&["composer"], None)
+                .unwrap_err()
+                .contains("none of them runs on `claude-code`")
         );
     }
 }

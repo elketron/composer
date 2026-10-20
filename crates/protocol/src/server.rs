@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::common::{
-    ChangedBy, ChatMessage, MessageSource, PageChangeKind, Seq, SessionId, SessionInfo, ToolInfo,
-    Url, WorkerState,
+    ChangedBy, ChatMessage, HarnessSwitch, MessageSource, PageChangeKind, Seq, SessionId,
+    SessionInfo, ToolInfo, Url, WorkerState,
 };
 
 /// Everything the server sends over `/ws`.
@@ -161,10 +161,27 @@ pub enum ServerMessage {
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum CommandResult {
     Done,
-    Session { session: SessionInfo },
-    Sessions { sessions: Vec<SessionInfo> },
-    SlotGranted { grant: u64 },
-    Approval { approved: bool },
-    Tools { tools: Vec<ToolInfo> },
-    ToolOutput { output: String, is_error: bool },
+    Session {
+        session: SessionInfo,
+    },
+    Sessions {
+        sessions: Vec<SessionInfo>,
+    },
+    SlotGranted {
+        grant: u64,
+    },
+    Approval {
+        approved: bool,
+    },
+    Tools {
+        tools: Vec<ToolInfo>,
+    },
+    ToolOutput {
+        output: String,
+        is_error: bool,
+    },
+    Harnesses {
+        project: String,
+        harnesses: Vec<HarnessSwitch>,
+    },
 }

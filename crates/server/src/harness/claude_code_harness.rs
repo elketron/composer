@@ -41,6 +41,10 @@ impl Harness for ClaudeCodeHarness {
         "claude-code"
     }
 
+    fn default_model(&self, server: &Server) -> Option<String> {
+        Some(server.config.claude_code.model.clone()).filter(|m| !m.is_empty())
+    }
+
     async fn start(
         &self,
         server: &Arc<Server>,
@@ -98,8 +102,8 @@ impl Harness for ClaudeCodeHarness {
             Some(_) => command.args(["--resume", &harness_session]),
             None => command.args(["--session-id", &harness_session]),
         };
-        if !config.model.is_empty() {
-            command.args(["--model", &config.model]);
+        if let Some(model) = &request.model {
+            command.args(["--model", model]);
         }
         let plugin = server.home.templates().join("harness/claude-code");
         if plugin.is_dir() {

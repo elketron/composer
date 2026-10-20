@@ -127,6 +127,22 @@ final class ProjectChosen extends AppAction {
   final String? project;
 }
 
+/// Ask which external harnesses a project allows and has on (for the chat menu).
+final class HarnessesRequested extends AppAction {
+  const HarnessesRequested(this.url, this.project);
+  final String url;
+  final String project;
+}
+
+/// Turn an external harness (`claude-code`) on or off for a project.
+final class HarnessToggled extends AppAction {
+  const HarnessToggled(this.url, this.project, this.entry, this.on);
+  final String url;
+  final String project;
+  final String entry;
+  final bool on;
+}
+
 /// Compact the open session: save memory, then summarize older messages.
 final class CompactRequested extends AppAction {
   const CompactRequested(this.url);

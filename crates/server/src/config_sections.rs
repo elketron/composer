@@ -46,6 +46,10 @@ pub struct ProjectSettings {
     /// Tools Claude Code may use here on top of `[claude_code] allowed_tools`, e.g. `Bash(cargo test:*)`.
     #[serde(default)]
     pub allowed_tools: Vec<String>,
+    /// Which models its tickets may use: `"<harness>"` (any of its models) or
+    /// `"<harness>:<model>"` (`"claude-code:sonnet"`, `"composer"`). Empty: any.
+    #[serde(default)]
+    pub models: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

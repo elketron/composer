@@ -46,6 +46,8 @@ case "$mode" in
     exit 1 ;;
   silent)
     echo '{"type":"result","subtype":"success","is_error":false,"result":"I could not do it"}' ;;
+  slow)
+    sleep 30 ;;
 esac
 "#;
 
@@ -156,7 +158,7 @@ async fn claude_code_works_tickets() {
     std::fs::write(
         home.config_file(),
         format!(
-            "[provider]\nbase_url = \"{base_url}\"\n\n[projects.\"{}\"]\nexternal_harnesses = [\"claude-code\"]\nallowed_tools = [\"Bash(cargo test:*)\"]\n\n[claude_code]\ncommand = \"{}\"\n",
+            "[provider]\nbase_url = \"{base_url}\"\n\n[projects.\"{}\"]\nexternal_harnesses = [\"claude-code\"]\nallowed_tools = [\"Bash(cargo test:*)\"]\nmodels = [\"claude-code:sonnet\"]\n\n[claude_code]\ncommand = \"{}\"\n",
             project.display(),
             fake.display()
         ),
@@ -241,6 +243,8 @@ async fn claude_code_works_tickets() {
         assert!(args.contains(arg), "{arg} in:\n{args}");
     }
     assert!(args.contains("--permission-prompts\nnone\n"));
+    // The project's models pick the model.
+    assert!(args.contains("--model\nsonnet\n"), "{args}");
     let events =
         std::fs::read_to_string(root.join(format!("state/sessions/{worker}/events.jsonl")))
             .unwrap();
@@ -270,6 +274,46 @@ async fn claude_code_works_tickets() {
         args.contains("--resume") && args.contains("try again"),
         "{args}"
     );
+
+    // Turned off for the project: the running ticket pauses, new ones are refused; turned
+    // back on, it goes on by itself.
+    let project_key = project.display().to_string();
+    std::fs::write(bin.join("mode"), "slow").unwrap();
+    ticket(&root, "0006", &project);
+    spawn(&server, &orchestrator, "0006").await.unwrap();
+    until_field(&root, "0006", "model: ", "").await;
+    server
+        .workers
+        .switch(&server, &project_key, "claude-code", false)
+        .await
+        .unwrap();
+    let text = until_status(&root, "0006", "paused").await;
+    assert!(text.contains("paused_reason: switch"), "{text}");
+    ticket(&root, "0007", &project);
+    let refused = spawn(&server, &orchestrator, "0007").await.unwrap_err();
+    assert!(refused.contains("turned off for this project"), "{refused}");
+    let switches = server.workers.switches(&server, &project_key);
+    assert!(
+        switches
+            .iter()
+            .any(|h| h.entry == "claude-code" && h.allowed && !h.on)
+    );
+    std::fs::write(bin.join("mode"), "finish").unwrap();
+    server
+        .workers
+        .switch(&server, &project_key, "claude-code", true)
+        .await
+        .unwrap();
+    until_status(&root, "0006", "done").await;
+
+    // Shutting down pauses a running ticket (without telling the orchestrator).
+    std::fs::write(bin.join("mode"), "slow").unwrap();
+    spawn(&server, &orchestrator, "0007").await.unwrap();
+    until_field(&root, "0007", "model: ", "").await;
+    server.workers.shutdown().await;
+    let text = until_status(&root, "0007", "paused").await;
+    assert!(text.contains("paused_reason: shutdown"), "{text}");
+    assert!(server.workers.running().is_empty());
 
     // A usage limit pauses the ticket and Claude Code, instead of failing.
     std::fs::write(bin.join("mode"), "limit").unwrap();

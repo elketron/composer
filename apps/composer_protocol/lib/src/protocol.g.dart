@@ -190,6 +190,8 @@ sealed class ClientCommand {
         'session.compact' => ClientCommandSessionCompact.fromJson(json),
         'turn.cancel' => ClientCommandTurnCancel.fromJson(json),
         'project.set' => ClientCommandProjectSet.fromJson(json),
+        'harness.list' => ClientCommandHarnessList.fromJson(json),
+        'harness.set' => ClientCommandHarnessSet.fromJson(json),
         'approval.respond' => ClientCommandApprovalRespond.fromJson(json),
         'subscribe' => ClientCommandSubscribe.fromJson(json),
         'worker.hello' => ClientCommandWorkerHello.fromJson(json),
@@ -366,6 +368,53 @@ final class ClientCommandProjectSet extends ClientCommand {
         'type': 'project.set',
         'session': session,
         if (path != null) 'path': path,
+      };
+}
+
+/// The external harnesses of a project (a folder, `~/x`, or a name in the projects dir).
+final class ClientCommandHarnessList extends ClientCommand {
+  const ClientCommandHarnessList({
+    required this.project,
+  });
+
+  final String project;
+
+  factory ClientCommandHarnessList.fromJson(Map<String, Object?> json) => ClientCommandHarnessList(
+        project: json['project'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'harness.list',
+        'project': project,
+      };
+}
+
+/// Turns a harness (`claude-code`) or one of its models (`claude-code:opus`) on or off for a
+/// project. Off stops its running tickets there; on lets the ones it stopped go on.
+final class ClientCommandHarnessSet extends ClientCommand {
+  const ClientCommandHarnessSet({
+    required this.project,
+    required this.entry,
+    required this.on,
+  });
+
+  final String project;
+
+  final String entry;
+
+  final bool on;
+
+  factory ClientCommandHarnessSet.fromJson(Map<String, Object?> json) => ClientCommandHarnessSet(
+        project: json['project'] as String,
+        entry: json['entry'] as String,
+        on: json['on'] as bool,
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'harness.set',
+        'project': project,
+        'entry': entry,
+        'on': on,
       };
 }
 
@@ -622,6 +671,7 @@ sealed class CommandResult {
         'approval' => CommandResultApproval.fromJson(json),
         'tools' => CommandResultTools.fromJson(json),
         'tool_output' => CommandResultToolOutput.fromJson(json),
+        'harnesses' => CommandResultHarnesses.fromJson(json),
         _ => CommandResultUnknown(json),
       };
 
@@ -746,12 +796,63 @@ final class CommandResultToolOutput extends CommandResult {
       };
 }
 
+final class CommandResultHarnesses extends CommandResult {
+  const CommandResultHarnesses({
+    required this.project,
+    required this.harnesses,
+  });
+
+  final String project;
+
+  final List<HarnessSwitch> harnesses;
+
+  factory CommandResultHarnesses.fromJson(Map<String, Object?> json) => CommandResultHarnesses(
+        project: json['project'] as String,
+        harnesses: (json['harnesses'] as List).map((e) => HarnessSwitch.fromJson(e as Map<String, Object?>)).toList(),
+      );
+
+  Map<String, Object?> toJson() => {
+        'kind': 'harnesses',
+        'project': project,
+        'harnesses': harnesses.map((e) => e.toJson()).toList(),
+      };
+}
+
 /// A `kind` this version doesn't know (a newer server): kept as raw JSON.
 final class CommandResultUnknown extends CommandResult {
   const CommandResultUnknown(this.raw);
   final Map<String, Object?> raw;
 
   Map<String, Object?> toJson() => raw;
+}
+
+/// An external harness (or one of its models) for a project: allowed by config.toml, and
+/// turned on or off at runtime.
+class HarnessSwitch {
+  const HarnessSwitch({
+    required this.entry,
+    required this.allowed,
+    required this.on,
+  });
+
+  /// `claude-code`, or `claude-code:<model>`.
+  final String entry;
+
+  final bool allowed;
+
+  final bool on;
+
+  factory HarnessSwitch.fromJson(Map<String, Object?> json) => HarnessSwitch(
+        entry: json['entry'] as String,
+        allowed: json['allowed'] as bool,
+        on: json['on'] as bool,
+      );
+
+  Map<String, Object?> toJson() => {
+        'entry': entry,
+        'allowed': allowed,
+        'on': on,
+      };
 }
 
 /// Where a user-side message came from.

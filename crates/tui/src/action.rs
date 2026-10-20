@@ -32,6 +32,11 @@ pub enum Action {
     /// The next (1) or previous (-1) session of this orchestration: orchestrator, workers.
     CycleOrchestration(i32),
     SetProject(Option<String>),
+    /// Show the project's external harnesses, or turn one (`claude-code[:model]`) on or off.
+    Harness {
+        on: Option<bool>,
+        entry: String,
+    },
 
     // ---- pages ----
     OpenUrl(String),

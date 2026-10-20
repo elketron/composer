@@ -25,6 +25,10 @@ class ChatPage extends StatelessWidget {
     final session = chat == null ? null : status.session(chat.session);
     final activity = session == null ? 'idle' : status.activity(session);
     final project = session?.project?.split('/').last;
+    final switches = [
+      for (final h in status.harnesses[session?.project] ?? const <HarnessSwitch>[])
+        if (h.allowed && !h.entry.contains(':')) h,
+    ];
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 0,
@@ -54,7 +58,12 @@ class ChatPage extends StatelessWidget {
             tooltip: 'More',
             icon: const Icon(Icons.more_vert, size: 20, color: t.muted),
             enabled: chat != null,
+            onOpened: () {
+              final folder = session?.project;
+              if (folder != null) store.dispatch(HarnessesRequested(url, folder));
+            },
             onSelected: (choice) => switch (choice) {
+              _ when choice.startsWith('harness:') => _toggle(store, url, session?.project, choice),
               'project' => showProjectSheet(context, url),
               'unset' => store.dispatch(ProjectChosen(url, null)),
               'compact' => store.dispatch(CompactRequested(url)),
@@ -64,6 +73,11 @@ class ChatPage extends StatelessWidget {
             itemBuilder: (_) => [
               PopupMenuItem(value: 'project', child: Text(project == null ? 'Set project…' : 'Change project…')),
               if (project != null) PopupMenuItem(value: 'unset', child: Text('Unset $project')),
+              for (final h in switches)
+                PopupMenuItem(
+                  value: 'harness:${h.on ? 'off' : 'on'}:${h.entry}',
+                  child: Text('${h.on ? 'Turn off' : 'Turn on'} ${harnessName(h.entry)} for $project'),
+                ),
               const PopupMenuItem(value: 'compact', child: Text('Compact (save memory, summarize)')),
               if (session != null && session.state != TurnState.idle) const PopupMenuItem(value: 'stop', child: Text('Stop the turn')),
             ],
@@ -76,4 +90,18 @@ class ChatPage extends StatelessWidget {
           : ChatView(url: url, status: status, chat: chat, header: false),
     );
   }
+
+  /// `harness:off:claude-code` → turn it off for the session's project.
+  void _toggle(AppStore store, String url, String? project, String choice) {
+    final rest = choice.substring('harness:'.length);
+    final colon = rest.indexOf(':');
+    if (project == null || colon < 0) return;
+    store.dispatch(HarnessToggled(url, project, rest.substring(colon + 1), rest.substring(0, colon) == 'on'));
+  }
 }
+
+/// `claude-code` → `Claude Code`.
+String harnessName(String entry) => switch (entry) {
+      'claude-code' => 'Claude Code',
+      _ => entry,
+    };

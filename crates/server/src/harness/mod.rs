@@ -8,6 +8,7 @@
 mod child_process;
 mod claude_code_harness;
 mod claude_code_run;
+mod harness_switches;
 mod own_harness;
 mod project_policy;
 mod resequence;
@@ -18,7 +19,8 @@ mod worker_sink;
 pub use child_process::ChildProcess;
 pub use claude_code_harness::ClaudeCodeHarness;
 pub use claude_code_run::ClaudeCodeRun;
+pub use harness_switches::HarnessSwitches;
 pub use own_harness::OwnHarness;
-pub use project_policy::{check_harness_allowed, project_settings};
+pub use project_policy::{check_harness_allowed, pick_model, project_settings};
 pub use types::{Harness, HarnessRun, Pause, Resume, StartRequest};
 pub use worker_sink::WorkerSink;

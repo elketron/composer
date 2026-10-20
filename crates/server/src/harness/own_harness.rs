@@ -20,6 +20,15 @@ impl Harness for OwnHarness {
         false
     }
 
+    fn default_model(&self, server: &Server) -> Option<String> {
+        Some(server.provider.model().to_string())
+    }
+
+    /// The provider's one model.
+    fn chooses_model(&self) -> bool {
+        false
+    }
+
     async fn start(
         &self,
         server: &Arc<Server>,

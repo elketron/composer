@@ -112,6 +112,18 @@ pub struct ToolCall {
     pub args: serde_json::Value,
 }
 
+/// An external harness (or one of its models) for a project: allowed by config.toml, and
+/// turned on or off at runtime.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct HarnessSwitch {
+    /// `claude-code`, or `claude-code:<model>`.
+    pub entry: String,
+    pub allowed: bool,
+    pub on: bool,
+}
+
 /// A tool an agent may call: what the model (or an external harness) sees.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]

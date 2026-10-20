@@ -13,6 +13,7 @@ use crate::actions::{Approvals, PendingApprovals};
 use crate::config::Config;
 use crate::devices::Devices;
 use crate::error::{Result, ServerError};
+use crate::harness::HarnessSwitches;
 use crate::hash::content_hash;
 use crate::home::Home;
 use crate::hub::EventHub;
@@ -42,6 +43,8 @@ pub struct Server {
     pub devices: Devices,
     /// Worker processes this server started.
     pub workers: WorkerRegistry,
+    /// Harnesses turned off per project at runtime (`state/projects.json`).
+    pub switches: HarnessSwitches,
     /// The binary started for workers (`$COMPOSER_WORKER_EXE`, else this executable).
     pub worker_exe: PathBuf,
     /// Set in a worker process: the server that spawned it.
@@ -120,6 +123,7 @@ impl Server {
             approvals,
             pending_approvals: PendingApprovals::default(),
             workers: WorkerRegistry::default(),
+            switches: HarnessSwitches::load(home.state().join("projects.json")),
             devices: Devices::new(&home.state()),
             worker_exe,
             parent,
@@ -174,10 +178,20 @@ impl Server {
         }
         *self.watcher.lock().expect("watcher lock") = Some(crate::watcher::watch(self)?);
         tokio::spawn(crate::reminders::run_reminders(self.clone()));
+        self.workers.schedule_paused(self);
         let router = crate::api::router(self.clone());
-        axum::serve(listener, router)
-            .await
-            .map_err(|e| ServerError::Invalid(format!("server stopped: {e}")))
+        let serving = axum::serve(listener, router);
+        tokio::select! {
+            served = serving => {
+                served.map_err(|e| ServerError::Invalid(format!("server stopped: {e}")))?;
+            }
+            _ = shutdown_signal() => {
+                tracing::info!("shutting down");
+            }
+        }
+        // Workers run in their own process groups: stop them, or they outlive the server.
+        self.workers.shutdown().await;
+        Ok(())
     }
 
     /// Writes a page, updates the index and broadcasts `page.changed`.
@@ -343,4 +357,24 @@ fn is_watched(root: &Path, path: &Path) -> bool {
             .iter()
             .any(|p| p.starts_with('.') || *p == "node_modules")
         && !(parts.len() > 2 && parts[1] == "ui")
+}
+
+/// Ctrl-C, or SIGTERM (systemd, `kill`).
+async fn shutdown_signal() {
+    #[cfg(unix)]
+    {
+        let mut term =
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()).ok();
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {}
+            _ = async {
+                match term.as_mut() {
+                    Some(term) => { term.recv().await; }
+                    None => std::future::pending::<()>().await,
+                }
+            } => {}
+        }
+    }
+    #[cfg(not(unix))]
+    let _ = tokio::signal::ctrl_c().await;
 }

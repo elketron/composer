@@ -19,6 +19,8 @@ pub struct StartRequest {
     pub project: Option<String>,
     /// The project's settings in config.toml.
     pub settings: ProjectSettings,
+    /// The model to run (allowed for the project); `None`: the harness's default.
+    pub model: Option<String>,
     /// The run's own output: `state/workers/<session>.log` (appended to).
     pub log: PathBuf,
     /// Continue an earlier run of this ticket (the harness's own session id) with a message
@@ -48,6 +50,14 @@ pub trait Harness: Send + Sync {
 
     /// External harnesses run only in projects that allow them (`external_harnesses`).
     fn external(&self) -> bool {
+        true
+    }
+
+    /// The model it runs unless a project's `models` say otherwise (`None`: its own default).
+    fn default_model(&self, server: &Server) -> Option<String>;
+
+    /// Whether it can run another model than its default.
+    fn chooses_model(&self) -> bool {
         true
     }
 

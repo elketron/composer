@@ -117,6 +117,8 @@ pub enum Pending {
     ListSessions,
     CreateSession,
     Attach(String),
+    /// `harness.list` / `harness.set`: show the result.
+    Harnesses,
     Ignore,
 }
 
