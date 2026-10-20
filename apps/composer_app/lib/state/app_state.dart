@@ -15,6 +15,7 @@ class AppState {
     this.notice,
     this.foreground = true,
     this.notifiedApprovals = const {},
+    this.tab = PhoneTab.chats,
   });
 
   static const initial = AppState();
@@ -43,6 +44,9 @@ class AppState {
   /// Approval requests already notified (not again after a reconnect re-sends them).
   final Set<String> notifiedApprovals;
 
+  /// The phone layout's tab.
+  final PhoneTab tab;
+
   ServerEntry? get activeServer => servers.where((s) => s.url == active).firstOrNull;
 
   ServerStatus statusOf(String url) => status[url] ?? ServerStatus.initial;
@@ -57,6 +61,7 @@ class AppState {
     Notice? notice,
     bool? foreground,
     Set<String>? notifiedApprovals,
+    PhoneTab? tab,
   }) =>
       AppState(
         loaded: loaded ?? this.loaded,
@@ -68,5 +73,6 @@ class AppState {
         notice: notice ?? this.notice,
         foreground: foreground ?? this.foreground,
         notifiedApprovals: notifiedApprovals ?? this.notifiedApprovals,
+        tab: tab ?? this.tab,
       );
 }

@@ -133,9 +133,9 @@ void main() {
     });
 
     test('unsetting the project goes to the open session', () {
-      expect(reduce(loaded([home]), ProjectCleared(home.url)).$2, isEmpty);
+      expect(reduce(loaded([home]), ProjectChosen(home.url, null)).$2, isEmpty);
       final state = reduce(loaded([home]), SessionOpened(home.url, 'a')).$1;
-      final command = (reduce(state, ProjectCleared(home.url)).$2.single as SendCommand).command as ClientCommandProjectSet;
+      final command = (reduce(state, ProjectChosen(home.url, null)).$2.single as SendCommand).command as ClientCommandProjectSet;
       expect((command.session, command.path), ('a', null));
     });
 
@@ -252,7 +252,7 @@ void main() {
 
     test('coming online fetches the site list', () {
       final (_, effects) = reduce(loaded([home]), LinkChanged(home.url, LinkState.online));
-      expect(effects.whereType<FetchSites>().single.url, home.url);
+      expect(effects.whereType<FetchCatalog>().single.url, home.url);
     });
   });
 
@@ -364,6 +364,35 @@ void main() {
 
       state = reduce(state, DraftChanged(home.url, drafting: true)).$1;
       expect(reduce(state, finished('w1', WorkerState.failed)).$1.statusOf(home.url).chat!.session, 'w1');
+    });
+
+    test('the phone home: unread work, recent pages, search, new chats with a project', () {
+      SessionInfo s(String id, TurnState state) => SessionInfo(id: id, agent: 'default', state: state, lastSeq: 0, updated: '');
+      var state = withSessions(loaded([home]), [s('a', TurnState.running), s('b', TurnState.running)]);
+      state = reduce(state, SessionOpened(home.url, 'b')).$1;
+      ServerEvent idle(String id) => ServerEvent(home.url, ServerMessageSessionUpdated(session: s(id, TurnState.idle)));
+      state = reduce(reduce(state, idle('a')).$1, idle('b')).$1;
+      expect(state.statusOf(home.url).unread, {'a'}, reason: 'b was on screen');
+      state = reduce(state, SessionOpened(home.url, 'a')).$1;
+      expect(state.statusOf(home.url).unread, isEmpty, reason: 'opening it reads it');
+
+      ServerEvent changed(String url, ChangedBy by) =>
+          ServerEvent(home.url, ServerMessagePageChanged(url: url, kind: PageChangeKind.modified, by: by));
+      for (final e in [changed('site://a.md', ChangedBy.agent), changed('site://b.md', ChangedBy.external), changed('site://a.md', ChangedBy.app)]) {
+        state = reduce(state, e).$1;
+      }
+      expect(state.statusOf(home.url).recent.map((r) => (r.url, r.by)), [('site://a.md', ChangedBy.app)], reason: 'not your own edits; no repeats');
+
+      var (next, effects) = reduce(state, SearchChanged(home.url, 'type:ticket'));
+      expect(effects.whereType<SearchPages>().single.query, 'type:ticket');
+      next = reduce(next, SearchChanged(home.url, 'type:plan')).$1;
+      const hit = SearchHit(url: 'site://x.md', title: 'X', site: 'x');
+      expect(reduce(next, SearchLoaded(home.url, 'type:ticket', const [hit])).$1.statusOf(home.url).search.hits, isNull, reason: 'stale');
+      expect(reduce(next, SearchLoaded(home.url, 'type:plan', const [hit])).$1.statusOf(home.url).search.hits, [hit]);
+
+      final create = reduce(state, NewSessionRequested(home.url, agent: 'orchestrator', project: 'composer')).$2.single as CreateSession;
+      expect((create.agent, create.project), ('orchestrator', 'composer'));
+      expect(reduce(state, const TabSelected(PhoneTab.pages)).$1.tab, PhoneTab.pages);
     });
 
     test('Android keeps running while there are servers', () {

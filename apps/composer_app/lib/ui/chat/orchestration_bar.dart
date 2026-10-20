@@ -68,7 +68,10 @@ class OrchestrationBar extends StatelessWidget {
                 s.parent == null ? s.agent : (s.ticket != null ? 'ticket ${s.ticket}' : s.agent),
                 style: mono(size: 12, color: open ? t.text : t.muted, weight: open ? FontWeight.w600 : FontWeight.w400),
               ),
-              Text('  #${s.id}', style: mono(size: 11, color: t.faint)),
+              Text(
+                activity == 'idle' ? '  #${s.id}' : '  $label',
+                style: mono(size: 11, color: activity == 'idle' ? t.faint : dot),
+              ),
             ]),
           ),
         ),

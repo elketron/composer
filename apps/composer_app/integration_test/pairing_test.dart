@@ -32,11 +32,11 @@ void main() {
     await tester.tap(find.byKey(const Key('add-first-server')));
     await pumpUntil(tester, find.byKey(const Key('server-url')));
 
-    // Pasting the login line fills the address and the code.
+    // Pasting the login line is enough: the address and code are read from it.
     await tester.enterText(find.byKey(const Key('server-url')), pairLine);
     await tester.pump();
-    final code = tester.widget<TextField>(find.byKey(const Key('pair-code'))).controller!.text;
-    expect(code, pairLine.split(' ').last);
+    expect(tester.widget<Text>(find.byKey(const Key('pair-parsed'))).data, contains(pairLine.split(' ').last));
+    expect(find.byKey(const Key('pair-code')), findsNothing);
 
     await tester.tap(find.byKey(const Key('pair')));
     await pumpUntil(tester, find.text('online'));

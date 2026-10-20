@@ -1,5 +1,27 @@
 // Plain state types (no behaviour).
 
+import 'package:composer_protocol/composer_protocol.dart';
+
+/// The phone layout's tabs.
+enum PhoneTab { chats, pages, server }
+
+/// A page an agent or app changed lately (the Pages tab).
+class RecentPage {
+  const RecentPage(this.url, this.by);
+  final String url;
+  final ChangedBy by;
+}
+
+/// The Pages tab's search: the query, and its hits once they arrive.
+class PageSearch {
+  const PageSearch({this.query = '', this.hits, this.error});
+  final String query;
+
+  /// Null while loading (or with an empty query).
+  final List<SearchHit>? hits;
+  final String? error;
+}
+
 /// A server's WebSocket.
 enum LinkState { connecting, online, offline }
 

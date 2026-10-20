@@ -19,6 +19,9 @@ void newSession(BuildContext context, String url) {
   if (!isWide(context)) _push(context, url);
 }
 
+/// Show the server's chat as its own page (phones); it fills in once the session is open.
+void pushChat(BuildContext context, String url) => _push(context, url);
+
 void _push(BuildContext context, String url) {
   final store = StoreScope.read(context);
   Navigator.of(context)

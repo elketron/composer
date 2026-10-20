@@ -3,16 +3,19 @@ import 'package:flutter/material.dart';
 
 import '../../state/chat_state.dart';
 import '../../state/server_status.dart';
-import '../../theme/composer_theme.dart';
 import '../../theme/tokens.dart' as t;
 import '../pages/page_navigation.dart';
 import '../../state/actions.dart';
 import '../store_scope.dart';
+import '../../state/chat_items.dart';
+import '../../state/chat_rows.dart';
+import 'activity_line.dart';
 import 'agent_text.dart';
 import 'approval_card.dart';
 import 'chat_header.dart';
 import 'chat_item_view.dart';
-import 'collapsible_row.dart';
+import 'steps_view.dart';
+import 'worker_card.dart';
 import 'message_composer.dart';
 import 'orchestration_bar.dart';
 
@@ -39,16 +42,23 @@ class ChatView extends StatelessWidget {
 
     // Built bottom-up: the list is reversed so it sticks to the newest line. Keys keep each
     // row's state (an expanded tool row) on its row as new ones arrive below.
+    // A turn's steps fold into one row; workers' reports become cards.
+    final chatRowsList = chatRows(chat.items);
     final rows = <(Key, Widget)>[
       for (final approval in approvals.toList().reversed)
         (ValueKey('approval-${approval.request}'), ApprovalCard(url: url, approval: approval)),
+      if (busy) (const ValueKey('activity'), ActivityLine(chat: chat, state: session.state)),
       if (streaming != null && streaming.content.isNotEmpty)
         (const ValueKey('streaming'), AgentText(streaming.content, url: url, streaming: true)),
-      if (streaming != null && streaming.thinking.isNotEmpty && streaming.content.isEmpty)
-        (const ValueKey('streaming-thinking'), const CollapsibleRow(label: TextSpan(text: 'thinking …'))),
-      if (busy && streaming == null && session.state == TurnState.waiting)
-        (const ValueKey('waiting'), Text('waiting for a model slot', style: mono(size: 12, color: t.faint))),
-      for (final (i, item) in chat.items.indexed.toList().reversed) (ValueKey('item-$i'), ChatItemView(item, url: url)),
+      for (final (i, row) in chatRowsList.indexed.toList().reversed)
+        (
+          ValueKey('row-$i'),
+          switch (row) {
+            ItemRow(:final item) => ChatItemView(item, url: url),
+            StepsRow() => StepsView(row: row, url: url),
+            WorkerRow() => WorkerCard(row: row, url: url),
+          },
+        ),
     ];
     final keys = [for (final (key, _) in rows) key];
 
@@ -60,7 +70,7 @@ class ChatView extends StatelessWidget {
           parent: parent,
           onClose: onClose,
           onBrowse: () => openPage(context, url, 'site://home'),
-          onClearProject: () => StoreScope.read(context).dispatch(ProjectCleared(url)),
+          onClearProject: () => StoreScope.read(context).dispatch(ProjectChosen(url, null)),
         ),
       OrchestrationBar(url: url, status: status, session: chat.session),
       Expanded(

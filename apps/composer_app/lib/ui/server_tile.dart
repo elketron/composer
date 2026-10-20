@@ -8,7 +8,7 @@ import '../theme/tokens.dart' as t;
 import 'format.dart';
 import 'status_dot.dart';
 
-/// A server in the switcher: name, link state, and the model (or why it is offline).
+/// A server in the switcher: name, link state, and its address (or why it is offline).
 class ServerTile extends StatelessWidget {
   const ServerTile({super.key, required this.server, required this.status, required this.selected, required this.onTap, this.shortcut});
 
@@ -24,7 +24,8 @@ class ServerTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final detail = switch (status.link) {
       LinkState.offline => status.error ?? 'offline',
-      _ => status.info == null ? shortUrl(server.url) : '${status.info!.model} · ${status.info!.slots} slots',
+      // The address tells same-named servers apart.
+      _ => shortUrl(server.url),
     };
     return Material(
       color: selected ? t.raised : Colors.transparent,

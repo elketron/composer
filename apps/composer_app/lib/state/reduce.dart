@@ -44,13 +44,27 @@ import 'types.dart';
       ServerEvent(:final url, :final message) => _serverEvent(s, url, message),
       SessionOpened(:final url, :final session) => _open(s, url, session),
       SessionClosed(:final url) => _close(s, url),
-      NewSessionRequested(:final url, :final agent) => (s, [CreateSession(url, agent)]),
+      NewSessionRequested(:final url, :final agent, :final project) => (s, [CreateSession(url, agent, project: project)]),
       MessageSubmitted(:final url, :final text) => _toChat(s, url, (session) => ClientCommandMessageSend(session: session, text: text)),
       DraftChanged(:final url, :final drafting) => (
           _updateStatus(s, url, (x) => x.chat == null ? x : x.copyWith(chat: x.chat!.copyWith(drafting: drafting))),
           const [],
         ),
-      ProjectCleared(:final url) => _toChat(s, url, (session) => ClientCommandProjectSet(session: session)),
+      ProjectChosen(:final url, :final project) =>
+        _toChat(s, url, (session) => ClientCommandProjectSet(session: session, path: project)),
+      CompactRequested(:final url) => _toChat(s, url, (session) => ClientCommandSessionCompact(session: session)),
+      TabSelected(:final tab) => (s.copyWith(tab: tab), const []),
+      SearchChanged(:final url, :final query) => (
+          _updateStatus(s, url, (x) => x.copyWith(search: PageSearch(query: query, hits: query.trim().isEmpty ? const [] : null))),
+          [if (query.trim().isNotEmpty) SearchPages(url, query)],
+        ),
+      SearchLoaded(:final url, :final query, :final hits, :final error) => (
+          // A late answer for an older query is dropped.
+          _updateStatus(s, url, (x) => x.search.query == query ? x.copyWith(search: PageSearch(query: query, hits: hits, error: error)) : x),
+          const [],
+        ),
+      AgentsLoaded(:final url, :final agents) => (_updateStatus(s, url, (x) => x.copyWith(agents: agents)), const []),
+      ProjectsLoaded(:final url, :final projects) => (_updateStatus(s, url, (x) => x.copyWith(projects: projects)), const []),
       CancelRequested(:final url) => _toChat(s, url, (session) => ClientCommandTurnCancel(session: session)),
       ApprovalAnswered(:final url, :final request, :final approve) => (
           _updateStatus(s, url, (x) => x.copyWith(approvals: [for (final a in x.approvals) if (a.request != request) a])),
@@ -159,7 +173,7 @@ import 'types.dart';
   return (
     next,
     [
-      FetchSites(url),
+      FetchCatalog(url),
       if (chat != null) SendCommand(url, ClientCommandSessionAttach(session: chat.session, since: chat.lastSeq)),
     ],
   );
@@ -169,7 +183,14 @@ import 'types.dart';
   final current = s.status[url]?.chat;
   if (current?.session == session) return (s, const []);
   return (
-    _updateStatus(s, url, (x) => x.copyWith(chat: ChatState(session: session, liveAfter: x.session(session)?.lastSeq ?? 0))),
+    _updateStatus(
+      s,
+      url,
+      (x) => x.copyWith(
+        chat: ChatState(session: session, liveAfter: x.session(session)?.lastSeq ?? 0),
+        unread: x.unread.contains(session) ? ({...x.unread}..remove(session)) : null,
+      ),
+    ),
     [
       if (current != null) SendCommand(url, ClientCommandSessionDetach(session: current.session)),
       SendCommand(url, ClientCommandSessionAttach(session: session)),
@@ -338,11 +359,20 @@ Notify _approvalNote(String url, String server, ServerMessageApprovalRequest a) 
 AppState _event(AppState s, String url, ServerMessage message) => switch (message) {
       ServerMessageOk(result: CommandResultSessions(:final sessions)) =>
         _updateStatus(s, url, (x) => x.copyWith(sessions: _newestFirst(sessions))),
-      ServerMessageSessionUpdated(:final session) => _updateStatus(
-          s,
-          url,
-          (x) => x.copyWith(sessions: _newestFirst([session, for (final y in x.sessions) if (y.id != session.id) y])),
-        ),
+      ServerMessageSessionUpdated(:final session) => _updateStatus(s, url, (x) {
+          // A turn ended in a session that isn't open: it has something new for you.
+          final finished = session.state == TurnState.idle &&
+              (x.session(session.id)?.state ?? TurnState.idle) != TurnState.idle &&
+              session.ticket == null &&
+              x.chat?.session != session.id;
+          return x.copyWith(
+            sessions: _newestFirst([session, for (final y in x.sessions) if (y.id != session.id) y]),
+            unread: finished ? {...x.unread, session.id} : null,
+          );
+        }),
+      ServerMessageSlots(:final used) => _updateStatus(s, url, (x) => x.copyWith(slotsUsed: used)),
+      ServerMessagePageChanged(url: final page, :final by) when by == ChangedBy.agent || by == ChangedBy.app =>
+        _updateStatus(s, url, (x) => x.copyWith(recent: [RecentPage(page, by), ...x.recent.where((r) => r.url != page)].take(12).toList())),
       ServerMessageApprovalRequest(:final request) => _updateStatus(
           s,
           url,
@@ -350,8 +380,10 @@ AppState _event(AppState s, String url, ServerMessage message) => switch (messag
         ),
       ServerMessageApprovalResolved(:final request) =>
         _updateStatus(s, url, (x) => x.copyWith(approvals: [for (final a in x.approvals) if (a.request != request) a])),
-      ServerMessageWorkerStatus(:final worker, :final state) =>
-        _updateStatus(s, url, (x) => x.copyWith(workers: {...x.workers, worker: state})),
+      ServerMessageWorkerStatus(:final worker, :final state) => _updateStatus(s, url, (x) {
+          final finished = (state == WorkerState.done || state == WorkerState.failed) && x.chat?.session != worker;
+          return x.copyWith(workers: {...x.workers, worker: state}, unread: finished ? {...x.unread, worker} : null);
+        }),
       _ when sessionEvent(message) != null => _updateStatus(s, url, (x) {
           final chat = x.chat;
           if (chat == null) return x;

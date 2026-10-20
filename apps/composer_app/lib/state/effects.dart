@@ -50,9 +50,10 @@ final class SendCommand extends AppEffect {
 
 /// `session.create`, then open it.
 final class CreateSession extends AppEffect {
-  const CreateSession(this.url, this.agent);
+  const CreateSession(this.url, this.agent, {this.project});
   final String url;
   final String agent;
+  final String? project;
 }
 
 /// A system notification; `key` identifies it (to replace or withdraw it).
@@ -98,7 +99,15 @@ final class FetchPage extends AppEffect {
   final String page;
 }
 
-final class FetchSites extends AppEffect {
-  const FetchSites(this.url);
+/// The sites, agents and projects (`SitesLoaded`, `AgentsLoaded`, `ProjectsLoaded`).
+final class FetchCatalog extends AppEffect {
+  const FetchCatalog(this.url);
   final String url;
+}
+
+/// `GET /api/search` (`SearchLoaded`).
+final class SearchPages extends AppEffect {
+  const SearchPages(this.url, this.query);
+  final String url;
+  final String query;
 }

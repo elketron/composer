@@ -79,13 +79,14 @@ class _MessageComposerState extends State<MessageComposer> {
                 textCapitalization: TextCapitalization.sentences,
                 style: const TextStyle(fontSize: 15, height: 1.4),
                 decoration: InputDecoration(
-                  hintText: widget.busy ? 'Message (after this turn)' : 'Message',
+                  hintText: widget.busy ? 'Message (sent after this turn)' : 'Message',
                   contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 ),
               ),
             ),
           ),
-          if (widget.busy) ...[
+          // Writing while the agent works: Stop stays beside Send (the message waits for the turn).
+          if (widget.busy && _text.text.trim().isNotEmpty) ...[
             const SizedBox(width: 8),
             SquareButton(
               key: const Key('cancel'),
@@ -96,13 +97,23 @@ class _MessageComposerState extends State<MessageComposer> {
             ),
           ],
           const SizedBox(width: 8),
-          SquareButton(
-            key: const Key('send'),
-            tooltip: 'Send (ctrl-enter)',
-            color: t.accent,
-            onPressed: _text.text.trim().isEmpty ? null : _send,
-            child: const Icon(Icons.arrow_upward, size: 18, color: t.bg),
-          ),
+          // Nothing written while it works: Stop in Send's place.
+          if (widget.busy && _text.text.trim().isEmpty)
+            SquareButton(
+              key: const Key('cancel'),
+              tooltip: 'Stop the turn',
+              color: t.raised,
+              child: const Icon(Icons.stop, size: 18, color: t.err),
+              onPressed: () => store.dispatch(CancelRequested(widget.url)),
+            )
+          else
+            SquareButton(
+              key: const Key('send'),
+              tooltip: 'Send (ctrl-enter)',
+              color: t.accent,
+              onPressed: _text.text.trim().isEmpty ? null : _send,
+              child: const Icon(Icons.arrow_upward, size: 18, color: t.bg),
+            ),
         ]),
       ),
     );

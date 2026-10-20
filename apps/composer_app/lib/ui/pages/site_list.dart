@@ -5,7 +5,7 @@ import '../../theme/composer_theme.dart';
 import '../../theme/tokens.dart' as t;
 import 'page_navigation.dart';
 
-/// A server's sites: open the index, or the micro app.
+/// A server's sites. A site with a built app opens the app; its pages are one tap to the side.
 class SiteList extends StatelessWidget {
   const SiteList({super.key, required this.url, required this.status});
 
@@ -21,12 +21,13 @@ class SiteList extends StatelessWidget {
               InkWell(
                 key: Key('site-${site.name}'),
                 borderRadius: BorderRadius.circular(t.radius),
-                onTap: () => openPage(context, url, 'site://${site.name}'),
+                onTap: () => site.appBuilt ? openApp(context, url, site.name) : openPage(context, url, 'site://${site.name}'),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                   child: Text.rich(TextSpan(children: [
                     TextSpan(text: site.title, style: const TextStyle(fontSize: 13)),
                     TextSpan(text: '  ${site.name}', style: mono(size: 11, color: t.faint)),
+                    if (site.appBuilt) TextSpan(text: '  app', style: mono(size: 11, color: t.accent)),
                   ])),
                 ),
               ),
@@ -37,12 +38,12 @@ class SiteList extends StatelessWidget {
                 ),
               if (site.appBuilt)
                 InkWell(
-                  key: Key('app-${site.name}'),
-                  onTap: () => openApp(context, url, site.name),
+                  key: Key('pages-${site.name}'),
+                  onTap: () => openPage(context, url, 'site://${site.name}'),
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
                     decoration: const BoxDecoration(border: Border(left: BorderSide(color: t.border))),
-                    child: Text('app', style: mono(size: 11, color: t.accent)),
+                    child: Text('pages', style: mono(size: 11, color: t.muted)),
                   ),
                 ),
             ]),

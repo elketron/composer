@@ -1,0 +1,582 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>composer app UX</title>
+<link rel="stylesheet" href="theme.css">
+<style>
+  body { padding: 40px 32px 80px; }
+  .doc { max-width: 1240px; margin: 0 auto; }
+  .doc > header h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; }
+  .doc > header p { color: var(--muted); margin: 0 0 20px; max-width: 760px; }
+  .problems { columns: 2 380px; column-gap: 40px; margin: 0 0 48px; padding: 0; list-style: none; }
+  .problems li { break-inside: avoid; color: var(--muted); font-size: 13px; padding: 6px 0 6px 18px; position: relative; }
+  .problems li::before { content: ""; position: absolute; left: 2px; top: 13px; width: 6px; height: 6px; border-radius: 2px; background: var(--warn); }
+  .problems b { color: var(--text); font-weight: 500; }
+  .row { display: flex; flex-wrap: wrap; gap: 36px; margin-bottom: 56px; }
+  figure { margin: 0; width: 360px; }
+  figcaption h2 { font-size: 14px; font-weight: 600; margin: 14px 0 2px; }
+  figcaption p { color: var(--muted); font-size: 13px; margin: 0 0 4px; }
+  figcaption ul { color: var(--muted); font-size: 13px; margin: 4px 0 0; padding-left: 18px; }
+  .section-title { font: 11px var(--font-mono); color: var(--faint); text-transform: uppercase; letter-spacing: .08em; margin: 0 0 16px; }
+
+  /* ===== phone frame ===== */
+  .phone {
+    width: 360px; height: 760px; border: 1px solid var(--border-strong); border-radius: 14px;
+    background: var(--bg); overflow: hidden; display: flex; flex-direction: column; position: relative;
+  }
+  .status { height: 24px; flex: none; display: flex; justify-content: space-between; align-items: center; padding: 0 16px; font: 11px var(--font-mono); color: var(--muted); }
+  .bar { height: 52px; flex: none; display: flex; align-items: center; gap: 10px; padding: 0 12px 0 16px; border-bottom: 1px solid var(--border); background: var(--surface); }
+  .bar .title { font-weight: 600; font-size: 15px; }
+  .bar .grow { flex: 1; min-width: 0; }
+  .icon { width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; color: var(--muted); border-radius: var(--radius); flex: none; }
+  .icon svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  .body { flex: 1; overflow: hidden; position: relative; }
+  .pad { padding: 12px 14px; }
+  .tabs { height: 58px; flex: none; display: flex; border-top: 1px solid var(--border); background: var(--surface); }
+  .tabs a { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: var(--faint); font-size: 11px; position: relative; text-decoration: none; }
+  .tabs a.on { color: var(--text); }
+  .tabs a.on::before { content: ""; position: absolute; top: 0; left: 30%; right: 30%; height: 2px; background: var(--accent); border-radius: 0 0 2px 2px; }
+  .tabs svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  .tabs .count { position: absolute; top: 7px; left: calc(50% + 6px); font: 600 9px var(--font-mono); background: var(--warn); color: var(--bg); border-radius: 2px; padding: 0 3px; line-height: 13px; }
+
+  /* ===== bits ===== */
+  .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex: none; background: var(--faint); }
+  .dot.ok { background: var(--ok); } .dot.warn { background: var(--warn); } .dot.err { background: var(--err); } .dot.info { background: var(--info); }
+  .dot.pulse { box-shadow: 0 0 0 3px #d6b06a26; }
+  .switcher { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; font-size: 15px; }
+  .switcher .chev { color: var(--faint); font-weight: 400; font-size: 12px; }
+  .switcher small { font: 11px var(--font-mono); color: var(--faint); font-weight: 400; }
+  .chip { font: 11px var(--font-mono); color: var(--muted); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 1px 6px; line-height: 16px; white-space: nowrap; display: inline-flex; align-items: center; gap: 5px; }
+  .chip.accent { color: var(--accent); border-color: #8fb3e855; }
+  .chip.warn { color: var(--warn); border-color: #d6b06a55; }
+  .chip.ok { color: var(--ok); border-color: #8cc29a55; }
+  .chip .x { color: var(--faint); margin-left: 2px; }
+  .label { font: 10.5px var(--font-mono); color: var(--faint); text-transform: uppercase; letter-spacing: .08em; margin: 14px 0 8px; display: flex; justify-content: space-between; align-items: center; }
+  .label:first-child { margin-top: 2px; }
+  .mono { font-family: var(--font-mono); }
+  .muted { color: var(--muted); } .faint { color: var(--faint); }
+  .btn { font: 500 13px var(--font-ui); height: 34px; padding: 0 14px; border-radius: var(--radius); border: 1px solid var(--border-strong); background: var(--raised); color: var(--text); display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+  .btn.ghost { background: none; border-color: transparent; color: var(--muted); }
+  .btn.sm { height: 28px; font-size: 12px; padding: 0 10px; }
+  .btn.block { width: 100%; }
+  .fab { position: absolute; right: 14px; bottom: 14px; height: 44px; padding: 0 16px 0 14px; border-radius: var(--radius); background: var(--accent); color: var(--bg); font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 8px; box-shadow: 0 6px 18px #0008; }
+  .fab svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; }
+
+  /* session rows */
+  .card { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+  .srow { padding: 10px 12px; display: block; color: var(--text); text-decoration: none !important; }
+  .srow + .srow { border-top: 1px solid var(--border); }
+  .srow .top { display: flex; align-items: center; gap: 8px; }
+  .srow .agent { font: 500 13px var(--font-mono); }
+  .srow .id { font: 11px var(--font-mono); color: var(--faint); }
+  .srow .when { margin-left: auto; font: 11px var(--font-mono); color: var(--faint); }
+  .srow .when.warn { color: var(--warn); }
+  .srow .preview { color: var(--muted); font-size: 13px; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .srow .meta { margin-top: 7px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .workers { margin: 8px 0 0 3px; padding-left: 12px; border-left: 1px solid var(--border-strong); display: grid; gap: 5px; }
+  .workers div { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+  .workers .t { font-family: var(--font-mono); color: var(--text); font-size: 12px; }
+  .workers .s { margin-left: auto; font: 11px var(--font-mono); }
+
+  /* approval */
+  .approval { border: 1px solid #d6b06a66; background: #d6b06a0d; border-radius: var(--radius); padding: 10px 12px; }
+  .approval .what { font: 13px var(--font-mono); margin: 4px 0 8px; }
+  .approval .who { font-size: 12px; color: var(--muted); }
+  .approval .acts { display: flex; gap: 8px; }
+
+  /* chat */
+  .chatbar { height: 56px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 6px; background: var(--surface); }
+  .chatbar .who { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+  .chatbar .who b { font: 600 14px var(--font-mono); }
+  .chatbar .who span { font-size: 11px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+  .orch { display: flex; gap: 6px; padding: 7px 10px; border-bottom: 1px solid var(--border); border-top: 1px solid var(--border); background: var(--surface); overflow: hidden; flex: none; }
+  .orch .c { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 9px; border: 1px solid var(--border); border-radius: var(--radius); font: 11.5px var(--font-mono); color: var(--muted); }
+  .orch .c.on { background: var(--raised); border-color: var(--border-strong); color: var(--text); }
+  .orch .c small { color: var(--faint); font-size: 10.5px; }
+  .msgs { padding: 12px 14px; display: flex; flex-direction: column; gap: 12px; font-size: 14px; line-height: 1.5; }
+  .you { align-self: flex-end; max-width: 82%; background: var(--you); border: 1px solid #8fb3e826; border-radius: var(--radius); padding: 8px 11px; }
+  .src { font: 10.5px var(--font-mono); color: var(--info); margin-bottom: 2px; }
+  .activity { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+  .activity .head { display: flex; align-items: center; gap: 8px; padding: 7px 10px; font-size: 12.5px; color: var(--muted); }
+  .activity .head b { color: var(--text); font-weight: 500; }
+  .activity .head .sum { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .activity .head .caret { color: var(--faint); font-size: 10px; width: 10px; }
+  .activity .head .n { margin-left: auto; font: 11px var(--font-mono); color: var(--faint); }
+  .steps { border-top: 1px solid var(--border); padding: 6px 10px 8px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 5px; }
+  .step { display: flex; gap: 8px; align-items: baseline; font: 12px var(--font-mono); color: var(--muted); }
+  .step .tool { color: var(--info); width: 92px; flex: none; }
+  .step .ok, .step .err { flex: none; }
+  .step .arg { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+  .step .arg a { color: var(--accent); }
+  .step.think .tool { color: var(--faint); }
+  .step .ok { color: var(--ok); } .step .err { color: var(--err); }
+  .agent p { margin: 0 0 8px; }
+  .agent code { color: var(--muted); }
+  .event { display: flex; gap: 10px; align-items: center; border: 1px solid #8cc29a40; background: #8cc29a0a; border-radius: var(--radius); padding: 8px 10px; font-size: 12.5px; }
+  .event .t { flex: 1; } .event .t b { font-weight: 500; }
+  .event .t div { color: var(--muted); font-size: 12px; }
+  .typing { display: flex; align-items: center; gap: 8px; font: 12px var(--font-mono); color: var(--warn); }
+  .composer { flex: none; border-top: 1px solid var(--border); background: var(--surface); padding: 8px 10px 10px; }
+  .composer .ctx { display: flex; gap: 6px; margin-bottom: 7px; }
+  .composer .line { display: flex; gap: 8px; align-items: flex-end; }
+  .composer .field { flex: 1; min-height: 40px; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--bg); padding: 9px 11px; color: var(--faint); font-size: 14px; }
+  .composer .send { width: 40px; height: 40px; border-radius: var(--radius); background: var(--accent); display: flex; align-items: center; justify-content: center; color: var(--bg); flex: none; }
+  .composer .send.stop { background: var(--raised); border: 1px solid var(--border-strong); color: var(--err); }
+  .composer .send svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* sheets */
+  .scrim { position: absolute; inset: 0; background: #000a; }
+  .sheet { position: absolute; left: 0; right: 0; bottom: 0; background: var(--surface); border-top: 1px solid var(--border-strong); border-radius: 12px 12px 0 0; padding: 8px 16px 18px; }
+  .grab { width: 36px; height: 4px; border-radius: 2px; background: var(--border-strong); margin: 0 auto 12px; }
+  .sheet h3 { font-size: 15px; margin: 0 0 2px; font-weight: 600; }
+  .choice { display: flex; gap: 10px; align-items: flex-start; padding: 10px 11px; border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 7px; }
+  .choice.on { border-color: #8fb3e888; background: var(--accent-dim); }
+  .choice .r { width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid var(--border-strong); flex: none; margin-top: 3px; }
+  .choice.on .r { border: 4px solid var(--accent); }
+  .choice b { font: 500 13px var(--font-mono); display: block; }
+  .choice span { font-size: 12px; color: var(--muted); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pchip { height: 30px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: var(--radius); display: inline-flex; align-items: center; gap: 6px; font: 12px var(--font-mono); color: var(--muted); }
+  .pchip.on { border-color: var(--accent); color: var(--text); background: var(--accent-dim); }
+
+  /* lists */
+  .list a.item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; color: var(--text); text-decoration: none; }
+  .list a.item + a.item { border-top: 1px solid var(--border); }
+  .list .item .t { flex: 1; min-width: 0; }
+  .list .item .t div { font-size: 14px; }
+  .list .item .t small { display: block; color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .list .item .r { font: 11px var(--font-mono); color: var(--faint); }
+  .search { display: flex; align-items: center; gap: 8px; height: 40px; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--bg); padding: 0 11px; color: var(--faint); font-size: 14px; }
+  .search svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; }
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 13px; }
+  .kv dt { font: 11.5px var(--font-mono); color: var(--faint); padding-top: 1px; }
+  .kv dd { margin: 0; font: 12.5px var(--font-mono); color: var(--text); overflow-wrap: anywhere; }
+  .input { height: 42px; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--bg); padding: 0 12px; display: flex; align-items: center; font-size: 14px; color: var(--faint); }
+  .input.filled { color: var(--text); font-family: var(--font-mono); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; line-height: 40px; }
+  .stepper { display: grid; gap: 14px; margin: 6px 0 18px; }
+  .stepper div { display: flex; gap: 12px; font-size: 13.5px; color: var(--muted); }
+  .stepper .n { width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--border-strong); font: 11px var(--font-mono); display: flex; align-items: center; justify-content: center; color: var(--text); flex: none; }
+  .stepper code { color: var(--text); }
+  .hint { font-size: 12px; color: var(--faint); margin-top: 6px; }
+  .ok-line { display: flex; gap: 8px; align-items: center; font-size: 12.5px; color: var(--ok); margin-top: 8px; }
+
+  /* wide */
+  .wide { width: 1180px; height: 640px; border: 1px solid var(--border-strong); border-radius: 8px; display: grid; grid-template-columns: 56px 280px 1fr 380px; overflow: hidden; background: var(--bg); }
+  .wide .rail { background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 12px 0; }
+  .wide .rail .srv { width: 36px; height: 36px; border-radius: var(--radius); border: 1px solid var(--border-strong); display: flex; align-items: center; justify-content: center; font: 600 13px var(--font-mono); position: relative; }
+  .wide .rail .srv.on { border-color: var(--accent); color: var(--accent); }
+  .wide .rail .srv .dot { position: absolute; right: -2px; bottom: -2px; border: 2px solid var(--surface); width: 10px; height: 10px; }
+  .wide .col { border-right: 1px solid var(--border); display: flex; flex-direction: column; min-width: 0; }
+  .wide .colhead { height: 48px; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-bottom: 1px solid var(--border); background: var(--surface); flex: none; }
+</style>
+</head>
+<body>
+<div class="doc">
+<header>
+  <h1>composer app: phone UX, round 2</h1>
+  <p>From trying 0.1.0 on a phone (Android emulator, a server with an orchestrator, a worker and a plain chat).
+  The theme stays as it is; what changes is where things are and how much each screen asks of you.</p>
+</header>
+
+<div class="section-title">What got in the way</div>
+<ul class="problems">
+  <li><b>The home screen is the server page.</b> Model name, slots, version and the site chips come first; the sessions you want to continue are below them, at the bottom.</li>
+  <li><b>New session can't pick an agent or project.</b> It always starts <code>default</code>; an orchestrator needs the TUI.</li>
+  <li><b>Every tool call and every thought is its own row.</b> One orchestrator turn was 9 rows (<code>thinking · 20 words</code>, <code>open … open</code>, …) before the answer; on a phone that is a screen of noise.</li>
+  <li><b>Nothing says what is waiting for you.</b> Running sessions, approvals and finished workers look like any other row; you find them by scrolling.</li>
+  <li><b>Two servers with the same hostname look identical</b> in the switcher (it shows the model, not the address).</li>
+  <li><b>Pages are hard to reach.</b> Only the site chips on the server page and the book icon in a chat; no search on the phone.</li>
+  <li><b>Add server:</b> a third of the screen is empty, the form jumps when the keyboard opens, and pasting the link from <code>composer pair</code> still leaves two fields.</li>
+  <li><b>The project is invisible</b> in the chat on a phone, and the worker's finished state is lost after reconnecting (grey dot).</li>
+</ul>
+
+<!-- ================= row 1 ================= -->
+<div class="row">
+
+<figure>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>●●● 82%</span></div>
+  <div class="bar">
+    <span class="switcher grow"><span class="dot ok"></span>my-pc <small>tail1234</small><span class="chev">▾</span></span>
+    <span class="icon"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4-4"/></svg></span>
+  </div>
+  <div class="body">
+    <div class="pad">
+      <div class="label">Needs you <span class="chip warn">2</span></div>
+      <div class="approval">
+        <div class="who">orchestrator <span class="mono faint">#3459</span> wants to run</div>
+        <div class="what">orchestration › new-ticket "Add a README badge"</div>
+        <div class="acts"><span class="btn sm primary">Approve</span><span class="btn sm">Deny</span><span class="btn sm ghost">View recipe</span></div>
+      </div>
+      <div style="height:8px"></div>
+      <div class="card">
+        <a class="srow">
+          <div class="top"><span class="dot ok"></span><span class="agent">worker</span><span class="id">#96a1</span><span class="when" style="color:var(--ok)">done · 2m</span></div>
+          <div class="preview">ticket 0001: Note the release steps</div>
+        </a>
+      </div>
+
+      <div class="label">Running</div>
+      <div class="card">
+        <a class="srow">
+          <div class="top"><span class="dot warn pulse"></span><span class="agent">orchestrator</span><span class="id">#3459</span><span class="when warn">running</span></div>
+          <div class="preview">Ticket 0001 done. Spawning 0002 for the changelog…</div>
+          <div class="workers">
+            <div><span class="dot warn"></span><span class="t">0002</span> changelog entry<span class="s" style="color:var(--warn)">running</span></div>
+            <div><span class="dot ok"></span><span class="t">0001</span> release steps<span class="s" style="color:var(--ok)">done</span></div>
+          </div>
+          <div class="meta"><span class="chip">composer</span></div>
+        </a>
+      </div>
+
+      <div class="label">Recent</div>
+      <div class="card">
+        <a class="srow">
+          <div class="top"><span class="dot"></span><span class="agent">default</span><span class="id">#fc1b</span><span class="when">4m</span></div>
+          <div class="preview">What sites are there, in two sentences?</div>
+          <div class="meta"><span class="chip">composer</span></div>
+        </a>
+        <a class="srow">
+          <div class="top"><span class="dot"></span><span class="agent">default</span><span class="id">#a07e</span><span class="when">yesterday</span></div>
+          <div class="preview">Plan the calendar reminders</div>
+          <div class="meta"><span class="chip">no project</span></div>
+        </a>
+      </div>
+    </div>
+    <span class="fab"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>New chat</span>
+  </div>
+  <nav class="tabs">
+    <a class="on"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg>Chats<span class="count">2</span></a>
+    <a><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/></svg>Pages</a>
+    <a><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="7" rx="1"/><rect x="4" y="13" width="16" height="7" rx="1"/><path d="M8 7.5h.01M8 16.5h.01"/></svg>Server</a>
+  </nav>
+</div>
+<figcaption>
+  <h2>1 · Chats is home</h2>
+  <p>The first screen answers "what needs me, what is running, what was I doing".</p>
+  <ul>
+    <li><b>Needs you</b>: approvals (answer in place) and finished workers or turns you haven't opened; the tab badge counts them.</li>
+    <li><b>Running</b>: an orchestrator carries its workers as lines with their state, so a running orchestration is one card.</li>
+    <li>Each session shows its project. The switcher shows the tailnet name under the hostname.</li>
+    <li>Model, slots and version move to the Server tab (screen 6).</li>
+  </ul>
+</figcaption>
+</figure>
+
+<figure>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>●●● 82%</span></div>
+  <div class="bar">
+    <span class="switcher grow"><span class="dot ok"></span>my-pc <span class="chev">▾</span></span>
+  </div>
+  <div class="body">
+    <div class="pad" style="opacity:.35">
+      <div class="label">Running</div>
+      <div class="card"><a class="srow"><div class="top"><span class="dot warn"></span><span class="agent">orchestrator</span><span class="id">#3459</span></div><div class="preview">Ticket 0001 done…</div></a></div>
+    </div>
+    <div class="scrim"></div>
+    <div class="sheet">
+      <div class="grab"></div>
+      <h3>New chat</h3>
+      <div class="label">Agent</div>
+      <div class="choice on"><span class="r"></span><div><b>default</b><span>general assistant: memory, pages, sites, projects</span></div></div>
+      <div class="choice"><span class="r"></span><div><b>orchestrator</b><span>splits a plan into tickets and runs workers</span></div></div>
+      <div class="label">Project</div>
+      <div class="chips">
+        <span class="pchip on">composer</span><span class="pchip">notes</span><span class="pchip">lamp</span><span class="pchip">none</span><span class="pchip faint">+ other…</span>
+      </div>
+      <div class="hint">From ~/Projects; the last one you used is preselected.</div>
+      <div style="height:16px"></div>
+      <span class="btn primary block" style="height:42px">Start chat</span>
+    </div>
+  </div>
+  <nav class="tabs">
+    <a class="on"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg>Chats</a>
+    <a><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/></svg>Pages</a>
+    <a><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="7" rx="1"/><rect x="4" y="13" width="16" height="7" rx="1"/></svg>Server</a>
+  </nav>
+</div>
+<figcaption>
+  <h2>2 · New chat: agent and project</h2>
+  <p>One sheet, two choices, both with a sensible default, so a plain chat is still two taps.</p>
+  <ul>
+    <li>Agents come from <code>site://agents</code> with their <code>description:</code>; worker agents are left out (they only run tickets).</li>
+    <li>Projects are the folders in the projects directory, most recent first. Needs a small <code>GET /api/projects</code>.</li>
+  </ul>
+</figcaption>
+</figure>
+
+<figure>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>●●● 82%</span></div>
+  <div class="chatbar">
+    <span class="icon"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></span>
+    <div class="who"><b>orchestrator</b><span><span class="dot warn"></span>running · composer · #3459</span></div>
+    <span class="icon"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/></svg></span>
+    <span class="icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="5.5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="18.5" r="1"/></svg></span>
+  </div>
+  <div class="orch">
+    <span class="c on"><span class="dot warn"></span>orchestrator</span>
+    <span class="c"><span class="dot warn"></span>0002 <small>running</small></span>
+    <span class="c"><span class="dot ok"></span>0001 <small>done</small></span>
+  </div>
+  <div class="body">
+    <div class="msgs">
+      <div class="you">Write ticket 0001 for the release steps and spawn a worker on it.</div>
+      <div class="activity">
+        <div class="head"><span class="caret">▸</span><span class="sum"><b>6 steps</b> · read 1 page, wrote 0001.md, started a worker</span><span class="n">14s</span></div>
+      </div>
+      <div class="agent"><p>Ticket <b>0001</b> is written and worker <code>#96a1</code> is on it. I'll report back when it finishes.</p></div>
+      <div class="event">
+        <span class="dot ok"></span>
+        <div class="t"><b>Worker #96a1 finished ticket 0001</b><div>done · wrote memory/topics/release.md</div></div>
+        <span class="btn sm ghost">Result</span>
+      </div>
+      <div class="activity">
+        <div class="head"><span class="caret">▸</span><span class="sum"><b>4 steps</b> · read the ticket, edited 1 page</span><span class="n">9s</span></div>
+      </div>
+      <div class="agent"><p>Ticket 0001 is done. Next is the changelog entry: I've written <b>0002</b> and started a worker.</p></div>
+      <div class="typing"><span class="dot warn pulse"></span>working · run orchestration › new-ticket</div>
+    </div>
+  </div>
+  <div class="composer">
+    <div class="line">
+      <div class="field">Message (sent after this turn)</div>
+      <div class="send stop"><svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="1"/></svg></div>
+    </div>
+  </div>
+</div>
+<figcaption>
+  <h2>3 · A chat: steps folded per turn</h2>
+  <p>A turn's tool calls and thinking become one line that says what happened. Answers stay in view.</p>
+  <ul>
+    <li>The header carries the state and the project; <b>⋮</b> has project (change, unset), compact, cancel.</li>
+    <li>The orchestration strip says what each worker is doing, not just a dot.</li>
+    <li>"Worker finished" is a card with a link to its Result, not a user bubble with a <code>[worker …]</code> prefix.</li>
+    <li>While running: the current step shows at the bottom, and the button is Stop.</li>
+  </ul>
+</figcaption>
+</figure>
+
+</div>
+
+<!-- ================= row 2 ================= -->
+<div class="row">
+
+<figure>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>●●● 82%</span></div>
+  <div class="chatbar">
+    <span class="icon"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></span>
+    <div class="who"><b>orchestrator</b><span><span class="dot"></span>idle · composer · #3459</span></div>
+    <span class="icon"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/></svg></span>
+    <span class="icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="5.5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="18.5" r="1"/></svg></span>
+  </div>
+  <div class="body">
+    <div class="msgs">
+      <div class="you">Write ticket 0001 for the release steps and spawn a worker on it.</div>
+      <div class="activity">
+        <div class="head"><span class="caret">▾</span><span class="sum"><b>6 steps</b> · read 1 page, wrote 0001.md, started a worker</span><span class="n">14s</span></div>
+        <div class="steps">
+          <div class="step think"><span class="tool">thought</span><span class="arg">Check the ticket format before writing…</span></div>
+          <div class="step"><span class="tool">open</span><span class="arg"><a>orchestration</a></span><span class="ok">✓</span></div>
+          <div class="step think"><span class="tool">thought</span><span class="arg">Id 0001 is free; status open.</span></div>
+          <div class="step"><span class="tool">write</span><span class="arg"><a>orchestration/tickets/0001.md</a></span><span class="ok">✓</span></div>
+          <div class="step"><span class="tool">spawn_worker</span><span class="arg">0001 → <a>#96a1</a> (worker)</span><span class="ok">✓</span></div>
+          <div class="step"><span class="tool">run</span><span class="arg">orchestration › ui-build</span><span class="err">✗ denied</span></div>
+        </div>
+      </div>
+      <div class="agent"><p>Ticket <b>0001</b> is written and worker <code>#96a1</code> is on it.</p></div>
+      <div class="you"><div class="src">from the orchestration app</div>Bump 0002 to high priority.</div>
+    </div>
+  </div>
+  <div class="composer">
+    <div class="ctx"><span class="chip accent">plans/server-api <span class="x">×</span></span></div>
+    <div class="line">
+      <div class="field">Message</div>
+      <div class="send"><svg viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></svg></div>
+    </div>
+  </div>
+</div>
+<figcaption>
+  <h2>4 · Steps unfolded</h2>
+  <p>Tap the line to see the steps: one compact row each, results as ✓ / ✗, pages as links. Tapping a step shows its full arguments and result.</p>
+  <ul>
+    <li>Thinking is a step too (first line only), not a separate row type.</li>
+    <li>The composer can carry a page as context (from the reader's "Ask about this"), shown as a chip above the field.</li>
+  </ul>
+</figcaption>
+</figure>
+
+<figure>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>●●● 82%</span></div>
+  <div class="bar">
+    <span class="switcher grow"><span class="dot ok"></span>my-pc <span class="chev">▾</span></span>
+  </div>
+  <div class="body">
+    <div class="pad">
+      <div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4-4"/></svg>Search pages, or type:ticket status:open</div>
+      <div class="label">Recently touched by agents</div>
+      <div class="card list">
+        <a class="item"><div class="t"><div>Release steps</div><small>memory/topics/release.md · worker #96a1</small></div><span class="r">2m</span></a>
+        <a class="item"><div class="t"><div>Note the release steps</div><small>orchestration/tickets/0001.md · done</small></div><span class="r">3m</span></a>
+        <a class="item"><div class="t"><div>composer</div><small>memory/projects/composer.md</small></div><span class="r">3m</span></a>
+      </div>
+      <div class="label">Sites</div>
+      <div class="card list">
+        <a class="item"><div class="t"><div>Memory</div><small>what agents know: you, projects, topics</small></div><span class="chip">12</span></a>
+        <a class="item"><div class="t"><div>Plans</div><small>goals and the steps to reach them</small></div><span class="chip">3</span></a>
+        <a class="item"><div class="t"><div>Orchestration <span class="chip accent" style="margin-left:4px">app</span></div><small>tickets handed to workers · opens the ticket board</small></div><span class="btn sm ghost">pages</span></a>
+        <a class="item"><div class="t"><div>Agents</div><small>agent definitions</small></div><span class="chip">4</span></a>
+        <a class="item"><div class="t"><div>Chat</div><small>phone web chat</small></div><span class="chip faint">app not built</span></a>
+      </div>
+    </div>
+  </div>
+  <nav class="tabs">
+    <a><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg>Chats<span class="count">2</span></a>
+    <a class="on"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/></svg>Pages</a>
+    <a><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="7" rx="1"/><rect x="4" y="13" width="16" height="7" rx="1"/></svg>Server</a>
+  </nav>
+</div>
+<figcaption>
+  <h2>5 · Pages tab</h2>
+  <p>The workspace gets its own place: search first (the same queries the agents use), then what changed lately, then the sites.</p>
+  <ul>
+    <li>"Recently touched" comes from <code>page.changed</code> events (by agent / app), so you see what your agents just did.</li>
+    <li>A site with a built app opens the app; its pages are one tap away (<b>pages</b>). Other sites open their index.</li>
+  </ul>
+</figcaption>
+</figure>
+
+<figure>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>●●● 82%</span></div>
+  <div class="bar">
+    <span class="switcher grow"><span class="dot ok"></span>my-pc <span class="chev">▾</span></span>
+  </div>
+  <div class="body">
+    <div class="pad">
+      <div class="label">This server</div>
+      <div class="card" style="padding:12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><span class="dot ok"></span><b style="font-weight:600">my-pc</b><span class="muted" style="font-size:12px">online</span></div>
+        <dl class="kv">
+          <dt>address</dt><dd>my-pc.tail1234.ts.net</dd>
+          <dt>model</dt><dd>qwen3.8-flash-next · 2 slots, 1 in use</dd>
+          <dt>version</dt><dd>composer 0.1.0</dd>
+          <dt>projects</dt><dd>~/Projects</dd>
+        </dl>
+      </div>
+      <div class="label">Servers</div>
+      <div class="card list">
+        <a class="item"><span class="dot ok"></span><div class="t"><div>my-pc</div><small>my-pc.tail1234.ts.net</small></div><span class="r">this one</span></a>
+        <a class="item"><span class="dot err"></span><div class="t"><div>work-pc</div><small>work-pc.tail1234.ts.net · offline 2h</small></div><span class="btn sm ghost">Retry</span></a>
+      </div>
+      <div style="height:10px"></div>
+      <span class="btn block">+ Add a server</span>
+      <div class="label">On this device</div>
+      <div class="card list">
+        <a class="item"><div class="t"><div>Notifications</div><small>approvals, finished workers, reminders</small></div><span class="chip ok">on</span></a>
+        <a class="item"><div class="t"><div>Keep connected in the background</div><small>needed for notifications on Android</small></div><span class="chip ok">on</span></a>
+      </div>
+    </div>
+  </div>
+  <nav class="tabs">
+    <a><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg>Chats<span class="count">2</span></a>
+    <a><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/></svg>Pages</a>
+    <a class="on"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="7" rx="1"/><rect x="4" y="13" width="16" height="7" rx="1"/></svg>Server</a>
+  </nav>
+</div>
+<figcaption>
+  <h2>6 · Server tab</h2>
+  <p>Everything about connections in one place, out of the way of daily use.</p>
+  <ul>
+    <li>Servers are told apart by address, and offline ones say since when.</li>
+    <li>The device settings that matter on Android (notifications, background connection) are visible and explained.</li>
+  </ul>
+</figcaption>
+</figure>
+
+</div>
+
+<!-- ================= row 3 ================= -->
+<div class="row">
+
+<figure>
+<div class="phone">
+  <div class="status"><span>9:41</span><span>●●● 82%</span></div>
+  <div class="bar">
+    <span class="icon"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></span>
+    <span class="title grow">Add a server</span>
+  </div>
+  <div class="body">
+    <div class="pad" style="padding-top:20px">
+      <div class="stepper">
+        <div><span class="n">1</span><span>On the computer running composer: <code>composer pair --name phone</code></span></div>
+        <div><span class="n">2</span><span>Scan the QR code it shows, or paste its link below.</span></div>
+      </div>
+      <span class="btn block" style="height:44px"><svg viewBox="0 0 24 24" style="width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.8"><path d="M4 8V4h4M16 4h4v4M20 16v4h-4M8 20H4v-4"/><path d="M9 9h2v2H9zM13 13h2v2h-2z"/></svg>Scan QR code</span>
+      <div class="label" style="justify-content:center;margin:18px 0">or</div>
+      <div class="input filled">https://my-pc.tail1234.ts.net/pair?code=E63E-PQRF</div>
+      <div class="ok-line"><span class="dot ok"></span>my-pc.tail1234.ts.net · code E63E-PQRF</div>
+      <div class="hint">A link, a <code>composer login …</code> line, or an address and code all work.</div>
+      <div style="height:22px"></div>
+      <span class="btn primary block" style="height:44px">Pair as “Pixel 9”</span>
+      <div class="hint" style="text-align:center">Rename this device</div>
+    </div>
+  </div>
+</div>
+<figcaption>
+  <h2>7 · Add a server</h2>
+  <p>Top-aligned, so the keyboard doesn't move it, and one field that understands whatever you paste.</p>
+  <ul>
+    <li>What was understood is shown under the field before you pair.</li>
+    <li>The device name defaults to the phone's model; renaming is a link, not a field.</li>
+  </ul>
+</figcaption>
+</figure>
+
+<figure style="width:780px">
+<div class="wide" style="width:780px;grid-template-columns:52px 230px 1fr">
+  <div class="rail">
+    <div class="srv on">O<span class="dot ok"></span></div>
+    <div class="srv">W<span class="dot err"></span></div>
+    <div style="flex:1"></div>
+    <span class="icon"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/></svg></span>
+  </div>
+  <div class="col">
+    <div class="colhead"><b style="font-weight:600;flex:1">my-pc</b><span class="btn sm primary">+ New</span></div>
+    <div class="pad" style="padding:8px">
+      <div class="label">Needs you</div>
+      <div class="card"><a class="srow"><div class="top"><span class="dot warn"></span><span class="agent">orchestrator</span><span class="when warn">approve</span></div><div class="preview">orchestration › new-ticket</div></a></div>
+      <div class="label">Running</div>
+      <div class="card"><a class="srow" style="background:var(--raised)"><div class="top"><span class="dot warn"></span><span class="agent">orchestrator</span><span class="id">#3459</span></div><div class="workers"><div><span class="dot warn"></span><span class="t">0002</span><span class="s" style="color:var(--warn)">running</span></div><div><span class="dot ok"></span><span class="t">0001</span><span class="s" style="color:var(--ok)">done</span></div></div></a></div>
+      <div class="label">Recent</div>
+      <div class="card"><a class="srow"><div class="top"><span class="dot"></span><span class="agent">default</span><span class="id">#fc1b</span><span class="when">4m</span></div><div class="preview">What sites are there…</div></a></div>
+    </div>
+  </div>
+  <div class="col" style="border-right:0">
+    <div class="colhead"><b class="mono" style="font-size:13px">orchestrator</b><span class="muted" style="font-size:12px">running · composer · #3459</span><span style="flex:1"></span><span class="chip">0002 running</span><span class="chip ok">0001 done</span></div>
+    <div class="msgs" style="flex:1">
+      <div class="you">Write ticket 0001 for the release steps and spawn a worker on it.</div>
+      <div class="activity"><div class="head"><span class="caret">▸</span><span class="sum"><b>6 steps</b> · read 1 page, wrote 0001.md, started a worker</span><span class="n">14s</span></div></div>
+      <div class="agent"><p>Ticket <b>0001</b> is written and worker <code>#96a1</code> is on it.</p></div>
+      <div class="event"><span class="dot ok"></span><div class="t"><b>Worker #96a1 finished ticket 0001</b><div>done · wrote memory/topics/release.md</div></div><span class="btn sm ghost">Result</span></div>
+    </div>
+    <div class="composer"><div class="line"><div class="field">Message · ctrl-enter sends</div><div class="send stop"><svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="1"/></svg></div></div></div>
+  </div>
+</div>
+<figcaption>
+  <h2>8 · The same on a wide screen</h2>
+  <p>Desktop keeps its rail, but the session column becomes the same Needs you / Running / Recent list, and the chat uses the same folded steps and worker cards. The reader still opens as the right-hand pane.</p>
+</figcaption>
+</figure>
+
+</div>
+
+</div>
+</body>
+</html>

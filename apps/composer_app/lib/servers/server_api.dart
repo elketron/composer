@@ -76,6 +76,27 @@ Future<List<SiteSummary>> fetchSites(String url, String token) async {
       .toList();
 }
 
+/// `GET /api/agents`; empty from an older server.
+Future<List<AgentSummary>> fetchAgents(String url, String token) async =>
+    [for (final e in await _getList(url, token, '/api/agents')) AgentSummary.fromJson(e as Map<String, Object?>)];
+
+/// `GET /api/projects`; empty from an older server.
+Future<List<ProjectSummary>> fetchProjects(String url, String token) async =>
+    [for (final e in await _getList(url, token, '/api/projects')) ProjectSummary.fromJson(e as Map<String, Object?>)];
+
+/// `GET /api/search?q=`: full text and `key:value` filters, as the agents' `search`.
+Future<List<SearchHit>> searchPages(String url, String token, String query) async => [
+      for (final e in await _getList(url, token, '/api/search?q=${Uri.encodeQueryComponent(query)}&limit=40'))
+        SearchHit.fromJson(e as Map<String, Object?>),
+    ];
+
+Future<List<Object?>> _getList(String url, String token, String path) async {
+  final response = await http.get(Uri.parse('$url$path'), headers: {HttpHeaders.authorizationHeader: 'Bearer $token'}).timeout(_timeout);
+  if (response.statusCode == 404) return const [];
+  if (response.statusCode != 200) throw ServerError('server answered ${response.statusCode}');
+  return jsonDecode(utf8.decode(response.bodyBytes)) as List;
+}
+
 /// Trades a pairing code for a device token (`POST /api/pair`).
 Future<String> redeemCode(String url, String code, String deviceName) async {
   final response = await http

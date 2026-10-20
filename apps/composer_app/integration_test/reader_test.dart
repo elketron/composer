@@ -53,8 +53,8 @@ void main() {
     await pumpUntil(tester, pageTitled('Memory'));
     await settle(tester, seconds: 3);
 
-    // A micro app in the same pane.
-    await tester.tap(find.byKey(const Key('app-orchestration')));
+    // A site with a built app opens the app, in the same pane.
+    await tester.tap(find.byKey(const Key('site-orchestration')));
     await pumpUntil(tester, find.byType(AppView));
     await settle(tester, seconds: 6);
 

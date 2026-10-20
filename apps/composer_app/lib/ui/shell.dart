@@ -7,15 +7,13 @@ import 'approval_bar.dart';
 import 'chat/chat_view.dart';
 import 'pages/reader.dart';
 import 'rail.dart';
-import 'server_list.dart';
-import 'server_list_footer.dart';
+import 'home/phone_home.dart';
 import 'server_page.dart';
-import 'status_dot.dart';
 import 'store_scope.dart';
 import 'welcome_page.dart';
 
-/// The app frame: a server rail beside the page on wide screens; on phones the title opens
-/// the switcher. ctrl-1…9 switches servers.
+/// The app frame: a server rail beside the page on wide screens; on phones `PhoneHome` (tabs,
+/// the title opens the switcher). ctrl-1…9 switches servers.
 class Shell extends StatelessWidget {
   const Shell({super.key});
 
@@ -78,45 +76,9 @@ class Shell extends StatelessWidget {
               ]),
             );
           }
-          return Scaffold(
-            appBar: AppBar(
-              titleSpacing: 8,
-              title: TextButton(
-                key: const Key('switch-server'),
-                style: TextButton.styleFrom(foregroundColor: t.text),
-                onPressed: () => _openSwitcher(context),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  StatusDot(status.link),
-                  const SizedBox(width: 8),
-                  Flexible(child: Text(server.name, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600))),
-                  const SizedBox(width: 4),
-                  Icon(Icons.expand_more, size: 18, color: t.muted),
-                ]),
-              ),
-              bottom: const PreferredSize(preferredSize: Size.fromHeight(1), child: Divider()),
-            ),
-            body: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              const ApprovalBar(),
-              Expanded(child: page),
-            ]),
-          );
+          return PhoneHome(key: ValueKey(server.url), server: server, status: status);
         }),
       ),
     );
   }
-
-  void _openSwitcher(BuildContext context) => showModalBottomSheet<void>(
-        context: context,
-        showDragHandle: true,
-        builder: (sheet) => SafeArea(
-          child: SizedBox(
-            height: MediaQuery.sizeOf(context).height * 0.5,
-            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              Expanded(child: SingleChildScrollView(child: ServerList(onSelected: () => Navigator.pop(sheet)))),
-              const ServerListFooter(),
-            ]),
-          ),
-        ),
-      );
 }
-

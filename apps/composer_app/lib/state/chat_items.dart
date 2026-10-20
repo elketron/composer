@@ -55,3 +55,39 @@ class Streaming {
   final String thinking;
   final String content;
 }
+
+/// What the chat shows, one entry per row: an item as is, a turn's steps folded into one row,
+/// or a worker's report as a card.
+sealed class ChatRow {
+  const ChatRow();
+}
+
+final class ItemRow extends ChatRow {
+  const ItemRow(this.item);
+  final ChatItem item;
+}
+
+/// Consecutive tool calls and thoughts.
+final class StepsRow extends ChatRow {
+  const StepsRow(this.steps, this.summary);
+
+  /// `ToolItem`s and `ThinkingItem`s, in order.
+  final List<ChatItem> steps;
+
+  /// `read 1 page, wrote 0001.md, started a worker`.
+  final String summary;
+}
+
+/// `[worker #96a1 finished ticket 0001: done]` and what follows, as the server writes it.
+final class WorkerRow extends ChatRow {
+  const WorkerRow({required this.worker, required this.ticket, required this.status, required this.summary, this.result});
+  final String worker;
+  final String ticket;
+
+  /// `done` or `failed`.
+  final String status;
+  final String summary;
+
+  /// The ticket page holding the Result.
+  final String? result;
+}

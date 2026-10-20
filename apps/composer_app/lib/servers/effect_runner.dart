@@ -46,13 +46,23 @@ class EffectRunner {
         _keeper.keep(servers).catchError((_) {});
       case FetchPage(:final url, :final page):
         _fetchPage(url, page, dispatch);
-      case FetchSites(:final url):
+      case FetchCatalog(:final url):
         final server = _connections[url]?.server;
         if (server != null) {
           fetchSites(url, server.token).then((sites) => dispatch(SitesLoaded(url, sites)), onError: (_) {});
+          fetchAgents(url, server.token).then((agents) => dispatch(AgentsLoaded(url, agents)), onError: (_) {});
+          fetchProjects(url, server.token).then((projects) => dispatch(ProjectsLoaded(url, projects)), onError: (_) {});
         }
-      case CreateSession(:final url, :final agent):
-        _request(url, ClientCommandSessionCreate(agent: agent), dispatch).then((result) {
+      case SearchPages(:final url, :final query):
+        final server = _connections[url]?.server;
+        if (server != null) {
+          searchPages(url, server.token, query).then(
+            (hits) => dispatch(SearchLoaded(url, query, hits)),
+            onError: (Object e) => dispatch(SearchLoaded(url, query, const [], error: describeError(e))),
+          );
+        }
+      case CreateSession(:final url, :final agent, :final project):
+        _request(url, ClientCommandSessionCreate(agent: agent, project: project), dispatch).then((result) {
           if (result is CommandResultSession) dispatch(SessionOpened(url, result.session.id));
         });
     }

@@ -99,9 +99,12 @@ final class SessionClosed extends AppAction {
 }
 
 final class NewSessionRequested extends AppAction {
-  const NewSessionRequested(this.url, {this.agent = 'default'});
+  const NewSessionRequested(this.url, {this.agent = 'default', this.project});
   final String url;
   final String agent;
+
+  /// A name in the projects directory, or a path; null for none.
+  final String? project;
 }
 
 final class MessageSubmitted extends AppAction {
@@ -117,10 +120,38 @@ final class DraftChanged extends AppAction {
   final bool drafting;
 }
 
-/// Unset the open session's project.
-final class ProjectCleared extends AppAction {
-  const ProjectCleared(this.url);
+/// Set the open session's project (a name in the projects directory), or unset it (null).
+final class ProjectChosen extends AppAction {
+  const ProjectChosen(this.url, this.project);
   final String url;
+  final String? project;
+}
+
+/// Compact the open session: save memory, then summarize older messages.
+final class CompactRequested extends AppAction {
+  const CompactRequested(this.url);
+  final String url;
+}
+
+/// The phone layout's tab.
+final class TabSelected extends AppAction {
+  const TabSelected(this.tab);
+  final PhoneTab tab;
+}
+
+/// The Pages tab's search field changed.
+final class SearchChanged extends AppAction {
+  const SearchChanged(this.url, this.query);
+  final String url;
+  final String query;
+}
+
+final class SearchLoaded extends AppAction {
+  const SearchLoaded(this.url, this.query, this.hits, {this.error});
+  final String url;
+  final String query;
+  final List<SearchHit> hits;
+  final String? error;
 }
 
 final class CancelRequested extends AppAction {
@@ -206,4 +237,16 @@ final class SitesLoaded extends AppAction {
   const SitesLoaded(this.url, this.sites);
   final String url;
   final List<SiteSummary> sites;
+}
+
+final class AgentsLoaded extends AppAction {
+  const AgentsLoaded(this.url, this.agents);
+  final String url;
+  final List<AgentSummary> agents;
+}
+
+final class ProjectsLoaded extends AppAction {
+  const ProjectsLoaded(this.url, this.projects);
+  final String url;
+  final List<ProjectSummary> projects;
 }
