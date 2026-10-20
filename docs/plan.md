@@ -694,7 +694,11 @@ MCP schemas load lazily, and it guessed `open(target)` once).
 
 ### Desktop app polish
 
-The desktop (wide) layout of the app, mockups first (`docs/mockups/`), then built.
+The desktop (wide) layout of the app: [mockups](mockups/desktop.html) (seven screens), then built once they're agreed.
+Four columns: server rail, session list (the phone's Needs you / Running / Recent), chat, and a resizable side
+pane with tabs (Page, App, Changes, Worker; Server from the rail); the session list collapses to a strip (ctrl-b). Review, a worker's live run and the server page sit
+beside the chat instead of replacing it; ctrl-k palette (sessions, pages, actions), ctrl-n new chat dialog,
+the chat's ⋮ menu as on phones, approvals answerable with y / a / n.
 
 ### Milestones
 

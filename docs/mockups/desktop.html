@@ -1,0 +1,675 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>composer desktop UX</title>
+<link rel="stylesheet" href="theme.css">
+<style>
+  body { padding: 40px 32px 80px; }
+  .doc { max-width: 1240px; margin: 0 auto; }
+  .doc > header h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; }
+  .doc > header p { color: var(--muted); margin: 0 0 20px; max-width: 820px; }
+  .problems { columns: 2 380px; column-gap: 40px; margin: 0 0 48px; padding: 0; list-style: none; }
+  .problems li { break-inside: avoid; color: var(--muted); font-size: 13px; padding: 6px 0 6px 18px; position: relative; }
+  .problems li::before { content: ""; position: absolute; left: 2px; top: 13px; width: 6px; height: 6px; border-radius: 2px; background: var(--warn); }
+  .problems b { color: var(--text); font-weight: 500; }
+  .section-title { font: 11px var(--font-mono); color: var(--faint); text-transform: uppercase; letter-spacing: .08em; margin: 0 0 16px; }
+  figure { margin: 0 0 56px; }
+  figcaption h2 { font-size: 14px; font-weight: 600; margin: 14px 0 2px; }
+  figcaption p { color: var(--muted); font-size: 13px; margin: 0 0 4px; max-width: 900px; }
+  figcaption ul { color: var(--muted); font-size: 13px; margin: 4px 0 0; padding-left: 18px; max-width: 900px; }
+  figcaption kbd, .kbd { font: 10.5px var(--font-mono); border: 1px solid var(--border-strong); border-bottom-width: 2px; border-radius: var(--radius-sm); padding: 0 4px; color: var(--muted); }
+
+  /* ===== window ===== */
+  .win { width: 1240px; height: 760px; border: 1px solid var(--border-strong); border-radius: 8px; overflow: hidden; background: var(--bg);
+         display: grid; grid-template-columns: 52px 264px minmax(0, 1fr) var(--right, 460px); position: relative; }
+  .win.noright { grid-template-columns: 52px 264px minmax(0, 1fr); }
+  .rail { background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 12px 0; }
+  .srv { width: 34px; height: 34px; border-radius: var(--radius); border: 1px solid var(--border-strong); display: flex; align-items: center; justify-content: center; font: 600 13px var(--font-mono); position: relative; color: var(--muted); }
+  .srv.on { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+  .srv .dot { position: absolute; right: -3px; bottom: -3px; border: 2px solid var(--surface); width: 10px; height: 10px; }
+  .srv .n { position: absolute; top: -6px; right: -7px; font: 600 9px var(--font-mono); background: var(--warn); color: var(--bg); border-radius: 2px; padding: 0 3px; line-height: 13px; }
+  .rail .grow { flex: 1; }
+  .icon { width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; color: var(--muted); border-radius: var(--radius); flex: none; }
+  .icon.on { color: var(--text); background: var(--raised); }
+  .icon svg { width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  .col { border-right: 1px solid var(--border); display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+  .col:last-child { border-right: 0; }
+  .colhead { height: 48px; display: flex; align-items: center; gap: 8px; padding: 0 10px 0 12px; border-bottom: 1px solid var(--border); background: var(--surface); flex: none; min-width: 0; }
+  .colhead .t { font-weight: 600; font-size: 14px; }
+  .colhead .grow { flex: 1; min-width: 0; }
+  .scroll { flex: 1; overflow: hidden; min-height: 0; }
+  .pad { padding: 10px; }
+
+  /* bits */
+  .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex: none; background: var(--faint); }
+  .dot.ok { background: var(--ok); } .dot.warn { background: var(--warn); } .dot.err { background: var(--err); } .dot.info { background: var(--info); }
+  .dot.pulse { box-shadow: 0 0 0 3px #d6b06a26; }
+  .chip { font: 11px var(--font-mono); color: var(--muted); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 1px 6px; line-height: 16px; white-space: nowrap; display: inline-flex; align-items: center; gap: 5px; }
+  .chip.accent { color: var(--accent); border-color: #8fb3e855; }
+  .chip.warn { color: var(--warn); border-color: #d6b06a55; }
+  .chip.ok { color: var(--ok); border-color: #8cc29a55; }
+  .chip.err { color: var(--err); border-color: #e07c7c55; }
+  .chip.info { color: var(--info); border-color: #b39ce055; }
+  .label { font: 10.5px var(--font-mono); color: var(--faint); text-transform: uppercase; letter-spacing: .08em; margin: 14px 2px 7px; display: flex; justify-content: space-between; align-items: center; }
+  .label:first-child { margin-top: 4px; }
+  .muted { color: var(--muted); } .faint { color: var(--faint); } .mono { font-family: var(--font-mono); }
+  .btn { font: 500 12.5px var(--font-ui); height: 30px; padding: 0 12px; border-radius: var(--radius); border: 1px solid var(--border-strong); background: var(--raised); color: var(--text); display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+  .btn.ghost { background: none; border-color: transparent; color: var(--muted); }
+  .btn.danger { color: var(--err); background: none; }
+  .btn.sm { height: 26px; font-size: 12px; padding: 0 9px; }
+  .search { display: flex; align-items: center; gap: 8px; height: 32px; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--bg); padding: 0 10px; color: var(--faint); font-size: 13px; }
+  .search svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; }
+  .search .kbd { margin-left: auto; }
+
+  /* session list */
+  .card { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+  .srow { padding: 8px 10px; display: block; color: var(--text); }
+  .srow + .srow { border-top: 1px solid var(--border); }
+  .srow.on { background: var(--raised); box-shadow: inset 2px 0 0 var(--accent); }
+  .srow .top { display: flex; align-items: center; gap: 7px; }
+  .srow .agent { font: 500 12.5px var(--font-mono); }
+  .srow .id { font: 10.5px var(--font-mono); color: var(--faint); }
+  .srow .when { margin-left: auto; font: 10.5px var(--font-mono); color: var(--faint); }
+  .srow .when.warn { color: var(--warn); }
+  .srow .preview { color: var(--muted); font-size: 12px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .srow .proj { font: 10.5px var(--font-mono); color: var(--faint); margin-top: 3px; }
+  .workers { margin: 7px 0 0 3px; padding-left: 11px; border-left: 1px solid var(--border-strong); display: grid; gap: 4px; }
+  .workers div { display: flex; align-items: center; gap: 7px; font-size: 11.5px; color: var(--muted); white-space: nowrap; min-width: 0; }
+  .workers .d { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .workers div.on { color: var(--text); }
+  .workers .t { font-family: var(--font-mono); color: var(--text); }
+  .workers .s { margin-left: auto; font: 10.5px var(--font-mono); flex: none; }
+
+  /* chat */
+  .chathead { height: 48px; display: flex; align-items: center; gap: 9px; padding: 0 8px 0 14px; border-bottom: 1px solid var(--border); background: var(--surface); flex: none; }
+  .chathead b { font: 600 13.5px var(--font-mono); }
+  .chathead .sub { min-width: 0; overflow: hidden; font-size: 12px; color: var(--muted); display: flex; gap: 6px; align-items: center; white-space: nowrap; }
+  .orch { display: flex; gap: 6px; padding: 6px 12px; border-bottom: 1px solid var(--border); background: var(--surface); overflow: hidden; flex: none; }
+  .orch .c { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; border: 1px solid var(--border); border-radius: var(--radius); font: 11px var(--font-mono); color: var(--muted); }
+  .orch .c.on { background: var(--raised); border-color: var(--border-strong); color: var(--text); }
+  .orch .c small { color: var(--faint); font-size: 10px; }
+  .msgs { padding: 14px 18px; display: flex; flex-direction: column; gap: 12px; font-size: 13.5px; line-height: 1.55; max-width: 780px; }
+  .you { align-self: flex-end; max-width: 80%; background: var(--you); border: 1px solid #8fb3e826; border-radius: var(--radius); padding: 7px 11px; }
+  .src { font: 10.5px var(--font-mono); color: var(--info); margin-bottom: 2px; }
+  .agent p { margin: 0 0 6px; }
+  .agent code { color: var(--muted); }
+  .activity { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+  .activity .head { display: flex; align-items: center; gap: 8px; padding: 6px 10px; font-size: 12px; color: var(--muted); }
+  .activity .head b { color: var(--text); font-weight: 500; }
+  .activity .head .sum { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .activity .head .caret { color: var(--faint); font-size: 10px; width: 10px; }
+  .activity .head .n { margin-left: auto; font: 10.5px var(--font-mono); color: var(--faint); }
+  .steps { border-top: 1px solid var(--border); padding: 6px 10px 8px; display: grid; gap: 4px; }
+  .step { display: flex; gap: 8px; align-items: baseline; font: 11.5px var(--font-mono); color: var(--muted); min-width: 0; }
+  .step .tool { color: var(--info); width: 78px; flex: none; }
+  .step.nested { padding-left: 16px; }
+  .step.nested .tool { width: 47px; }
+  .step .arg { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+  .step .ok { color: var(--ok); } .step .err { color: var(--err); } .step .run { color: var(--warn); }
+  .diff { margin: 2px 0 4px 86px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); padding: 6px 8px; font: 11px/1.5 var(--font-mono); }
+  .diff .a { color: var(--ok); } .diff .d { color: var(--err); } .diff .h { color: var(--faint); }
+  .event { display: flex; gap: 10px; align-items: center; border: 1px solid #8cc29a40; background: #8cc29a0a; border-radius: var(--radius); padding: 7px 10px; font-size: 12.5px; }
+  .event .t { flex: 1; min-width: 0; } .event .t b { font-weight: 500; }
+  .event .t > * { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .event .t div { color: var(--muted); font-size: 12px; }
+  .typing { display: flex; align-items: center; gap: 8px; font: 11.5px var(--font-mono); color: var(--warn); }
+  .caret-blink { display: inline-block; width: 7px; height: 14px; background: var(--accent); vertical-align: -2px; margin-left: 1px; }
+  .composer { flex: none; border-top: 1px solid var(--border); background: var(--surface); padding: 8px 12px 10px; }
+  .composer .ctx { display: flex; gap: 6px; margin-bottom: 7px; }
+  .composer .line { display: flex; gap: 8px; align-items: flex-end; }
+  .composer .field { flex: 1; min-height: 38px; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--bg); padding: 8px 11px; color: var(--faint); font-size: 13.5px; }
+  .composer .send { width: 38px; height: 38px; border-radius: var(--radius); background: var(--accent); display: flex; align-items: center; justify-content: center; color: var(--bg); flex: none; }
+  .composer .send.stop { background: var(--raised); border: 1px solid var(--border-strong); color: var(--err); }
+  .composer .send svg, .composer .clip svg { width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .composer .clip { width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; color: var(--muted); flex: none; }
+
+  /* approval */
+  .approval { border: 1px solid #d6b06a66; background: #d6b06a0d; border-radius: var(--radius); padding: 10px 12px; }
+  .approval .q { font-size: 12.5px; color: var(--warn); }
+  .approval .what { font: 12.5px var(--font-mono); margin: 3px 0 8px; }
+  .approval pre { margin: 0 0 8px; padding: 7px 9px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); font: 11.5px/1.5 var(--font-mono); color: var(--text); white-space: pre-wrap; }
+  .approval .note { font-size: 11.5px; color: var(--faint); margin-bottom: 8px; }
+  .approval .acts { display: flex; gap: 7px; align-items: center; }
+  .approval .acts .kb { margin-left: auto; font: 10.5px var(--font-mono); color: var(--faint); }
+
+  /* right pane */
+  .tabs { display: flex; gap: 2px; height: 48px; align-items: flex-end; padding: 0 8px; border-bottom: 1px solid var(--border); background: var(--surface); flex: none; }
+  .tabs a { height: 36px; display: inline-flex; align-items: center; gap: 6px; padding: 0 11px; font-size: 12.5px; color: var(--muted); border-radius: var(--radius) var(--radius) 0 0; position: relative; }
+  .tabs a.on { color: var(--text); background: var(--bg); border: 1px solid var(--border); border-bottom-color: var(--bg); margin-bottom: -1px; }
+  .tabs a .chip { padding: 0 4px; font-size: 10px; line-height: 14px; }
+  .tabs .grow { flex: 1; }
+  .tabs .tools { display: flex; align-items: center; height: 47px; }
+  .page { padding: 16px 20px; font-size: 13.5px; line-height: 1.6; }
+  .page h1 { font-size: 18px; margin: 0 0 8px; }
+  .page h2 { font-size: 14px; margin: 16px 0 6px; }
+  .page .fm { display: grid; grid-template-columns: 90px 1fr; gap: 2px 10px; font: 11.5px var(--font-mono); margin-bottom: 14px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+  .page .fm dt { color: var(--faint); } .page .fm dd { margin: 0; color: var(--text); }
+  .page ul { padding-left: 18px; margin: 4px 0; color: var(--muted); }
+  .crumbs { display: flex; align-items: center; gap: 6px; font: 11.5px var(--font-mono); color: var(--muted); padding: 7px 12px; border-bottom: 1px solid var(--border); }
+  .crumbs .follow { margin-left: auto; }
+  .review { padding: 12px 14px; font-size: 12.5px; }
+  .review .head { display: flex; align-items: center; gap: 8px; font: 12px var(--font-mono); margin-bottom: 6px; }
+  .review .commits { font: 11.5px var(--font-mono); color: var(--faint); margin: 0 0 10px; }
+  .files { border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 10px; }
+  .files div { display: flex; gap: 8px; padding: 4px 9px; font: 11.5px var(--font-mono); }
+  .files div + div { border-top: 1px solid var(--border); }
+  .files .p { flex: 1; } .files .s { width: 12px; }
+  .files .on { background: var(--raised); }
+  .bigdiff { font: 11.5px/1.55 var(--font-mono); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .bigdiff div { padding: 0 9px; white-space: pre; color: var(--muted); }
+  .bigdiff .f { background: var(--raised); color: var(--text); padding: 3px 9px; }
+  .bigdiff .h { color: var(--info); } .bigdiff .a { color: var(--ok); background: #8cc29a10; } .bigdiff .d { color: var(--err); background: #e07c7c10; }
+  .bigdiff .ln { color: var(--faint); display: inline-block; width: 28px; }
+  .reviewbar { flex: none; border-top: 1px solid var(--border); padding: 8px 12px; display: flex; gap: 8px; align-items: center; background: var(--surface); }
+  .reviewbar .kb { font: 10.5px var(--font-mono); color: var(--faint); margin-left: auto; }
+
+  /* collapsed session list */
+  .win.collapsed { grid-template-columns: 52px 44px minmax(0, 1fr) var(--right, 460px); }
+  .strip { border-right: 1px solid var(--border); background: var(--bg); display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 0; }
+  .strip .s { width: 30px; height: 30px; border-radius: var(--radius); display: flex; align-items: center; justify-content: center; position: relative; font: 600 11px var(--font-mono); color: var(--muted); border: 1px solid transparent; }
+  .strip .s.on { background: var(--raised); border-color: var(--border-strong); color: var(--text); }
+  .strip .s .dot { position: absolute; right: 1px; bottom: 1px; width: 7px; height: 7px; }
+  .strip .s.w { width: 22px; height: 20px; font-size: 9.5px; margin-left: 8px; }
+  .strip hr { width: 22px; border: 0; border-top: 1px solid var(--border); margin: 4px 0; }
+  /* a micro app in the side pane */
+  .app { padding: 14px 16px; font-size: 13px; }
+  .app h3 { margin: 0 0 10px; font-size: 15px; }
+  .board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .board .lane { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 7px; min-height: 380px; }
+  .board .lane h4 { margin: 0 0 7px; font: 10.5px var(--font-mono); color: var(--faint); text-transform: uppercase; letter-spacing: .08em; display: flex; justify-content: space-between; }
+  .tk { background: var(--raised); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 8px; margin-bottom: 6px; font-size: 12px; }
+  .tk .id { font: 10.5px var(--font-mono); color: var(--faint); display: flex; gap: 6px; align-items: center; margin-bottom: 2px; }
+  .tk.hl { border-color: #8fb3e888; box-shadow: 0 0 0 1px #8fb3e844; }
+
+  /* overlays */
+  .scrim { position: absolute; inset: 0; background: #000a; }
+  .dialog { position: absolute; left: 50%; top: 92px; transform: translateX(-50%); width: 560px; background: var(--overlay); border: 1px solid var(--border-strong); border-radius: var(--radius); box-shadow: 0 18px 50px #000c; }
+  .palette input, .palette .in { height: 44px; display: flex; align-items: center; gap: 10px; padding: 0 14px; border-bottom: 1px solid var(--border); font-size: 14px; color: var(--text); }
+  .palette .in svg { width: 16px; height: 16px; stroke: var(--faint); fill: none; stroke-width: 1.8; stroke-linecap: round; }
+  .palette .grp { font: 10px var(--font-mono); color: var(--faint); text-transform: uppercase; letter-spacing: .08em; padding: 9px 14px 4px; }
+  .palette .it { display: flex; align-items: center; gap: 10px; padding: 6px 14px; font-size: 13px; }
+  .palette .it.on { background: var(--accent-dim); box-shadow: inset 2px 0 0 var(--accent); }
+  .palette .it .m { font: 11px var(--font-mono); color: var(--faint); margin-left: auto; }
+  .palette .it .k { font: 11.5px var(--font-mono); color: var(--muted); }
+  .palette .foot { display: flex; gap: 14px; padding: 8px 14px; border-top: 1px solid var(--border); font: 10.5px var(--font-mono); color: var(--faint); }
+  .form { padding: 14px 16px 16px; }
+  .form h3 { margin: 0 0 12px; font-size: 15px; }
+  .choice { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 6px; }
+  .choice.on { border-color: #8fb3e888; background: var(--accent-dim); }
+  .choice .r { width: 13px; height: 13px; border-radius: 50%; border: 1.5px solid var(--border-strong); flex: none; margin-top: 3px; }
+  .choice.on .r { border: 4px solid var(--accent); }
+  .choice b { font: 500 12.5px var(--font-mono); display: block; }
+  .choice span { font-size: 12px; color: var(--muted); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pchip { height: 28px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: var(--radius); display: inline-flex; align-items: center; gap: 6px; font: 12px var(--font-mono); color: var(--muted); }
+  .pchip.on { border-color: var(--accent); color: var(--text); background: var(--accent-dim); }
+  .kv { display: grid; grid-template-columns: 110px 1fr; gap: 6px 14px; font-size: 13px; }
+  .kv dt { font: 11.5px var(--font-mono); color: var(--faint); padding-top: 1px; }
+  .kv dd { margin: 0; font: 12.5px var(--font-mono); color: var(--text); }
+  .switch { width: 28px; height: 16px; border-radius: 8px; background: var(--border-strong); position: relative; flex: none; }
+  .switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: var(--muted); }
+  .switch.on { background: var(--accent); } .switch.on::after { left: 14px; background: var(--bg); }
+  .menu { position: absolute; width: 310px; background: var(--overlay); border: 1px solid var(--border-strong); border-radius: var(--radius); box-shadow: 0 12px 30px #000b; padding: 4px 0; font-size: 13px; }
+  .menu div { padding: 6px 12px; display: flex; gap: 8px; align-items: center; white-space: nowrap; }
+  .menu div .m { margin-left: auto; font: 11px var(--font-mono); color: var(--faint); }
+  .menu hr { border: 0; border-top: 1px solid var(--border); margin: 4px 0; }
+  .menu .on { background: var(--accent-dim); }
+</style>
+</head>
+<body>
+<div class="doc">
+<header>
+  <h1>composer app: the desktop layout</h1>
+  <p>The phone got its second round (<a href="app.html">app.html</a>); the wide layout still shows the first one, and the features since
+  (merging tickets, Claude Code workers and their approvals, attachments) were built phone-first. Same theme and components;
+  what changes is the frame around them and what a big screen can show at once.</p>
+</header>
+
+<div class="section-title">What gets in the way on a wide screen today</div>
+<ul class="problems">
+  <li><b>It opens on the server page.</b> Model, slots, version and site chips, then a second copy of the session list. The rail's own session list is a flat tree of every worker ever run.</li>
+  <li><b>Nothing says what needs you.</b> The phone has Needs you / Running / Recent; the rail doesn't, and approvals only show as a bar over the page.</li>
+  <li><b>The chat has no menu.</b> Project, compact, turning Claude Code off and "Review changes" are phone-only (⋮ in the phone's chat header).</li>
+  <li><b>Review is a full-screen page.</b> On a desktop it covers the chat you came from; there is room to show it beside the chat, like the reader.</li>
+  <li><b>The reader always takes half the width</b> and is the only thing that can sit beside the chat; a worker's changes, the ticket and the orchestrator can't.</li>
+  <li><b>Following a worker means switching away</b> from its orchestrator; there is no way to keep both in view.</li>
+  <li><b>Keyboard:</b> ctrl-enter sends and ctrl-1…9 switches servers; nothing else. No palette, no quick switch between sessions.</li>
+  <li><b>Pairing and server settings</b> are phone screens stretched to the window.</li>
+</ul>
+
+<div class="section-title">The frame</div>
+<p class="muted" style="font-size:13px;max-width:900px;margin:0 0 24px">Four columns: the server rail, the session list (the phone's Chats tab), the chat, and a <b>side pane</b> with tabs:
+<b>Page</b> (the reader), <b>Changes</b> (a ticket's review, or the project's diff), <b>Worker</b> (another session, live). The side pane
+is resizable and closes with <span class="kbd">esc</span>; under 1100px it overlays the chat instead of sitting beside it.
+A site's micro app opens in its own <b>App</b> tab, so it can sit beside the chat while you talk about it. The session list
+<b>collapses</b> (<span class="kbd">ctrl b</span>, or its ‹ button) to a narrow strip of session dots, giving the chat and the side pane its width.</p>
+
+<!-- ================= 1 ================= -->
+<figure>
+<div class="win" style="--right: 420px">
+  <div class="rail">
+    <div class="srv on">O<span class="dot ok"></span><span class="n">1</span></div>
+    <div class="srv">W<span class="dot err"></span></div>
+    <div class="grow"></div>
+    <span class="icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1c.6.5 1.3.9 2 1.2L10 21h4l.5-2.6c.7-.3 1.4-.7 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2z"/></svg></span>
+    <span class="icon"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span>
+  </div>
+  <div class="col">
+    <div class="colhead"><span class="t grow">my-pc</span><span class="btn sm primary">+ New</span><span class="icon" title="Collapse (ctrl b)"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></span></div>
+    <div class="pad" style="padding-bottom:0"><div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4-4"/></svg>Sessions and pages<span class="kbd">ctrl k</span></div></div>
+    <div class="scroll pad">
+      <div class="label">Needs you <span>1</span></div>
+      <div class="card"><a class="srow"><div class="top"><span class="dot warn pulse"></span><span class="agent">worker</span><span class="id">#85c3</span><span class="when warn">allow tool</span></div><div class="preview">Bash: npm test</div><div class="proj">composer · 0011 · claude-code</div></a></div>
+      <div class="label">Running</div>
+      <div class="card"><a class="srow on"><div class="top"><span class="dot warn"></span><span class="agent">orchestrator</span><span class="id">#o1</span><span class="when">now</span></div><div class="preview">Start ticket 0011 with Claude Code…</div><div class="proj">composer</div>
+        <div class="workers"><div><span class="dot warn"></span><span class="t">0011</span><span class="d">Explain worktrees</span><span class="s" style="color:var(--warn)">approval</span></div><div><span class="dot ok"></span><span class="t">0010</span><span class="d">Note in the README</span><span class="s" style="color:var(--ok)">to merge</span></div></div></a></div>
+      <div class="label">Recent</div>
+      <div class="card">
+        <a class="srow"><div class="top"><span class="dot"></span><span class="agent">default</span><span class="id">#fc1b</span><span class="when">4m</span></div><div class="preview">What sites are there and what…</div><div class="proj">no project</div></a>
+        <a class="srow"><div class="top"><span class="dot"></span><span class="agent">orchestrator</span><span class="id">#3459</span><span class="when">2h</span></div><div class="preview">Release steps for 0.1.1</div><div class="proj">composer · 3 tickets merged</div></a>
+        <a class="srow"><div class="top"><span class="dot"></span><span class="agent">default</span><span class="id">#26b5</span><span class="when">1d</span></div><div class="preview">Remind me Friday to renew…</div><div class="proj">no project</div></a>
+      </div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="chathead">
+      <span class="dot warn"></span><b>orchestrator</b>
+      <span class="sub">running · <span class="chip">composer</span><span class="chip info">claude-code on</span> #o1</span>
+      <span style="flex:1"></span>
+      <span class="icon"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/></svg></span>
+      <span class="icon on"><svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg></span>
+    </div>
+    <div class="orch"><span class="c on"><span class="dot warn"></span>orchestrator</span><span class="c"><span class="dot warn"></span>0011 <small>needs approval</small></span><span class="c"><span class="dot ok"></span>0010 <small>done</small></span></div>
+    <div class="scroll"><div class="msgs">
+      <div class="you">Ticket 10 is done; merge it once it looks right, then start 11 with Claude Code.</div>
+      <div class="activity"><div class="head"><span class="caret">▸</span><span class="sum"><b>4 steps</b> · read 0010.md, asked to merge, started a worker</span><span class="n">9s</span></div></div>
+      <div class="approval">
+        <div class="q">Merge?</div>
+        <div class="what">Merge ticket 0010 into main</div>
+        <pre>ticket/0010 → main · 1 changed file
+M README.md  +2 −0
+cbb8499 Ticket 0010: Note in the README</pre>
+        <div class="acts"><span class="btn sm primary">Merge</span><span class="btn sm">Deny</span><span class="btn sm ghost">Review changes</span><span class="kb">y / n</span></div>
+      </div>
+      <div class="agent"><p>Waiting for your answer on the merge. Worker <code>#85c3</code> is on ticket <b>0011</b> with Claude Code.</p></div>
+    </div></div>
+    <div class="composer"><div class="line"><span class="clip"><svg viewBox="0 0 24 24"><path d="M21 11l-8.5 8.5a5 5 0 0 1-7-7L14 4a3.3 3.3 0 0 1 4.7 4.7L10 17.4a1.7 1.7 0 0 1-2.4-2.4L15 7.6"/></svg></span><div class="field">Message · ctrl-enter sends</div><div class="send stop"><svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="1"/></svg></div></div></div>
+  </div>
+  <div class="col">
+    <div class="tabs"><a class="on">Page</a><a>Changes <span class="chip ok">0010</span></a><a>Worker <span class="chip warn">0011</span></a><span class="grow"></span><span class="tools"><span class="icon"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></span></span></div>
+    <div class="crumbs">← → <span>orchestration / tickets / 0010</span><span class="follow chip accent">following</span></div>
+    <div class="scroll page">
+      <dl class="fm"><dt>status</dt><dd>done</dd><dt>harness</dt><dd>claude-code</dd><dt>branch</dt><dd>ticket/0010</dd><dt>model</dt><dd>claude-haiku-5-5</dd><dt>turns</dt><dd>11 · 1m 52s · $0.021</dd></dl>
+      <h1>Note in the README</h1>
+      <h2>Task</h2>
+      <ul><li>Use the Agent tool to read README.md and report its first line.</li><li>Add <code>Followed live.</code> at the end of README.md.</li></ul>
+      <h2>Result</h2>
+      <ul><li>Sub-agent read README.md: first line <code># proj</code>.</li><li>Appended <code>Followed live.</code>, committed as cbb8499.</li></ul>
+    </div>
+  </div>
+</div>
+<figcaption>
+  <h2>1 · Home: what you're working on, not the server</h2>
+  <p>The app opens on your last chat. The session list is the phone's Chats tab; the side pane follows the agent (here the ticket it just read).</p>
+  <ul>
+    <li><b>Session list:</b> Needs you (approvals, finished work you haven't seen), Running (an orchestrator with one line per worker, "to merge" for a done ticket with a branch), Recent. Each row shows its project; workers aren't listed on their own.</li>
+    <li><b>Chat header:</b> state, project and Claude Code as chips (click to change or toggle), the reader, and ⋮ (screen 6). The orchestration strip under it switches between the orchestrator and its workers, as in the TUI's <span class="kbd">]w</span>.</li>
+    <li><b>Approvals inline</b> in the chat that asked, answerable with <span class="kbd">y</span> / <span class="kbd">n</span> while the chat has focus; a merge has "Review changes", which opens the Changes tab.</li>
+    <li><b>Rail:</b> servers with their state and a count of what needs you; settings and add server at the bottom.</li>
+  </ul>
+</figcaption>
+</figure>
+
+<!-- ================= 2 ================= -->
+<figure>
+<div class="win" style="--right: 500px">
+  <div class="rail">
+    <div class="srv on">O<span class="dot ok"></span></div>
+    <div class="srv">W<span class="dot err"></span></div>
+    <div class="grow"></div>
+  </div>
+  <div class="col">
+    <div class="colhead"><span class="t grow">my-pc</span><span class="btn sm primary">+ New</span></div>
+    <div class="scroll pad">
+      <div class="label">Running</div>
+      <div class="card"><a class="srow on"><div class="top"><span class="dot info"></span><span class="agent">orchestrator</span><span class="id">#o1</span><span class="when">1m</span></div><div class="preview">Ticket 0010 is ready to merge.</div><div class="proj">composer</div>
+        <div class="workers"><div><span class="dot warn"></span><span class="t">0011</span><span class="d">Explain worktrees</span><span class="s" style="color:var(--warn)">running</span></div><div class="on"><span class="dot ok"></span><span class="t">0010</span><span class="d">Note in the README</span><span class="s" style="color:var(--ok)">to merge</span></div></div></a></div>
+      <div class="label">Recent</div>
+      <div class="card"><a class="srow"><div class="top"><span class="dot"></span><span class="agent">default</span><span class="id">#fc1b</span><span class="when">4m</span></div><div class="preview">What sites are there and what…</div><div class="proj">no project</div></a></div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="chathead"><span class="dot info"></span><b>orchestrator</b><span class="sub">idle · <span class="chip">composer</span> #o1</span><span style="flex:1"></span><span class="icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg></span></div>
+    <div class="scroll"><div class="msgs">
+      <div class="event"><span class="dot ok"></span><div class="t"><b>Worker #0917 finished ticket 0010</b><div>done · README.md ends with “Followed live.” · on ticket/0010</div></div><span class="btn sm ghost">Changes</span><span class="btn sm ghost">Result</span></div>
+      <div class="activity"><div class="head"><span class="caret">▸</span><span class="sum"><b>2 steps</b> · read 0010.md</span><span class="n">3s</span></div></div>
+      <div class="agent"><p>Ticket <b>0010</b> is done and its Result matches the task. It's one commit on <code>ticket/0010</code>; say the word and I'll merge it.</p></div>
+    </div></div>
+    <div class="composer"><div class="line"><span class="clip"><svg viewBox="0 0 24 24"><path d="M21 11l-8.5 8.5a5 5 0 0 1-7-7L14 4a3.3 3.3 0 0 1 4.7 4.7L10 17.4a1.7 1.7 0 0 1-2.4-2.4L15 7.6"/></svg></span><div class="field">Message · ctrl-enter sends</div><div class="send"><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div></div></div>
+  </div>
+  <div class="col">
+    <div class="tabs"><a>Page</a><a class="on">Changes <span class="chip ok">0010</span></a><a>Worker</a><span class="grow"></span><span class="tools"><span class="icon"><svg viewBox="0 0 24 24"><path d="M4 4v6h6M20 20v-6h-6"/><path d="M5 15a7 7 0 0 0 12 3M19 9A7 7 0 0 0 7 6"/></svg></span><span class="icon"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></span></span></div>
+    <div class="scroll review">
+      <div class="head"><span class="chip accent">ticket/0010</span>→<b>main</b><span class="faint">· 1 commit · 1 file</span><span style="flex:1"></span><span class="chip ok">merges cleanly</span></div>
+      <div class="commits">cbb8499 Ticket 0010: Note in the README</div>
+      <div class="files"><div class="on"><span class="s" style="color:var(--warn)">M</span><span class="p">README.md</span><span style="color:var(--ok)">+2</span><span style="color:var(--err)">−0</span></div></div>
+      <div class="bigdiff">
+        <div class="f">README.md</div>
+        <div class="h">@@ -5,3 +5,5 @@</div>
+        <div><span class="ln">5</span> ## Run</div>
+        <div><span class="ln">6</span></div>
+        <div><span class="ln">7</span>     cargo run</div>
+        <div class="a"><span class="ln">8</span>+</div>
+        <div class="a"><span class="ln">9</span>+Followed live.</div>
+      </div>
+    </div>
+    <div class="reviewbar"><span class="btn primary">Merge into main</span><span class="btn danger">Discard…</span><span class="kb">m merge · { } files · enter opens in $EDITOR</span></div>
+  </div>
+</div>
+<figcaption>
+  <h2>2 · A ticket's changes beside the chat</h2>
+  <p>The review screen becomes the side pane's Changes tab: opened from a worker's card ("Changes"), a merge approval ("Review changes"), the worker row in the list, or ⋮.</p>
+  <ul>
+    <li>Commits, files and the diff with line numbers; a file opens in <code>$EDITOR</code> on this machine when the server is local (as the TUI's <span class="kbd">enter</span>).</li>
+    <li>Merge / Discard at the bottom, with what the merge will do on top ("merges cleanly", or the conflicting files in red with "Ask the worker to resolve").</li>
+    <li>Refreshes while the worker edits; for a session that isn't a worker, the tab shows the project's uncommitted changes instead (the TUI's <span class="kbd">gd</span>).</li>
+    <li>Session list: a done ticket with a branch says "to merge" until it's merged or discarded.</li>
+  </ul>
+</figcaption>
+</figure>
+
+<!-- ================= 3 ================= -->
+<figure>
+<div class="win" style="--right: 520px">
+  <div class="rail">
+    <div class="srv on">O<span class="dot ok"></span><span class="n">1</span></div>
+    <div class="srv">W<span class="dot err"></span></div>
+    <div class="grow"></div>
+  </div>
+  <div class="col">
+    <div class="colhead"><span class="t grow">my-pc</span><span class="btn sm primary">+ New</span></div>
+    <div class="scroll pad">
+      <div class="label">Needs you <span>1</span></div>
+      <div class="card"><a class="srow"><div class="top"><span class="dot warn pulse"></span><span class="agent">worker</span><span class="id">#85c3</span><span class="when warn">allow tool</span></div><div class="preview">Bash: npm test</div><div class="proj">composer · 0011 · claude-code</div></a></div>
+      <div class="label">Running</div>
+      <div class="card"><a class="srow on"><div class="top"><span class="dot warn"></span><span class="agent">orchestrator</span><span class="id">#o1</span><span class="when">now</span></div><div class="preview">Started 0011 with Claude Code</div><div class="proj">composer</div>
+        <div class="workers"><div class="on"><span class="dot warn"></span><span class="t">0011</span><span class="d">Explain worktrees</span><span class="s" style="color:var(--warn)">approval</span></div></div></a></div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="chathead"><span class="dot info"></span><b>orchestrator</b><span class="sub">idle · <span class="chip">composer</span> #o1</span><span style="flex:1"></span><span class="icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg></span></div>
+    <div class="orch"><span class="c on"><span class="dot info"></span>orchestrator</span><span class="c"><span class="dot warn"></span>0011 <small>needs approval</small></span></div>
+    <div class="scroll"><div class="msgs">
+      <div class="you">Start ticket 11 with Claude Code.</div>
+      <div class="activity"><div class="head"><span class="caret">▸</span><span class="sum"><b>2 steps</b> · read 0011.md, started a worker</span><span class="n">4s</span></div></div>
+      <div class="agent"><p>Worker <code>#85c3</code> is on ticket <b>0011</b> with Claude Code (haiku), on branch <code>ticket/0011</code>. I'll report back when it finishes.</p></div>
+    </div></div>
+    <div class="composer"><div class="line"><span class="clip"><svg viewBox="0 0 24 24"><path d="M21 11l-8.5 8.5a5 5 0 0 1-7-7L14 4a3.3 3.3 0 0 1 4.7 4.7L10 17.4a1.7 1.7 0 0 1-2.4-2.4L15 7.6"/></svg></span><div class="field">Message · ctrl-enter sends</div><div class="send"><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div></div></div>
+  </div>
+  <div class="col">
+    <div class="tabs"><a>Page</a><a>Changes</a><a class="on">Worker <span class="chip warn">0011</span></a><span class="grow"></span><span class="tools"><span class="btn sm ghost">Open as chat</span><span class="icon"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></span></span></div>
+    <div class="crumbs"><span class="dot warn"></span><span style="color:var(--text)">worker #85c3</span>· ticket 0011 · claude-code · haiku<span class="follow faint">turn 6 · 41s</span></div>
+    <div class="scroll"><div class="msgs" style="padding:12px 14px">
+      <div class="activity"><div class="head"><span class="caret">▾</span><span class="sum"><b>6 steps</b> · read 0011.md, ran a sub-agent, edited worktrees.md</span><span class="n">running</span></div>
+        <div class="steps">
+          <div class="step"><span class="tool">open</span><span class="arg" style="color:var(--accent)">orchestration/tickets/0011</span><span class="ok">✓</span></div>
+          <div class="step"><span class="tool">Agent</span><span class="arg">Find where worktrees are explained</span><span class="ok">✓</span></div>
+          <div class="step nested"><span class="faint">↳</span><span class="tool">Grep</span><span class="arg">worktree in docs/</span><span class="ok">✓</span></div>
+          <div class="step nested"><span class="faint">↳</span><span class="tool">Read</span><span class="arg">docs/plan.md</span><span class="ok">✓</span></div>
+          <div class="step"><span class="tool">Edit</span><span class="arg">docs/worktrees.md</span><span class="ok">✓</span></div>
+          <div class="diff"><div class="d">- A worktree is a second checkout.</div><div class="a">+ A worktree is a second working folder of the same</div><div class="a">+ repository, on its own branch.</div></div>
+          <div class="step"><span class="tool">Bash</span><span class="arg">npm test</span><span class="run">…</span></div>
+        </div>
+      </div>
+      <div class="approval">
+        <div class="q">Allow tool?</div>
+        <div class="what">Claude Code: Bash: npm test</div>
+        <pre>npm test
+
+# Run the docs link checker</pre>
+        <div class="note">Outside its allowlist. Always allows <span class="mono" style="color:var(--text)">Bash(npm test:*)</span> in composer from now on.</div>
+        <div class="acts"><span class="btn sm primary">Allow once</span><span class="btn sm">Always</span><span class="btn sm">Deny</span><span class="kb">y / a / n</span></div>
+      </div>
+      <div class="agent"><p>The explanation is in place; running the link checker before I commit<span class="caret-blink"></span></p></div>
+    </div></div>
+  </div>
+</div>
+<figcaption>
+  <h2>3 · Watching a worker without leaving the orchestrator</h2>
+  <p>The Worker tab shows any session of the orchestration live, beside the orchestrator: clicking a worker in the list or the strip opens it here; "Open as chat" swaps them.</p>
+  <ul>
+    <li>Claude Code's steps as built in milestone 18: tool summaries, a sub-agent's calls nested under it, an edit's diff unfolded, its text streaming.</li>
+    <li>Its tool approval right there: Allow once / Always / Deny, with the rule Always adds. Answered from here, from Needs you, or from a notification.</li>
+    <li>The header line: harness, model, turn count and time, so a slow or stuck run shows.</li>
+  </ul>
+</figcaption>
+</figure>
+
+<!-- ================= 4 ================= -->
+<figure>
+<div class="win noright">
+  <div class="rail">
+    <div class="srv on">O<span class="dot ok"></span></div>
+    <div class="srv">W<span class="dot err"></span></div>
+    <div class="grow"></div>
+  </div>
+  <div class="col">
+    <div class="colhead"><span class="t grow">my-pc</span><span class="btn sm primary">+ New</span></div>
+    <div class="scroll pad">
+      <div class="label">Running</div>
+      <div class="card"><a class="srow on"><div class="top"><span class="dot warn"></span><span class="agent">orchestrator</span><span class="id">#o1</span><span class="when">now</span></div><div class="preview">Start ticket 0011…</div><div class="proj">composer</div></a></div>
+      <div class="label">Recent</div>
+      <div class="card"><a class="srow"><div class="top"><span class="dot"></span><span class="agent">default</span><span class="id">#fc1b</span><span class="when">4m</span></div><div class="preview">What sites are there and what…</div><div class="proj">no project</div></a></div>
+    </div>
+  </div>
+  <div class="col" style="position:relative">
+    <div class="chathead"><span class="dot warn"></span><b>orchestrator</b><span class="sub">running · <span class="chip">composer</span> #o1</span><span style="flex:1"></span><span class="icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg></span></div>
+    <div class="scroll"><div class="msgs" style="max-width:none">
+      <div class="you">Start ticket 11 with Claude Code.</div>
+    </div></div>
+    <div class="composer"><div class="line"><div class="field">Message · ctrl-enter sends</div><div class="send stop"><svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="1"/></svg></div></div></div>
+  </div>
+  <div class="scrim"></div>
+  <div class="dialog palette" style="top:70px">
+    <div class="in"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4-4"/></svg>merge</div>
+    <div class="grp">Actions</div>
+    <div class="it on"><span>Merge ticket 0010 into main</span><span class="m">orchestrator #o1</span></div>
+    <div class="it"><span>Review changes of ticket 0010</span><span class="m">ctrl shift d</span></div>
+    <div class="it"><span>Discard ticket 0007</span><span class="m">failed</span></div>
+    <div class="grp">Sessions</div>
+    <div class="it"><span class="dot ok"></span><span class="k">worker #0917</span><span>ticket 0010: Note in the README</span><span class="m">15m</span></div>
+    <div class="grp">Pages</div>
+    <div class="it"><span class="k">plans/merge-flow</span><span class="muted">Merging tickets back</span><span class="m">plans</span></div>
+    <div class="it"><span class="k">orchestration/index</span><span class="muted">… <b>merge</b>_ticket(id) merges the branch…</span><span class="m">orchestration</span></div>
+    <div class="foot"><span>↑↓ choose</span><span>enter open</span><span>tab next group</span><span style="margin-left:auto">sessions · pages · actions · servers</span></div>
+  </div>
+</div>
+<figcaption>
+  <h2>4 · ctrl-k: sessions, pages and actions</h2>
+  <p>One box for everything you'd otherwise click through: sessions by agent, id, project or ticket; pages by title and text (<code>/api/search</code>); and actions.</p>
+  <ul>
+    <li><b>Actions</b> are the TUI's <code>:</code> commands with names: new chat (agent, project), set project, compact, merge / discard a ticket, turn Claude Code on or off, switch server, open a site's app.</li>
+    <li>Other shortcuts, shown in the palette next to their action: <span class="kbd">ctrl n</span> new chat, <span class="kbd">ctrl shift d</span> changes, <span class="kbd">ctrl p</span> reader, <span class="kbd">alt ↑/↓</span> previous / next session in the list, <span class="kbd">ctrl ]</span> next worker of this orchestration, <span class="kbd">esc</span> closes the side pane.</li>
+  </ul>
+</figcaption>
+</figure>
+
+<!-- ================= 5 ================= -->
+<figure>
+<div class="win noright">
+  <div class="rail">
+    <div class="srv on">O<span class="dot ok"></span></div>
+    <div class="srv">W<span class="dot err"></span></div>
+    <div class="grow"></div>
+  </div>
+  <div class="col">
+    <div class="colhead"><span class="t grow">my-pc</span><span class="btn sm primary">+ New</span></div>
+    <div class="scroll pad">
+      <div class="label">Recent</div>
+      <div class="card"><a class="srow"><div class="top"><span class="dot"></span><span class="agent">default</span><span class="id">#fc1b</span><span class="when">4m</span></div><div class="preview">What sites are there and what…</div><div class="proj">no project</div></a></div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="chathead"><b>new chat</b></div>
+    <div class="scroll"></div>
+  </div>
+  <div class="scrim"></div>
+  <div class="dialog" style="width:620px;top:80px">
+    <div class="form">
+      <h3>New chat on my-pc</h3>
+      <div class="label" style="margin-top:0">Agent</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 8px">
+        <div class="choice on"><span class="r"></span><div><b>default</b><span>general assistant: pages, memory, apps</span></div></div>
+        <div class="choice"><span class="r"></span><div><b>orchestrator</b><span>splits a plan into tickets and runs workers</span></div></div>
+      </div>
+      <div class="label">Project</div>
+      <div class="chips"><span class="pchip">none</span><span class="pchip on">composer</span><span class="pchip">proj</span><span class="pchip">dotfiles</span><span class="pchip">website</span><span class="pchip faint">other folder…</span></div>
+      <div class="label">First message <span style="text-transform:none;letter-spacing:0">optional</span></div>
+      <div class="search" style="height:64px;align-items:flex-start;padding-top:8px">What's left on the release plan?</div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px"><span class="btn ghost">Cancel</span><span class="btn primary">Start · ctrl-enter</span></div>
+    </div>
+  </div>
+</div>
+<figcaption>
+  <h2>5 · New chat (ctrl-n)</h2>
+  <p>The phone's sheet as a dialog: agent with its description, project from <code>/api/projects</code>, and an optional first message so starting a chat is one step.</p>
+</figcaption>
+</figure>
+
+<!-- ================= 6 ================= -->
+<figure>
+<div class="win" style="--right: 480px">
+  <div class="rail">
+    <div class="srv on">O<span class="dot ok"></span></div>
+    <div class="srv">W<span class="dot err"></span></div>
+    <div class="grow"></div>
+    <span class="icon on"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1c.6.5 1.3.9 2 1.2L10 21h4l.5-2.6c.7-.3 1.4-.7 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2z"/></svg></span>
+    <span class="icon"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span>
+  </div>
+  <div class="col">
+    <div class="colhead"><span class="t grow">my-pc</span><span class="btn sm primary">+ New</span></div>
+    <div class="scroll pad">
+      <div class="label">Running</div>
+      <div class="card"><a class="srow on"><div class="top"><span class="dot info"></span><span class="agent">orchestrator</span><span class="id">#o1</span><span class="when">1m</span></div><div class="preview">Ticket 0010 is ready to merge.</div><div class="proj">composer</div></a></div>
+    </div>
+  </div>
+  <div class="col" style="position:relative">
+    <div class="chathead"><span class="dot info"></span><b>orchestrator</b><span class="sub">idle · <span class="chip">composer</span> #o1</span><span style="flex:1"></span><span class="icon on"><svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg></span></div>
+    <div class="scroll"><div class="msgs"><div class="agent"><p>Ticket <b>0010</b> is done…</p></div></div></div>
+    <div class="menu" style="right:8px;top:44px">
+      <div>Change project…<span class="m">composer</span></div>
+      <div>Unset the project</div>
+      <hr>
+      <div class="on">Review changes of ticket 0010<span class="m">ctrl shift d</span></div>
+      <div>Project changes (git)</div>
+      <hr>
+      <div>Turn off Claude Code for composer</div>
+      <div>Compact (save memory, summarize)</div>
+      <div>Stop the turn<span class="m">ctrl c</span></div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="tabs"><a class="on">Server</a><span class="grow"></span><span class="tools"><span class="icon"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></span></span></div>
+    <div class="scroll" style="padding:14px 16px">
+      <dl class="kv"><dt>address</dt><dd>my-pc.tail1234.ts.net</dd><dt>model</dt><dd>qwen3.8-flash</dd><dt>slots</dt><dd>1 of 2 in use</dd><dt>version</dt><dd>composer 0.1.1</dd></dl>
+      <div class="label">Projects · external harnesses</div>
+      <div class="card">
+        <div class="srow"><div class="top"><span class="agent">composer</span><span class="when">~/Projects/composer</span></div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:7px;font-size:12px"><span class="switch on"></span>Claude Code<span class="faint mono" style="font-size:11px">sonnet · 2 tool rules</span></div></div>
+        <div class="srow"><div class="top"><span class="agent">website</span><span class="when">~/Projects/website</span></div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:7px;font-size:12px"><span class="switch"></span>Claude Code<span class="faint mono" style="font-size:11px">turned off</span></div></div>
+      </div>
+      <div class="label">Sites</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px"><span class="chip">agents</span><span class="chip">memory</span><span class="chip accent">orchestration · app</span><span class="chip">plans</span><span class="chip">home</span></div>
+      <div class="label">This device</div>
+      <dl class="kv"><dt>name</dt><dd>my-laptop</dd><dt>token</dt><dd>keyring</dd></dl>
+      <div style="margin-top:12px;display:flex;gap:8px"><span class="btn sm">Rename</span><span class="btn sm danger">Forget this server</span></div>
+    </div>
+  </div>
+</div>
+<figcaption>
+  <h2>6 · The chat menu, and the server in the side pane</h2>
+  <p>⋮ in the chat header has what the phone's has (project, Claude Code, compact, stop) plus Review changes for a worker or a ticket the chat mentions. The server page moves to the side pane (the rail's gear), so it never replaces your chat.</p>
+  <ul>
+    <li>Server: address, model, slots, version; per project, Claude Code on / off (<code>harness.set</code>) with its model and the number of remembered tool rules; sites (an app opens in the Page tab); this device's name and where its token is kept.</li>
+  </ul>
+</figcaption>
+</figure>
+
+<!-- ================= 7 ================= -->
+<figure>
+<div class="win collapsed" style="--right: 640px">
+  <div class="rail">
+    <div class="srv on">O<span class="dot ok"></span></div>
+    <div class="srv">W<span class="dot err"></span></div>
+    <div class="grow"></div>
+  </div>
+  <div class="strip">
+    <span class="icon" title="Show sessions (ctrl b)"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>
+    <hr>
+    <div class="s on">or<span class="dot warn"></span></div>
+    <div class="s w">11<span class="dot warn"></span></div>
+    <div class="s w">10<span class="dot ok"></span></div>
+    <hr>
+    <div class="s">de<span class="dot"></span></div>
+    <div class="s">or<span class="dot"></span></div>
+    <div class="s">de<span class="dot"></span></div>
+    <div style="flex:1"></div>
+    <span class="icon"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span>
+  </div>
+  <div class="col">
+    <div class="chathead"><span class="dot warn"></span><b>orchestrator</b><span class="sub">running · <span class="chip">composer</span> #o1</span><span style="flex:1"></span><span class="icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg></span></div>
+    <div class="scroll"><div class="msgs">
+      <div class="you">Split the release plan into tickets; I'll drag them into order on the board.</div>
+      <div class="activity"><div class="head"><span class="caret">▸</span><span class="sum"><b>5 steps</b> · read 1 page, wrote 0012.md, 0013.md, 0014.md</span><span class="n">12s</span></div></div>
+      <div class="agent"><p>Three new tickets are open: <b>0012</b> changelog, <b>0013</b> version bump, <b>0014</b> tag and release notes. They're on the board in that order.</p></div>
+      <div class="you"><div class="src">orchestration app</div>Moved 0013 before 0012.</div>
+      <div class="agent"><p>Noted: version bump first. Shall I start 0013 with Claude Code<span class="caret-blink"></span></p></div>
+    </div></div>
+    <div class="composer"><div class="line"><span class="clip"><svg viewBox="0 0 24 24"><path d="M21 11l-8.5 8.5a5 5 0 0 1-7-7L14 4a3.3 3.3 0 0 1 4.7 4.7L10 17.4a1.7 1.7 0 0 1-2.4-2.4L15 7.6"/></svg></span><div class="field">Message · ctrl-enter sends</div><div class="send stop"><svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="1"/></svg></div></div></div>
+  </div>
+  <div class="col">
+    <div class="tabs"><a>Page</a><a class="on">App <span class="chip accent">orchestration</span></a><a>Changes</a><a>Worker</a><span class="grow"></span><span class="tools"><span class="icon" title="Open in the browser"><svg viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9"/><path d="M18 14v5H5V6h5"/></svg></span><span class="icon" title="Reload"><svg viewBox="0 0 24 24"><path d="M4 4v6h6M20 20v-6h-6"/><path d="M5 15a7 7 0 0 0 12 3M19 9A7 7 0 0 0 7 6"/></svg></span><span class="icon"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></span></span></div>
+    <div class="crumbs"><span class="chip accent">orchestration</span>ticket board · signed in as session #o1<span class="follow faint">drag to reorder</span></div>
+    <div class="scroll app">
+      <div class="board">
+        <div class="lane"><h4>open <span>3</span></h4>
+          <div class="tk hl"><div class="id">0013</div>Bump the version to 0.2.0</div>
+          <div class="tk"><div class="id">0012</div>Changelog for 0.2.0</div>
+          <div class="tk"><div class="id">0014</div>Tag and write release notes</div>
+        </div>
+        <div class="lane"><h4>claimed <span>1</span></h4>
+          <div class="tk"><div class="id"><span class="dot warn"></span>0011 · claude-code</div>Explain worktrees</div>
+        </div>
+        <div class="lane"><h4>done <span>2</span></h4>
+          <div class="tk"><div class="id"><span class="dot ok"></span>0010 · to merge</div>Note in the README</div>
+          <div class="tk"><div class="id"><span class="dot ok"></span>0003 · merged</div>Friendlier greeting</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<figcaption>
+  <h2>7 · An app beside the chat, sessions collapsed</h2>
+  <p>A site's micro app opens in the side pane's <b>App</b> tab, signed in with the chat's session, so what you do in it (the orchestration board here) reaches the agent and the agent's changes show in it, side by side.</p>
+  <ul>
+    <li>Opened from a site in the palette, the Server tab, an <code>app</code> link in a page, or ⋮ → "Open the orchestration app". The Page tab keeps its own page; switching tabs doesn't reload the app.</li>
+    <li>Wide apps get room: the side pane can be dragged wider, and <span class="kbd">ctrl b</span> collapses the session list to a strip of sessions (two letters of the agent, its state dot, workers indented under their orchestrator). Clicking one opens it; hovering shows its preview. The choice is remembered.</li>
+    <li>"Open in the browser" for the full window; reload when the app was rebuilt.</li>
+  </ul>
+</figcaption>
+</figure>
+
+<div class="section-title">Not in this round</div>
+<ul class="problems">
+  <li><b>Editing pages</b> in the reader (the TUI's <code>e</code>): later, with a proper editor.</li>
+  <li><b>Showing and removing tool rules</b> one by one: the count is shown; editing them stays in <code>state/tool_rules.json</code> for now.</li>
+  <li><b>Several windows</b> (a chat per window): the side pane's Worker tab covers the common case.</li>
+</ul>
+
+</div>
+</body>
+</html>
