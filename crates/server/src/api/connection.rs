@@ -114,6 +114,32 @@ impl Connection {
                 });
                 None
             }
+            // A stopped external worker: the message continues its run (`--resume`).
+            ClientCommand::MessageSend { session, text, .. }
+                if server
+                    .sessions
+                    .get(&session)
+                    .is_ok_and(|s| server.workers.resumable(server, &s)) =>
+            {
+                let (connection, server) = (self.clone(), server.clone());
+                tokio::spawn(async move {
+                    let resumed = match server.sessions.get(&session) {
+                        Ok(s) => server.workers.resume(&server, &s, text).await,
+                        Err(e) => Err(e.to_string()),
+                    };
+                    connection.send(Arc::new(match resumed {
+                        Ok(()) => ServerMessage::Ok {
+                            id,
+                            result: CommandResult::Done,
+                        },
+                        Err(message) => ServerMessage::Error {
+                            id: Some(id),
+                            message,
+                        },
+                    }));
+                });
+                None
+            }
             ClientCommand::ToolCall {
                 session,
                 name,

@@ -4,6 +4,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use composer_protocol::ChatMessage;
 
+use crate::config_sections::ProjectSettings;
 use crate::server::Server;
 
 /// What a harness gets to work a ticket. The worker session already exists and the ticket
@@ -14,18 +15,43 @@ pub struct StartRequest {
     pub session: String,
     pub ticket: String,
     pub agent: String,
-    /// The folder to work in, if the ticket has a project.
+    /// The folder to work in (the ticket's worktree, or its project folder).
     pub project: Option<String>,
-    /// The run's own output: `state/workers/<session>.log`.
+    /// The project's settings in config.toml.
+    pub settings: ProjectSettings,
+    /// The run's own output: `state/workers/<session>.log` (appended to).
     pub log: PathBuf,
+    /// Continue an earlier run of this ticket (the harness's own session id) with a message
+    /// from the user, instead of starting fresh.
+    pub resume: Option<Resume>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Resume {
+    pub harness_session: String,
+    pub message: String,
+}
+
+/// Why a run stopped without finishing, to be picked up later.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Pause {
+    pub reason: String,
+    /// When it can go on (unix seconds), if known.
+    pub until: Option<i64>,
 }
 
 /// Something that works tickets: composer's own agent loop, or an external CLI.
+#[async_trait]
 pub trait Harness: Send + Sync {
     /// The name in a ticket's `harness:`.
     fn name(&self) -> &'static str;
 
-    fn start(
+    /// External harnesses run only in projects that allow them (`external_harnesses`).
+    fn external(&self) -> bool {
+        true
+    }
+
+    async fn start(
         &self,
         server: &Arc<Server>,
         request: StartRequest,
@@ -49,5 +75,10 @@ pub trait HarnessRun: Send + Sync {
             "this worker can't take messages while it works; cancel it, or tell the orchestrator"
                 .into(),
         )
+    }
+
+    /// Set when the run stopped to be resumed later (a usage limit), rather than failed.
+    fn paused(&self) -> Option<Pause> {
+        None
     }
 }

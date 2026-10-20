@@ -162,4 +162,6 @@ pub enum WorkerState {
     Running,
     Done,
     Failed,
+    /// Stopped before finishing, to be resumed later (a usage limit was hit).
+    Paused,
 }

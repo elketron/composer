@@ -495,43 +495,56 @@ login), and messages and tickets can carry files.
 
 ### Claude Code harness
 
+Built (milestone 13):
+
+- **Choosing it:** a ticket's `harness: claude-code`, or `spawn_worker(ticket, harness: "claude-code")`.
 - **Allowed per project**, default off, in the server's `config.toml` (not in the repo, so a cloned repo
-  can't switch it on for itself):
+  can't switch it on for itself); the closest configured folder containing the project counts:
   ```toml
   [projects."~/Projects/composer"]
   external_harnesses = ["claude-code"]
+  allowed_tools = ["Bash(cargo test:*)"]   # on top of [claude_code] allowed_tools
   ```
-  `spawn_worker` checks it before launching and fails the ticket with a clear message otherwise.
+  Checked against the project before it becomes a worktree; refused with the snippet to add otherwise.
+- **`[claude_code]`:** `command` (default `claude`), `model` (empty: the CLI's default), `max_turns` (60),
+  `timeout_minutes` (60), `allowed_tools` (read/edit/write/search, the composer MCP tools, and
+  `git status|diff|log|add|commit`).
+- **Login:** only an already logged-in CLI is used: `claude auth status --json` (with the same cleared
+  environment) must say `loggedIn`. Never read or reuse its token. Not logged in or not installed: the
+  spawn fails with the error and the ticket stays as it was; no retry.
+- **Environment:** cleared; only `PATH`, `HOME`, `USER`, `LOGNAME`, `SHELL`, `TERM`, `LANG`, `LC_*`,
+  `TMPDIR`, `XDG_*` and `CLAUDE_CONFIG_DIR` pass. A set `ANTHROPIC_API_KEY` would win over the login and
+  bill the API; this also keeps out `ANTHROPIC_*`, `CLAUDE_CODE_USE_*`, the provider key and
+  `COMPOSER_*`. Not `--bare` (it ignores the login).
+- **Command:** `claude -p <prompt> --output-format stream-json --verbose --permission-mode acceptEdits`
+  `--permission-prompts none --max-turns N --mcp-config <composer mcp for this worker> --strict-mcp-config`
+  `--append-system-prompt <role> --session-id <uuid> [--model M] --plugin-dir <templates/harness/claude-code>`
+  `--allowedTools <list>`, in the worktree (or project folder). Anything outside the list is denied, never
+  asked. We choose the session id, so the ticket has it (`harness_session:`) before the first event.
+- **Ticket fields:** `harness`, `harness_session`, `model` (from the init event), `exit`.
+- **Process:** its own process group; cancel and the timeout stop the group (TERM, KILL after 5s).
+- **Output:** every stream-json line goes to `state/workers/<id>.log`. Mapped to worker session events:
+  text, thinking, tool calls (composer's tools under their own names) and results (cut at 4000 chars),
+  turn start/end and state, so it shows in the orchestration picker, worker cards and the chat.
+- **Ends without `finish`:** failed, with what it last said. **Usage limit** (a rejected `rate_limit_event`,
+  or a 429 result): the worker is `paused` (new `WorkerState::Paused`), the ticket `status: paused`, and
+  Claude Code launches are refused until the reset time; own-harness tickets keep running.
+- **Feedback:** a message to a stopped Claude Code worker session resumes the run (`--resume
+  <harness_session>`) in the same session and worktree, after the same checks.
+- **Skills:** a plugin in `templates/harness/claude-code/` (installed by `init`, merged by `update`, loaded
+  with `--plugin-dir`, never written into project repos): `composer-sites`, `composer-tickets`,
+  `composer-memory`, `composer-apps`.
+
+Next (13b):
+
 - **Models per project:** `models = ["claude-code:sonnet", "local"]` limits which models tickets in the
-  project may use (`--model` for Claude Code, the provider for the own harness; with one provider today,
-  `local` is it). Unset: anything the allowed harnesses offer.
+  project may use (`--model` for Claude Code, the provider for the own harness). Unset: anything.
 - **Off switch:** `:harness off [name]` (TUI), a toggle in the app's project sheet, and
   `composer harness off <project> [name]` turn an external harness (or a model) off for a project at
-  runtime, without editing config. Stored in `state/projects.json`; it can only narrow what config.toml
-  allows, never widen it. Turning it off stops new launches and interrupts running tickets on it: they go
-  to `waiting` ("claude-code turned off for this project") and resume with `--resume` once it is back on.
-- **Login:** only an already logged-in CLI is used; `claude auth status` before launching. Never read or
-  reuse its token. Not logged in or `claude` missing: fail the ticket with the error, no retry.
-- **Environment:** start empty and add only `PATH`, `HOME`, `USER`, `LANG`, `TERM`, `SHELL`, `XDG_*`. A set
-  `ANTHROPIC_API_KEY` would win over the login and bill the API; this also keeps out `ANTHROPIC_*`,
-  `CLAUDE_CODE_USE_*`, the provider key and `COMPOSER_HOME`. Not `--bare` (it ignores the login).
-- **Command:** `claude -p --output-format stream-json --verbose --session-id <uuid>`
-  `--mcp-config <ticket config> --strict-mcp-config --plugin-dir ~/.composer/harness/claude-code`
-  `--permission-mode acceptEdits --permission-prompts none --allowedTools <list>`, `current_dir` = the
-  worktree (or project folder). We choose the session id, so the ticket has it before the first event.
-  Feedback on the ticket: `--resume <id>`. Turn cap: `--max-turns` if this CLI version still takes it
-  (not in 2.1's `--help`), plus a wall-clock timeout of ours.
-- **Process:** its own process group (`process_group(0)`); cancel and server shutdown `killpg` the group.
-- **Output:** every stream-json line goes to `state/workers/<id>.log`. First version maps assistant text,
-  tool names and the final `result` to worker session events, so it shows in the orchestration picker and
-  worker cards; the full follow-mode mapping comes later.
-- **Usage limit hit:** the ticket goes to `waiting` and Claude Code launches pause until the reset time;
-  own-harness tickets keep running. Not marked failed.
-- **Skills:** source in `seed/harness/claude-code/` (so `composer update` merges them), installed as a
-  plugin under `~/.composer/harness/claude-code/`, never written into project repos:
-  `composer-sites` (site folders, `index.md` as the front door, via the MCP page tools),
-  `composer-tickets` (before finishing, write what was done and what is left, then `finish`),
-  `composer-memory`, `composer-apps`.
+  runtime. Stored in `state/projects.json`; it can only narrow what config.toml allows. Turning it off
+  stops new launches and interrupts running tickets on it: they pause and resume once it is back on.
+- Stop running external harnesses when the server shuts down; resume paused tickets automatically
+  after the reset time.
 
 ### Attachments
 
@@ -558,8 +571,9 @@ login), and messages and tickets can carry files.
 10. ✅ **harness trait** — own worker behind it; cancel stops the worker's process group; a ticket's `harness:` picks one.
 11. ✅ **`composer mcp`** — a running worker's tools over MCP, run by the server (`tool.list` / `tool.call`).
 12. ✅ **worktrees** — per-ticket worktrees on `ticket/<id>` branches for both harnesses.
-13. **Claude Code harness** — project switch, per-project models and runtime off switch, auth check, environment, process group, log, basic event
-    mapping, failure handling (missing, logged out, usage limit, no `finish`), skills plugin.
+13. ✅ **Claude Code harness** — project switch, auth check, cleared environment, process group, log, event
+    mapping, failure handling (missing, logged out, usage limit, no `finish`), resume on feedback, skills plugin.
+    13b: per-project models, runtime off switch, shutdown and automatic resume.
 14. **attachments (server)** — protocol, upload route, storage, resizing, own harness, Claude Code paths.
 15. **attachments (clients)** — app pickers and chips, TUI paths and clipboard.
 
@@ -567,4 +581,4 @@ Later: full stream-json → follow mode, approvals through `--permission-prompt-
 
 ## Open questions
 
-- None blocking. Next: milestone 13.
+- None blocking. Next: milestone 13b.

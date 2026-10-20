@@ -23,7 +23,7 @@ class SessionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final activity = status.activity(session);
     final workers = session.parent == null ? status.sessions.where((s) => s.parent == session.id).toList() : const <SessionInfo>[];
-    final right = isBusy(activity) || activity == 'done' || activity == 'failed'
+    final right = isBusy(activity) || const {'done', 'failed', 'paused'}.contains(activity)
         ? (activity == 'approval' ? 'needs approval' : activity)
         : (unread ? 'new · ${ago(session.updated)}' : ago(session.updated));
     final project = session.project?.split('/').last;

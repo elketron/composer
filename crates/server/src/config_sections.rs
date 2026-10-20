@@ -1,5 +1,7 @@
 //! The sections of `config.toml`. Every field has a default, so an empty file is valid.
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -31,6 +33,38 @@ pub struct ProjectsConfig {
     /// and a project given by name (`:project composer`, `--project composer`) is a folder here.
     #[serde(default = "default_projects_dir")]
     pub dir: String,
+    /// Per-project settings, `[projects."~/Projects/composer"]` (or a name in `dir`).
+    #[serde(flatten, default)]
+    pub settings: BTreeMap<String, ProjectSettings>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct ProjectSettings {
+    /// External harnesses tickets in this project may run on (`claude-code`). Default: none.
+    #[serde(default)]
+    pub external_harnesses: Vec<String>,
+    /// Tools Claude Code may use here on top of `[claude_code] allowed_tools`, e.g. `Bash(cargo test:*)`.
+    #[serde(default)]
+    pub allowed_tools: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ClaudeCodeConfig {
+    /// The Claude Code CLI. It must already be logged in (`claude auth login`).
+    #[serde(default = "default_claude_command")]
+    pub command: String,
+    /// `--model` (`sonnet`, `opus`, a full name); empty: the CLI's default.
+    #[serde(default)]
+    pub model: String,
+    /// `--max-turns` per run.
+    #[serde(default = "default_claude_max_turns")]
+    pub max_turns: u32,
+    /// A run is stopped after this many minutes.
+    #[serde(default = "default_claude_timeout")]
+    pub timeout_minutes: u64,
+    /// `--allowedTools`: what it may do without asking (anything else is denied).
+    #[serde(default = "default_claude_tools")]
+    pub allowed_tools: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -66,6 +100,36 @@ fn default_base_url() -> String {
 
 fn default_projects_dir() -> String {
     "~/Projects".into()
+}
+
+fn default_claude_command() -> String {
+    "claude".into()
+}
+
+fn default_claude_max_turns() -> u32 {
+    60
+}
+
+fn default_claude_timeout() -> u64 {
+    60
+}
+
+fn default_claude_tools() -> Vec<String> {
+    [
+        "Read",
+        "Edit",
+        "Write",
+        "Glob",
+        "Grep",
+        "mcp__composer",
+        "Bash(git status:*)",
+        "Bash(git diff:*)",
+        "Bash(git log:*)",
+        "Bash(git add:*)",
+        "Bash(git commit:*)",
+    ]
+    .map(String::from)
+    .to_vec()
 }
 
 fn default_reminder_time() -> String {

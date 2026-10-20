@@ -1,6 +1,9 @@
 //! Tickets in `site://orchestration/tickets/<id>.md`.
 
 use composer_core::{CoreError, SiteUrl};
+use composer_protocol::ChangedBy;
+
+use crate::server::Server;
 
 /// `3`, `0003`, `0003.md` or `site://orchestration/tickets/0003` → `0003`.
 pub fn normalize_id(raw: &str) -> String {
@@ -18,6 +21,22 @@ pub fn normalize_id(raw: &str) -> String {
 
 pub fn ticket_url(id: &str) -> Result<SiteUrl, CoreError> {
     SiteUrl::new("orchestration", &format!("tickets/{id}.md"))
+}
+
+/// Sets frontmatter fields of ticket `id` (a harness recording its session, model, exit).
+pub fn set_ticket_fields(server: &Server, id: &str, fields: &[(&str, &str)]) -> Result<(), String> {
+    let url = ticket_url(id).map_err(|e| e.to_string())?;
+    let page = server
+        .workspace
+        .read_page(&url)
+        .map_err(|e| e.to_string())?;
+    let raw = fields.iter().fold(page.raw.clone(), |raw, (key, value)| {
+        set_field(&raw, key, value)
+    });
+    server
+        .write_page(&url, &raw, ChangedBy::Agent)
+        .map(|_| ())
+        .map_err(|e| e.to_string())
 }
 
 /// Sets `status:` in the frontmatter (adding it if missing). Leaves the rest untouched.

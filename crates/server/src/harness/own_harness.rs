@@ -1,6 +1,8 @@
 use std::process::Stdio;
 use std::sync::Arc;
 
+use async_trait::async_trait;
+
 use crate::harness::{ChildProcess, Harness, HarnessRun, StartRequest};
 use crate::server::Server;
 
@@ -8,12 +10,17 @@ use crate::server::Server;
 /// WebSocket (slots, approvals, events and `finish`; see `worker::run_worker`).
 pub struct OwnHarness;
 
+#[async_trait]
 impl Harness for OwnHarness {
     fn name(&self) -> &'static str {
         "composer"
     }
 
-    fn start(
+    fn external(&self) -> bool {
+        false
+    }
+
+    async fn start(
         &self,
         server: &Arc<Server>,
         request: StartRequest,
@@ -21,6 +28,9 @@ impl Harness for OwnHarness {
         let listen = server
             .listen_addr()
             .ok_or("the server is not listening yet")?;
+        if request.resume.is_some() {
+            return Err("composer workers can't be resumed yet; open a new ticket".into());
+        }
         let log = std::fs::File::create(&request.log).map_err(|e| e.to_string())?;
         let mut command = tokio::process::Command::new(&server.worker_exe);
         command

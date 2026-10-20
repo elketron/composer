@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use async_trait::async_trait;
-use tokio::process::{Child, Command};
+use tokio::process::{Child, ChildStdout, Command};
 use tokio::sync::{Mutex, Notify};
 
 use crate::harness::HarnessRun;
@@ -27,6 +27,11 @@ impl ChildProcess {
             child: Mutex::new(child),
             interrupt: Notify::new(),
         })
+    }
+
+    /// Its stdout, when piped; once.
+    pub fn take_stdout(&self) -> Option<ChildStdout> {
+        self.child.try_lock().ok()?.stdout.take()
     }
 
     #[cfg(unix)]

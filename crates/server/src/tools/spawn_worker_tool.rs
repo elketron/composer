@@ -17,7 +17,9 @@ impl Tool for SpawnWorkerTool {
         "Start a worker agent on a ticket (site://orchestration/tickets/<id>). The ticket becomes \
          `claimed`; the worker runs in its own session and process. You get a message when it \
          finishes; then read the ticket's Result. Returns immediately. `agent` picks which worker \
-         agent (listed in your Environment); default: the ticket's `agent:`, else `worker`."
+         agent (listed in your Environment); default: the ticket's `agent:`, else `worker`. \
+         `harness` picks what runs it: `composer` (default) or `claude-code` (only in projects \
+         that allow it); default: the ticket's `harness:`."
     }
 
     fn parameters(&self) -> Value {
@@ -25,7 +27,8 @@ impl Tool for SpawnWorkerTool {
             "type": "object",
             "properties": {
                 "ticket": { "type": "string", "description": "ticket id, e.g. 0003" },
-                "agent": { "type": "string", "description": "worker agent, e.g. coder (optional)" }
+                "agent": { "type": "string", "description": "worker agent, e.g. coder (optional)" },
+                "harness": { "type": "string", "description": "composer or claude-code (optional)" }
             },
             "required": ["ticket"]
         })
@@ -37,12 +40,17 @@ impl Tool for SpawnWorkerTool {
         if context.server.parent.is_some() || context.session.info().ticket.is_some() {
             return Err("workers cannot start workers".into());
         }
-        let (worker, worktree) = context.server.workers.spawn(
-            &context.server,
-            &context.session,
-            &ticket,
-            args.agent.as_deref(),
-        )?;
+        let (worker, worktree) = context
+            .server
+            .workers
+            .spawn(
+                &context.server,
+                &context.session,
+                &ticket,
+                args.agent.as_deref(),
+                args.harness.as_deref(),
+            )
+            .await?;
         let agent = context
             .server
             .sessions

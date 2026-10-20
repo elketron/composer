@@ -63,7 +63,7 @@ String _count(int n, String noun) => '$n $noun${n == 1 ? '' : 's'}';
 /// `site://orchestration/tickets/0001.md` → `0001.md`.
 String _file(String summary) => summary.split('/').where((s) => s.isNotEmpty).lastOrNull ?? summary;
 
-final _report = RegExp(r'^\[worker #(\S+) finished ticket (\S+): (\w+)\]\s*(.*?)(?:\s*Its Result is in (site://\S+?)\.?)?\s*$', dotAll: true);
+final _report = RegExp(r'^\[worker #(\S+) finished ticket (\S+): (\w+)\]\s*(.*?)(?:\s*Its Result is in (site://\S+?)\.?(?:\s.*)?)?\s*$', dotAll: true);
 
 /// A finished worker's message to its orchestrator, if `item` is one.
 WorkerRow? workerReport(UserItem item) {

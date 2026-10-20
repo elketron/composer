@@ -7,6 +7,7 @@ Color activityColor(String activity) => switch (activity) {
       'running' || 'waiting' || 'starting' || 'approval' => t.warn,
       'done' => t.ok,
       'failed' => t.err,
+      'paused' => t.warn,
       _ => t.faint,
     };
 

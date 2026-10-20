@@ -75,6 +75,8 @@ pub struct SpawnWorkerArgs {
     pub ticket: String,
     #[serde(default)]
     pub agent: Option<String>,
+    #[serde(default)]
+    pub harness: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

@@ -32,6 +32,24 @@ max_workers = 1
 # (`:project composer`, `composer --project composer`, a ticket's `project:`) is a folder here.
 dir = "~/Projects"
 
+# Per project (a path, or a name in `dir`): which external harnesses its tickets may run on.
+# Off unless listed here.
+# [projects."~/Projects/composer"]
+# external_harnesses = ["claude-code"]
+# allowed_tools = ["Bash(cargo test:*)", "Bash(cargo clippy:*)"]
+
 [reminders]
 # When a reminder page with a due date but no time goes off (local time).
 default_time = "09:00"
+
+[claude_code]
+# The Claude Code CLI, for tickets with `harness: claude-code` in projects that allow it.
+# It runs under its own login (`claude auth login`); composer never reads its credentials.
+command = "claude"
+# --model; empty: the CLI's default.
+model = ""
+max_turns = 60
+# A run is stopped after this long.
+timeout_minutes = 60
+# What it may do without asking; anything else is denied. Projects can add to it.
+allowed_tools = ["Read", "Edit", "Write", "Glob", "Grep", "mcp__composer", "Bash(git status:*)", "Bash(git diff:*)", "Bash(git log:*)", "Bash(git add:*)", "Bash(git commit:*)"]

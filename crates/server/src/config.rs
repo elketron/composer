@@ -3,7 +3,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::config_sections::{
-    AgentConfig, ProjectsConfig, ProviderConfig, RemindersConfig, ServerConfig,
+    AgentConfig, ClaudeCodeConfig, ProjectsConfig, ProviderConfig, RemindersConfig, ServerConfig,
 };
 use crate::error::{Result, ServerError};
 
@@ -20,6 +20,8 @@ pub struct Config {
     pub projects: ProjectsConfig,
     #[serde(default = "section")]
     pub reminders: RemindersConfig,
+    #[serde(default = "section")]
+    pub claude_code: ClaudeCodeConfig,
 }
 
 impl Config {
@@ -76,6 +78,20 @@ mod tests {
         let c = Config::parse("[agent]\nslots = 1\n").unwrap();
         assert_eq!(c.agent.slots, 1);
         assert_eq!(c.agent.max_steps, 40);
+        assert_eq!(Config::parse(&c.to_toml()).unwrap(), c);
+    }
+
+    #[test]
+    fn per_project_settings() {
+        let c = Config::parse(
+            "[projects]\ndir = \"~/code\"\n\n[projects.\"~/code/app\"]\nexternal_harnesses = [\"claude-code\"]\n",
+        )
+        .unwrap();
+        assert_eq!(c.projects.dir, "~/code");
+        assert_eq!(
+            c.projects.settings["~/code/app"].external_harnesses,
+            ["claude-code"]
+        );
         assert_eq!(Config::parse(&c.to_toml()).unwrap(), c);
     }
 }

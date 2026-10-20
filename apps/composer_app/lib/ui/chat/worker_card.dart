@@ -16,8 +16,7 @@ class WorkerCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final done = row.status == 'done';
-    final color = done ? t.ok : t.err;
+    final color = switch (row.status) { 'done' => t.ok, 'paused' => t.warn, _ => t.err };
     return Container(
       padding: const EdgeInsets.fromLTRB(10, 8, 4, 8),
       decoration: BoxDecoration(
@@ -31,7 +30,7 @@ class WorkerCard extends StatelessWidget {
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text.rich(TextSpan(style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500), children: [
-              TextSpan(text: 'Worker #${row.worker} ${done ? 'finished' : 'failed'} ticket ${row.ticket}'),
+              TextSpan(text: 'Worker #${row.worker} ${switch (row.status) { 'done' => 'finished', 'paused' => 'paused on', _ => 'failed' }} ticket ${row.ticket}'),
             ])),
             if (row.summary.isNotEmpty)
               Text(row.summary, maxLines: 3, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: t.muted)),

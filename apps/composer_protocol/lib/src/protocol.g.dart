@@ -1912,7 +1912,9 @@ enum WorkerState {
   starting('starting'),
   running('running'),
   done('done'),
-  failed('failed');
+  failed('failed'),
+  /// Stopped before finishing, to be resumed later (a usage limit was hit).
+  paused('paused');
 
   const WorkerState(this.wire);
   final String wire;

@@ -28,7 +28,8 @@ pub mod worker;
 
 pub use config::Config;
 pub use config_sections::{
-    AgentConfig, ProjectsConfig, ProviderConfig, RemindersConfig, ServerConfig,
+    AgentConfig, ClaudeCodeConfig, ProjectSettings, ProjectsConfig, ProviderConfig,
+    RemindersConfig, ServerConfig,
 };
 pub use error::{Result, ServerError};
 pub use hash::content_hash;

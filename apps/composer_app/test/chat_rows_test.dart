@@ -36,6 +36,13 @@ void main() {
     final row = chatRows([report]).single as WorkerRow;
     expect((row.worker, row.ticket, row.status, row.summary, row.result),
         ('96a1', '0001', 'done', 'wrote the release page', 'site://orchestration/tickets/0001.md'));
+    // With the branch its changes are on.
+    const onBranch = UserItem(
+      '[worker #96a1 finished ticket 0001: paused]\nusage limit\n\nIts Result is in site://orchestration/tickets/0001.md. Its changes are on branch `ticket/0001`.',
+      source: 'worker #96a1',
+    );
+    final paused = chatRows([onBranch]).single as WorkerRow;
+    expect((paused.status, paused.summary, paused.result), ('paused', 'usage limit', 'site://orchestration/tickets/0001.md'));
     expect(chatRows([const UserItem('[worker #1 finished ticket 2: done]')]).single, isA<ItemRow>(), reason: 'yours, not a worker\'s');
   });
 }

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use composer_protocol::{ServerMessage, WorkerState};
+use composer_protocol::{ServerMessage, TurnState, WorkerState};
 
 use crate::harness::resequence::resequence;
 use crate::server::Server;
@@ -45,6 +45,17 @@ impl WorkerSink {
             }
             _ => {}
         }
+    }
+
+    /// The run's turn state (external harnesses; own workers send `SessionUpdated`).
+    pub fn set_state(&self, state: TurnState) {
+        let mut info = self.session.info();
+        info.state = state;
+        self.event(ServerMessage::SessionUpdated { session: info });
+    }
+
+    pub fn session(&self) -> &str {
+        self.session.id()
     }
 
     /// The run is done with its ticket.

@@ -220,15 +220,18 @@ import 'types.dart';
   return (state, [...switches, ...notes, ...effects]);
 }
 
+/// A worker that ended its run: finished, failed, or paused until later.
+bool stopped(WorkerState state) => state == WorkerState.done || state == WorkerState.failed || state == WorkerState.paused;
+
 /// The worker you were watching finished: back to its orchestrator, which gets the result
 /// next. Not while you're writing a message.
 (AppState, List<AppEffect>) _handBack(AppState s, String url, ServerMessage message) {
   if (message case ServerMessageWorkerStatus(:final worker, :final ticket, :final parent, :final state)
-      when state == WorkerState.done || state == WorkerState.failed) {
+      when stopped(state)) {
     final chat = s.status[url]?.chat;
     if (chat == null || chat.session != worker || chat.drafting) return (s, const []);
     final (opened, effects) = _open(s, url, parent);
-    final what = state == WorkerState.done ? 'finished' : 'failed';
+    final what = switch (state) { WorkerState.done => 'finished', WorkerState.paused => 'paused', _ => 'failed' };
     return (opened.copyWith(notice: Notice((s.notice?.id ?? 0) + 1, 'Worker #$worker $what ticket $ticket: back to the orchestrator')), effects);
   }
   return (s, const []);
@@ -280,13 +283,17 @@ import 'types.dart';
     case ServerMessageApprovalResolved(:final request):
       return (s, [CancelNotification('approval:$request')]);
     case ServerMessageWorkerStatus(:final worker, :final ticket, :final parent, state: final state)
-        when (state == WorkerState.done || state == WorkerState.failed) && !viewing(parent):
+        when stopped(state) && !viewing(parent):
       return (
         s,
         [
           Notify(
             key: 'worker:$worker',
-            title: state == WorkerState.done ? 'Worker finished ticket $ticket' : 'Worker failed on ticket $ticket',
+            title: switch (state) {
+              WorkerState.done => 'Worker finished ticket $ticket',
+              WorkerState.paused => 'Worker paused on ticket $ticket (usage limit)',
+              _ => 'Worker failed on ticket $ticket',
+            },
             body: 'on $server',
             url: url,
             session: parent,
@@ -381,7 +388,7 @@ AppState _event(AppState s, String url, ServerMessage message) => switch (messag
       ServerMessageApprovalResolved(:final request) =>
         _updateStatus(s, url, (x) => x.copyWith(approvals: [for (final a in x.approvals) if (a.request != request) a])),
       ServerMessageWorkerStatus(:final worker, :final state) => _updateStatus(s, url, (x) {
-          final finished = (state == WorkerState.done || state == WorkerState.failed) && x.chat?.session != worker;
+          final finished = stopped(state) && x.chat?.session != worker;
           return x.copyWith(workers: {...x.workers, worker: state}, unread: finished ? {...x.unread, worker} : null);
         }),
       _ when sessionEvent(message) != null => _updateStatus(s, url, (x) {

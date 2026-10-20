@@ -478,12 +478,18 @@ impl AppState {
                         format!("worker #{worker} failed ticket {ticket}"),
                         FlashLevel::Warn,
                     ),
+                    composer_protocol::WorkerState::Paused => (
+                        format!("worker #{worker} paused ticket {ticket} (usage limit)"),
+                        FlashLevel::Warn,
+                    ),
                 };
                 // Watching it finish: back to the orchestrator, which gets its result next.
                 // Not while you're typing, or the message would go to the orchestrator.
                 let finished = matches!(
                     state,
-                    composer_protocol::WorkerState::Done | composer_protocol::WorkerState::Failed
+                    composer_protocol::WorkerState::Done
+                        | composer_protocol::WorkerState::Failed
+                        | composer_protocol::WorkerState::Paused
                 );
                 if finished
                     && self.session.current.as_deref() == Some(worker.as_str())
