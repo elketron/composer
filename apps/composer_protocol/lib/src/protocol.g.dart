@@ -198,6 +198,8 @@ sealed class ClientCommand {
         'slot.release' => ClientCommandSlotRelease.fromJson(json),
         'approval.ask' => ClientCommandApprovalAsk.fromJson(json),
         'worker.finish' => ClientCommandWorkerFinish.fromJson(json),
+        'tool.list' => ClientCommandToolList.fromJson(json),
+        'tool.call' => ClientCommandToolCall.fromJson(json),
         _ => ClientCommandUnknown(json),
       };
 
@@ -533,6 +535,52 @@ final class ClientCommandWorkerFinish extends ClientCommand {
       };
 }
 
+/// The tools a running worker's agent may call; the reply is `tools`.
+final class ClientCommandToolList extends ClientCommand {
+  const ClientCommandToolList({
+    required this.session,
+  });
+
+  final String session;
+
+  factory ClientCommandToolList.fromJson(Map<String, Object?> json) => ClientCommandToolList(
+        session: json['session'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'tool.list',
+        'session': session,
+      };
+}
+
+/// Runs one of them in the running worker's session; the reply is `tool_output`.
+final class ClientCommandToolCall extends ClientCommand {
+  const ClientCommandToolCall({
+    required this.session,
+    required this.name,
+    this.args,
+  });
+
+  final String session;
+
+  final String name;
+
+  final Object? args;
+
+  factory ClientCommandToolCall.fromJson(Map<String, Object?> json) => ClientCommandToolCall(
+        session: json['session'] as String,
+        name: json['name'] as String,
+        args: json['args'],
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'tool.call',
+        'session': session,
+        'name': name,
+        if (args != null) 'args': args,
+      };
+}
+
 /// A `type` this version doesn't know (a newer server): kept as raw JSON.
 final class ClientCommandUnknown extends ClientCommand {
   const ClientCommandUnknown(this.raw);
@@ -572,6 +620,8 @@ sealed class CommandResult {
         'sessions' => CommandResultSessions.fromJson(json),
         'slot_granted' => CommandResultSlotGranted.fromJson(json),
         'approval' => CommandResultApproval.fromJson(json),
+        'tools' => CommandResultTools.fromJson(json),
+        'tool_output' => CommandResultToolOutput.fromJson(json),
         _ => CommandResultUnknown(json),
       };
 
@@ -654,6 +704,45 @@ final class CommandResultApproval extends CommandResult {
   Map<String, Object?> toJson() => {
         'kind': 'approval',
         'approved': approved,
+      };
+}
+
+final class CommandResultTools extends CommandResult {
+  const CommandResultTools({
+    required this.tools,
+  });
+
+  final List<ToolInfo> tools;
+
+  factory CommandResultTools.fromJson(Map<String, Object?> json) => CommandResultTools(
+        tools: (json['tools'] as List).map((e) => ToolInfo.fromJson(e as Map<String, Object?>)).toList(),
+      );
+
+  Map<String, Object?> toJson() => {
+        'kind': 'tools',
+        'tools': tools.map((e) => e.toJson()).toList(),
+      };
+}
+
+final class CommandResultToolOutput extends CommandResult {
+  const CommandResultToolOutput({
+    required this.output,
+    required this.isError,
+  });
+
+  final String output;
+
+  final bool isError;
+
+  factory CommandResultToolOutput.fromJson(Map<String, Object?> json) => CommandResultToolOutput(
+        output: json['output'] as String,
+        isError: json['is_error'] as bool,
+      );
+
+  Map<String, Object?> toJson() => {
+        'kind': 'tool_output',
+        'output': output,
+        'is_error': isError,
       };
 }
 
@@ -1771,6 +1860,34 @@ class ToolCall {
         'call_id': callId,
         'name': name,
         'args': args,
+      };
+}
+
+/// A tool an agent may call: what the model (or an external harness) sees.
+class ToolInfo {
+  const ToolInfo({
+    required this.name,
+    required this.description,
+    this.parameters,
+  });
+
+  final String name;
+
+  final String description;
+
+  /// JSON schema of the arguments object.
+  final Object? parameters;
+
+  factory ToolInfo.fromJson(Map<String, Object?> json) => ToolInfo(
+        name: json['name'] as String,
+        description: json['description'] as String,
+        parameters: json['parameters'],
+      );
+
+  Map<String, Object?> toJson() => {
+        'name': name,
+        'description': description,
+        'parameters': parameters,
       };
 }
 

@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 
 use composer_protocol::{
     ChatMessage, ClientCommand, ClientRequest, CommandResult, MessageSource, Role, Seq,
-    ServerMessage, SessionId, WorkerState,
+    ServerMessage, SessionId,
 };
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
@@ -12,7 +12,7 @@ use tokio_util::sync::CancellationToken;
 use crate::agent::AgentDefinition;
 use crate::api::event_scope::{EventScope, scope};
 use crate::api::glob::url_matches;
-use crate::api::resequence::resequence;
+use crate::harness::WorkerSink;
 use crate::server::Server;
 use crate::session::{compact_now, submit};
 use crate::slot_guard::SlotGuard;
@@ -114,6 +114,31 @@ impl Connection {
                 });
                 None
             }
+            ClientCommand::ToolCall {
+                session,
+                name,
+                args,
+            } => {
+                let (connection, server) = (self.clone(), server.clone());
+                tokio::spawn(async move {
+                    let reply = match server.workers.tool_context(&server, &session) {
+                        Ok(context) => {
+                            let (output, is_error) =
+                                server.tools.call_value(&context, &name, args).await;
+                            ServerMessage::Ok {
+                                id,
+                                result: CommandResult::ToolOutput { output, is_error },
+                            }
+                        }
+                        Err(message) => ServerMessage::Error {
+                            id: Some(id),
+                            message,
+                        },
+                    };
+                    connection.send(Arc::new(reply));
+                });
+                None
+            }
             ClientCommand::ApprovalAsk {
                 site,
                 recipe,
@@ -150,34 +175,13 @@ impl Connection {
         }
     }
 
-    /// An event from the worker process: re-sequenced into its session here, or its info mirrored.
+    /// An event from the worker process, for its session here.
     fn worker_event(&self, server: &Arc<Server>, event: ServerMessage) {
         let Some(id) = self.worker_session.lock().expect("worker lock").clone() else {
             return;
         };
-        let Ok(session) = server.sessions.get(&id) else {
-            return;
-        };
-        match event {
-            ServerMessage::SessionUpdated { session: info } => {
-                session.update_info(&server.hub, |mine| {
-                    // Finished (`finish`, or the process ended): late updates from the worker
-                    // process must not make it look busy again.
-                    let finished =
-                        matches!(mine.worker, Some(WorkerState::Done | WorkerState::Failed));
-                    if !finished {
-                        mine.state = info.state;
-                    }
-                    mine.context_tokens = info.context_tokens;
-                    mine.project = info.project;
-                })
-            }
-            event if resequence(&event, 0).is_some() => {
-                session.emit(&server.hub, |seq| {
-                    resequence(&event, seq).expect("checked above")
-                });
-            }
-            _ => {}
+        if let Some(sink) = WorkerSink::new(server, &id) {
+            sink.event(event);
         }
     }
 
@@ -286,7 +290,11 @@ impl Connection {
                     images,
                     source: Some(MessageSource::Tui),
                 };
-                submit(server, &s, message);
+                // A running worker's turns happen in its harness, not here.
+                match server.workers.get(&session) {
+                    Some(worker) => worker.run.send(message)?,
+                    None => submit(server, &s, message),
+                }
                 Ok(CommandResult::Done)
             }
             ClientCommand::SessionCompact { session } => {
@@ -295,11 +303,10 @@ impl Connection {
                 Ok(CommandResult::Done)
             }
             ClientCommand::TurnCancel { session } => {
-                server
-                    .sessions
-                    .get(&session)
-                    .map_err(|e| e.to_string())?
-                    .cancel();
+                let s = server.sessions.get(&session).map_err(|e| e.to_string())?;
+                if !server.workers.interrupt(&session) {
+                    s.cancel();
+                }
                 Ok(CommandResult::Done)
             }
             ClientCommand::ProjectSet { session, path } => {
@@ -334,7 +341,14 @@ impl Connection {
                 server.workers.finish(server, &id, state, summary);
                 Ok(CommandResult::Done)
             }
+            ClientCommand::ToolList { session } => {
+                let context = server.workers.tool_context(server, &session)?;
+                Ok(CommandResult::Tools {
+                    tools: server.tools.infos_for(&context.agent),
+                })
+            }
             ClientCommand::WorkerEvent { .. }
+            | ClientCommand::ToolCall { .. }
             | ClientCommand::SlotAcquire
             | ClientCommand::SlotRelease { .. }
             | ClientCommand::ApprovalAsk { .. } => Err("handled asynchronously".into()),

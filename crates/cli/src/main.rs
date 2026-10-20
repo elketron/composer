@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 use composer_server::client::{AskOptions, ask};
+use composer_server::mcp::{McpOptions, run_mcp};
 use composer_server::worker::{WorkerOptions, run_worker};
 use composer_server::{
     Config, Home, Server, UpdateOutcome, init_home, pending_updates, update_home,
@@ -85,6 +86,14 @@ enum Command {
         session: String,
         #[arg(long)]
         ticket: String,
+        #[arg(long)]
+        parent: String,
+    },
+    /// Serve a running worker's tools over MCP on stdin/stdout (started for external harnesses).
+    #[command(hide = true)]
+    Mcp {
+        #[arg(long)]
+        session: String,
         #[arg(long)]
         parent: String,
     },
@@ -191,6 +200,13 @@ async fn main() -> anyhow::Result<()> {
                 parent_url: parent,
             };
             run_worker(home, options).await?;
+        }
+        Some(Command::Mcp { session, parent }) => {
+            let options = McpOptions {
+                session,
+                parent_url: parent,
+            };
+            run_mcp(home, options).await?;
         }
         Some(Command::Script { file, out, new }) => {
             let script = std::fs::read_to_string(&file)?;

@@ -601,6 +601,23 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
             id: 5,
             result: CommandResult::Approval { approved: true },
         },
+        ServerMessage::Ok {
+            id: 50,
+            result: CommandResult::Tools {
+                tools: vec![ToolInfo {
+                    name: "open".into(),
+                    description: "Open a page".into(),
+                    parameters: json!({ "type": "object" }),
+                }],
+            },
+        },
+        ServerMessage::Ok {
+            id: 51,
+            result: CommandResult::ToolOutput {
+                output: "# Home".into(),
+                is_error: false,
+            },
+        },
         ServerMessage::Error {
             id: Some(6),
             message: "nope".into(),
@@ -769,6 +786,12 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
         ClientCommand::WorkerFinish {
             state: WorkerState::Failed,
             summary: "why".into(),
+        },
+        ClientCommand::ToolList { session: s() },
+        ClientCommand::ToolCall {
+            session: s(),
+            name: "open".into(),
+            args: json!({ "url": "site://home" }),
         },
     ];
     let requests: Vec<Value> = commands

@@ -22,8 +22,13 @@ pub fn ticket_url(id: &str) -> Result<SiteUrl, CoreError> {
 
 /// Sets `status:` in the frontmatter (adding it if missing). Leaves the rest untouched.
 pub fn set_status(raw: &str, status: &str) -> String {
+    set_field(raw, "status", status)
+}
+
+/// Sets `key:` in the frontmatter (adding it if missing), keeping a trailing `# comment`.
+pub fn set_field(raw: &str, key: &str, value: &str) -> String {
     let Some(rest) = raw.strip_prefix("---\n") else {
-        return format!("---\nstatus: {status}\n---\n{raw}");
+        return format!("---\n{key}: {value}\n---\n{raw}");
     };
     let Some(end) = rest.find("\n---") else {
         return raw.to_string();
@@ -33,11 +38,11 @@ pub fn set_status(raw: &str, status: &str) -> String {
     let lines: Vec<String> = front
         .lines()
         .map(|line| {
-            if line.starts_with("status:") {
+            if line.starts_with(&format!("{key}:")) {
                 found = true;
                 // Keep a trailing comment like `# open | claimed | done | failed`.
                 let comment = line.find(" #").map(|i| &line[i..]).unwrap_or("");
-                format!("status: {status}{comment}")
+                format!("{key}: {value}{comment}")
             } else {
                 line.to_string()
             }
@@ -45,7 +50,7 @@ pub fn set_status(raw: &str, status: &str) -> String {
         .collect();
     let mut front = lines.join("\n");
     if !found {
-        front.push_str(&format!("\nstatus: {status}"));
+        front.push_str(&format!("\n{key}: {value}"));
     }
     format!("---\n{front}{body}")
 }
@@ -71,6 +76,14 @@ mod tests {
         assert_eq!(
             set_status("---\ntitle: X\n---\nbody", "done"),
             "---\ntitle: X\nstatus: done\n---\nbody"
+        );
+        assert_eq!(
+            set_field(
+                "---\ntitle: X\nbranch: old\n---\nbody",
+                "branch",
+                "ticket/0001"
+            ),
+            "---\ntitle: X\nbranch: ticket/0001\n---\nbody"
         );
     }
 }

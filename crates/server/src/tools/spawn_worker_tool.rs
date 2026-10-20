@@ -34,10 +34,10 @@ impl Tool for SpawnWorkerTool {
     async fn call(&self, context: &ToolContext, args: Value) -> Result<String, String> {
         let args: SpawnWorkerArgs = serde_json::from_value(args).map_err(|e| e.to_string())?;
         let ticket = normalize_id(&args.ticket);
-        if context.server.parent.is_some() {
+        if context.server.parent.is_some() || context.session.info().ticket.is_some() {
             return Err("workers cannot start workers".into());
         }
-        let worker = context.server.workers.spawn(
+        let (worker, worktree) = context.server.workers.spawn(
             &context.server,
             &context.session,
             &ticket,
@@ -49,9 +49,18 @@ impl Tool for SpawnWorkerTool {
             .get(&worker)
             .map(|s| s.info().agent)
             .unwrap_or_default();
+        let place = match worktree {
+            Some(w) => format!(
+                " It works on branch `{}` in its own worktree ({}), from the project's last \
+                 commit: uncommitted changes in the project are not in it.",
+                w.branch,
+                w.path.display()
+            ),
+            None => String::new(),
+        };
         Ok(format!(
-            "worker #{worker} ({agent}) started on ticket {ticket} (now claimed). You will get a \
-             message when it finishes; don't wait for it in this turn."
+            "worker #{worker} ({agent}) started on ticket {ticket} (now claimed).{place} You will \
+             get a message when it finishes; don't wait for it in this turn."
         ))
     }
 }

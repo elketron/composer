@@ -475,6 +475,7 @@ dependencies = [
  "composer-protocol",
  "futures",
  "include_dir",
+ "libc",
  "notify",
  "rand 0.9.5",
  "reqwest",

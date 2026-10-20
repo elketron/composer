@@ -65,6 +65,31 @@
     }
   },
   {
+    "type": "ok",
+    "id": 50,
+    "result": {
+      "kind": "tools",
+      "tools": [
+        {
+          "name": "open",
+          "description": "Open a page",
+          "parameters": {
+            "type": "object"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "type": "ok",
+    "id": 51,
+    "result": {
+      "kind": "tool_output",
+      "output": "# Home",
+      "is_error": false
+    }
+  },
+  {
     "type": "error",
     "id": 6,
     "message": "nope"

@@ -96,5 +96,19 @@
     "type": "worker.finish",
     "state": "failed",
     "summary": "why"
+  },
+  {
+    "id": 17,
+    "type": "tool.list",
+    "session": "a3f1"
+  },
+  {
+    "id": 18,
+    "type": "tool.call",
+    "session": "a3f1",
+    "name": "open",
+    "args": {
+      "url": "site://home"
+    }
   }
 ]

@@ -101,4 +101,18 @@ pub enum ClientCommand {
     /// The worker is done with its ticket.
     #[serde(rename = "worker.finish")]
     WorkerFinish { state: WorkerState, summary: String },
+
+    // ---- from harness tool servers (`composer mcp`) ----
+    /// The tools a running worker's agent may call; the reply is `tools`.
+    #[serde(rename = "tool.list")]
+    ToolList { session: SessionId },
+
+    /// Runs one of them in the running worker's session; the reply is `tool_output`.
+    #[serde(rename = "tool.call")]
+    ToolCall {
+        session: SessionId,
+        name: String,
+        #[serde(default)]
+        args: serde_json::Value,
+    },
 }

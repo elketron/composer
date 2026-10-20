@@ -112,6 +112,17 @@ pub struct ToolCall {
     pub args: serde_json::Value,
 }
 
+/// A tool an agent may call: what the model (or an external harness) sees.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct ToolInfo {
+    pub name: String,
+    pub description: String,
+    /// JSON schema of the arguments object.
+    pub parameters: serde_json::Value,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]

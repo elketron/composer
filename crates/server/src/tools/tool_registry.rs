@@ -1,5 +1,8 @@
 use std::sync::Arc;
 
+use composer_protocol::ToolInfo;
+use serde_json::Value;
+
 use crate::agent::AgentDefinition;
 use crate::provider::{ModelToolCall, ToolSpec};
 use crate::tools::actions_tool::ActionsTool;
@@ -55,18 +58,39 @@ impl ToolRegistry {
             .collect()
     }
 
-    /// Runs a call. Returns the result text and whether it failed.
+    /// The same, for the protocol (`tool.list`).
+    pub fn infos_for(&self, agent: &AgentDefinition) -> Vec<ToolInfo> {
+        self.specs_for(agent)
+            .into_iter()
+            .map(|spec| ToolInfo {
+                name: spec.name,
+                description: spec.description,
+                parameters: spec.parameters,
+            })
+            .collect()
+    }
+
+    /// Runs a model's call. Returns the result text and whether it failed.
     pub async fn call(&self, context: &ToolContext, call: &ModelToolCall) -> (String, bool) {
+        match serde_json::from_str(&call.arguments) {
+            Ok(args) => self.call_value(context, &call.name, args).await,
+            Err(e) => (format!("arguments are not valid JSON: {e}"), true),
+        }
+    }
+
+    /// Runs a call with parsed arguments (models, and harnesses through `tool.call`).
+    pub async fn call_value(
+        &self,
+        context: &ToolContext,
+        name: &str,
+        args: Value,
+    ) -> (String, bool) {
         let Some(tool) = self
             .tools
             .iter()
-            .find(|t| t.name() == call.name && context.agent.allows_tool(t.name()))
+            .find(|t| t.name() == name && context.agent.allows_tool(t.name()))
         else {
-            return (format!("unknown tool `{}`", call.name), true);
-        };
-        let args = match serde_json::from_str(&call.arguments) {
-            Ok(args) => args,
-            Err(e) => return (format!("arguments are not valid JSON: {e}"), true),
+            return (format!("unknown tool `{name}`"), true);
         };
         match tool.call(context, args).await {
             Ok(result) => (result, false),

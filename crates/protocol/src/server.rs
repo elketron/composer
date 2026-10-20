@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::common::{
-    ChangedBy, ChatMessage, MessageSource, PageChangeKind, Seq, SessionId, SessionInfo, Url,
-    WorkerState,
+    ChangedBy, ChatMessage, MessageSource, PageChangeKind, Seq, SessionId, SessionInfo, ToolInfo,
+    Url, WorkerState,
 };
 
 /// Everything the server sends over `/ws`.
@@ -165,4 +165,6 @@ pub enum CommandResult {
     Sessions { sessions: Vec<SessionInfo> },
     SlotGranted { grant: u64 },
     Approval { approved: bool },
+    Tools { tools: Vec<ToolInfo> },
+    ToolOutput { output: String, is_error: bool },
 }

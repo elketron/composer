@@ -38,6 +38,7 @@ rand = "0.9"
 base64 = "0.22"
 qrcode = { version = "0.14.1", default-features = false }
 anyhow = "1.0.104"
+libc = "0.2.191"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 ratatui = "0.30.2"

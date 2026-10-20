@@ -31,16 +31,26 @@ impl Tool for FinishTool {
 
     async fn call(&self, context: &ToolContext, args: Value) -> Result<String, String> {
         let args: FinishArgs = serde_json::from_value(args).map_err(|e| e.to_string())?;
-        let Some(parent) = &context.server.parent else {
-            return Err("only workers finish; this session is not a worker".into());
-        };
         let state = match args.status.as_str() {
             "done" => WorkerState::Done,
             "failed" => WorkerState::Failed,
             other => return Err(format!("status must be done or failed, not `{other}`")),
         };
-        parent.finish(state, args.summary).await?;
-        context.server.mark_worker_finished();
+        if let Some(parent) = &context.server.parent {
+            // A `composer worker` process: the parent finishes it.
+            parent.finish(state, args.summary).await?;
+            context.server.mark_worker_finished();
+        } else if context.server.workers.get(context.session.id()).is_some() {
+            // Another harness, calling through `tool.call`.
+            context.server.workers.finish(
+                &context.server,
+                context.session.id(),
+                state,
+                args.summary,
+            );
+        } else {
+            return Err("only workers finish; this session is not a worker".into());
+        }
         Ok("finished: the orchestrator has been told. End your turn now.".into())
     }
 }

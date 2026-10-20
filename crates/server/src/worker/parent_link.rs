@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use composer_protocol::{ClientCommand, ClientRequest, CommandResult, ServerMessage, WorkerState};
+use composer_protocol::{
+    ClientCommand, ClientRequest, CommandResult, ServerMessage, ToolInfo, WorkerState,
+};
 use futures::{SinkExt, StreamExt};
 use tokio::sync::{Notify, mpsc, oneshot};
 use tokio_tungstenite::tungstenite::Message;
@@ -17,12 +19,22 @@ pub struct ParentLink {
 }
 
 impl ParentLink {
-    /// Connects and announces `session`.
+    /// Connects as the worker process running `session`.
     pub async fn connect(
         parent_url: &str,
         token: &str,
         session: &str,
     ) -> Result<Arc<Self>, String> {
+        let link = Self::open(parent_url, token).await?;
+        link.request(ClientCommand::WorkerHello {
+            session: session.to_string(),
+        })
+        .await?;
+        Ok(link)
+    }
+
+    /// Connects without announcing a session (a harness's tool server).
+    pub async fn open(parent_url: &str, token: &str) -> Result<Arc<Self>, String> {
         let ws_url = format!(
             "{}/ws?token={token}",
             parent_url.trim_end_matches('/').replacen("http", "ws", 1)
@@ -78,12 +90,7 @@ impl ParentLink {
             on_close.notify_one();
         });
 
-        let link = Arc::new(Self { tx, closed });
-        link.request(ClientCommand::WorkerHello {
-            session: session.to_string(),
-        })
-        .await?;
-        Ok(link)
+        Ok(Arc::new(Self { tx, closed }))
     }
 
     async fn request(&self, command: ClientCommand) -> Result<CommandResult, String> {
@@ -150,6 +157,37 @@ impl ParentLink {
         self.request(ClientCommand::WorkerFinish { state, summary })
             .await
             .map(|_| ())
+    }
+
+    /// The tools the running worker `session` may call.
+    pub async fn tools(&self, session: &str) -> Result<Vec<ToolInfo>, String> {
+        match self
+            .request(ClientCommand::ToolList {
+                session: session.into(),
+            })
+            .await?
+        {
+            CommandResult::Tools { tools } => Ok(tools),
+            other => Err(format!("unexpected reply to tool.list: {other:?}")),
+        }
+    }
+
+    /// Runs a tool in the running worker `session`. Returns the output and whether it failed.
+    pub async fn call_tool(
+        &self,
+        session: &str,
+        name: &str,
+        args: serde_json::Value,
+    ) -> Result<(String, bool), String> {
+        let command = ClientCommand::ToolCall {
+            session: session.into(),
+            name: name.into(),
+            args,
+        };
+        match self.request(command).await? {
+            CommandResult::ToolOutput { output, is_error } => Ok((output, is_error)),
+            other => Err(format!("unexpected reply to tool.call: {other:?}")),
+        }
     }
 
     /// Resolves when the connection to the parent is gone.

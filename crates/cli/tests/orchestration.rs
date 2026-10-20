@@ -1,125 +1,16 @@
 //! An orchestrator spawns a real worker process (this crate's `composer` binary) on a
 //! ticket; both talk to a fake OpenAI-compatible model that answers by role.
 
-use std::collections::VecDeque;
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
+mod support;
 
-use axum::Json;
-use axum::extract::State;
-use axum::response::IntoResponse;
-use axum::routing::{get, post};
+use std::collections::VecDeque;
+
 use composer_protocol::{
-    ClientCommand, ClientRequest, CommandResult, MessageSource, Role, ServerMessage, WorkerState,
+    ClientCommand, CommandResult, MessageSource, Role, ServerMessage, WorkerState,
 };
 use composer_server::{Home, Server, init_home};
-use futures::{SinkExt, StreamExt};
-use serde_json::{Value, json};
-use tokio_tungstenite::tungstenite::Message;
-
-/// A scripted reply: text, or one tool call.
-#[derive(Clone)]
-enum Reply {
-    Text(&'static str),
-    Call(&'static str, Value),
-}
-
-#[derive(Default)]
-struct Scripts {
-    orchestrator: VecDeque<Reply>,
-    worker: VecDeque<Reply>,
-}
-
-/// The role is told apart by the tools offered: only orchestrators get `spawn_worker`,
-/// only workers `finish`.
-async fn completions(
-    State(scripts): State<Arc<Mutex<Scripts>>>,
-    Json(body): Json<Value>,
-) -> impl IntoResponse {
-    let tools: Vec<String> = body["tools"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(|t| t["function"]["name"].as_str().map(str::to_string))
-        .collect();
-    let reply = {
-        let mut scripts = scripts.lock().unwrap();
-        let queue = if tools.iter().any(|t| t == "finish") {
-            &mut scripts.worker
-        } else if tools.iter().any(|t| t == "spawn_worker") {
-            &mut scripts.orchestrator
-        } else {
-            return sse(Reply::Text("(no script)"));
-        };
-        queue
-            .pop_front()
-            .unwrap_or(Reply::Text("(script exhausted)"))
-    };
-    sse(reply)
-}
-
-fn sse(reply: Reply) -> axum::response::Response {
-    let chunk = |delta: Value, finish: Option<&str>| {
-        format!(
-            "data: {}\n\n",
-            json!({ "choices": [{ "index": 0, "delta": delta, "finish_reason": finish }] })
-        )
-    };
-    let body = match reply {
-        Reply::Text(text) => chunk(json!({ "content": text }), Some("stop")),
-        Reply::Call(name, args) => chunk(
-            json!({ "tool_calls": [{ "index": 0, "id": "call_1", "type": "function",
-                "function": { "name": name, "arguments": args.to_string() } }] }),
-            Some("tool_calls"),
-        ),
-    } + "data: [DONE]\n\n";
-    ([("content-type", "text/event-stream")], body).into_response()
-}
-
-async fn fake_model(scripts: Scripts) -> String {
-    let app = axum::Router::new()
-        .route(
-            "/v1/models",
-            get(|| async { Json(json!({ "data": [{ "id": "fake" }] })) }),
-        )
-        .route("/v1/chat/completions", post(completions))
-        .with_state(Arc::new(Mutex::new(scripts)));
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-    tokio::spawn(async move { axum::serve(listener, app).await });
-    format!("http://{addr}/v1")
-}
-
-type Socket =
-    tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
-
-async fn send(socket: &mut Socket, id: u64, command: ClientCommand) {
-    let json = serde_json::to_string(&ClientRequest { id, command }).unwrap();
-    socket.send(Message::Text(json.into())).await.unwrap();
-}
-
-async fn until(
-    socket: &mut Socket,
-    secs: u64,
-    stop: impl Fn(&ServerMessage) -> bool,
-) -> Vec<ServerMessage> {
-    let mut events = Vec::new();
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(secs);
-    loop {
-        let frame = tokio::time::timeout_at(deadline, socket.next())
-            .await
-            .unwrap_or_else(|_| panic!("timed out; got: {events:#?}"))
-            .unwrap()
-            .unwrap();
-        let Message::Text(text) = frame else { continue };
-        let event: ServerMessage = serde_json::from_str(&text).unwrap();
-        let done = stop(&event);
-        events.push(event);
-        if done {
-            return events;
-        }
-    }
-}
+use serde_json::json;
+use support::{Reply, Scripts, fake_model, send, until};
 
 #[tokio::test]
 async fn orchestrator_runs_a_worker_process_on_a_ticket() {

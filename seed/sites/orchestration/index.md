@@ -48,7 +48,7 @@ Filled in by the worker: what was done, where, anything left over.
 ## Lifecycle
 
 1. **Orchestrator** creates the ticket (`run orchestration new-ticket <title>`), fills Task, Context and Done when, then `spawn_worker(id)`. It returns right away; the worker runs in its own process and session.
-2. **Server** sets `status: claimed` when the worker starts.
+2. **Server** sets `status: claimed` when the worker starts. In a git project the worker gets its own worktree on branch `ticket/<id>` (the ticket's `branch:`), made from the project's last commit; its changes stay on that branch until merged.
 3. **Worker** does the work, writes **Result**, then calls `finish(done | failed, summary)`.
 4. **Orchestrator** gets a message when the worker finishes (the server sets `status: done` or `failed`), reads the Result, updates the plan. A worker that dies without `finish` counts as failed.
 
