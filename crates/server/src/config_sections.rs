@@ -82,6 +82,10 @@ pub struct ClaudeCodeConfig {
     /// `--allowedTools`: what it may do without asking (anything else is denied).
     #[serde(default = "default_claude_tools")]
     pub allowed_tools: Vec<String>,
+    /// Anything outside `allowed_tools` is asked of the user (an approval in the worker's
+    /// session); `false` denies it without asking.
+    #[serde(default = "default_true")]
+    pub ask: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -159,6 +163,10 @@ fn default_claude_tools() -> Vec<String> {
     ]
     .map(String::from)
     .to_vec()
+}
+
+fn default_true() -> bool {
+    true
 }
 
 fn default_reminder_time() -> String {

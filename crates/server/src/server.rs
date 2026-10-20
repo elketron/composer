@@ -15,7 +15,7 @@ use crate::actions::{Approvals, PendingApprovals};
 use crate::config::Config;
 use crate::devices::Devices;
 use crate::error::{Result, ServerError};
-use crate::harness::HarnessSwitches;
+use crate::harness::{HarnessSwitches, ToolRules};
 use crate::hash::content_hash;
 use crate::home::Home;
 use crate::hub::EventHub;
@@ -47,6 +47,8 @@ pub struct Server {
     pub workers: WorkerRegistry,
     /// Harnesses turned off per project at runtime (`state/projects.json`).
     pub switches: HarnessSwitches,
+    /// Tools the user always allows an external harness, per project.
+    pub tool_rules: ToolRules,
     /// The binary started for workers (`$COMPOSER_WORKER_EXE`, else this executable).
     pub worker_exe: PathBuf,
     /// Set in a worker process: the server that spawned it.
@@ -126,6 +128,7 @@ impl Server {
             pending_approvals: PendingApprovals::default(),
             workers: WorkerRegistry::default(),
             switches: HarnessSwitches::load(home.state().join("projects.json")),
+            tool_rules: ToolRules::load(home.state().join("tool_rules.json")),
             devices: Devices::new(&home.state()),
             worker_exe,
             parent,

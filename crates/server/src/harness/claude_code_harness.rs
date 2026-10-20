@@ -116,8 +116,16 @@ impl Harness for ClaudeCodeHarness {
             .arg("-p")
             .arg(&prompt)
             .args(["--output-format", "stream-json", "--verbose"])
-            .args(["--permission-mode", "acceptEdits"])
-            .args(["--permission-prompts", "none"])
+            .args(["--permission-mode", "acceptEdits"]);
+        if config.ask {
+            // Outside the allowlist: an approval for the user (`composer mcp`'s permission tool).
+            command
+                .args(["--permission-prompt-tool", "mcp__composer__permission"])
+                .args(["--permission-prompts", "host"]);
+        } else {
+            command.args(["--permission-prompts", "none"]);
+        }
+        command
             .args(["--max-turns", &config.max_turns.to_string()])
             .args(["--mcp-config", &mcp.to_string()])
             .arg("--strict-mcp-config")
@@ -154,6 +162,13 @@ impl Harness for ClaudeCodeHarness {
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(log.try_clone().map_err(|e| e.to_string())?);
+        if config.ask {
+            // Its MCP calls (a question to the user) may wait as long as the run may.
+            command.env(
+                "MCP_TOOL_TIMEOUT",
+                (config.timeout_minutes * 60_000).to_string(),
+            );
+        }
         // Recorded first, so a later message can resume it.
         set_ticket_fields(
             server,

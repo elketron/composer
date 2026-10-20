@@ -13,6 +13,8 @@ mod own_harness;
 mod project_policy;
 mod resequence;
 mod stream_json;
+mod tool_permission;
+mod tool_rules;
 mod types;
 mod worker_sink;
 
@@ -22,5 +24,7 @@ pub use claude_code_run::ClaudeCodeRun;
 pub use harness_switches::HarnessSwitches;
 pub use own_harness::OwnHarness;
 pub use project_policy::{check_harness_allowed, pick_model, project_settings};
+pub use tool_permission::{PERMISSION_TOOL, answer_permission, permission_tool_info};
+pub use tool_rules::ToolRules;
 pub use types::{Harness, HarnessRun, Pause, Resume, StartRequest};
 pub use worker_sink::WorkerSink;

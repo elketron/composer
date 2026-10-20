@@ -462,7 +462,14 @@ impl WorkerRegistry {
         let project = ticket_project(server, page, parent_project);
         // Checked against the project itself, before it becomes a worktree path.
         let settings = if harness.external() {
-            check_harness_allowed(&server.config, project.as_deref(), name)?
+            let mut settings = check_harness_allowed(&server.config, project.as_deref(), name)?;
+            // What the user said `always` to, in this project.
+            if let Some(project) = &project {
+                settings
+                    .allowed_tools
+                    .extend(server.tool_rules.rules(project));
+            }
+            settings
         } else {
             project
                 .as_deref()

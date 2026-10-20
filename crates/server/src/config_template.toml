@@ -54,8 +54,11 @@ model = ""
 max_turns = 60
 # A run is stopped after this long.
 timeout_minutes = 60
-# What it may do without asking; anything else is denied. Projects can add to it.
+# What it may do without asking. Projects can add to it.
 allowed_tools = ["Read", "Edit", "Write", "Glob", "Grep", "mcp__composer", "Bash(git status:*)", "Bash(git diff:*)", "Bash(git log:*)", "Bash(git add:*)", "Bash(git commit:*)"]
+# Anything else is asked of you (an approval in the worker's chat; "always" remembers it for the
+# project, in state/tool_rules.json). false: denied without asking.
+ask = true
 
 [attachments]
 # Largest upload, in MB.

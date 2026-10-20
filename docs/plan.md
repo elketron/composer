@@ -662,6 +662,14 @@ screen opens from a worker's report card (`Changes`) or a worker chat's menu; `i
 - `[claude_code] ask = true` (default); `false` keeps today's deny-without-asking. Unanswered requests
   wait (the run's timeout still applies); cancelling the worker closes them.
 
+Built (milestone 17): `harness/tool_permission.rs` and `harness/tool_rules.rs`. `permission` is listed and
+answered by the server only for external harnesses' workers (`tool.list` / `tool.call`); it refuses to
+approve itself. Rules are offered only for plain commands (no `;&|$` etc. outside single quotes) and
+never for file tools; `git`, `cargo`, `npm` and the like pin their subcommand (`Bash(git push:*)`), and
+with a flag first (`git -C x …`) there is no rule. The child gets `MCP_TOOL_TIMEOUT` (the run's timeout),
+so a question can wait. Checked with the real CLI: asked, approved from the TUI, then `always` and a
+second run that wasn't asked.
+
 ### Following a Claude Code run
 
 - **Streaming:** `--include-partial-messages`; text and thinking deltas become `message.delta` /
@@ -683,7 +691,7 @@ The desktop (wide) layout of the app, mockups first (`docs/mockups/`), then buil
 
 16. ✅ **ticket merging** — review diff against the merge base, merge / discard with checks, CLI, TUI, app
     review screen; generalised approvals and the orchestrator's `merge_ticket`.
-17. **Claude Code approvals** — `permission` MCP tool, tool approvals in both clients, `always` rules.
+17. ✅ **Claude Code approvals** — `permission` MCP tool, tool approvals in both clients, `always` rules.
 18. **following Claude Code** — partial messages, tool summaries and diffs, sub-agent nesting, live
     changes, run stats.
 19. **desktop app** — mockups, then the wide layout.

@@ -13,7 +13,7 @@ use crate::agent::AgentDefinition;
 use crate::api::event_scope::{EventScope, scope};
 use crate::api::glob::url_matches;
 use crate::attachments::resolve;
-use crate::harness::WorkerSink;
+use crate::harness::{PERMISSION_TOOL, WorkerSink, answer_permission, permission_tool_info};
 use crate::server::Server;
 use crate::session::{compact_now, submit};
 use crate::slot_guard::SlotGuard;
@@ -225,6 +225,19 @@ impl Connection {
             } => {
                 let (connection, server) = (self.clone(), server.clone());
                 tokio::spawn(async move {
+                    if name == PERMISSION_TOOL
+                        && server.workers.get(&session).is_some_and(|h| h.resumable)
+                    {
+                        let output = answer_permission(&server, &session, args).await;
+                        connection.reply(
+                            id,
+                            Ok(CommandResult::ToolOutput {
+                                output,
+                                is_error: false,
+                            }),
+                        );
+                        return;
+                    }
                     let reply = match server.workers.tool_context(&server, &session) {
                         Ok(context) => {
                             let (output, is_error) =
@@ -456,9 +469,12 @@ impl Connection {
             }
             ClientCommand::ToolList { session } => {
                 let context = server.workers.tool_context(server, &session)?;
-                Ok(CommandResult::Tools {
-                    tools: server.tools.infos_for(&context.agent),
-                })
+                let mut tools = server.tools.infos_for(&context.agent);
+                // External harnesses ask the user through it.
+                if server.workers.get(&session).is_some_and(|h| h.resumable) {
+                    tools.push(permission_tool_info());
+                }
+                Ok(CommandResult::Tools { tools })
             }
             ClientCommand::HarnessList { project } => {
                 let folder = resolve_project(&project, &server.config.projects.dir)?;

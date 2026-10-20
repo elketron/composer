@@ -44,6 +44,14 @@ case "$mode" in
     echo '{"type":"rate_limit_event","rate_limit_info":{"status":"rejected","resetsAt":4102444800}}'
     echo '{"type":"result","subtype":"error_during_execution","is_error":true,"result":"usage limit reached","api_error_status":429}'
     exit 1 ;;
+  ask)
+    # Asks to run something outside the allowlist, then finishes.
+    { echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{}}}'
+      echo '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"permission","arguments":{"tool_name":"Bash","input":{"command":"python3 make.py","description":"Build"},"tool_use_id":"t2"}}}'
+      sleep 4
+      echo '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"finish","arguments":{"status":"done","summary":"asked"}}}'
+      sleep 1; } | COMPOSER_HOME="$home" "$exe" mcp --session "$sid" --parent "$parent" > "$here/mcp.txt"
+    echo '{"type":"result","subtype":"success","is_error":false,"result":"done"}' ;;
   silent)
     echo '{"type":"result","subtype":"success","is_error":false,"result":"I could not do it"}' ;;
   slow)
@@ -276,7 +284,11 @@ async fn claude_code_works_tickets() {
     ] {
         assert!(args.contains(arg), "{arg} in:\n{args}");
     }
-    assert!(args.contains("--permission-prompts\nnone\n"));
+    assert!(args.contains(
+        "--permission-prompt-tool\nmcp__composer__permission\n--permission-prompts\nhost\n"
+    ));
+    let env = std::fs::read_to_string(bin.join("env.txt")).unwrap();
+    assert!(env.contains("MCP_TOOL_TIMEOUT=3600000"), "{env}");
     assert!(
         args.contains(&format!(
             "--add-dir\n{}",
@@ -302,6 +314,55 @@ async fn claude_code_works_tickets() {
         server.sessions.get(&worker).unwrap().info().worker,
         Some(WorkerState::Done)
     );
+
+    // Outside the allowlist: asked in the worker's session; `always` remembers it for the
+    // project, so the next run has it in --allowedTools and isn't asked.
+    std::fs::write(bin.join("mode"), "ask").unwrap();
+    ticket(&root, "0008", &project);
+    let worker = spawn(&server, &orchestrator, "0008").await.unwrap();
+    let request = loop {
+        if let Some(composer_protocol::ServerMessage::ApprovalRequest {
+            request,
+            session,
+            kind,
+            title,
+            body,
+            rule,
+            ..
+        }) = server.pending_approvals.all().pop()
+        {
+            assert_eq!(session, worker);
+            assert_eq!(kind, composer_protocol::ApprovalKind::Tool);
+            assert_eq!(title, "Claude Code: Bash: python3 make.py");
+            assert_eq!(body, "python3 make.py\n\n# Build");
+            assert_eq!(rule.as_deref(), Some("Bash(python3:*)"));
+            break request;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    };
+    assert_eq!(
+        server.sessions.get(&worker).unwrap().info().state,
+        composer_protocol::TurnState::AwaitingApproval
+    );
+    assert!(
+        server
+            .pending_approvals
+            .resolve(&request, composer_protocol::ApprovalDecision::Always)
+    );
+    until_status(&root, "0008", "done").await;
+    let mcp = std::fs::read_to_string(bin.join("mcp.txt")).unwrap();
+    assert!(mcp.contains(r#"\"behavior\":\"allow\""#), "{mcp}");
+    ticket(&root, "0009", &project);
+    spawn(&server, &orchestrator, "0009").await.unwrap();
+    until_status(&root, "0009", "done").await;
+    let args = std::fs::read_to_string(bin.join("args.txt")).unwrap();
+    assert!(args.contains("Bash(python3:*)"), "{args}");
+    let mcp = std::fs::read_to_string(bin.join("mcp.txt")).unwrap();
+    assert!(
+        mcp.contains(r#"\"behavior\":\"allow\""#),
+        "not asked again: {mcp}"
+    );
+    assert!(server.pending_approvals.all().is_empty());
 
     // A run that ends without finish fails, with what it last said; a message resumes it.
     std::fs::write(bin.join("mode"), "silent").unwrap();
