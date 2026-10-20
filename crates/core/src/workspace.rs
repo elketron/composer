@@ -34,16 +34,16 @@ impl Workspace {
             }
             let dir = entry.path();
             let index = SiteUrl::new(&name, "")?;
-            let title = self
-                .read_page(&index)
-                .map(|p| p.title())
-                .unwrap_or_else(|_| name.clone());
+            let page = self.read_page(&index).ok();
+            let title = page.as_ref().map_or_else(|| name.clone(), |p| p.title());
+            let description = page.as_ref().map(|p| p.description()).unwrap_or_default();
             sites.push(SiteInfo {
                 title,
                 has_index: dir.join("index.md").is_file(),
                 has_justfile: dir.join("justfile").is_file(),
                 has_ui: dir.join("ui").is_dir(),
                 app_built: dir.join("ui/dist/index.html").is_file(),
+                description,
                 name,
             });
         }

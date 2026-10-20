@@ -14,6 +14,7 @@ pub struct AgentDefinition {
     pub sites: SiteAccess,
     /// `role:`; `worker` marks an agent `spawn_worker` can start.
     pub role: Option<String>,
+    pub title: String,
     /// `description:`, one line for lists (else the title).
     pub description: String,
     pub prompt: String,
@@ -53,6 +54,7 @@ impl AgentDefinition {
                 .get_str("role")
                 .map(|r| r.trim().to_lowercase())
                 .filter(|r| !r.is_empty()),
+            title: page.title(),
             description: page
                 .frontmatter
                 .get_str("description")
@@ -77,6 +79,14 @@ impl AgentDefinition {
 
     /// Every worker agent in `site://agents`, by name.
     pub fn workers(workspace: &Workspace, index: &Index) -> Vec<Self> {
+        Self::all(workspace, index)
+            .into_iter()
+            .filter(Self::is_worker)
+            .collect()
+    }
+
+    /// Every agent in `site://agents` (`type: agent` pages), by name.
+    pub fn all(workspace: &Workspace, index: &Index) -> Vec<Self> {
         let mut names: Vec<String> = index
             .entries()
             .filter(|e| e.url.site() == "agents" && e.frontmatter.matches("type", "agent"))
@@ -89,7 +99,6 @@ impl AgentDefinition {
         names
             .iter()
             .filter_map(|name| Self::load(workspace, name).ok())
-            .filter(Self::is_worker)
             .collect()
     }
 

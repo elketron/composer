@@ -614,6 +614,7 @@ mod tests {
             project: None,
             ticket: None,
             parent: parent.map(Into::into),
+            worker: None,
             state: TurnState::Idle,
             last_seq: 0,
             context_tokens: 0,
@@ -957,6 +958,8 @@ mod tests {
             has_justfile: true,
             has_ui,
             app_built,
+            description: String::new(),
+            pages: 0,
         };
         let mut check = |sites| {
             state.reduce(Action::AppChecked {

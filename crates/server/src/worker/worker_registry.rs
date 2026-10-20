@@ -107,6 +107,7 @@ impl WorkerRegistry {
         session.update_info(&server.hub, |info| {
             info.ticket = Some(id.to_string());
             info.parent = Some(parent.id().to_string());
+            info.worker = Some(WorkerState::Starting);
             info.preview = Some(format!("ticket {id}: {}", page.title()));
         });
         server
@@ -205,7 +206,10 @@ impl WorkerRegistry {
             tracing::error!("updating ticket {}: {e}", handle.ticket);
         }
         if let Ok(session) = server.sessions.get(worker) {
-            session.update_info(&server.hub, |info| info.state = TurnState::Idle);
+            session.update_info(&server.hub, |info| {
+                info.state = TurnState::Idle;
+                info.worker = Some(state);
+            });
         }
         server.hub.send(ServerMessage::WorkerStatus {
             worker: worker.to_string(),

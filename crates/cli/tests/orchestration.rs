@@ -285,6 +285,13 @@ async fn orchestrator_runs_a_worker_process_on_a_ticket() {
             ..
         }
     )));
+    // The session keeps the outcome, for clients that connect later.
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e, ServerMessage::SessionUpdated { session }
+        if session.id == worker && session.worker == Some(WorkerState::Done)))
+    );
     // The orchestrator was told, by a message from the worker.
     assert!(events.iter().any(
         |e| matches!(e, ServerMessage::MessageDone { session, message, .. }

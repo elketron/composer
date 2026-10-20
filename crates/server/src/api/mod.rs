@@ -27,6 +27,8 @@ pub fn router(server: Arc<Server>) -> Router {
         .route("/ws", get(ws_routes::upgrade))
         .route("/api/info", get(http_routes::info))
         .route("/api/sites", get(http_routes::sites))
+        .route("/api/agents", get(http_routes::agents))
+        .route("/api/projects", get(http_routes::projects))
         .route("/api/search", get(http_routes::search))
         .route(
             "/api/pages/{site}",

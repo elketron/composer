@@ -6,14 +6,16 @@ use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use composer_core::SiteUrl;
 use composer_protocol::http::{
-    AppMessage, PageResponse, ProjectDiff, PutPageRequest, PutPageResponse, SearchHit, ServerInfo,
-    SiteSummary,
+    AgentSummary, AppMessage, PageResponse, ProjectDiff, ProjectSummary, PutPageRequest,
+    PutPageResponse, SearchHit, ServerInfo, SiteSummary,
 };
 use composer_protocol::{ChangedBy, ChatMessage, MessageSource, Role};
 
+use crate::agent::AgentDefinition;
 use crate::api::ApiError;
 use crate::server::Server;
 use crate::session::submit;
+use crate::tools::{expand_home, tilde};
 
 /// `GET /api/info`: what this server is.
 pub async fn info(State(server): State<Arc<Server>>) -> Json<ServerInfo> {
@@ -22,20 +24,71 @@ pub async fn info(State(server): State<Arc<Server>>) -> Json<ServerInfo> {
         version: env!("CARGO_PKG_VERSION").to_string(),
         model: server.provider.model().to_string(),
         slots: server.config.agent.slots,
+        projects_dir: server.config.projects.dir.clone(),
     })
+}
+
+pub async fn agents(State(server): State<Arc<Server>>) -> Json<Vec<AgentSummary>> {
+    let index = server.index.read().expect("index lock");
+    Json(
+        AgentDefinition::all(&server.workspace, &index)
+            .into_iter()
+            .map(|a| AgentSummary {
+                worker: a.is_worker(),
+                name: a.name,
+                title: a.title,
+                description: a.description,
+            })
+            .collect(),
+    )
+}
+
+/// The folders in the projects directory, most recently changed first; hidden ones left out.
+pub async fn projects(State(server): State<Arc<Server>>) -> Json<Vec<ProjectSummary>> {
+    let dir = expand_home(&server.config.projects.dir);
+    let mut projects: Vec<(std::time::SystemTime, ProjectSummary)> = std::fs::read_dir(&dir)
+        .into_iter()
+        .flatten()
+        .filter_map(Result::ok)
+        .filter(|e| e.file_type().is_ok_and(|t| t.is_dir()))
+        .filter_map(|e| {
+            let name = e.file_name().into_string().ok()?;
+            if name.starts_with('.') {
+                return None;
+            }
+            let modified = e.metadata().and_then(|m| m.modified()).ok()?;
+            Some((
+                modified,
+                ProjectSummary {
+                    path: tilde(&e.path()),
+                    modified: chrono::DateTime::<chrono::Local>::from(modified).to_rfc3339(),
+                    name,
+                },
+            ))
+        })
+        .collect();
+    projects.sort_by_key(|p| std::cmp::Reverse(p.0));
+    Json(projects.into_iter().map(|(_, p)| p).collect())
 }
 
 pub async fn sites(State(server): State<Arc<Server>>) -> Result<Json<Vec<SiteSummary>>, ApiError> {
     let sites = server.workspace.sites()?;
+    let index = server.index.read().expect("index lock");
+    let mut pages: HashMap<&str, u32> = HashMap::new();
+    for entry in index.entries() {
+        *pages.entry(entry.url.site()).or_default() += 1;
+    }
     Ok(Json(
         sites
             .into_iter()
             .map(|s| SiteSummary {
+                pages: pages.get(s.name.as_str()).copied().unwrap_or(0),
                 name: s.name,
                 title: s.title,
                 has_justfile: s.has_justfile,
                 has_ui: s.has_ui,
                 app_built: s.app_built,
+                description: s.description,
             })
             .collect(),
     ))

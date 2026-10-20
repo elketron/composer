@@ -3,14 +3,17 @@
     "name": "home",
     "version": "0.1.0",
     "model": "m",
-    "slots": 2
+    "slots": 2,
+    "projects_dir": "~/Projects"
   },
   {
     "name": "memory",
     "title": "Memory",
     "has_justfile": false,
     "has_ui": true,
-    "app_built": false
+    "app_built": false,
+    "description": "what agents know",
+    "pages": 12
   },
   {
     "url": "site://memory/user.md",
@@ -40,5 +43,16 @@
       }
     ],
     "diff": "+x"
+  },
+  {
+    "name": "coder",
+    "title": "Coder",
+    "description": "writes code",
+    "worker": true
+  },
+  {
+    "name": "composer",
+    "path": "~/Projects/composer",
+    "modified": "2026-10-20T07:00:00+02:00"
   }
 ]

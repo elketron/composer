@@ -54,6 +54,7 @@ async fn orchestrators_see_the_worker_agents() {
         project: None,
         ticket: None,
         parent: None,
+        worker: None,
         state: TurnState::Idle,
         last_seq: 0,
         context_tokens: 0,

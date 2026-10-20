@@ -15,6 +15,8 @@ pub struct SiteInfo {
     pub has_ui: bool,
     /// `ui/dist/index.html` exists: the app can be opened.
     pub app_built: bool,
+    /// From the site's `index.md` (`Page::description`).
+    pub description: String,
 }
 
 /// What the index keeps per page.

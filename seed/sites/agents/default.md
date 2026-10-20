@@ -2,6 +2,7 @@
 title: Default
 type: agent
 name: default
+description: general assistant for memory, pages, sites and projects
 model: default
 tools: [open, search, list_sites, write, edit, actions, run, new_site, new_app, new_project, set_project]
 sites: all

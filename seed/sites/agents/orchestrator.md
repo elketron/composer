@@ -2,6 +2,7 @@
 title: Orchestrator
 type: agent
 name: orchestrator
+description: splits a plan into tickets and runs workers on them
 model: default
 tools: [open, search, list_sites, write, edit, actions, run, spawn_worker, set_project]
 sites: all

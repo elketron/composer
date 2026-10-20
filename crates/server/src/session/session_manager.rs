@@ -52,6 +52,7 @@ impl SessionManager {
             project,
             ticket: None,
             parent: None,
+            worker: None,
             state: TurnState::Idle,
             last_seq: 0,
             context_tokens: 0,

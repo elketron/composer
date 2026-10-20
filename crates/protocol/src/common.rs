@@ -20,6 +20,10 @@ pub struct SessionInfo {
     pub ticket: Option<String>,
     /// The session that spawned this one (orchestrator of a worker).
     pub parent: Option<SessionId>,
+    /// A worker's last state: kept after it ends, so a client connecting later still sees
+    /// `done` or `failed`. None for other sessions (and from older servers).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub worker: Option<WorkerState>,
     pub state: TurnState,
     /// Last seq written to the transcript.
     pub last_seq: Seq,

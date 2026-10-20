@@ -12,8 +12,8 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use composer_protocol::http::{
-    AppMessage, ChangedFile, PageResponse, ProjectDiff, PutPageRequest, PutPageResponse, SearchHit,
-    ServerInfo, SiteSummary,
+    AgentSummary, AppMessage, ChangedFile, PageResponse, ProjectDiff, ProjectSummary,
+    PutPageRequest, PutPageResponse, SearchHit, ServerInfo, SiteSummary,
 };
 use composer_protocol::*;
 use serde_json::{Map, Value, json};
@@ -70,6 +70,8 @@ fn definitions() -> Map<String, Value> {
     let _ = generator.subschema_for::<AppMessage>();
     let _ = generator.subschema_for::<ProjectDiff>();
     let _ = generator.subschema_for::<ChangedFile>();
+    let _ = generator.subschema_for::<AgentSummary>();
+    let _ = generator.subschema_for::<ProjectSummary>();
     let defs = generator.take_definitions(true);
     defs.into_iter().collect()
 }
@@ -551,6 +553,7 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
         project: Some("/home/me/project".into()),
         ticket: None,
         parent: None,
+        worker: Some(WorkerState::Done),
         state: TurnState::AwaitingApproval,
         last_seq: 42,
         context_tokens: 1200,
@@ -785,6 +788,7 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
             version: "0.1.0".into(),
             model: "m".into(),
             slots: 2,
+            projects_dir: "~/Projects".into(),
         }),
         serde_json::to_value(SiteSummary {
             name: "memory".into(),
@@ -792,6 +796,8 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
             has_justfile: false,
             has_ui: true,
             app_built: false,
+            description: "what agents know".into(),
+            pages: 12,
         }),
         serde_json::to_value(PageResponse {
             url: "site://memory/user.md".into(),
@@ -812,6 +818,17 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
                 removed: 1,
             }],
             diff: "+x".into(),
+        }),
+        serde_json::to_value(AgentSummary {
+            name: "coder".into(),
+            title: "Coder".into(),
+            description: "writes code".into(),
+            worker: true,
+        }),
+        serde_json::to_value(ProjectSummary {
+            name: "composer".into(),
+            path: "~/Projects/composer".into(),
+            modified: "2026-10-20T07:00:00+02:00".into(),
         }),
     ]
     .into_iter()

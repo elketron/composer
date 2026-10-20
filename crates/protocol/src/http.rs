@@ -17,6 +17,9 @@ pub struct ServerInfo {
     pub model: String,
     /// Model slots (the provider's parallelism).
     pub slots: u32,
+    /// Where projects live (`[projects] dir`), `~` for the home folder. Older servers leave it out.
+    #[serde(default)]
+    pub projects_dir: String,
 }
 
 /// `GET /api/sites`
@@ -32,6 +35,38 @@ pub struct SiteSummary {
     /// The app is built (`ui/dist/index.html`) and can be opened. Older servers leave it out.
     #[serde(default)]
     pub app_built: bool,
+    /// One line about the site: its index's `description:`, else its first sentence.
+    #[serde(default)]
+    pub description: String,
+    /// Pages in the site.
+    #[serde(default)]
+    pub pages: u32,
+}
+
+/// `GET /api/agents`: the agent definitions (`site://agents`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct AgentSummary {
+    pub name: String,
+    pub title: String,
+    /// `description:`, else the title.
+    pub description: String,
+    /// A worker agent (`role: worker`): runs tickets, not chats.
+    pub worker: bool,
+}
+
+/// `GET /api/projects`: the folders in the projects directory, most recently changed first.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct ProjectSummary {
+    /// Folder name; what `project.set` and `session.create` accept.
+    pub name: String,
+    /// `~/Projects/<name>`.
+    pub path: String,
+    /// RFC 3339.
+    pub modified: String,
 }
 
 /// `GET /api/pages/{site}/{path}`. The `ETag` header carries `hash`.

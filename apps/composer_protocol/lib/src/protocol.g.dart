@@ -2,6 +2,40 @@
 // Source of truth: crates/protocol (Rust).
 // ignore_for_file: annotate_overrides, prefer_const_constructors, unnecessary_this
 
+/// `GET /api/agents`: the agent definitions (`site://agents`).
+class AgentSummary {
+  const AgentSummary({
+    required this.name,
+    required this.title,
+    required this.description,
+    required this.worker,
+  });
+
+  final String name;
+
+  final String title;
+
+  /// `description:`, else the title.
+  final String description;
+
+  /// A worker agent (`role: worker`): runs tickets, not chats.
+  final bool worker;
+
+  factory AgentSummary.fromJson(Map<String, Object?> json) => AgentSummary(
+        name: json['name'] as String,
+        title: json['title'] as String,
+        description: json['description'] as String,
+        worker: json['worker'] as bool,
+      );
+
+  Map<String, Object?> toJson() => {
+        'name': name,
+        'title': title,
+        'description': description,
+        'worker': worker,
+      };
+}
+
 /// `POST /api/sessions/{id}/messages` — a micro app pushing a message to the agent.
 class AppMessage {
   const AppMessage({
@@ -829,6 +863,36 @@ class ProjectDiff {
       };
 }
 
+/// `GET /api/projects`: the folders in the projects directory, most recently changed first.
+class ProjectSummary {
+  const ProjectSummary({
+    required this.name,
+    required this.path,
+    required this.modified,
+  });
+
+  /// Folder name; what `project.set` and `session.create` accept.
+  final String name;
+
+  /// `~/Projects/<name>`.
+  final String path;
+
+  /// RFC 3339.
+  final String modified;
+
+  factory ProjectSummary.fromJson(Map<String, Object?> json) => ProjectSummary(
+        name: json['name'] as String,
+        path: json['path'] as String,
+        modified: json['modified'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'name': name,
+        'path': path,
+        'modified': modified,
+      };
+}
+
 /// `PUT /api/pages/{site}/{path}`
 class PutPageRequest {
   const PutPageRequest({
@@ -922,6 +986,7 @@ class ServerInfo {
     required this.version,
     required this.model,
     required this.slots,
+    this.projectsDir,
   });
 
   /// `server.name` from config.toml, else the hostname.
@@ -936,11 +1001,15 @@ class ServerInfo {
   /// Model slots (the provider's parallelism).
   final int slots;
 
+  /// Where projects live (`[projects] dir`), `~` for the home folder. Older servers leave it out.
+  final String? projectsDir;
+
   factory ServerInfo.fromJson(Map<String, Object?> json) => ServerInfo(
         name: json['name'] as String,
         version: json['version'] as String,
         model: json['model'] as String,
         slots: (json['slots'] as num).toInt(),
+        projectsDir: json['projects_dir'] == null ? null : json['projects_dir'] as String,
       );
 
   Map<String, Object?> toJson() => {
@@ -948,6 +1017,7 @@ class ServerInfo {
         'version': version,
         'model': model,
         'slots': slots,
+        if (projectsDir != null) 'projects_dir': projectsDir,
       };
 }
 
@@ -1558,6 +1628,7 @@ class SessionInfo {
     this.project,
     this.ticket,
     this.parent,
+    this.worker,
     required this.state,
     required this.lastSeq,
     this.contextTokens = 0,
@@ -1579,6 +1650,10 @@ class SessionInfo {
   /// The session that spawned this one (orchestrator of a worker).
   final String? parent;
 
+  /// A worker's last state: kept after it ends, so a client connecting later still sees
+  /// `done` or `failed`. None for other sessions (and from older servers).
+  final WorkerState? worker;
+
   final TurnState state;
 
   /// Last seq written to the transcript.
@@ -1599,6 +1674,7 @@ class SessionInfo {
         project: json['project'] == null ? null : json['project'] as String,
         ticket: json['ticket'] == null ? null : json['ticket'] as String,
         parent: json['parent'] == null ? null : json['parent'] as String,
+        worker: json['worker'] == null ? null : WorkerState.fromJson(json['worker']),
         state: TurnState.fromJson(json['state']),
         lastSeq: (json['last_seq'] as num).toInt(),
         contextTokens: json['context_tokens'] == null ? 0 : (json['context_tokens'] as num).toInt(),
@@ -1612,6 +1688,7 @@ class SessionInfo {
         if (project != null) 'project': project,
         if (ticket != null) 'ticket': ticket,
         if (parent != null) 'parent': parent,
+        if (worker != null) 'worker': worker?.toJson(),
         'state': state.toJson(),
         'last_seq': lastSeq,
         'context_tokens': contextTokens,
@@ -1628,6 +1705,8 @@ class SiteSummary {
     required this.hasJustfile,
     required this.hasUi,
     this.appBuilt = false,
+    this.description,
+    this.pages = 0,
   });
 
   final String name;
@@ -1642,12 +1721,20 @@ class SiteSummary {
   /// The app is built (`ui/dist/index.html`) and can be opened. Older servers leave it out.
   final bool appBuilt;
 
+  /// One line about the site: its index's `description:`, else its first sentence.
+  final String? description;
+
+  /// Pages in the site.
+  final int pages;
+
   factory SiteSummary.fromJson(Map<String, Object?> json) => SiteSummary(
         name: json['name'] as String,
         title: json['title'] as String,
         hasJustfile: json['has_justfile'] as bool,
         hasUi: json['has_ui'] as bool,
         appBuilt: json['app_built'] == null ? false : json['app_built'] as bool,
+        description: json['description'] == null ? null : json['description'] as String,
+        pages: json['pages'] == null ? 0 : (json['pages'] as num).toInt(),
       );
 
   Map<String, Object?> toJson() => {
@@ -1656,6 +1743,8 @@ class SiteSummary {
         'has_justfile': hasJustfile,
         'has_ui': hasUi,
         'app_built': appBuilt,
+        if (description != null) 'description': description,
+        'pages': pages,
       };
 }
 

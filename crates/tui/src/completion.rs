@@ -283,6 +283,7 @@ mod tests {
             project: None,
             ticket: None,
             parent: None,
+            worker: None,
             state: TurnState::Idle,
             last_seq: 0,
             context_tokens: 0,
@@ -299,6 +300,8 @@ mod tests {
             has_justfile: false,
             has_ui,
             app_built: has_ui,
+            description: String::new(),
+            pages: 0,
         };
         let page = |url: &str, title: &str| SearchHit {
             url: url.into(),

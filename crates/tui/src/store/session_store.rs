@@ -52,13 +52,16 @@ impl SessionStore {
     /// What a session is doing, for lists: `running`, `waiting`, `approval`, `idle`, or a
     /// worker's `starting` / `done` / `failed`.
     pub fn status(&self, session: &SessionInfo) -> &'static str {
-        match (session.state, self.workers.get(&session.id)) {
+        // Events seen since starting, else what the server remembers (`SessionInfo.worker`).
+        let worker = self.workers.get(&session.id).or(session.worker.as_ref());
+        match (session.state, worker) {
+            // A finished worker is finished, whatever its last turn state said.
+            (_, Some(WorkerState::Done)) => "done",
+            (_, Some(WorkerState::Failed)) => "failed",
             (TurnState::Running, _) => "running",
             (TurnState::Waiting, _) => "waiting",
             (TurnState::AwaitingApproval, _) => "approval",
             (TurnState::Idle, Some(WorkerState::Starting)) => "starting",
-            (TurnState::Idle, Some(WorkerState::Done)) => "done",
-            (TurnState::Idle, Some(WorkerState::Failed)) => "failed",
             (TurnState::Idle, _) => "idle",
         }
     }

@@ -23,7 +23,7 @@ Android only updates an app signed with the same key, so make one key and keep i
 
 ```sh
 keytool -genkeypair -keystore composer-release.jks -alias composer -keyalg RSA -keysize 4096 -validity 10000
-gh secret set ANDROID_KEYSTORE_BASE64 < <(base64 -w0 composer-release.jks)
+base64 -w0 composer-release.jks | gh secret set ANDROID_KEYSTORE_BASE64
 gh secret set ANDROID_KEYSTORE_PASSWORD     # prompts
 gh secret set ANDROID_KEY_ALIAS --body composer
 gh secret set ANDROID_KEY_PASSWORD          # prompts

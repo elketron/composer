@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 
 use composer_protocol::{
     ChatMessage, ClientCommand, ClientRequest, CommandResult, MessageSource, Role, Seq,
-    ServerMessage, SessionId,
+    ServerMessage, SessionId, WorkerState,
 };
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
@@ -161,7 +161,13 @@ impl Connection {
         match event {
             ServerMessage::SessionUpdated { session: info } => {
                 session.update_info(&server.hub, |mine| {
-                    mine.state = info.state;
+                    // Finished (`finish`, or the process ended): late updates from the worker
+                    // process must not make it look busy again.
+                    let finished =
+                        matches!(mine.worker, Some(WorkerState::Done | WorkerState::Failed));
+                    if !finished {
+                        mine.state = info.state;
+                    }
                     mine.context_tokens = info.context_tokens;
                     mine.project = info.project;
                 })
