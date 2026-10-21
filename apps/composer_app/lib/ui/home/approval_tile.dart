@@ -25,6 +25,7 @@ class ApprovalTile extends StatelessWidget {
       ApprovalKind.recipe => ' wants to run',
       ApprovalKind.merge => ' asks to merge',
       ApprovalKind.tool => ' wants to use a tool',
+      ApprovalKind.amendment => ' proposes a change from your edits',
     };
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),

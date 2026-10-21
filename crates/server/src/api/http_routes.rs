@@ -42,7 +42,7 @@ pub async fn agents(State(server): State<Arc<Server>>) -> Json<Vec<AgentSummary>
     )
 }
 
-/// `GET /api/projects?q=/// The folders in the projects directory, most recently changed first; hidden ones left out.limit=`: the projects matching `q` (folders in the projects directory and
+/// `GET /api/projects?q=&limit=`: the projects matching `q` (folders in the projects directory and
 /// any a session works in), the ones with something going on first.
 pub async fn projects(
     State(server): State<Arc<Server>>,

@@ -87,7 +87,9 @@ enum ApprovalDecision {
 enum ApprovalKind {
   recipe('recipe'),
   merge('merge'),
-  tool('tool');
+  tool('tool'),
+  /// A change to a pipeline's stage contract or `_config` page, learned from your edits.
+  amendment('amendment');
 
   const ApprovalKind(this.wire);
   final String wire;

@@ -48,6 +48,9 @@ default_time = "09:00"
 [pipelines]
 # Build a new pipeline's board app right away (its `ui-build` action; needs `just` and `bun`).
 build_board = true
+# After how many works with your edits to the same stage (made before approving its gate) an agent
+# proposes a change to the stage's contract or a `_config` page, for you to approve. 0: never.
+learn_after = 3
 
 [claude_code]
 # The Claude Code CLI, for tickets with `harness: claude-code` in projects that allow it.

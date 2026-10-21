@@ -489,6 +489,7 @@ impl AppState {
                         ApprovalKind::Recipe => format!("{}-{}.just", a.site, a.recipe),
                         ApprovalKind::Merge => format!("merge-{}.txt", a.request),
                         ApprovalKind::Tool => format!("tool-{}.txt", a.request),
+                        ApprovalKind::Amendment => format!("amendment-{}.diff", a.request),
                     },
                     text: a.body.clone(),
                 }],

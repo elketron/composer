@@ -216,6 +216,12 @@ fn new_ticket(
         .outputs
         .iter()
         .map(|o| format!("- [ ] `{o}`"))
+        .chain(
+            contract
+                .verify
+                .iter()
+                .map(|c| format!("- [ ] verified: {c}")),
+        )
         .collect();
     let body = format!(
         "# {title}\n\n## Task\n\nRun stage {} {} of [{}]({}) as [its contract](site://{site}/stages/{}.md) says. \
@@ -260,7 +266,7 @@ fn new_ticket(
 }
 
 /// Sets fields of a stage's `_stage.md`.
-fn set_stage_fields(server: &Server, work: &Work, stage: &str, fields: &[(&str, &str)]) {
+pub(crate) fn set_stage_fields(server: &Server, work: &Work, stage: &str, fields: &[(&str, &str)]) {
     let Ok(url) = SiteUrl::new(
         &work.pipeline.name,
         &format!("{}/{stage}/_stage.md", work.name),
@@ -314,8 +320,14 @@ pub fn stage_ended(
             ("status", status),
             ("finished", &now),
             ("summary", &one_line(summary)),
+            // A fresh run: its output is the agent's again.
+            ("edited", "false"),
         ],
     );
+    if matches!(status, "done" | "review") {
+        // As the agent wrote it, to tell your edits from it at the gate.
+        crate::pipeline::learning::keep_agent_output(&work, &stage);
+    }
     server.hub.send(ServerMessage::StageEnded {
         work: work.url(),
         title: work.title.clone(),
@@ -395,6 +407,7 @@ pub fn work_session(
 /// wrote it (the board app, the TUI, an editor, an agent).
 pub async fn run_gates(server: Arc<Server>) {
     let mut events = server.hub.subscribe();
+    crate::pipeline::learning::ask_open_proposals(&server);
     loop {
         let event = match events.recv().await {
             Ok(event) => event,
@@ -425,6 +438,10 @@ async fn gate_changed(server: &Arc<Server>, url: &str) -> Result<(), String> {
     };
     match work.stage_status(stage).as_str() {
         "approved" => {
+            // What you changed before approving it (once: the edit is recorded then).
+            if work.stage_field(stage, "edited").as_deref() != Some("true") {
+                crate::pipeline::learning::gate_approved(server, &work, stage);
+            }
             let Some(next) = work
                 .pipeline
                 .stages

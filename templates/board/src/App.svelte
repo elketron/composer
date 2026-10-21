@@ -4,7 +4,7 @@
   write the stage's `_stage.md`, and the server goes on from there.
 -->
 <script lang="ts">
-  import { AppShell, Badge, Button, Kbd, onChange, page, putPage, request, session, site, type Page } from '$sdk';
+  import { AppShell, Badge, Button, Kbd, file, onChange, page, putPage, request, session, site, type Page } from '$sdk';
 
   interface StageSummary { name: string; title: string; gate: boolean; harness?: string; model?: string; worktree: boolean }
   interface Pipeline { site: string; title: string; about: string; stages: StageSummary[]; needs_project: boolean; works: number }
@@ -32,6 +32,9 @@
   let newProject = $state('');
   let newBrief = $state('');
   let busy = $state(false);
+  /** The agent's own version of the output on show (`.agent/`), while showing your edits. */
+  let agentText: string | null = $state(null);
+  let diffing = $state(false);
 
   const nameOf = (w: Work) => w.url.replace(/^site:\/\/[^/]+\//, '').replace(/\/index\.md$/, '');
   // The one asked for, else one waiting for you, else the first.
@@ -158,6 +161,37 @@
     }
   }
 
+  /** The kept copy of an output: `<stage>/.agent/<file>`. */
+  const keptUrl = (url: string) => url.replace(/\/(\d+_[^/]+)\//, '/$1/.agent/');
+
+  async function toggleDiff() {
+    if (diffing) { diffing = false; return; }
+    if (!output) return;
+    try {
+      agentText = await (await file(keptUrl(output.url))).text();
+      diffing = true;
+    } catch {
+      notice = 'no copy of what the agent wrote (it ran before this was kept)';
+    }
+  }
+
+  /** Lines of `after` against `before`: same, added by you, or removed by you. */
+  function lineDiff(before: string, after: string): { kind: ' ' | '+' | '-'; text: string }[] {
+    const a = before.split('\n'), b = after.split('\n');
+    const n = a.length, m = b.length;
+    const lcs: number[][] = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+    for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) lcs[i][j] = a[i] === b[j] ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+    const out: { kind: ' ' | '+' | '-'; text: string }[] = [];
+    let i = 0, j = 0;
+    while (i < n || j < m) {
+      if (i < n && j < m && a[i] === b[j]) { out.push({ kind: ' ', text: a[i] }); i++; j++; }
+      else if (j < m && (i === n || lcs[i][j + 1] >= lcs[i + 1][j])) { out.push({ kind: '+', text: b[j] }); j++; }
+      else { out.push({ kind: '-', text: a[i] }); i++; }
+    }
+    return out;
+  }
+  const edits = $derived(diffing && output && agentText !== null ? lineDiff(body(agentText), body(output.raw)) : []);
+
   const body = (raw: string) => raw.replace(/^---\n[\s\S]*?\n---\n?/, '').trimStart();
   const short = (url: string) => url.replace(/^site:\/\/[^/]+\//, '');
 
@@ -235,12 +269,15 @@
         <div class="ohead">
           <Badge tone={tone(stage.status)}>{stage.status}</Badge>
           {#each stage.outputs as url, i (url)}
-            <button class="file" class:on={i === outputIndex} onclick={() => { outputIndex = i; editing = false; }}>{short(url)}</button>
+            <button class="file" class:on={i === outputIndex} onclick={() => { outputIndex = i; editing = false; diffing = false; }}>{short(url)}</button>
           {:else}
             <span class="faint">{stage.status === 'running' ? 'running…' : 'nothing written yet'}</span>
           {/each}
           <span class="grow"></span>
-          {#if output && !editing}<Button variant="ghost" onclick={() => { draft = output!.raw; editing = true; }}>Edit</Button>{/if}
+          {#if output && !editing}
+            <Button variant="ghost" onclick={toggleDiff}>{diffing ? 'Output' : 'Your edits'}</Button>
+            <Button variant="ghost" onclick={() => { draft = output!.raw; editing = true; diffing = false; }}>Edit</Button>
+          {/if}
         </div>
         {#if stage.stale}
           <div class="stale-bar">
@@ -262,6 +299,10 @@
         {#if editing}
           <textarea class="editor" bind:value={draft}></textarea>
           <div class="row"><Button variant="ghost" onclick={() => (editing = false)}>Cancel</Button><Button variant="primary" onclick={save}>Save</Button></div>
+        {:else if output && diffing}
+          <pre class="doc">{#each edits as line}<span class="line {line.kind === '+' ? 'add' : line.kind === '-' ? 'del' : ''}">{line.text}
+</span>{/each}</pre>
+          {#if !edits.some((l) => l.kind !== ' ')}<p class="summary">No edits: this is what the agent wrote.</p>{/if}
         {:else if output}
           <pre class="doc">{body(output.raw)}</pre>
         {/if}
@@ -337,6 +378,8 @@
   .file.on { color: var(--text); border-bottom-color: var(--accent); }
   .summary { margin: 0 0 8px; font-size: 12.5px; color: var(--muted); }
   .doc { margin: 0; font: 13px/1.6 var(--font-ui); white-space: pre-wrap; color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); padding: 12px 14px; max-height: calc(100vh - 330px); overflow: auto; }
+  .line.add { background: color-mix(in srgb, var(--ok) 14%, transparent); }
+  .line.del { color: var(--faint); text-decoration: line-through; }
   .editor { width: 100%; min-height: 320px; font: 12.5px/1.55 var(--font-mono); background: var(--bg); color: var(--text); border: 1px solid var(--accent); border-radius: var(--radius); padding: 10px 12px; box-sizing: border-box; }
   .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
   .gate {

@@ -172,6 +172,8 @@ pub enum ApprovalKind {
     Recipe,
     Merge,
     Tool,
+    /// A change to a pipeline's stage contract or `_config` page, learned from your edits.
+    Amendment,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

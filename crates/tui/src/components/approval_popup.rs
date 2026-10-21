@@ -55,6 +55,7 @@ impl Component for ApprovalPopup {
             ApprovalKind::Recipe => "run recipe?",
             ApprovalKind::Merge => "merge?",
             ApprovalKind::Tool => "allow tool?",
+            ApprovalKind::Amendment => "amend the pipeline?",
         };
         let title = if more > 0 {
             format!(" {question} (+{more} more) ")
@@ -124,6 +125,9 @@ impl Component for ApprovalPopup {
             }
             ApprovalKind::Merge => {
                 "merges into the project's branch, then removes the worktree and branch".to_string()
+            }
+            ApprovalKind::Amendment => {
+                "learned from your edits: every work reads it from then on".to_string()
             }
             ApprovalKind::Tool => match &approval.rule {
                 Some(rule) => format!("a always: allow {rule} in this project from now on"),

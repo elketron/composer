@@ -19,6 +19,9 @@ pub struct StageContract {
     pub inputs: Vec<StageInput>,
     /// The Outputs section's paths (in backticks).
     pub outputs: Vec<String>,
+    /// The Verify section's checks (its list items, or its paragraphs): what the worker checks
+    /// against earlier stages before `finish`.
+    pub verify: Vec<String>,
 }
 
 impl StageContract {
@@ -47,6 +50,7 @@ impl StageContract {
             agent: text("agent"),
             worktree: flag("worktree"),
             inputs: inputs(section(body, "inputs")),
+            verify: checks(section(body, "verify")),
             outputs: section(body, "outputs")
                 .lines()
                 .filter_map(|l| l.trim_start().strip_prefix("- "))
@@ -122,6 +126,23 @@ fn inputs(section: &str) -> Vec<StageInput> {
         .collect()
 }
 
+/// A section's list items, else its paragraphs, each on one line.
+fn checks(section: &str) -> Vec<String> {
+    let items: Vec<String> = section
+        .lines()
+        .filter_map(|l| l.trim_start().strip_prefix("- "))
+        .map(|l| l.trim().to_string())
+        .collect();
+    if !items.is_empty() {
+        return items;
+    }
+    section
+        .split("\n\n")
+        .map(|p| p.split_whitespace().collect::<Vec<_>>().join(" "))
+        .filter(|p| !p.is_empty())
+        .collect()
+}
+
 /// The first `code span` in `text`.
 fn backticked(text: &str) -> Option<String> {
     let (_, rest) = text.split_once('`')?;
@@ -150,6 +171,15 @@ mod tests {
         assert_eq!(c.inputs[1].path, "_config/voice.md");
         assert_eq!(c.inputs[1].about, "how it sounds");
         assert_eq!(c.outputs, vec!["02_script/script.md".to_string()]);
+        assert!(c.verify.is_empty());
+        let c = StageContract::parse(
+            "02_script",
+            "# x\n\n## Verify\n\nEvery claim is in\nresearch.md.\n\nIt fits the length.\n",
+        );
+        assert_eq!(
+            c.verify,
+            ["Every claim is in research.md.", "It fits the length."]
+        );
     }
 
     #[test]

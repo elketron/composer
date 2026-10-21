@@ -100,6 +100,10 @@ pub struct PipelinesConfig {
     /// Build a new pipeline's board app right away (its `ui-build` action, needs `just` and `bun`).
     #[serde(default = "default_true")]
     pub build_board: bool,
+    /// After how many works with your edits to the same stage an agent proposes changing the
+    /// stage's contract or `_config` (0: never).
+    #[serde(default = "default_learn_after")]
+    pub learn_after: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -202,4 +206,8 @@ fn default_recipe_timeout() -> u64 {
 
 fn default_max_workers() -> u32 {
     1
+}
+
+fn default_learn_after() -> u32 {
+    3
 }

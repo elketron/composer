@@ -914,8 +914,22 @@ Stages that ran before this have no `inputs:` and are never stale.
 - When a stage finishes, its untouched output is kept (`<stage>/.agent/`); at the gate, the difference is
   your edit. When the same kind of edit recurs across works of a pipeline, an agent proposes an amendment to
   the stage contract or `_config` (for the pipeline, or just this work) for you to approve.
-- Also later: a contract's `Verify` section (checks against earlier stages before `finish`), breakpoints in a
-  contract (pause mid-stage), provenance markers tracing output back to the input that produced it.
+- Also later: breakpoints in a contract (pause mid-stage), provenance markers tracing output back to the input
+  that produced it.
+
+Built (milestone 25): `crates/server/src/pipeline/learning.rs`. When a stage ends done (or at its gate), its
+output is copied to `<stage>/.agent/` (hidden: not indexed, not an output). Approving its gate records the
+difference as your edit (`<stage>/.agent/edit.diff`, `edited: true`). When `[pipelines] learn_after` works (default
+3; 0 turns it off) have an edit at the same stage that no proposal has looked at, one model call (no tools, a
+model slot) gets the stage's contract, the `_config` pages it reads and the edits, and answers with the recurring
+edit and a new contract or `_config` page. That becomes a proposal page (`site://<pipeline>/_proposals/<stage>-<when>.md`,
+`type: proposal`, with the diff; the text beside it) and an approval of the new kind `amendment` (title, diff):
+approve writes the page, deny dismisses it; the works are marked `learned` either way. Open proposals are asked
+again after a restart. The board's **Your edits** shows the output against the kept copy. A contract's
+**Verify** section is now used: its checks go into the stage's context ("Before you finish") and its ticket's
+Done when, and the stage agent checks them before `finish`. Tested in `crates/server/tests/learning.rs` (a scripted
+model) and once with a real one: a storyboard edit at its gate became a proposed line in `_config/structure.md`,
+approved from the TUI.
 
 ### Milestones
 
@@ -927,7 +941,7 @@ Stages that ran before this have no `inputs:` and are never stale.
     advancing without gates.
 23. ✅ **gates and the board app** — the board template app, gate state via pages, notifications and Needs you.
 24. ✅ **stale stages** — input hashes, staleness, rerun from a stage.
-25. **learning from edits** — kept agent output, recurring-edit detection, proposed amendments; Verify.
+25. ✅ **learning from edits** — kept agent output, recurring-edit detection, proposed amendments; Verify.
 
 ## Open questions
 

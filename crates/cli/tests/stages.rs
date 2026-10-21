@@ -235,6 +235,11 @@ async fn stages_run_in_order_and_stop_at_a_gate() {
         stage("02_polish")
     );
     assert!(flow.join("note/02_polish/final.md").is_file());
+    // What the agent wrote is kept beside it, to tell your edits at the gate from it.
+    assert_eq!(
+        std::fs::read_to_string(flow.join("note/02_polish/.agent/final.md")).unwrap(),
+        std::fs::read_to_string(flow.join("note/02_polish/final.md")).unwrap()
+    );
     let ticket =
         std::fs::read_to_string(dir.path().join("sites/orchestration/tickets/0002.md")).unwrap();
     assert!(

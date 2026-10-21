@@ -11,6 +11,7 @@ String approvalQuestion(ServerMessageApprovalRequest a) => switch (a.kind ?? App
       ApprovalKind.recipe => 'Run recipe?',
       ApprovalKind.merge => 'Merge?',
       ApprovalKind.tool => 'Allow tool?',
+      ApprovalKind.amendment => 'Amend the pipeline?',
     };
 
 /// What approving does.
@@ -20,6 +21,7 @@ String approvalNote(ServerMessageApprovalRequest a) => switch (a.kind ?? Approva
       ApprovalKind.tool => a.rule == null
           ? 'Claude Code wants a tool outside its allowlist.'
           : 'Always allows ${a.rule} in this project from now on.',
+      ApprovalKind.amendment => 'Learned from your edits at its gate: every work reads the change from then on. Dismiss leaves it as it is.',
     };
 
 /// Whether `always` is an answer to it.

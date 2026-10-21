@@ -2,6 +2,7 @@
 //! contracts (`stages/`) and shared rules (`_config/`); each piece of work is a folder in it.
 
 mod create;
+pub mod learning;
 #[allow(clippy::module_inception)]
 mod pipeline;
 mod run;

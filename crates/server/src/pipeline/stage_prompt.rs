@@ -80,6 +80,15 @@ pub fn stage_context(workspace: &Workspace, id: &str, project: Option<&str>) -> 
             sections.push(format!("# {title}\n\n{}", files.join("\n\n")));
         }
     }
+    if !contract.verify.is_empty() {
+        let checks: Vec<String> = contract.verify.iter().map(|c| format!("- {c}")).collect();
+        sections.push(format!(
+            "# Before you finish\n\nCheck each of these against the earlier stages' outputs and fix what fails. Write \
+             what you checked, and how it came out, in the ticket's Result. If one still fails, `finish` with \
+             `failed` and say which.\n\n{}",
+            checks.join("\n")
+        ));
+    }
     let mut env = format!(
         "# Environment\n- date: {}\n- write your outputs into site://{site}/{}/{stage}/ (the paths in Outputs are relative to the work)\n- other pages are reachable with `open` and `search` when the contract's files are not enough",
         chrono::Local::now().format("%Y-%m-%d %A"),
