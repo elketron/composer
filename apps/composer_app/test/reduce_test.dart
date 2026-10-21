@@ -439,6 +439,13 @@ void main() {
       expect((workSpec(waiting.url), runnable(waiting)), ('coding/a', true));
       const inReview = WorkSummary(url: 'site://coding/b/index.md', pipeline: 'coding', title: 'b', stages: [StageState(name: '01_spec', status: 'review')]);
       expect(runnable(inReview), isFalse);
+      // Stale: what a stage read changed; Run reruns from there, even past a review.
+      const stale = WorkSummary(url: 'site://coding/c/index.md', pipeline: 'coding', title: 'c', stages: [
+        StageState(name: '01_spec', status: 'done', stale: true, outputs: []),
+        StageState(name: '02_plan', status: 'review', stale: true, outputs: []),
+      ]);
+      expect((runnable(stale), runLabel(stale), nextStage(stale)?.name), (true, 'Rerun from 01', '01_spec'));
+      expect(runLabel(waiting), 'Run');
     });
 
     test('apps show in the reader; closing keeps the follow choice', () {

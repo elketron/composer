@@ -8,7 +8,7 @@
 
   interface StageSummary { name: string; title: string; gate: boolean; harness?: string; model?: string; worktree: boolean }
   interface Pipeline { site: string; title: string; about: string; stages: StageSummary[]; needs_project: boolean; works: number }
-  interface StageState { name: string; status: string; ticket?: string; summary?: string; outputs: string[] }
+  interface StageState { name: string; status: string; ticket?: string; summary?: string; outputs: string[]; stale: boolean; changed: string[] }
   interface Work { url: string; pipeline: string; title: string; status?: string; stages: StageState[]; project?: string }
 
   const finished = ['done', 'approved'];
@@ -38,21 +38,22 @@
   const work = $derived(
     works.find((w) => nameOf(w) === chosen) ?? works.find((w) => w.stages.some((s) => s.status === 'review')) ?? works[0] ?? null,
   );
-  /** The stage worth looking at: one waiting for you, else running, else the next, else the last. */
+  /** The stage worth looking at: one waiting for you, else running, else the next (stale or not run), else the last. */
   const current = (w: Work) => {
     const at = (test: (s: StageState) => boolean) => w.stages.findIndex(test);
-    for (const i of [at((s) => s.status === 'review'), at((s) => s.status === 'running'), at((s) => !finished.includes(s.status))]) {
+    for (const i of [at((s) => s.status === 'review' && !s.stale), at((s) => s.status === 'running'), at((s) => s.stale || !finished.includes(s.status))]) {
       if (i >= 0) return i;
     }
     return Math.max(w.stages.length - 1, 0);
   };
   const stage = $derived(work ? work.stages[stageIndex ?? current(work)] : undefined);
   const contract = $derived(pipeline?.stages.find((s) => s.name === stage?.name));
+  /** What Run starts: the first stage that is stale or not finished. */
+  const next = $derived(work?.stages.find((s) => s.stale || !finished.includes(s.status)));
   const runnable = $derived(
-    !!work && !work.stages.some((s) => s.status === 'running') &&
-      (() => { const next = work.stages.find((s) => !finished.includes(s.status)); return !!next && next.status !== 'review'; })(),
+    !!work && !work.stages.some((s) => s.status === 'running') && !!next && (next.status !== 'review' || next.stale),
   );
-  const dot = (w: Work) => (w.stages.some((s) => s.status === 'review') ? 'accent' : w.stages.some((s) => s.status === 'running') ? 'warn' : w.stages.every((s) => finished.includes(s.status)) ? 'ok' : 'muted');
+  const dot = (w: Work) => (w.stages.some((s) => s.status === 'review' && !s.stale) ? 'accent' : w.stages.some((s) => s.stale) ? 'warn' : w.stages.some((s) => s.status === 'running') ? 'warn' : w.stages.every((s) => finished.includes(s.status)) ? 'ok' : 'muted');
 
   async function load() {
     try {
@@ -115,11 +116,11 @@
     }
   }
 
-  async function run() {
+  async function run(from?: string) {
     if (!work) return;
     busy = true;
     try {
-      const result = await request({ type: 'work.run', work: `${site}/${nameOf(work)}`, session });
+      const result = await request({ type: 'work.run', work: `${site}/${nameOf(work)}`, stage: from ?? null, session });
       notice = result.work?.status ?? 'started';
       stageIndex = null;
     } catch (e) {
@@ -185,7 +186,7 @@
 
 <AppShell crumb={work ? nameOf(work) : 'board'} status={output?.url ?? work?.url ?? ''}>
   {#snippet actions()}
-    {#if runnable}<Button kbd="R" onclick={run} disabled={busy}>Run</Button>{/if}
+    {#if runnable}<Button kbd="R" onclick={() => run()} disabled={busy}>{next?.stale ? `Rerun from ${next.name.split('_')[0]}` : 'Run'}</Button>{/if}
     <Button onclick={() => (creating = !creating)}>+ New work</Button>
   {/snippet}
 
@@ -222,9 +223,9 @@
     <div class="stages" style="--n: {Math.max(work.stages.length, 1)}">
       {#each work.stages as s, i (s.name)}
         {@const c = pipeline?.stages.find((x) => x.name === s.name)}
-        <button class="st {tone(s.status)}" class:on={s === stage} onclick={() => { stageIndex = i; outputIndex = 0; }}>
+        <button class="st {tone(s.status)}" class:stale={s.stale} class:on={s === stage} onclick={() => { stageIndex = i; outputIndex = 0; }}>
           <span class="n">{s.name.split('_')[0]}</span>
-          <span class="t"><b>{c?.title.toLowerCase() ?? s.name}</b><small>{s.status}{c?.gate ? ' · gate' : ''}{c?.harness && c.harness !== 'composer' ? ` · ${c.harness}` : ''}</small></span>
+          <span class="t"><b>{c?.title.toLowerCase() ?? s.name}</b><small>{s.status}{s.stale ? ' · stale' : ''}{c?.gate ? ' · gate' : ''}{c?.harness && c.harness !== 'composer' ? ` · ${c.harness}` : ''}</small></span>
         </button>
       {/each}
     </div>
@@ -241,6 +242,22 @@
           <span class="grow"></span>
           {#if output && !editing}<Button variant="ghost" onclick={() => { draft = output!.raw; editing = true; }}>Edit</Button>{/if}
         </div>
+        {#if stage.stale}
+          <div class="stale-bar">
+            <span>
+              <b>Stale</b> ·
+              {#if stage.changed.length}
+                changed since it ran: {stage.changed.map(short).join(', ')}
+              {:else}
+                a stage before it is stale
+              {/if}
+            </span>
+            <span class="grow"></span>
+            {#if !work.stages.some((s) => s.status === 'running')}
+              <Button onclick={() => run(stage!.name)} disabled={busy}>Rerun from here</Button>
+            {/if}
+          </div>
+        {/if}
         {#if stage.summary}<p class="summary">{stage.summary}</p>{/if}
         {#if editing}
           <textarea class="editor" bind:value={draft}></textarea>
@@ -306,6 +323,13 @@
   .st.info { border-color: color-mix(in srgb, var(--accent) 60%, var(--border)); }
   .st.warn { border-color: color-mix(in srgb, var(--warn) 50%, var(--border)); }
   .st.err { border-color: color-mix(in srgb, var(--err) 50%, var(--border)); }
+  .st.stale { border-style: dashed; border-color: color-mix(in srgb, var(--warn) 60%, var(--border)); }
+  .stale-bar {
+    display: flex; gap: 10px; align-items: center; margin-bottom: 8px; padding: 7px 10px; font-size: 12.5px; color: var(--muted);
+    border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--border)); border-radius: var(--radius);
+    background: color-mix(in srgb, var(--warn) 6%, var(--surface));
+  }
+  .stale-bar b { color: var(--warn); font-weight: 500; }
   .st.on { outline: 1px solid var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--surface)); }
   .out { padding: 10px 14px; }
   .ohead { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }

@@ -90,6 +90,10 @@
             "ticket": "0031",
             "outputs": [
               "site://coding/game-save-system/03_implement/notes.md"
+            ],
+            "stale": true,
+            "changed": [
+              "site://coding/_config/conventions.md"
             ]
           }
         ],

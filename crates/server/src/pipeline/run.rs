@@ -67,16 +67,20 @@ fn pick_stage<'a>(work: &'a Work, stage: Option<&str>) -> Result<&'a StageContra
                 format!("no stage `{wanted}` (stages: {})", names.join(", "))
             }),
         None => {
+            // The first that is stale (rerun from there) or not finished.
+            let states = work.stages();
             let next = stages
                 .iter()
-                .find(|s| !FINISHED.contains(&work.stage_status(&s.name).as_str()))
+                .zip(&states)
+                .find(|(_, s)| s.stale || !FINISHED.contains(&s.status.as_str()))
                 .ok_or_else(|| {
                     format!(
                         "every stage of {} is done; give a stage to run one again",
                         work.name
                     )
                 })?;
-            if work.stage_status(&next.name) == "review" {
+            let (next, state) = next;
+            if state.status == "review" && !state.stale {
                 return Err(format!(
                     "{} waits for review: approve it (`status: approved` in its _stage.md) or run it again with stage {}",
                     next.name, next.name
@@ -125,6 +129,8 @@ pub async fn run_stage(
     let now = chrono::Local::now().to_rfc3339();
     let quoted = format!("\"{ticket}\"");
     let session = format!("\"{}\"", parent.id());
+    // What it reads, by hash: when one of them changes, the stage is stale.
+    let inputs = serde_json::to_string(&work.input_hashes(&contract)).expect("a map serializes");
     let mut fields = vec![
         ("status", "running"),
         ("ticket", quoted.as_str()),
@@ -133,6 +139,7 @@ pub async fn run_stage(
         ("session", session.as_str()),
         // A rerun's note is in the ticket now.
         ("note", "\"\""),
+        ("inputs", inputs.as_str()),
     ];
     if let Some(harness) = &contract.harness {
         fields.push(("harness", harness));
@@ -428,8 +435,14 @@ async fn gate_changed(server: &Arc<Server>, url: &str) -> Result<(), String> {
             else {
                 return Ok(());
             };
-            // Only a stage that hasn't run: approving again (or editing the page) does nothing.
-            if work.stage_status(&next) != "waiting" {
+            // Only a stage that hasn't run, or whose inputs changed (a rerun going on through
+            // the stages after it): approving again (or editing the page) does nothing.
+            let fresh = work
+                .stages()
+                .iter()
+                .find(|s| s.name == next)
+                .is_some_and(|s| s.status == "waiting" || s.stale);
+            if !fresh {
                 return Ok(());
             }
             let parent = work_session(server, &work, Some(stage))?;

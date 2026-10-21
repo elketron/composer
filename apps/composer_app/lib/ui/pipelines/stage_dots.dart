@@ -21,15 +21,16 @@ class StageDots extends StatelessWidget {
   Widget build(BuildContext context) => Row(mainAxisSize: MainAxisSize.min, children: [
         for (final s in stages)
           Tooltip(
-            message: '${s.name.replaceFirst('_', ' ')} · ${s.status}',
+            message: '${s.name.replaceFirst('_', ' ')} · ${s.stale ? 'stale (what it read changed)' : s.status}',
             child: Container(
               width: 7,
               height: 7,
               margin: const EdgeInsets.only(right: 3),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: s.status == 'waiting' ? null : colorOf(s.status),
-                border: Border.all(color: colorOf(s.status)),
+                // Stale: hollow, in the warning colour.
+                color: s.status == 'waiting' || s.stale ? null : colorOf(s.status),
+                border: Border.all(color: s.stale ? t.warn : colorOf(s.status), width: s.stale ? 1.5 : 1),
               ),
             ),
           ),

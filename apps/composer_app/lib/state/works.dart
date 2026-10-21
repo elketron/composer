@@ -8,11 +8,21 @@ const finishedStages = {'done', 'approved'};
 /// `site://coding/save-system/index.md` → `coding/save-system`, as `work.run` takes it.
 String workSpec(String url) => url.replaceFirst('site://', '').replaceFirst(RegExp(r'/index\.md$'), '');
 
-/// Whether a work's next stage can start: one is left, none runs, and it doesn't wait for review.
+/// The stage `work.run` starts by default: the first that is stale or not finished.
+StageState? nextStage(WorkSummary w) => w.stages.where((s) => s.stale || !finishedStages.contains(s.status)).firstOrNull;
+
+/// Whether a work's next stage can start: one is left, none runs, and it doesn't wait for
+/// review (unless what it read changed since).
 bool runnable(WorkSummary w) {
   if (w.stages.any((s) => s.status == 'running')) return false;
-  final next = w.stages.where((s) => !finishedStages.contains(s.status)).firstOrNull;
-  return next != null && next.status != 'review';
+  final next = nextStage(w);
+  return next != null && (next.status != 'review' || next.stale);
+}
+
+/// `Run`, or `Rerun from 02` when the next stage is stale.
+String runLabel(WorkSummary w) {
+  final next = nextStage(w);
+  return next != null && next.stale ? 'Rerun from ${next.name.split('_').first}' : 'Run';
 }
 
 /// The stage of a work that waits for you at its gate, if one does.

@@ -365,3 +365,102 @@ async fn the_agent_tools() {
         "{index}"
     );
 }
+
+/// A stage that ran is stale when what it read changed since; so is every stage after it that
+/// ran. A shared `_config` file makes stages stale in every work that read it.
+#[tokio::test]
+async fn stale_stages() {
+    let projects = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(projects.path().join("game")).unwrap();
+    let mut config = Config::defaults();
+    config.projects.dir = projects.path().display().to_string();
+    config.pipelines.build_board = false;
+    let (dir, server, _provider, addr) = start_with(config, vec![]).await;
+    let mut socket = connect(addr, &server.token).await;
+    command(
+        &mut socket,
+        1,
+        ClientCommand::PipelineNew {
+            kind: "coding".into(),
+            name: None,
+        },
+    )
+    .await
+    .unwrap();
+    for (id, name) in [(2, "a"), (3, "b")] {
+        command(
+            &mut socket,
+            id,
+            ClientCommand::WorkNew {
+                pipeline: "coding".into(),
+                name: name.into(),
+                project: Some("game".into()),
+                brief: None,
+            },
+        )
+        .await
+        .unwrap();
+    }
+    let coding = dir.path().join("sites/coding");
+    // As a run leaves them: 01 and 02 done, each with the hashes of what it read.
+    let ran = |name: &str, stage: &str| {
+        let work = Work::load(pipeline(&server, "coding").unwrap(), name).unwrap();
+        let contract = work.pipeline.stage(stage).unwrap().clone();
+        let inputs = serde_json::to_string(&work.input_hashes(&contract)).unwrap();
+        let path = coding.join(name).join(stage).join("_stage.md");
+        let raw = std::fs::read_to_string(&path).unwrap().replace(
+            "status: waiting",
+            &format!("status: done\ninputs: {inputs}"),
+        );
+        std::fs::write(path, raw).unwrap();
+    };
+    for name in ["a", "b"] {
+        std::fs::write(coding.join(name).join("01_spec/spec.md"), "# Spec\n").unwrap();
+        ran(name, "01_spec");
+        ran(name, "02_plan");
+    }
+    let states = |name: &str| {
+        Work::load(pipeline(&server, "coding").unwrap(), name)
+            .unwrap()
+            .summary()
+    };
+    let stale = |name: &str| -> Vec<bool> { states(name).stages.iter().map(|s| s.stale).collect() };
+    assert_eq!(stale("a"), [false, false, false, false]);
+    assert_eq!(
+        states("a").status.as_deref(),
+        Some("03 implement · waiting")
+    );
+
+    // An earlier output edited: the stage that read it (and none before it).
+    std::fs::write(coding.join("a/01_spec/spec.md"), "# Spec\n\nSharper.\n").unwrap();
+    assert_eq!(stale("a"), [false, true, false, false]);
+    let summary = states("a");
+    assert_eq!(
+        summary.stages[1].changed,
+        ["site://coding/a/01_spec/spec.md"]
+    );
+    assert_eq!(summary.status.as_deref(), Some("02 plan · stale"));
+    assert_eq!(
+        stale("b"),
+        [false, false, false, false],
+        "another work is left alone"
+    );
+
+    // A shared rule: both stages that read it, in both works.
+    let conventions = coding.join("_config/conventions.md");
+    let text = std::fs::read_to_string(&conventions).unwrap() + "\n- One more rule.\n";
+    std::fs::write(&conventions, text).unwrap();
+    assert_eq!(stale("a"), [true, true, false, false]);
+    assert_eq!(stale("b"), [true, true, false, false]);
+    assert_eq!(states("b").status.as_deref(), Some("01 spec · stale"));
+
+    // A work's own _config file takes over: what 01 reads is another page now.
+    std::fs::create_dir_all(coding.join("b/_config")).unwrap();
+    std::fs::write(coding.join("b/_config/conventions.md"), "# Ours\n").unwrap();
+    let changed = states("b").stages[0].changed.clone();
+    assert!(
+        changed.contains(&"site://coding/b/_config/conventions.md".to_string())
+            && changed.contains(&"site://coding/_config/conventions.md".to_string()),
+        "{changed:?}"
+    );
+}

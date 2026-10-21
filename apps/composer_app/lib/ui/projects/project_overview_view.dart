@@ -122,7 +122,7 @@ class _ProjectOverviewViewState extends State<ProjectOverviewView> {
                 InkWell(
                   key: Key('work-run-${w.url}'),
                   onTap: () => store.dispatch(WorkRunRequested(url, workSpec(w.url), project: widget.folder)),
-                  child: Text('Run', style: mono(size: 11.5, color: t.accent)),
+                  child: Text(runLabel(w), style: mono(size: 11.5, color: t.accent)),
                 ),
               ],
             ],

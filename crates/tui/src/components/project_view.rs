@@ -80,7 +80,7 @@ impl ProjectView {
                 let mut spans = vec![Span::styled(format!("{:<10} ", w.pipeline), theme::faint())];
                 // One dot per stage: done, review, running, waiting.
                 for stage in &w.stages {
-                    spans.push(stage_dot(&stage.status));
+                    spans.push(stage_dot(&stage.status, stage.stale));
                 }
                 if !w.stages.is_empty() {
                     spans.push(Span::raw(" "));
@@ -216,8 +216,12 @@ impl ProjectView {
     }
 }
 
-/// A stage's state as a dot: filled when finished, coloured by what it waits on.
-fn stage_dot(status: &str) -> Span<'static> {
+/// A stage's state as a dot: filled when finished, coloured by what it waits on; half for stale.
+fn stage_dot(status: &str, stale: bool) -> Span<'static> {
+    if stale {
+        // Ran, but something it read changed since.
+        return Span::styled("◐", Style::new().fg(theme::WARN));
+    }
     match status {
         "done" | "approved" => Span::styled("●", Style::new().fg(theme::OK)),
         "review" => Span::styled("●", Style::new().fg(theme::ACCENT)),

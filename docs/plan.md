@@ -898,6 +898,17 @@ by hand: the board built itself for a new pipeline, and Continue in a browser st
   **Rerun from here** reruns them in order. A shared `_config` file can make stages stale in several works: the
   board lists them, and finished works are left alone unless you rerun them.
 
+Built (milestone 24): when a stage starts, its `_stage.md` gets `inputs:`, the hash of every page its contract
+reads (as resolved then: a work's own `_config` file, the brief). `Work::stages` compares them with the pages now:
+a stage that ran (`done`, `approved`, `review`) is `stale` when one changed or another page is read now (with the
+pages in `changed`), and so is every stage after it that ran. A work's status names the first stale stage
+(`02 plan · stale`); `work.run` without a stage starts the first that is stale or not finished, and after a
+rerun stage is done the next goes on as usual, so a rerun walks through the stale stages up to the next gate.
+Approving a gate starts the next stage if it hasn't run or is stale. A shared `_config` file makes stages stale in
+every work that read it; nothing runs by itself. Shown on the board (dashed stage, what changed, Rerun from here,
+Rerun from NN), in the app (hollow dots, Rerun from NN on a work's row and in the palette) and in the TUI (◐).
+Stages that ran before this have no `inputs:` and are never stale.
+
 ### Learning from edits (later)
 
 - When a stage finishes, its untouched output is kept (`<stage>/.agent/`); at the gate, the difference is
@@ -915,7 +926,7 @@ by hand: the board built itself for a new pipeline, and Continue in a browser st
 22. ✅ **running stages** — stages as tickets with scoped context, the `stage` agent, harness and model per stage,
     advancing without gates.
 23. ✅ **gates and the board app** — the board template app, gate state via pages, notifications and Needs you.
-24. **stale stages** — input hashes, staleness, rerun from a stage.
+24. ✅ **stale stages** — input hashes, staleness, rerun from a stage.
 25. **learning from edits** — kept agent output, recurring-edit detection, proposed amendments; Verify.
 
 ## Open questions

@@ -2559,6 +2559,8 @@ class StageState {
     this.ticket,
     this.summary,
     this.outputs = const [],
+    this.stale = false,
+    this.changed = const [],
   });
 
   /// Its folder in the work (`02_script`).
@@ -2575,12 +2577,20 @@ class StageState {
   /// The pages it wrote (in its folder).
   final List<String> outputs;
 
+  /// It ran, and something it read changed since (or it comes after a stage that is stale).
+  final bool stale;
+
+  /// Its inputs that changed since it ran.
+  final List<String> changed;
+
   factory StageState.fromJson(Map<String, Object?> json) => StageState(
         name: json['name'] as String,
         status: json['status'] as String,
         ticket: json['ticket'] == null ? null : json['ticket'] as String,
         summary: json['summary'] == null ? null : json['summary'] as String,
         outputs: json['outputs'] == null ? const [] : (json['outputs'] as List).map((e) => e as String).toList(),
+        stale: json['stale'] == null ? false : json['stale'] as bool,
+        changed: json['changed'] == null ? const [] : (json['changed'] as List).map((e) => e as String).toList(),
       );
 
   Map<String, Object?> toJson() => {
@@ -2589,6 +2599,8 @@ class StageState {
         if (ticket != null) 'ticket': ticket,
         if (summary != null) 'summary': summary,
         if (outputs.isNotEmpty) 'outputs': outputs,
+        'stale': stale,
+        if (changed.isNotEmpty) 'changed': changed,
       };
 }
 

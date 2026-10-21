@@ -1023,6 +1023,8 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
                     ticket: Some("0031".into()),
                     summary: None,
                     outputs: vec!["site://coding/game-save-system/03_implement/notes.md".into()],
+                    stale: true,
+                    changed: vec!["site://coding/_config/conventions.md".into()],
                 }],
                 project: Some("~/Projects/game".into()),
             }],

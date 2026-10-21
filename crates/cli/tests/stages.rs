@@ -23,6 +23,10 @@ async fn stages_run_in_order_and_stop_at_a_gate() {
                     Reply::Call("write", json!({ "url": "site://flow/note/01_draft/draft.md", "content": "---\ntitle: Draft\ntype: page\n---\n# Draft\nshort\n" })),
                     Reply::Call("finish", json!({ "status": "done", "summary": "drafted" })),
                     Reply::Text("finished"),
+                    // Again, after the rules changed.
+                    Reply::Call("write", json!({ "url": "site://flow/note/01_draft/draft.md", "content": "---\ntitle: Draft\ntype: page\n---\n# Draft\nbrief\n" })),
+                    Reply::Call("finish", json!({ "status": "done", "summary": "drafted to the new rules" })),
+                    Reply::Text("finished"),
                 ]),
             ),
             (
@@ -34,6 +38,10 @@ async fn stages_run_in_order_and_stop_at_a_gate() {
                     // Run again, with the user's note.
                     Reply::Call("write", json!({ "url": "site://flow/note/02_polish/final.md", "content": "---\ntitle: Final\ntype: page\n---\n# Final\nshortest\n" })),
                     Reply::Call("finish", json!({ "status": "done", "summary": "polished again" })),
+                    Reply::Text("finished"),
+                    // From the new draft.
+                    Reply::Call("write", json!({ "url": "site://flow/note/02_polish/final.md", "content": "---\ntitle: Final\ntype: page\n---\n# Final\nbrief, polished\n" })),
+                    Reply::Call("finish", json!({ "status": "done", "summary": "polished the new draft" })),
                     Reply::Text("finished"),
                 ]),
             ),
@@ -365,4 +373,65 @@ async fn stages_run_in_order_and_stop_at_a_gate() {
             .join("sites/orchestration/tickets/0005.md")
             .exists()
     );
+
+    // Stale: a rule the draft read changes. Run reruns from there and goes on through the
+    // stages after it, up to the gate.
+    assert!(
+        stage("01_draft").contains("inputs: {\"site://flow/_config/rules.md\":"),
+        "{}",
+        stage("01_draft")
+    );
+    std::fs::write(
+        flow.join("_config/rules.md"),
+        "---\ntitle: Rules\n---\n# Rules\n\nBe briefer.\n",
+    )
+    .unwrap();
+    send(&mut socket, 4, ClientCommand::PipelineList).await;
+    let reply = until(&mut socket, 10, |e| {
+        matches!(e, ServerMessage::Ok { id: 4, .. })
+    })
+    .await;
+    let Some(ServerMessage::Ok {
+        result: CommandResult::Pipelines { works, .. },
+        ..
+    }) = reply.last()
+    else {
+        panic!()
+    };
+    let stale: Vec<bool> = works[0].stages.iter().map(|s| s.stale).collect();
+    assert_eq!(stale, [true, true, true]);
+    assert_eq!(works[0].status.as_deref(), Some("01 draft · stale"));
+    send(
+        &mut socket,
+        5,
+        ClientCommand::WorkRun {
+            work: "flow/note".into(),
+            stage: None,
+            session: None,
+        },
+    )
+    .await;
+    until(&mut socket, 60, ended("02_polish", "review")).await;
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    assert!(stage("01_draft").contains("summary: \"drafted to the new rules\""));
+    assert!(
+        std::fs::read_to_string(flow.join("note/02_polish/final.md"))
+            .unwrap()
+            .contains("brief, polished")
+    );
+    send(&mut socket, 6, ClientCommand::PipelineList).await;
+    let reply = until(&mut socket, 10, |e| {
+        matches!(e, ServerMessage::Ok { id: 6, .. })
+    })
+    .await;
+    let Some(ServerMessage::Ok {
+        result: CommandResult::Pipelines { works, .. },
+        ..
+    }) = reply.last()
+    else {
+        panic!()
+    };
+    let stale: Vec<bool> = works[0].stages.iter().map(|s| s.stale).collect();
+    // 03 read the old polish: stale until approving 02 runs it again.
+    assert_eq!(stale, [false, false, true]);
 }

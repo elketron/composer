@@ -148,6 +148,12 @@ pub struct StageState {
     /// The pages it wrote (in its folder).
     #[serde(default)]
     pub outputs: Vec<Url>,
+    /// It ran, and something it read changed since (or it comes after a stage that is stale).
+    #[serde(default)]
+    pub stale: bool,
+    /// Its inputs that changed since it ran.
+    #[serde(default)]
+    pub changed: Vec<Url>,
 }
 
 /// A pipeline: a site of staged work (`type: pipeline`), or a template one is made from

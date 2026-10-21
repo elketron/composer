@@ -95,7 +95,7 @@ class _CommandPaletteState extends State<CommandPalette> {
       // The works of this project (as its overview last said) whose next stage can start.
       for (final w in status.overviews[scope ?? session?.project]?.works ?? const <WorkSummary>[])
         if (runnable(w))
-          _Entry('Actions', 'Run the next stage of ${workSpec(w.url)}',
+          _Entry('Actions', runLabel(w) == 'Run' ? 'Run the next stage of ${workSpec(w.url)}' : '${runLabel(w)} in ${workSpec(w.url)}',
               () => store.dispatch(WorkRunRequested(url, workSpec(w.url), project: scope ?? session?.project)),
               detail: w.status),
       _Entry('Actions', 'Open the reader', () => openPage(parent, url, status.page.page?.url ?? 'site://home'), hint: 'ctrl p'),

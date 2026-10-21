@@ -1,9 +1,12 @@
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use composer_core::{Page, SiteUrl};
+use composer_core::{Page, SiteUrl, Workspace};
 use composer_protocol::http::{StageState, WorkSummary};
 
+use crate::content_hash;
 use crate::pipeline::pipeline::Pipeline;
+use crate::pipeline::stage_contract::StageContract;
 use crate::pipeline::types::FINISHED;
 
 /// A piece of work: a folder in a pipeline site (`site://coding/save-system/`) with its brief in
@@ -67,18 +70,87 @@ impl Work {
             .filter(|v| !v.is_empty())
     }
 
+    /// Its stages with their state. A stage that ran is stale when an input it read changed
+    /// since (its `_stage.md` keeps their hashes), and so is every stage after it that ran.
     pub fn stages(&self) -> Vec<StageState> {
+        let mut behind = false;
         self.pipeline
             .stages
             .iter()
-            .map(|s| StageState {
-                name: s.name.clone(),
-                status: self.stage_status(&s.name),
-                ticket: self.stage_field(&s.name, "ticket"),
-                summary: self.stage_field(&s.name, "summary"),
-                outputs: self.outputs(&s.name),
+            .map(|s| {
+                let status = self.stage_status(&s.name);
+                let ran = matches!(status.as_str(), "done" | "approved" | "review");
+                let changed = if ran { self.changed_inputs(s) } else { vec![] };
+                let stale = ran && (behind || !changed.is_empty());
+                behind |= stale;
+                StageState {
+                    name: s.name.clone(),
+                    ticket: self.stage_field(&s.name, "ticket"),
+                    summary: self.stage_field(&s.name, "summary"),
+                    outputs: self.outputs(&s.name),
+                    status,
+                    stale,
+                    changed,
+                }
             })
             .collect()
+    }
+
+    /// What a stage reads now, by page, with each page's hash (empty: not there).
+    pub fn input_hashes(&self, contract: &StageContract) -> BTreeMap<String, String> {
+        let root = self.pipeline.dir.parent().map(Workspace::new);
+        contract
+            .inputs
+            .iter()
+            .filter_map(|i| self.resolve(&i.path))
+            .map(|url| {
+                let hash = root
+                    .as_ref()
+                    .and_then(|ws| ws.locate(&url).ok())
+                    .and_then(|path| std::fs::read(path).ok())
+                    .map(|bytes| content_hash(&bytes))
+                    .unwrap_or_default();
+                (url.to_string(), hash)
+            })
+            .collect()
+    }
+
+    /// The inputs that differ from what the stage read last time (`inputs:` in `_stage.md`).
+    fn changed_inputs(&self, contract: &StageContract) -> Vec<String> {
+        let Some(recorded) = self.recorded_inputs(&contract.name) else {
+            // Run before inputs were recorded: nothing to compare with.
+            return vec![];
+        };
+        let now = self.input_hashes(contract);
+        let mut changed: Vec<String> = now
+            .iter()
+            .filter(|(url, hash)| recorded.get(*url) != Some(*hash))
+            .map(|(url, _)| url.clone())
+            .collect();
+        changed.extend(
+            recorded
+                .keys()
+                .filter(|url| !now.contains_key(*url))
+                .cloned(),
+        );
+        changed
+    }
+
+    fn recorded_inputs(&self, stage: &str) -> Option<BTreeMap<String, String>> {
+        let raw = std::fs::read_to_string(self.dir.join(stage).join("_stage.md")).ok()?;
+        let url = SiteUrl::new(
+            &self.pipeline.name,
+            &format!("{}/{stage}/_stage.md", self.name),
+        )
+        .ok()?;
+        let page = Page::parse(url, raw);
+        let inputs = page.frontmatter.get("inputs")?.as_object()?;
+        Some(
+            inputs
+                .iter()
+                .map(|(k, v)| (k.clone(), v.as_str().unwrap_or_default().to_string()))
+                .collect(),
+        )
     }
 
     /// The pages a stage wrote: markdown in its folder (and one level down), not `_stage.md`.
@@ -112,15 +184,17 @@ impl Work {
             .collect()
     }
 
-    /// Where it is: the first stage not finished and its state (`02 script · review`), or `done`.
+    /// Where it is: the first stage that is stale or not finished, and its state
+    /// (`02 script · review`, `02 script · stale`), or `done`.
     pub fn status(&self, stages: &[StageState]) -> String {
         match stages
             .iter()
-            .find(|s| !FINISHED.contains(&s.status.as_str()))
+            .find(|s| s.stale || !FINISHED.contains(&s.status.as_str()))
         {
             Some(s) => {
                 let label = s.name.replacen('_', " ", 1);
-                format!("{label} · {}", s.status)
+                let state = if s.stale { "stale" } else { s.status.as_str() };
+                format!("{label} · {state}")
             }
             None => "done".into(),
         }
