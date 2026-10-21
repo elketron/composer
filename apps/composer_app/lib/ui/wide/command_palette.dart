@@ -13,6 +13,7 @@ import '../chat/review_page.dart';
 import '../home/activity_dot.dart';
 import '../home/new_chat_sheet.dart';
 import '../pages/page_navigation.dart';
+import '../pipelines/new_work_dialog.dart';
 import '../projects/project_picker.dart';
 import '../store_scope.dart';
 
@@ -80,6 +81,8 @@ class _CommandPaletteState extends State<CommandPalette> {
 
     final actions = <_Entry>[
       _Entry('Actions', 'New chat', () => showNewChat(parent, url), hint: 'ctrl n'),
+      _Entry('Actions', 'New work…', () => showNewWork(parent, url, project: scope ?? session?.project),
+          detail: 'a piece of work in a pipeline (coding, video, research)'),
       if (session != null) ...[
         _Entry('Actions', session.project == null ? 'Set the project…' : 'Change the project…', () => showProjectSheet(parent, url),
             detail: session.project?.split('/').last),

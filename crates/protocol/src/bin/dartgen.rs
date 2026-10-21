@@ -12,9 +12,9 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use composer_protocol::http::{
-    AgentSummary, AppMessage, ChangedFile, PageExcerpt, PageResponse, ProjectDiff, ProjectOverview,
-    ProjectSummary, PutPageRequest, PutPageResponse, SearchHit, ServerInfo, SiteSummary,
-    TicketBranchSummary, TicketReview, WorkSummary,
+    AgentSummary, AppMessage, ChangedFile, PageExcerpt, PageResponse, PipelineSummary, ProjectDiff,
+    ProjectOverview, ProjectSummary, PutPageRequest, PutPageResponse, SearchHit, ServerInfo,
+    SiteSummary, StageState, StageSummary, TicketBranchSummary, TicketReview, WorkSummary,
 };
 use composer_protocol::*;
 use serde_json::{Map, Value, json};
@@ -637,6 +637,47 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
             },
         },
         ServerMessage::Ok {
+            id: 54,
+            result: CommandResult::Pipelines {
+                pipelines: vec![PipelineSummary {
+                    site: "coding".into(),
+                    title: "Coding".into(),
+                    about: "Staged changes to a project.".into(),
+                    stages: vec![StageSummary {
+                        name: "03_implement".into(),
+                        title: "Implement".into(),
+                        gate: false,
+                        harness: Some("claude-code".into()),
+                        model: None,
+                        worktree: true,
+                    }],
+                    needs_project: true,
+                    works: 2,
+                }],
+                templates: vec![PipelineSummary {
+                    site: "video".into(),
+                    title: "Video".into(),
+                    about: "Short videos from an idea.".into(),
+                    stages: vec![],
+                    needs_project: false,
+                    works: 0,
+                }],
+            },
+        },
+        ServerMessage::Ok {
+            id: 55,
+            result: CommandResult::Work {
+                work: WorkSummary {
+                    url: "site://coding/save-system/index.md".into(),
+                    pipeline: "coding".into(),
+                    title: "save-system".into(),
+                    status: Some("01 spec · waiting".into()),
+                    stages: vec![],
+                    project: None,
+                },
+            },
+        },
+        ServerMessage::Ok {
             id: 51,
             result: CommandResult::ToolOutput {
                 output: "# Home".into(),
@@ -824,6 +865,17 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
         ClientCommand::ProjectOverview {
             project: "game".into(),
         },
+        ClientCommand::PipelineList,
+        ClientCommand::PipelineNew {
+            kind: "video".into(),
+            name: Some("shorts".into()),
+        },
+        ClientCommand::WorkNew {
+            pipeline: "coding".into(),
+            name: "save-system".into(),
+            project: Some("game".into()),
+            brief: Some("Three save slots.".into()),
+        },
         ClientCommand::TicketMerge {
             ticket: "0007".into(),
         },
@@ -951,7 +1003,12 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
                 url: "site://coding/game-save-system/index.md".into(),
                 pipeline: "coding".into(),
                 title: "Save system".into(),
-                status: Some("03 implement".into()),
+                status: Some("03 implement · running".into()),
+                stages: vec![StageState {
+                    name: "03_implement".into(),
+                    status: "running".into(),
+                }],
+                project: Some("~/Projects/game".into()),
             }],
             branches: vec![TicketBranchSummary {
                 ticket: "0028".into(),

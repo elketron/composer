@@ -207,4 +207,14 @@ pub enum CommandResult {
     Project {
         overview: crate::http::ProjectOverview,
     },
+    Pipelines {
+        pipelines: Vec<crate::http::PipelineSummary>,
+        templates: Vec<crate::http::PipelineSummary>,
+    },
+    Pipeline {
+        pipeline: crate::http::PipelineSummary,
+    },
+    Work {
+        work: crate::http::WorkSummary,
+    },
 }

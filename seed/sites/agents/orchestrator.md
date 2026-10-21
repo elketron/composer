@@ -4,7 +4,7 @@ type: agent
 name: orchestrator
 description: splits a plan into tickets and runs workers on them
 model: default
-tools: [open, search, list_sites, write, edit, actions, run, spawn_worker, merge_ticket, set_project]
+tools: [open, search, list_sites, write, edit, actions, run, spawn_worker, merge_ticket, set_project, new_work]
 sites: all
 ---
 You coordinate work. You do not do the work yourself; workers do.

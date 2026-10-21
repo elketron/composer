@@ -145,3 +145,11 @@ final class SearchProjects extends AppEffect {
   final String url;
   final String query;
 }
+
+/// `pipeline.new` (with `template`) then `work.new`; the outcome comes back as `WorkReplied`.
+final class CreateWork extends AppEffect {
+  const CreateWork(this.url, this.work, {this.template});
+  final String url;
+  final ClientCommandWorkNew work;
+  final String? template;
+}

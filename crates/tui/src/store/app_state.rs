@@ -314,6 +314,42 @@ impl AppState {
                     Pending::Overview,
                 )
             }
+            Action::Pipelines => self.send(ClientCommand::PipelineList, Pending::Pipelines),
+            Action::PipelineNew { kind, name } => {
+                self.send(ClientCommand::PipelineNew { kind, name }, Pending::Pipeline)
+            }
+            Action::WorkNew {
+                pipeline,
+                name,
+                project,
+            } => {
+                let project = project
+                    .or_else(|| {
+                        self.project_view
+                            .open
+                            .then(|| {
+                                self.project_view
+                                    .overview
+                                    .as_ref()
+                                    .map(|o| o.folder.clone())
+                            })
+                            .flatten()
+                    })
+                    .or_else(|| {
+                        self.session
+                            .current_info()
+                            .and_then(|s| self.session.project_of(s))
+                    });
+                self.send(
+                    ClientCommand::WorkNew {
+                        pipeline,
+                        name,
+                        project,
+                        brief: None,
+                    },
+                    Pending::Work,
+                )
+            }
             Action::Scope(scope) => {
                 self.session.scope = scope.filter(|s| s != "none");
                 let text = match &self.session.scope {
@@ -775,6 +811,49 @@ impl AppState {
             (Pending::Overview, CommandResult::Project { overview }) => {
                 self.project_view.loaded(overview);
                 vec![]
+            }
+            (
+                Pending::Pipelines,
+                CommandResult::Pipelines {
+                    pipelines,
+                    templates,
+                },
+            ) => {
+                let made: Vec<String> = pipelines
+                    .iter()
+                    .map(|p| format!("{} ({} stages, {} works)", p.site, p.stages.len(), p.works))
+                    .collect();
+                let kinds: Vec<&str> = templates.iter().map(|t| t.site.as_str()).collect();
+                let text = if made.is_empty() {
+                    format!("no pipelines yet: :pipeline new <{}>", kinds.join("|"))
+                } else {
+                    format!(
+                        "pipelines: {} · templates: {}",
+                        made.join(", "),
+                        kinds.join(", ")
+                    )
+                };
+                self.ui.flash(text, FlashLevel::Info);
+                vec![]
+            }
+            (Pending::Pipeline, CommandResult::Pipeline { pipeline }) => {
+                self.ui.flash(
+                    format!(
+                        "created site://{}: :work new {} <name> starts a piece of work",
+                        pipeline.site, pipeline.site
+                    ),
+                    FlashLevel::Info,
+                );
+                self.project_view.open = false;
+                self.reduce(Action::OpenUrl(format!("site://{}", pipeline.site)))
+            }
+            (Pending::Work, CommandResult::Work { work }) => {
+                self.ui.flash(
+                    format!("created {}: write its brief (e), then run 01", work.url),
+                    FlashLevel::Info,
+                );
+                self.project_view.open = false;
+                self.reduce(Action::OpenUrl(work.url))
             }
             (Pending::Merged(ticket), CommandResult::Merged { commit }) => {
                 self.ui.flash(

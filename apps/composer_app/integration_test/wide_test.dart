@@ -1,5 +1,6 @@
 // The desktop frame against a real server: the latest chat opens by itself, the reader, a site's
-// app and a ticket's changes in the side pane's tabs, and folding the session list.
+// app and a ticket's changes in the side pane's tabs, new work in a pipeline, and folding the
+// session list.
 //
 // Needs a paired server in COMPOSER_APP_DATA (run pairing_test.dart first) whose latest chat is an
 // orchestrator with a worker's report for a ticket that still has its branch, and a built
@@ -27,6 +28,16 @@ Future<void> pumpUntil(WidgetTester tester, Finder finder, {int seconds = 20}) a
     await Future<void>.delayed(const Duration(milliseconds: 200));
   }
   fail('timed out waiting for $finder');
+}
+
+Future<void> pumpUntilGone(WidgetTester tester, Finder finder, {int seconds = 20}) async {
+  final end = DateTime.now().add(Duration(seconds: seconds));
+  while (DateTime.now().isBefore(end)) {
+    await tester.pump(const Duration(milliseconds: 100));
+    if (finder.evaluate().isEmpty) return;
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+  }
+  fail('timed out waiting for $finder to go');
 }
 
 /// Lets real time pass while painting (and screenshots get taken).
@@ -59,6 +70,32 @@ void main() {
     await tester.tap(find.byKey(const Key('project-chip')));
     await pumpUntil(tester, find.text('BRANCHES TO MERGE'));
     await settle(tester, seconds: 3);
+
+    // New work from the palette: a video (made from its template the first time), linking this
+    // project; ctrl-enter creates it, its page opens beside the chat, and the project lists it
+    // with its stages.
+    final work = 'teaser-${DateTime.now().millisecondsSinceEpoch % 100000}';
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyK);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await pumpUntil(tester, find.byKey(const Key('palette-query')));
+    await tester.enterText(find.byKey(const Key('palette-query')), 'new work');
+    await settle(tester, seconds: 1);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await pumpUntil(tester, find.byKey(const Key('pipeline-video')));
+    await tester.tap(find.byKey(const Key('pipeline-video')));
+    await tester.enterText(find.byKey(const Key('work-name')), work);
+    await tester.enterText(find.byKey(const Key('work-brief')), 'A 20 second teaser for the release.');
+    await settle(tester, seconds: 2);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await pumpUntilGone(tester, find.byKey(const Key('work-name')));
+    await pumpUntil(tester, find.text('A 20 second teaser for the release.'));
+    await settle(tester, seconds: 2);
+    await tester.tap(find.byKey(const Key('project-chip')));
+    await pumpUntil(tester, find.byKey(Key('work-site://video/$work/index.md')));
+    await settle(tester, seconds: 2);
 
     // The scope: … finds a project and narrows the session list to it.
     await tester.tap(find.byKey(const Key('scope-more')));

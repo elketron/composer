@@ -250,6 +250,9 @@ sealed class ClientCommand {
         'harness.list' => ClientCommandHarnessList.fromJson(json),
         'harness.set' => ClientCommandHarnessSet.fromJson(json),
         'project.overview' => ClientCommandProjectOverview.fromJson(json),
+        'pipeline.list' => ClientCommandPipelineList.fromJson(json),
+        'pipeline.new' => ClientCommandPipelineNew.fromJson(json),
+        'work.new' => ClientCommandWorkNew.fromJson(json),
         'ticket.changes' => ClientCommandTicketChanges.fromJson(json),
         'ticket.merge' => ClientCommandTicketMerge.fromJson(json),
         'ticket.discard' => ClientCommandTicketDiscard.fromJson(json),
@@ -501,6 +504,78 @@ final class ClientCommandProjectOverview extends ClientCommand {
   Map<String, Object?> toJson() => {
         'type': 'project.overview',
         'project': project,
+      };
+}
+
+/// The pipelines (sites of staged work) and the templates new ones are made from; the reply
+/// is `pipelines`.
+final class ClientCommandPipelineList extends ClientCommand {
+  const ClientCommandPipelineList();
+
+  factory ClientCommandPipelineList.fromJson(Map<String, Object?> json) => ClientCommandPipelineList(
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'pipeline.list',
+      };
+}
+
+/// Makes a pipeline site from `templates/pipelines/<kind>/`, named `name` (default: the
+/// kind); the reply is `pipeline`.
+final class ClientCommandPipelineNew extends ClientCommand {
+  const ClientCommandPipelineNew({
+    required this.kind,
+    this.name,
+  });
+
+  final String kind;
+
+  final String? name;
+
+  factory ClientCommandPipelineNew.fromJson(Map<String, Object?> json) => ClientCommandPipelineNew(
+        kind: json['kind'] as String,
+        name: json['name'] == null ? null : json['name'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'pipeline.new',
+        'kind': kind,
+        if (name != null) 'name': name,
+      };
+}
+
+/// Starts a piece of work in a pipeline: the folder `site://<pipeline>/<name>/` with its
+/// brief and a folder per stage. `project` is a name in the projects directory or a path;
+/// the reply is `work`.
+final class ClientCommandWorkNew extends ClientCommand {
+  const ClientCommandWorkNew({
+    required this.pipeline,
+    required this.name,
+    this.project,
+    this.brief,
+  });
+
+  final String pipeline;
+
+  final String name;
+
+  final String? project;
+
+  final String? brief;
+
+  factory ClientCommandWorkNew.fromJson(Map<String, Object?> json) => ClientCommandWorkNew(
+        pipeline: json['pipeline'] as String,
+        name: json['name'] as String,
+        project: json['project'] == null ? null : json['project'] as String,
+        brief: json['brief'] == null ? null : json['brief'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'work.new',
+        'pipeline': pipeline,
+        'name': name,
+        if (project != null) 'project': project,
+        if (brief != null) 'brief': brief,
       };
 }
 
@@ -816,6 +891,9 @@ sealed class CommandResult {
         'changes' => CommandResultChanges.fromJson(json),
         'merged' => CommandResultMerged.fromJson(json),
         'project' => CommandResultProject.fromJson(json),
+        'pipelines' => CommandResultPipelines.fromJson(json),
+        'pipeline' => CommandResultPipeline.fromJson(json),
+        'work' => CommandResultWork.fromJson(json),
         _ => CommandResultUnknown(json),
       };
 
@@ -1010,6 +1088,62 @@ final class CommandResultProject extends CommandResult {
   Map<String, Object?> toJson() => {
         'kind': 'project',
         'overview': overview.toJson(),
+      };
+}
+
+final class CommandResultPipelines extends CommandResult {
+  const CommandResultPipelines({
+    required this.pipelines,
+    required this.templates,
+  });
+
+  final List<PipelineSummary> pipelines;
+
+  final List<PipelineSummary> templates;
+
+  factory CommandResultPipelines.fromJson(Map<String, Object?> json) => CommandResultPipelines(
+        pipelines: (json['pipelines'] as List).map((e) => PipelineSummary.fromJson(e as Map<String, Object?>)).toList(),
+        templates: (json['templates'] as List).map((e) => PipelineSummary.fromJson(e as Map<String, Object?>)).toList(),
+      );
+
+  Map<String, Object?> toJson() => {
+        'kind': 'pipelines',
+        'pipelines': pipelines.map((e) => e.toJson()).toList(),
+        'templates': templates.map((e) => e.toJson()).toList(),
+      };
+}
+
+final class CommandResultPipeline extends CommandResult {
+  const CommandResultPipeline({
+    required this.pipeline,
+  });
+
+  final PipelineSummary pipeline;
+
+  factory CommandResultPipeline.fromJson(Map<String, Object?> json) => CommandResultPipeline(
+        pipeline: PipelineSummary.fromJson(json['pipeline'] as Map<String, Object?>),
+      );
+
+  Map<String, Object?> toJson() => {
+        'kind': 'pipeline',
+        'pipeline': pipeline.toJson(),
+      };
+}
+
+final class CommandResultWork extends CommandResult {
+  const CommandResultWork({
+    required this.work,
+  });
+
+  final WorkSummary work;
+
+  factory CommandResultWork.fromJson(Map<String, Object?> json) => CommandResultWork(
+        work: WorkSummary.fromJson(json['work'] as Map<String, Object?>),
+      );
+
+  Map<String, Object?> toJson() => {
+        'kind': 'work',
+        'work': work.toJson(),
       };
 }
 
@@ -1234,6 +1368,53 @@ class PageResponse {
         'raw': raw,
         'backlinks': backlinks,
         'hash': hash,
+      };
+}
+
+/// A pipeline: a site of staged work (`type: pipeline`), or a template one is made from
+/// (`templates/pipelines/<kind>/`: `site` is the kind).
+class PipelineSummary {
+  const PipelineSummary({
+    required this.site,
+    required this.title,
+    required this.about,
+    required this.stages,
+    required this.needsProject,
+    required this.works,
+  });
+
+  final String site;
+
+  final String title;
+
+  /// One line: what kind of work it is for.
+  final String about;
+
+  /// Its stage contracts in order.
+  final List<StageSummary> stages;
+
+  /// Whether a work must link a project (coding: where the code lives).
+  final bool needsProject;
+
+  /// How many works it holds.
+  final int works;
+
+  factory PipelineSummary.fromJson(Map<String, Object?> json) => PipelineSummary(
+        site: json['site'] as String,
+        title: json['title'] as String,
+        about: json['about'] as String,
+        stages: (json['stages'] as List).map((e) => StageSummary.fromJson(e as Map<String, Object?>)).toList(),
+        needsProject: json['needs_project'] as bool,
+        works: (json['works'] as num).toInt(),
+      );
+
+  Map<String, Object?> toJson() => {
+        'site': site,
+        'title': title,
+        'about': about,
+        'stages': stages.map((e) => e.toJson()).toList(),
+        'needs_project': needsProject,
+        'works': works,
       };
 }
 
@@ -2289,6 +2470,76 @@ class SiteSummary {
       };
 }
 
+/// A work's stage and where it is: `waiting`, `running`, `review`, `approved`, `rerun`,
+/// `stopped`, `done` (its `_stage.md`'s `status:`).
+class StageState {
+  const StageState({
+    required this.name,
+    required this.status,
+  });
+
+  /// Its folder in the work (`02_script`).
+  final String name;
+
+  final String status;
+
+  factory StageState.fromJson(Map<String, Object?> json) => StageState(
+        name: json['name'] as String,
+        status: json['status'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'name': name,
+        'status': status,
+      };
+}
+
+/// A stage contract (`site://<pipeline>/stages/02_script.md`, `type: stage`).
+class StageSummary {
+  const StageSummary({
+    required this.name,
+    required this.title,
+    required this.gate,
+    this.harness,
+    this.model,
+    required this.worktree,
+  });
+
+  /// `02_script`: its file in `stages/`, and its folder in each work.
+  final String name;
+
+  final String title;
+
+  /// Waits for the human after it.
+  final bool gate;
+
+  /// `composer` or an external one (`claude-code`); `None` is the default.
+  final String? harness;
+
+  final String? model;
+
+  /// Writes code in the linked project, in a ticket worktree.
+  final bool worktree;
+
+  factory StageSummary.fromJson(Map<String, Object?> json) => StageSummary(
+        name: json['name'] as String,
+        title: json['title'] as String,
+        gate: json['gate'] as bool,
+        harness: json['harness'] == null ? null : json['harness'] as String,
+        model: json['model'] == null ? null : json['model'] as String,
+        worktree: json['worktree'] as bool,
+      );
+
+  Map<String, Object?> toJson() => {
+        'name': name,
+        'title': title,
+        'gate': gate,
+        if (harness != null) 'harness': harness,
+        if (model != null) 'model': model,
+        'worktree': worktree,
+      };
+}
+
 /// A ticket's branch that is still there.
 class TicketBranchSummary {
   const TicketBranchSummary({
@@ -2461,6 +2712,8 @@ class WorkSummary {
     required this.pipeline,
     required this.title,
     this.status,
+    this.stages = const [],
+    this.project,
   });
 
   final String url;
@@ -2470,14 +2723,22 @@ class WorkSummary {
 
   final String title;
 
-  /// Its `status:` (the stage it is at, `done`, …).
+  /// Where it is: the stage it is at and its state (`01 spec · waiting`), or `done`.
   final String? status;
+
+  /// Its stages in order, with their state.
+  final List<StageState> stages;
+
+  /// The project it links (`~/Projects/game`).
+  final String? project;
 
   factory WorkSummary.fromJson(Map<String, Object?> json) => WorkSummary(
         url: json['url'] as String,
         pipeline: json['pipeline'] as String,
         title: json['title'] as String,
         status: json['status'] == null ? null : json['status'] as String,
+        stages: json['stages'] == null ? const [] : (json['stages'] as List).map((e) => StageState.fromJson(e as Map<String, Object?>)).toList(),
+        project: json['project'] == null ? null : json['project'] as String,
       );
 
   Map<String, Object?> toJson() => {
@@ -2485,6 +2746,8 @@ class WorkSummary {
         'pipeline': pipeline,
         'title': title,
         if (status != null) 'status': status,
+        if (stages.isNotEmpty) 'stages': stages.map((e) => e.toJson()).toList(),
+        if (project != null) 'project': project,
       };
 }
 

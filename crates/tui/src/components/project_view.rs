@@ -72,15 +72,21 @@ impl ProjectView {
             rows.push(blank());
             rows.push(heading("WORKS"));
             for w in &o.works {
+                let mut spans = vec![Span::styled(format!("{:<10} ", w.pipeline), theme::faint())];
+                // One dot per stage: done, review, running, waiting.
+                for stage in &w.stages {
+                    spans.push(stage_dot(&stage.status));
+                }
+                if !w.stages.is_empty() {
+                    spans.push(Span::raw(" "));
+                }
+                spans.push(Span::styled(w.title.clone(), theme::text()));
+                spans.push(Span::styled(
+                    format!("  {}", w.status.clone().unwrap_or_default()),
+                    theme::muted(),
+                ));
                 rows.push(Row {
-                    line: Line::from(vec![
-                        Span::styled(format!("{:<10} ", w.pipeline), theme::faint()),
-                        Span::styled(w.title.clone(), theme::text()),
-                        Span::styled(
-                            format!("  {}", w.status.clone().unwrap_or_default()),
-                            theme::muted(),
-                        ),
-                    ]),
+                    line: Line::from(spans),
                     open: vec![close.clone(), Action::OpenUrl(w.url.clone())],
                 });
             }
@@ -192,6 +198,17 @@ impl ProjectView {
             }
         }
         rows
+    }
+}
+
+/// A stage's state as a dot: filled when finished, coloured by what it waits on.
+fn stage_dot(status: &str) -> Span<'static> {
+    match status {
+        "done" | "approved" => Span::styled("●", Style::new().fg(theme::OK)),
+        "review" => Span::styled("●", Style::new().fg(theme::ACCENT)),
+        "running" | "rerun" => Span::styled("●", Style::new().fg(theme::WARN)),
+        "stopped" | "failed" => Span::styled("●", Style::new().fg(theme::ERR)),
+        _ => Span::styled("○", theme::faint()),
     }
 }
 
@@ -326,7 +343,7 @@ impl Component for ProjectView {
         }
         lines.push(Line::raw(""));
         lines.push(Line::from(Span::styled(
-            "  j/k move · enter open · n new chat here · r reload · q close",
+            "  j/k move · enter open · n new chat here · r reload · q close · :work new <pipeline> <name> adds a work",
             theme::faint(),
         )));
         // Keep the cursor's row in view.

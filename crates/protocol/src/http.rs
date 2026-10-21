@@ -120,8 +120,62 @@ pub struct WorkSummary {
     /// The pipeline's site.
     pub pipeline: String,
     pub title: String,
-    /// Its `status:` (the stage it is at, `done`, …).
+    /// Where it is: the stage it is at and its state (`01 spec · waiting`), or `done`.
     pub status: Option<String>,
+    /// Its stages in order, with their state.
+    #[serde(default)]
+    pub stages: Vec<StageState>,
+    /// The project it links (`~/Projects/game`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project: Option<String>,
+}
+
+/// A work's stage and where it is: `waiting`, `running`, `review`, `approved`, `rerun`,
+/// `stopped`, `done` (its `_stage.md`'s `status:`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct StageState {
+    /// Its folder in the work (`02_script`).
+    pub name: String,
+    pub status: String,
+}
+
+/// A pipeline: a site of staged work (`type: pipeline`), or a template one is made from
+/// (`templates/pipelines/<kind>/`: `site` is the kind).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct PipelineSummary {
+    pub site: String,
+    pub title: String,
+    /// One line: what kind of work it is for.
+    pub about: String,
+    /// Its stage contracts in order.
+    pub stages: Vec<StageSummary>,
+    /// Whether a work must link a project (coding: where the code lives).
+    pub needs_project: bool,
+    /// How many works it holds.
+    pub works: u32,
+}
+
+/// A stage contract (`site://<pipeline>/stages/02_script.md`, `type: stage`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct StageSummary {
+    /// `02_script`: its file in `stages/`, and its folder in each work.
+    pub name: String,
+    pub title: String,
+    /// Waits for the human after it.
+    pub gate: bool,
+    /// `composer` or an external one (`claude-code`); `None` is the default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub harness: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    /// Writes code in the linked project, in a ticket worktree.
+    pub worktree: bool,
 }
 
 /// A ticket's branch that is still there.

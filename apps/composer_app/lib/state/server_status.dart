@@ -8,7 +8,7 @@ const _keep = Object();
 
 /// What the app knows about a server right now (not persisted).
 class ServerStatus {
-  const ServerStatus({this.link = LinkState.connecting, this.error, this.retryAt, this.info, this.sessions = const [], this.approvals = const [], this.chat, this.page = const PageState(), this.sites = const [], this.workers = const {}, this.agents = const [], this.projects = const [], this.unread = const {}, this.recent = const [], this.search = const PageSearch(), this.slotsUsed = 0, this.harnesses = const {}, this.reviews = const {}, this.side, this.sideTicket, this.sideChat, this.opened = false, this.projectSearch = const ProjectSearch(), this.overviews = const {}, this.scope, this.sideProject});
+  const ServerStatus({this.link = LinkState.connecting, this.error, this.retryAt, this.info, this.sessions = const [], this.approvals = const [], this.chat, this.page = const PageState(), this.sites = const [], this.workers = const {}, this.agents = const [], this.projects = const [], this.unread = const {}, this.recent = const [], this.search = const PageSearch(), this.slotsUsed = 0, this.harnesses = const {}, this.reviews = const {}, this.side, this.sideTicket, this.sideChat, this.opened = false, this.projectSearch = const ProjectSearch(), this.overviews = const {}, this.scope, this.sideProject, this.pipelines, this.newWork = const NewWork()});
 
   static const initial = ServerStatus();
 
@@ -83,6 +83,12 @@ class ServerStatus {
   /// The project (folder) the Project tab shows.
   final String? sideProject;
 
+  /// The pipelines and their templates, once asked (`pipeline.list`).
+  final Pipelines? pipelines;
+
+  /// The New work dialog's request.
+  final NewWork newWork;
+
   /// A chat was opened on this server since the app started (the wide layout opens the latest
   /// one by itself only before that).
   final bool opened;
@@ -142,6 +148,8 @@ class ServerStatus {
     Map<String, ProjectOverview>? overviews,
     Object? scope = _keep,
     Object? sideProject = _keep,
+    Pipelines? pipelines,
+    NewWork? newWork,
   }) =>
       ServerStatus(
         link: link ?? this.link,
@@ -170,5 +178,7 @@ class ServerStatus {
         overviews: overviews ?? this.overviews,
         scope: identical(scope, _keep) ? this.scope : scope as String?,
         sideProject: identical(sideProject, _keep) ? this.sideProject : sideProject as String?,
+        pipelines: pipelines ?? this.pipelines,
+        newWork: newWork ?? this.newWork,
       );
 }

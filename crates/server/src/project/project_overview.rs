@@ -61,11 +61,16 @@ fn works(server: &Server, folder: &str) -> Vec<WorkSummary> {
                 .as_deref()
                 == Some(folder)
         })
-        .map(|e| WorkSummary {
-            url: e.url.to_string(),
-            pipeline: e.url.site().to_string(),
-            title: e.title.clone(),
-            status: e.frontmatter.get_str("status"),
+        .map(|e| {
+            // A work in a pipeline shows its stages; any other `type: work` page its `status:`.
+            crate::pipeline::work_summary(server, &e.url).unwrap_or_else(|| WorkSummary {
+                url: e.url.to_string(),
+                pipeline: e.url.site().to_string(),
+                title: e.title.clone(),
+                status: e.frontmatter.get_str("status"),
+                stages: vec![],
+                project: e.frontmatter.get_str("project"),
+            })
         })
         .collect();
     works.sort_by(|a, b| a.url.cmp(&b.url));

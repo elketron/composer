@@ -3,8 +3,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use composer_protocol::{
-    Attachment, ChatMessage, ClientCommand, ClientRequest, CommandResult, MessageSource, Role, Seq,
-    ServerMessage, SessionId,
+    Attachment, ChangedBy, ChatMessage, ClientCommand, ClientRequest, CommandResult, MessageSource,
+    Role, Seq, ServerMessage, SessionId,
 };
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
@@ -480,6 +480,40 @@ impl Connection {
                 crate::project::project_overview(server, &project)
                     .map(|overview| CommandResult::Project { overview })
             }
+            ClientCommand::PipelineList => Ok(CommandResult::Pipelines {
+                pipelines: crate::pipeline::pipelines(server)
+                    .iter()
+                    .map(|p| p.summary())
+                    .collect(),
+                templates: crate::pipeline::templates(server)
+                    .iter()
+                    .map(|t| t.summary())
+                    .collect(),
+            }),
+            ClientCommand::PipelineNew { kind, name } => {
+                crate::pipeline::new_pipeline(server, &kind, name.as_deref(), ChangedBy::App).map(
+                    |p| CommandResult::Pipeline {
+                        pipeline: p.summary(),
+                    },
+                )
+            }
+            ClientCommand::WorkNew {
+                pipeline,
+                name,
+                project,
+                brief,
+            } => crate::pipeline::new_work(
+                server,
+                crate::pipeline::NewWork {
+                    pipeline: &pipeline,
+                    name: &name,
+                    title: None,
+                    project: project.as_deref(),
+                    brief: brief.as_deref(),
+                },
+                ChangedBy::App,
+            )
+            .map(|w| CommandResult::Work { work: w.summary() }),
             ClientCommand::HarnessList { project } => {
                 let folder = resolve_project(&project, &server.config.projects.dir)?;
                 Ok(CommandResult::Harnesses {

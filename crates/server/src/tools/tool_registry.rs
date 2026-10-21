@@ -11,8 +11,10 @@ use crate::tools::finish_tool::FinishTool;
 use crate::tools::list_sites_tool::ListSitesTool;
 use crate::tools::merge_ticket_tool::MergeTicketTool;
 use crate::tools::new_app_tool::NewAppTool;
+use crate::tools::new_pipeline_tool::NewPipelineTool;
 use crate::tools::new_project_tool::NewProjectTool;
 use crate::tools::new_site_tool::NewSiteTool;
+use crate::tools::new_work_tool::NewWorkTool;
 use crate::tools::open_tool::OpenTool;
 use crate::tools::run_tool::RunTool;
 use crate::tools::search_tool::SearchTool;
@@ -41,6 +43,8 @@ impl ToolRegistry {
                 Arc::new(NewSiteTool),
                 Arc::new(NewAppTool),
                 Arc::new(NewProjectTool),
+                Arc::new(NewPipelineTool),
+                Arc::new(NewWorkTool),
                 Arc::new(SpawnWorkerTool),
                 Arc::new(MergeTicketTool),
                 Arc::new(FinishTool),

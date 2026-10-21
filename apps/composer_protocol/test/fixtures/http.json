@@ -82,7 +82,14 @@
         "url": "site://coding/game-save-system/index.md",
         "pipeline": "coding",
         "title": "Save system",
-        "status": "03 implement"
+        "status": "03 implement · running",
+        "stages": [
+          {
+            "name": "03_implement",
+            "status": "running"
+          }
+        ],
+        "project": "~/Projects/game"
       }
     ],
     "branches": [

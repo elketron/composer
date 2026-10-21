@@ -81,6 +81,33 @@ pub enum ClientCommand {
     #[serde(rename = "project.overview")]
     ProjectOverview { project: String },
 
+    /// The pipelines (sites of staged work) and the templates new ones are made from; the reply
+    /// is `pipelines`.
+    #[serde(rename = "pipeline.list")]
+    PipelineList,
+
+    /// Makes a pipeline site from `templates/pipelines/<kind>/`, named `name` (default: the
+    /// kind); the reply is `pipeline`.
+    #[serde(rename = "pipeline.new")]
+    PipelineNew {
+        kind: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        name: Option<String>,
+    },
+
+    /// Starts a piece of work in a pipeline: the folder `site://<pipeline>/<name>/` with its
+    /// brief and a folder per stage. `project` is a name in the projects directory or a path;
+    /// the reply is `work`.
+    #[serde(rename = "work.new")]
+    WorkNew {
+        pipeline: String,
+        name: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        project: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        brief: Option<String>,
+    },
+
     /// A ticket's changes against the branch it would be merged into; the reply is `changes`.
     #[serde(rename = "ticket.changes")]
     TicketChanges { ticket: String },

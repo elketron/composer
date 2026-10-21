@@ -132,6 +132,10 @@ pub enum Pending {
     Harnesses,
     /// `project.overview` for the project view.
     Overview,
+    /// `pipeline.list`, `pipeline.new`, `work.new`: say what there is, open what was made.
+    Pipelines,
+    Pipeline,
+    Work,
     /// `ticket.merge` / `ticket.discard` of this ticket.
     Merged(String),
     Discarded(String),

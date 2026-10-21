@@ -71,28 +71,46 @@
   },
   {
     "id": 13,
+    "type": "pipeline.list"
+  },
+  {
+    "id": 14,
+    "type": "pipeline.new",
+    "kind": "video",
+    "name": "shorts"
+  },
+  {
+    "id": 15,
+    "type": "work.new",
+    "pipeline": "coding",
+    "name": "save-system",
+    "project": "game",
+    "brief": "Three save slots."
+  },
+  {
+    "id": 16,
     "type": "ticket.merge",
     "ticket": "0007"
   },
   {
-    "id": 14,
+    "id": 17,
     "type": "ticket.discard",
     "ticket": "0007"
   },
   {
-    "id": 15,
+    "id": 18,
     "type": "subscribe",
     "urls": [
       "*"
     ]
   },
   {
-    "id": 16,
+    "id": 19,
     "type": "worker.hello",
     "session": "a3f1"
   },
   {
-    "id": 17,
+    "id": 20,
     "type": "worker.event",
     "event": {
       "type": "turn.started",
@@ -101,16 +119,16 @@
     }
   },
   {
-    "id": 18,
+    "id": 21,
     "type": "slot.acquire"
   },
   {
-    "id": 19,
+    "id": 22,
     "type": "slot.release",
     "grant": 7
   },
   {
-    "id": 20,
+    "id": 23,
     "type": "approval.ask",
     "site": "t",
     "recipe": "r",
@@ -119,30 +137,30 @@
     "hash": "h"
   },
   {
-    "id": 21,
+    "id": 24,
     "type": "worker.finish",
     "state": "failed",
     "summary": "why"
   },
   {
-    "id": 22,
+    "id": 25,
     "type": "tool.list",
     "session": "a3f1"
   },
   {
-    "id": 23,
+    "id": 26,
     "type": "harness.list",
     "project": "composer"
   },
   {
-    "id": 24,
+    "id": 27,
     "type": "harness.set",
     "project": "composer",
     "entry": "claude-code",
     "on": false
   },
   {
-    "id": 25,
+    "id": 28,
     "type": "tool.call",
     "session": "a3f1",
     "name": "open",

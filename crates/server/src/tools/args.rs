@@ -90,3 +90,19 @@ pub struct FinishArgs {
     pub status: String,
     pub summary: String,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct NewPipelineArgs {
+    pub kind: String,
+    /// The site's name; defaults to the kind.
+    pub name: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct NewWorkArgs {
+    pub pipeline: String,
+    pub name: String,
+    pub title: Option<String>,
+    pub project: Option<String>,
+    pub brief: Option<String>,
+}

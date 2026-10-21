@@ -3,6 +3,7 @@ use composer_core::SiteUrl;
 use composer_protocol::ChangedBy;
 use serde_json::{Value, json};
 
+use crate::server::Server;
 use crate::tools::args::NewSiteArgs;
 use crate::tools::markdown_sections::append_table_row;
 use crate::tools::{Tool, ToolContext};
@@ -96,20 +97,32 @@ fn homepage(title: &str, about: &str) -> String {
 /// Adds the site to the table on Home. Returns a note for the result.
 fn list_on_home(context: &ToolContext, name: &str, about: &str) -> String {
     let home = SiteUrl::new("home", "").expect("valid");
-    let not_listed = |why: &str| format!("; not listed on Home ({why}), add it there yourself");
     if context.check_write(&home).is_err() {
-        return not_listed("you may not edit it");
+        return "; not listed on Home (you may not edit it), add it there yourself".into();
     }
-    let server = &context.server;
+    match add_to_home(&context.server, name, about, ChangedBy::Agent) {
+        Ok(()) => " and listed it on Home".into(),
+        Err(why) => format!("; not listed on Home ({why}), add it there yourself"),
+    }
+}
+
+/// Adds a row for the site to Home's Sites table.
+pub(crate) fn add_to_home(
+    server: &Server,
+    name: &str,
+    about: &str,
+    by: ChangedBy,
+) -> Result<(), String> {
+    let home = SiteUrl::new("home", "").expect("valid");
     let Ok(page) = server.workspace.read_page(&home) else {
-        return not_listed("there is no site://home");
+        return Err("there is no site://home".into());
     };
-    let row = format!("| [{name}](site://{name}) | {about} |");
+    let row = format!("| [{name}](site://{name}) | {} |", one_line(about));
     let Some(text) = append_table_row(&page.raw, "Sites", &row) else {
-        return not_listed("it has no Sites table");
+        return Err("it has no Sites table".into());
     };
-    match server.write_page(&home, &text, ChangedBy::Agent) {
-        Ok(_) => " and listed it on Home".into(),
-        Err(e) => not_listed(&e.to_string()),
-    }
+    server
+        .write_page(&home, &text, by)
+        .map(|_| ())
+        .map_err(|e| e.to_string())
 }

@@ -403,3 +403,35 @@ final class CatalogRequested extends AppAction {
   const CatalogRequested(this.url);
   final String url;
 }
+
+/// Ask for the pipelines and their templates; the reply fills `pipelines`.
+final class PipelinesRequested extends AppAction {
+  const PipelinesRequested(this.url);
+  final String url;
+}
+
+/// Make a piece of work in `pipeline`; with `template`, first the pipeline itself from that
+/// template (`pipeline` is then its name).
+final class WorkCreateRequested extends AppAction {
+  const WorkCreateRequested(this.url, {required this.pipeline, required this.name, this.project, this.brief, this.template});
+  final String url;
+  final String pipeline;
+  final String name;
+  final String? project;
+  final String? brief;
+  final String? template;
+}
+
+/// The answer to `work.new` (and `pipeline.new` before it): the work, or why it failed.
+final class WorkReplied extends AppAction {
+  const WorkReplied(this.url, {this.work, this.error});
+  final String url;
+  final WorkSummary? work;
+  final String? error;
+}
+
+/// The New work dialog closed (or starts over).
+final class NewWorkReset extends AppAction {
+  const NewWorkReset(this.url);
+  final String url;
+}

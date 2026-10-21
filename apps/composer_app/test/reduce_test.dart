@@ -408,6 +408,28 @@ void main() {
       expect(reduce(state, const CatalogRequested(url)).$2.single, isA<FetchCatalog>());
     });
 
+    test('pipelines: the list, new work (from a template), its outcome', () {
+      const url = 'https://home.ts.net';
+      var (state, effects) = reduce(loaded([home]), const PipelinesRequested(url));
+      expect((effects.single as SendCommand).command, isA<ClientCommandPipelineList>());
+      const coding = PipelineSummary(site: 'coding', title: 'Coding', about: '', stages: [], needsProject: true, works: 0);
+      state = reduce(state, ServerEvent(url, const ServerMessageOk(id: 4, result: CommandResultPipelines(pipelines: [], templates: [coding])))).$1;
+      expect(state.statusOf(url).pipelines?.templates, [coding]);
+
+      (state, effects) = reduce(state, const WorkCreateRequested(url, pipeline: 'coding', name: 'save-system', project: 'game', template: 'coding'));
+      expect(state.statusOf(url).newWork.busy, isTrue);
+      final create = effects.single as CreateWork;
+      expect((create.template, create.work.pipeline, create.work.name, create.work.project), ('coding', 'coding', 'save-system', 'game'));
+
+      final failed = reduce(state, const WorkReplied(url, error: 'a coding work links a project')).$1.statusOf(url).newWork;
+      expect((failed.busy, failed.error), (false, 'a coding work links a project'));
+      const work = WorkSummary(url: 'site://coding/save-system/index.md', pipeline: 'coding', title: 'save-system', stages: []);
+      (state, effects) = reduce(state, const WorkReplied(url, work: work));
+      expect(state.statusOf(url).newWork.created, work.url);
+      expect((effects.single as SendCommand).command, isA<ClientCommandPipelineList>(), reason: 'the lists show it');
+      expect(reduce(state, const NewWorkReset(url)).$1.statusOf(url).newWork.created, isNull);
+    });
+
     test('apps show in the reader; closing keeps the follow choice', () {
       var state = reduce(opened('site://orchestration'), AppRequested(home.url, 'orchestration')).$1;
       expect(state.statusOf(home.url).page.appSite, 'orchestration');

@@ -13,6 +13,8 @@ import '../format.dart';
 import '../home/activity_dot.dart';
 import '../home/section_label.dart';
 import '../pages/page_navigation.dart';
+import '../pipelines/new_work_dialog.dart';
+import '../pipelines/stage_dots.dart';
 import '../store_scope.dart';
 
 /// What is going on in one project: its works across pipelines, branches waiting to merge, its
@@ -84,7 +86,7 @@ class _ProjectOverviewViewState extends State<ProjectOverviewView> {
           child: Text(text, style: mono(size: 10.5)),
         );
 
-    return ListView(padding: const EdgeInsets.fromLTRB(16, 12, 16, 16), children: [
+    return ListView(key: const Key('project-overview'), padding: const EdgeInsets.fromLTRB(16, 12, 16, 16), children: [
       Row(children: [
         Text(projectName(widget.folder), style: mono(size: 15, color: t.text, weight: FontWeight.w600)),
         const SizedBox(width: 8),
@@ -111,6 +113,7 @@ class _ProjectOverviewViewState extends State<ProjectOverviewView> {
             children: [
               chip(w.pipeline),
               const SizedBox(width: 8),
+              if (w.stages.isNotEmpty) ...[StageDots(w.stages), const SizedBox(width: 6)],
               Expanded(child: Text(w.title, overflow: TextOverflow.ellipsis, style: mono(size: 12.5, color: t.text))),
               Text(w.status ?? '', style: mono(size: 11, color: t.muted)),
             ],
@@ -207,6 +210,11 @@ class _ProjectOverviewViewState extends State<ProjectOverviewView> {
               if (!isWide(context)) pushChat(context, url);
             },
             child: const Text('New chat here'),
+          ),
+          OutlinedButton(
+            key: const Key('project-new-work'),
+            onPressed: () => showNewWork(context, url, project: widget.folder),
+            child: const Text('New work here'),
           ),
           OutlinedButton(
             onPressed: () => store.dispatch(ScopeChanged(url, status.scope == widget.folder ? null : widget.folder)),

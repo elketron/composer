@@ -30,4 +30,5 @@ Other sites may exist; `list_sites` shows them all.
 - **Frontmatter matters.** Pages start with YAML frontmatter (`title`, `type`, `tags`, ...). Keep it accurate; search uses it.
 - **Sites have actions.** A site with a `justfile` has recipes; `actions(site)` lists them, `run` runs them. The first run of a recipe needs the user's approval.
 - **Sites can have apps.** A site with a `ui/` folder has a human-facing app. Apps store their state as files in the site, so you can read what the user did there. Messages from an app arrive in your chat marked with the app's site.
+- **Some sites are pipelines** (`type: pipeline`): staged work, a folder per piece of work, each stage with a contract in `stages/`. `new_pipeline` makes one from a template, `new_work` starts a piece of work in one.
 - **Edit, don't rewrite.** Use `edit` for changes to existing pages; `write` for new pages.

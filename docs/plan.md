@@ -780,6 +780,24 @@ site://coding/
   site (`_config/conventions.md`), and say which are reference and which are working. A work's `_config/` file
   wins over the site's of the same name.
 
+Built (milestone 21): `templates/pipelines/{coding,video,research}/` (installed by `init`, brought in by `update`;
+`__PIPELINE__` becomes the site's name; a `README.md` there describes the shape for your own kinds).
+`crates/server/src/pipeline/`: `Pipeline` (a folder whose `index.md` says `type: pipeline`, `needs_project:`, and
+its `stages/NN_name.md`), `StageContract` (frontmatter `gate`, `harness`, `model`, `agent`, `worktree`; the Inputs
+table's `working` / `reference` rows; the Outputs section's paths), `Work` (its stages' state from each
+`_stage.md`, where it is: `02 plan · waiting` or `done`; `resolve` maps an input to a page: `brief` is the work's
+index, a work's own `_config/` file wins). `new_pipeline` copies a template through the server (indexed, listed on
+Home); `new_work` writes the work's `index.md` (`type: work`, `pipeline:`, `project:` as `~/…`, brief, stage
+table) and a `_stage.md` per stage (`type: stage-run`, `status: waiting`, the contract's harness and model), and
+lists it under the pipeline's Works. WebSocket: `pipeline.list` (reply `pipelines`: the pipelines and the templates,
+both `PipelineSummary`), `pipeline.new`, `work.new` (reply `work`); `WorkSummary` gained `stages` and `project`.
+Agent tools `new_pipeline`, `new_work` (default agent; the orchestrator gets `new_work`). App: New work dialog
+(`lib/ui/pipelines/`: pipelines and not-yet-made templates, name, project, the stages, the brief; ctrl-enter; from
+a template it makes the pipeline first), from the palette and the project view's New work here; works show their
+stages as dots. TUI: `:pipeline [new <kind> [name]]`, `:work new <pipeline> <name> [project]` (default project:
+the project view's, else the session's), dots in the project view. A `type: pipeline` site without stage contracts
+keeps its works' own `status:`.
+
 ### The project view
 
 A project (always a folder on disk) is where everything about one thing meets: the works that link it in any
@@ -859,7 +877,7 @@ gets its orchestrator's project, not the worktree. Works show once pipelines (21
 
 20. ✅ **project view** — `project.overview`, the overview (side pane tab, phone Projects tab, TUI view), the
     project scope on the session list and palette, project search everywhere projects are listed.
-21. **pipeline sites and works** — templates (`video`, `research`, `coding`), `new_pipeline`, `new_work`,
+21. ✅ **pipeline sites and works** — templates (`video`, `research`, `coding`), `new_pipeline`, `new_work`,
     stage contracts, `_config` overrides, `_stage.md`; works in the project view.
 22. **running stages** — stages as tickets with scoped context, the `stage` agent, harness and model per stage,
     advancing without gates.

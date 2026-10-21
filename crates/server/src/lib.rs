@@ -15,6 +15,7 @@ mod home;
 mod hub;
 mod init;
 pub mod mcp;
+pub mod pipeline;
 pub mod project;
 pub mod provider;
 pub mod reminders;

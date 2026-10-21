@@ -178,6 +178,17 @@ import 'types.dart';
         ),
       ProjectOverviewRequested(:final url, :final project) => (s, [SendCommand(url, ClientCommandProjectOverview(project: project))]),
       CatalogRequested(:final url) => (s, [FetchCatalog(url)]),
+      PipelinesRequested(:final url) => (s, [SendCommand(url, const ClientCommandPipelineList())]),
+      WorkCreateRequested(:final url, :final pipeline, :final name, :final project, :final brief, :final template) => (
+          _updateStatus(s, url, (x) => x.copyWith(newWork: const NewWork(busy: true))),
+          [CreateWork(url, ClientCommandWorkNew(pipeline: pipeline, name: name, project: project, brief: brief), template: template)],
+        ),
+      WorkReplied(:final url, :final work, :final error) => (
+          _updateStatus(s, url, (x) => x.copyWith(newWork: NewWork(error: error, created: work?.url))),
+          // The new work (and maybe pipeline) shows in the lists.
+          [if (work != null) SendCommand(url, const ClientCommandPipelineList())],
+        ),
+      NewWorkReset(:final url) => (_updateStatus(s, url, (x) => x.copyWith(newWork: const NewWork())), const []),
       ScopeChanged(:final url, :final project) => (_updateStatus(s, url, (x) => x.copyWith(scope: project)), const []),
       SideClosed(:final url) => (_side(s, url, null), const []),
       SessionsToggled() => _layout(s, s.layout.copyWith(sessionsCollapsed: !s.layout.sessionsCollapsed)),
@@ -560,6 +571,8 @@ AppState _event(AppState s, String url, ServerMessage message) => switch (messag
         }),
       ServerMessageOk(result: CommandResultProject(:final overview)) =>
         _updateStatus(s, url, (x) => x.copyWith(overviews: {...x.overviews, overview.folder: overview})),
+      ServerMessageOk(result: CommandResultPipelines(:final pipelines, :final templates)) =>
+        _updateStatus(s, url, (x) => x.copyWith(pipelines: Pipelines(pipelines: pipelines, templates: templates))),
       ServerMessageOk(result: CommandResultHarnesses(:final project, :final harnesses)) =>
         _updateStatus(s, url, (x) => x.copyWith(harnesses: {...x.harnesses, project: harnesses})),
       ServerMessageSlots(:final used) => _updateStatus(s, url, (x) => x.copyWith(slotsUsed: used)),

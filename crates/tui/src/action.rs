@@ -52,6 +52,20 @@ pub enum Action {
     ProjectView(Option<String>),
     /// `gp`: the project view on or off.
     ToggleProjectView,
+    /// `:pipeline`: the pipelines and the templates new ones come from.
+    Pipelines,
+    /// `:pipeline new <kind> [name]`: a pipeline site from a template.
+    PipelineNew {
+        kind: String,
+        name: Option<String>,
+    },
+    /// `:work new <pipeline> <name> [project]`: a piece of work in a pipeline (default project:
+    /// the project view's, else this session's).
+    WorkNew {
+        pipeline: String,
+        name: String,
+        project: Option<String>,
+    },
     /// Narrow the session picker to a project (a name or folder); `None`: all.
     Scope(Option<String>),
     /// The project list for the picker, for `query`.
