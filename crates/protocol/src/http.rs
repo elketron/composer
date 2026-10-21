@@ -139,6 +139,15 @@ pub struct StageState {
     /// Its folder in the work (`02_script`).
     pub name: String,
     pub status: String,
+    /// The ticket of its last run.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ticket: Option<String>,
+    /// What its last run said it did.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+    /// The pages it wrote (in its folder).
+    #[serde(default)]
+    pub outputs: Vec<Url>,
 }
 
 /// A pipeline: a site of staged work (`type: pipeline`), or a template one is made from

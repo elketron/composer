@@ -1127,21 +1127,27 @@ final class CommandResultPipelines extends CommandResult {
   const CommandResultPipelines({
     required this.pipelines,
     required this.templates,
+    this.works = const [],
   });
 
   final List<PipelineSummary> pipelines;
 
   final List<PipelineSummary> templates;
 
+  /// Every work in them.
+  final List<WorkSummary> works;
+
   factory CommandResultPipelines.fromJson(Map<String, Object?> json) => CommandResultPipelines(
         pipelines: (json['pipelines'] as List).map((e) => PipelineSummary.fromJson(e as Map<String, Object?>)).toList(),
         templates: (json['templates'] as List).map((e) => PipelineSummary.fromJson(e as Map<String, Object?>)).toList(),
+        works: json['works'] == null ? const [] : (json['works'] as List).map((e) => WorkSummary.fromJson(e as Map<String, Object?>)).toList(),
       );
 
   Map<String, Object?> toJson() => {
         'kind': 'pipelines',
         'pipelines': pipelines.map((e) => e.toJson()).toList(),
         'templates': templates.map((e) => e.toJson()).toList(),
+        if (works.isNotEmpty) 'works': works.map((e) => e.toJson()).toList(),
       };
 }
 
@@ -1774,6 +1780,7 @@ sealed class ServerMessage {
         'session.updated' => ServerMessageSessionUpdated.fromJson(json),
         'page.changed' => ServerMessagePageChanged.fromJson(json),
         'worker.status' => ServerMessageWorkerStatus.fromJson(json),
+        'stage.ended' => ServerMessageStageEnded.fromJson(json),
         'reminder.due' => ServerMessageReminderDue.fromJson(json),
         'slots' => ServerMessageSlots.fromJson(json),
         _ => ServerMessageUnknown(json),
@@ -2298,6 +2305,47 @@ final class ServerMessageWorkerStatus extends ServerMessage {
       };
 }
 
+/// A pipeline stage's run ended: `review` (waits at its gate), `done`, `failed`, `paused`.
+final class ServerMessageStageEnded extends ServerMessage {
+  const ServerMessageStageEnded({
+    required this.work,
+    required this.title,
+    required this.stage,
+    required this.status,
+    required this.summary,
+  });
+
+  /// The work's page (`site://video/launch-video/index.md`).
+  final String work;
+
+  /// The work's title.
+  final String title;
+
+  /// `02_script`.
+  final String stage;
+
+  final String status;
+
+  final String summary;
+
+  factory ServerMessageStageEnded.fromJson(Map<String, Object?> json) => ServerMessageStageEnded(
+        work: json['work'] as String,
+        title: json['title'] as String,
+        stage: json['stage'] as String,
+        status: json['status'] as String,
+        summary: json['summary'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'stage.ended',
+        'work': work,
+        'title': title,
+        'stage': stage,
+        'status': status,
+        'summary': summary,
+      };
+}
+
 /// A reminder page (`type: reminder`) came due. Sent once per reminder, to every client.
 final class ServerMessageReminderDue extends ServerMessage {
   const ServerMessageReminderDue({
@@ -2508,6 +2556,9 @@ class StageState {
   const StageState({
     required this.name,
     required this.status,
+    this.ticket,
+    this.summary,
+    this.outputs = const [],
   });
 
   /// Its folder in the work (`02_script`).
@@ -2515,14 +2566,29 @@ class StageState {
 
   final String status;
 
+  /// The ticket of its last run.
+  final String? ticket;
+
+  /// What its last run said it did.
+  final String? summary;
+
+  /// The pages it wrote (in its folder).
+  final List<String> outputs;
+
   factory StageState.fromJson(Map<String, Object?> json) => StageState(
         name: json['name'] as String,
         status: json['status'] as String,
+        ticket: json['ticket'] == null ? null : json['ticket'] as String,
+        summary: json['summary'] == null ? null : json['summary'] as String,
+        outputs: json['outputs'] == null ? const [] : (json['outputs'] as List).map((e) => e as String).toList(),
       );
 
   Map<String, Object?> toJson() => {
         'name': name,
         'status': status,
+        if (ticket != null) 'ticket': ticket,
+        if (summary != null) 'summary': summary,
+        if (outputs.isNotEmpty) 'outputs': outputs,
       };
 }
 

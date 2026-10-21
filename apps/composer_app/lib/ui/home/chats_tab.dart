@@ -7,7 +7,9 @@ import '../../theme/composer_theme.dart';
 import '../../theme/tokens.dart' as t;
 import '../../state/actions.dart';
 import '../../state/types.dart';
+import '../../state/works.dart';
 import '../chat/navigation.dart';
+import '../pipelines/gate_tile.dart';
 import '../store_scope.dart';
 import 'activity_dot.dart';
 import 'approval_tile.dart';
@@ -40,7 +42,13 @@ class ChatsTab extends StatelessWidget {
     final unread = sessions.where((s) => status.unread.contains(s.id) && !running(s)).toList();
     final busy = top.where(running).toList();
     final rest = top.where((s) => !running(s) && !status.unread.contains(s.id)).toList();
-    final needsYou = status.approvals.where((a) => sessions.any((s) => s.id == a.session)).length + unread.length;
+    // Works waiting at a gate (in the scope's project, when there is one).
+    final gates = [
+      for (final w in status.pipelines?.works ?? const <WorkSummary>[])
+        if (waitingStage(w) != null && (scope == null || linksProject(w, scope)))
+          w,
+    ];
+    final needsYou = status.approvals.where((a) => sessions.any((s) => s.id == a.session)).length + unread.length + gates.length;
 
     Widget card(SessionInfo s) => Padding(
           padding: const EdgeInsets.only(bottom: 8),
@@ -67,6 +75,7 @@ class ChatsTab extends StatelessWidget {
                 padding: const EdgeInsets.only(bottom: 8),
                 child: ApprovalTile(url: url, approval: a, agent: status.session(a.session)?.agent),
               ),
+            for (final w in gates) GateTile(url: url, status: status, work: w),
             for (final s in unread) card(s),
           ],
           if (busy.isNotEmpty) ...[const SectionLabel('Running'), for (final s in busy) card(s)],

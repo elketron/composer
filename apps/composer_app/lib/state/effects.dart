@@ -78,6 +78,7 @@ final class Notify extends AppEffect {
     this.session,
     this.approval,
     this.page,
+    this.app,
   });
   final String key;
   final String title;
@@ -92,6 +93,9 @@ final class Notify extends AppEffect {
 
   /// A page to open when there is no session (a reminder).
   final String? page;
+
+  /// A site whose app to open instead (a pipeline's board, for a stage waiting for review).
+  final String? app;
 }
 
 final class CancelNotification extends AppEffect {

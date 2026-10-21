@@ -9,6 +9,7 @@ use composer_protocol::http::WorkSummary;
 use crate::pipeline::pipeline::Pipeline;
 use crate::pipeline::work::Work;
 use crate::server::Server;
+use crate::tools::scaffold::copy_template;
 use crate::tools::{add_to_home, resolve_project, tilde};
 
 /// Replaced by the pipeline site's name in every template file.
@@ -100,6 +101,17 @@ pub fn new_pipeline(
     }
     std::fs::create_dir(&dir).map_err(|e| format!("creating site://{name}: {e}"))?;
     copy(server, &template.dir, Path::new(""), name, by)?;
+    // Its board app (built by `prepare_board`) and the action that builds it.
+    let board = server.home.templates().join("board");
+    if board.is_dir() {
+        copy_template(&board, &dir.join("ui"), PLACEHOLDER, name)
+            .map_err(|e| format!("copying the board app: {e}"))?;
+        std::fs::write(
+            dir.join("justfile"),
+            format!("# Build the board app (ui/dist), served at /{name}/.\nui-build:\n    cd ui && bun install && bun run build\n"),
+        )
+        .map_err(|e| format!("writing the justfile: {e}"))?;
+    }
     let pipeline = Pipeline::from_dir(name, &dir).ok_or("the template has no pipeline index")?;
     // Not listed on Home is no reason to fail: the site is there.
     let _ = add_to_home(server, name, &pipeline.about, by);
@@ -278,4 +290,61 @@ fn check_name(name: &str) -> Result<(), String> {
 
 fn one_line(text: &str) -> String {
     text.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// After `new_pipeline`: approves the board's stock `ui-build` action and, with
+/// `[pipelines] build_board`, builds the board in the background.
+pub fn prepare_board(server: &std::sync::Arc<Server>, site: &str) {
+    let server = server.clone();
+    let site = site.to_string();
+    tokio::spawn(async move {
+        let dir = server.workspace.root().join(&site);
+        let Ok(justfile) = crate::actions::Justfile::load(&dir).await else {
+            return;
+        };
+        if justfile.recipes().iter().all(|r| r.name != "ui-build") {
+            return;
+        }
+        if let Err(e) = server
+            .approvals
+            .approve(&site, "ui-build", &justfile.hash("ui-build"))
+        {
+            tracing::warn!("approving {site}'s ui-build: {e}");
+        }
+        if !server.config.pipelines.build_board {
+            return;
+        }
+        let env = crate::actions::RecipeEnv {
+            site: site.clone(),
+            ..Default::default()
+        };
+        let ran = crate::actions::run_recipe(
+            &justfile,
+            "ui-build",
+            &[],
+            &env,
+            std::time::Duration::from_secs(600),
+            &tokio_util::sync::CancellationToken::new(),
+        )
+        .await;
+        match ran {
+            Ok(_) if dir.join("ui/dist/index.html").is_file() => {
+                tracing::info!("built the board of site://{site}");
+                // Clients that list sites see the app now.
+                server
+                    .hub
+                    .send(composer_protocol::ServerMessage::PageChanged {
+                        url: format!("site://{site}/index.md"),
+                        kind: composer_protocol::PageChangeKind::Modified,
+                        by: ChangedBy::Agent,
+                    });
+            }
+            Ok(out) => tracing::warn!(
+                "building the board of site://{site} failed ({:?}): {}",
+                out.exit_code,
+                out.output
+            ),
+            Err(e) => tracing::warn!("building the board of site://{site}: {e}"),
+        }
+    });
 }

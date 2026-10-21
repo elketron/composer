@@ -63,9 +63,14 @@ class _ComposerAppState extends State<ComposerApp> {
     final session = tap.session;
     final page = tap.page;
     if (session == null) {
-      // A reminder: its page.
+      // A stage at its gate: the pipeline's board. A reminder: its page.
       final context = _navigator.currentContext;
-      if (page != null && context != null) openPage(context, tap.url, page);
+      if (context == null) return;
+      if (tap.app != null) {
+        openApp(context, tap.url, tap.app!);
+      } else if (page != null) {
+        openPage(context, tap.url, page);
+      }
       return;
     }
     store.dispatch(SessionOpened(tap.url, session));

@@ -658,6 +658,34 @@ impl AppState {
                 self.ui.flash(message, FlashLevel::Error);
                 vec![]
             }
+            ServerMessage::StageEnded {
+                work,
+                title,
+                stage,
+                status,
+                ..
+            } => {
+                let site = work
+                    .trim_start_matches("site://")
+                    .split('/')
+                    .next()
+                    .unwrap_or_default()
+                    .to_string();
+                let stage = stage.replacen('_', " ", 1);
+                let (text, level) = match status.as_str() {
+                    "review" => (
+                        format!("{title} · {stage} waits for review (:app {site} for the board)"),
+                        FlashLevel::Warn,
+                    ),
+                    "failed" => (format!("{title} · {stage} failed"), FlashLevel::Error),
+                    other => (format!("{title} · {stage} {other}"), FlashLevel::Info),
+                };
+                self.ui.flash(text, level);
+                if self.project_view.open {
+                    return self.reduce(Action::ProjectView(self.project_view.project.clone()));
+                }
+                vec![]
+            }
             ServerMessage::SessionUpdated { session } => {
                 self.session.upsert(session);
                 vec![]
@@ -838,6 +866,7 @@ impl AppState {
                 CommandResult::Pipelines {
                     pipelines,
                     templates,
+                    ..
                 },
             ) => {
                 let made: Vec<String> = pipelines

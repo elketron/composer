@@ -86,7 +86,11 @@
         "stages": [
           {
             "name": "03_implement",
-            "status": "running"
+            "status": "running",
+            "ticket": "0031",
+            "outputs": [
+              "site://coding/game-save-system/03_implement/notes.md"
+            ]
           }
         ],
         "project": "~/Projects/game"

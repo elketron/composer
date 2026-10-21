@@ -59,8 +59,11 @@ class ProjectSearch {
 
 /// The pipelines on a server (`pipeline.list`) and the templates new ones are made from.
 class Pipelines {
-  const Pipelines({this.pipelines = const [], this.templates = const []});
+  const Pipelines({this.pipelines = const [], this.templates = const [], this.works = const []});
   final List<PipelineSummary> pipelines;
+
+  /// Every work in them, with its stages.
+  final List<WorkSummary> works;
   /// What `pipeline.new` makes pipelines from (`site` is the kind).
   final List<PipelineSummary> templates;
 }
@@ -102,11 +105,14 @@ class PairingState {
 
 /// A tapped notification (or one of its buttons).
 class NotificationTap {
-  const NotificationTap({required this.url, this.session, this.approval, this.page, this.action});
+  const NotificationTap({required this.url, this.session, this.approval, this.page, this.app, this.action});
   final String url;
   final String? session;
   final String? approval;
   final String? page;
+
+  /// A site whose app it opens (a pipeline's board).
+  final String? app;
 
   /// `approve` / `deny`; null for the notification itself.
   final String? action;

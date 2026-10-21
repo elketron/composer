@@ -5,7 +5,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use composer_core::{Page, SiteUrl};
-use composer_protocol::{ChangedBy, WorkerState};
+use composer_protocol::{ChangedBy, ServerMessage, WorkerState};
 
 use crate::pipeline::pipeline::Pipeline;
 use crate::pipeline::stage_contract::StageContract;
@@ -93,6 +93,7 @@ pub async fn run_stage(
     parent: &Arc<Session>,
     work: &str,
     stage: Option<&str>,
+    note: Option<&str>,
 ) -> Result<StageStarted, String> {
     let work = find_work(server.workspace.root(), work)?;
     // Running is what has a worker now (a `running` left by a stopped server is not).
@@ -118,14 +119,20 @@ pub async fn run_stage(
             contract.name, work.name
         ));
     }
-    let ticket = new_ticket(server, &work, &contract)?;
+    let note = note.map(str::trim).filter(|n| !n.is_empty());
+    let ticket = new_ticket(server, &work, &contract, note)?;
     // Before the worker starts: one that finishes quickly must not be overwritten.
     let now = chrono::Local::now().to_rfc3339();
     let quoted = format!("\"{ticket}\"");
+    let session = format!("\"{}\"", parent.id());
     let mut fields = vec![
         ("status", "running"),
         ("ticket", quoted.as_str()),
         ("started", now.as_str()),
+        // Who hears about it, and whose session the next stage joins after a gate.
+        ("session", session.as_str()),
+        // A rerun's note is in the ticket now.
+        ("note", "\"\""),
     ];
     if let Some(harness) = &contract.harness {
         fields.push(("harness", harness));
@@ -156,7 +163,12 @@ pub async fn run_stage(
 }
 
 /// Writes the stage's ticket: the work, its stage contract, where the outputs go.
-fn new_ticket(server: &Server, work: &Work, contract: &StageContract) -> Result<String, String> {
+fn new_ticket(
+    server: &Server,
+    work: &Work,
+    contract: &StageContract,
+    note: Option<&str>,
+) -> Result<String, String> {
     let site = &work.pipeline.name;
     let folder = format!("site://{site}/{}/{}/", work.name, contract.name);
     let title = format!(
@@ -182,6 +194,9 @@ fn new_ticket(server: &Server, work: &Work, contract: &StageContract) -> Result<
     if !contract.worktree {
         // Only stages that write code get a worktree; the others read the project.
         fm.push_str("worktree: false\n");
+    }
+    if let Some(note) = note {
+        fm.push_str(&format!("note: {}\n", one_line(note)));
     }
     fm.push_str(&format!(
         "pipeline: site://{site}/stages/{}.md\nwork: {}\nstage: {}\ncreated: {}\n---\n",
@@ -294,6 +309,13 @@ pub fn stage_ended(
             ("summary", &one_line(summary)),
         ],
     );
+    server.hub.send(ServerMessage::StageEnded {
+        work: work.url(),
+        title: work.title.clone(),
+        stage: stage.clone(),
+        status: status.to_string(),
+        summary: summary.to_string(),
+    });
     let label = format!("{}/{}", work.pipeline.name, work.name);
     let folder = format!("site://{label}/{stage}/");
     let next = work
@@ -313,7 +335,7 @@ pub fn stage_ended(
                 let Ok(parent) = server.sessions.get(&parent) else {
                     return;
                 };
-                if let Err(e) = run_stage(&server, &parent, &spec, Some(&next)).await {
+                if let Err(e) = run_stage(&server, &parent, &spec, Some(&next), None).await {
                     tracing::warn!("starting {next} of {spec}: {e}");
                 }
             });
@@ -333,4 +355,97 @@ pub fn stage_ended(
 fn one_line(text: &str) -> String {
     let line = text.split_whitespace().collect::<Vec<_>>().join(" ");
     serde_json::to_string(&line).expect("a string serializes")
+}
+
+/// The session a work's stages belong to when nobody asked for them in a chat: the one its
+/// last stage ran under (`session:` in `_stage.md`), else a new one in the work's project.
+pub fn work_session(
+    server: &Server,
+    work: &Work,
+    last: Option<&str>,
+) -> Result<Arc<Session>, String> {
+    if let Some(session) = last
+        .and_then(|id| work.stage_field(id, "session"))
+        .and_then(|id| server.sessions.get(&id).ok())
+    {
+        return Ok(session);
+    }
+    let project = work
+        .project
+        .as_deref()
+        .and_then(|p| crate::tools::resolve_project(p, &server.config.projects.dir).ok());
+    let session = server
+        .sessions
+        .create("default", project)
+        .map_err(|e| e.to_string())?;
+    let label = format!("work {}/{}", work.pipeline.name, work.name);
+    session.update_info(&server.hub, |info| info.preview = Some(label));
+    Ok(session)
+}
+
+/// Watches stages' `_stage.md` pages for what the user decided at a gate: `approved` starts
+/// the next stage (if it hasn't run), `rerun` runs the stage again with its `note`. Whoever
+/// wrote it (the board app, the TUI, an editor, an agent).
+pub async fn run_gates(server: Arc<Server>) {
+    let mut events = server.hub.subscribe();
+    loop {
+        let event = match events.recv().await {
+            Ok(event) => event,
+            Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+            Err(_) => return,
+        };
+        let ServerMessage::PageChanged { url, .. } = &*event else {
+            continue;
+        };
+        if url.ends_with("/_stage.md")
+            && let Err(e) = gate_changed(&server, url).await
+        {
+            tracing::warn!("{url}: {e}");
+        }
+    }
+}
+
+async fn gate_changed(server: &Arc<Server>, url: &str) -> Result<(), String> {
+    let url = SiteUrl::parse(url).map_err(|e| e.to_string())?;
+    let mut parts = url.path().split('/');
+    let (Some(name), Some(stage), Some("_stage.md"), None) =
+        (parts.next(), parts.next(), parts.next(), parts.next())
+    else {
+        return Ok(());
+    };
+    let Ok(work) = find_work(server.workspace.root(), &format!("{}/{name}", url.site())) else {
+        return Ok(());
+    };
+    match work.stage_status(stage).as_str() {
+        "approved" => {
+            let Some(next) = work
+                .pipeline
+                .stages
+                .iter()
+                .skip_while(|s| s.name != stage)
+                .nth(1)
+                .map(|s| s.name.clone())
+            else {
+                return Ok(());
+            };
+            // Only a stage that hasn't run: approving again (or editing the page) does nothing.
+            if work.stage_status(&next) != "waiting" {
+                return Ok(());
+            }
+            let parent = work_session(server, &work, Some(stage))?;
+            let spec = format!("{}/{name}", url.site());
+            run_stage(server, &parent, &spec, Some(&next), None)
+                .await
+                .map(|_| ())
+        }
+        "rerun" => {
+            let note = work.stage_field(stage, "note");
+            let parent = work_session(server, &work, Some(stage))?;
+            let spec = format!("{}/{name}", url.site());
+            run_stage(server, &parent, &spec, Some(stage), note.as_deref())
+                .await
+                .map(|_| ())
+        }
+        _ => Ok(()),
+    }
 }

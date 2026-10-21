@@ -31,9 +31,11 @@ pub fn scope(message: &ServerMessage) -> EventScope<'_> {
         // Every client: a worker's recipe needs your answer wherever you are.
         ApprovalRequest { .. } | ApprovalResolved { .. } => EventScope::Global,
         PageChanged { url, .. } => EventScope::Page(url),
-        SessionUpdated { .. } | WorkerStatus { .. } | Slots { .. } | ReminderDue { .. } => {
-            EventScope::Global
-        }
+        SessionUpdated { .. }
+        | WorkerStatus { .. }
+        | Slots { .. }
+        | ReminderDue { .. }
+        | StageEnded { .. } => EventScope::Global,
         Ok { .. } | Error { .. } => EventScope::Reply,
     }
 }

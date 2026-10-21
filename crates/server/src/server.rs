@@ -183,6 +183,7 @@ impl Server {
         }
         *self.watcher.lock().expect("watcher lock") = Some(crate::watcher::watch(self)?);
         tokio::spawn(crate::reminders::run_reminders(self.clone()));
+        tokio::spawn(crate::pipeline::run_gates(self.clone()));
         self.workers.schedule_paused(self);
         let router = crate::api::router(self.clone());
         let serving = axum::serve(listener, router);

@@ -45,6 +45,10 @@ dir = "~/Projects"
 # When a reminder page with a due date but no time goes off (local time).
 default_time = "09:00"
 
+[pipelines]
+# Build a new pipeline's board app right away (its `ui-build` action; needs `just` and `bun`).
+build_board = true
+
 [claude_code]
 # The Claude Code CLI, for tickets with `harness: claude-code` in projects that allow it.
 # It runs under its own login (`claude auth login`); composer never reads its credentials.

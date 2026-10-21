@@ -42,6 +42,7 @@ impl Tool for RunStageTool {
             &context.session,
             &args.work,
             args.stage.as_deref(),
+            None,
         )
         .await?;
         let contract = started.work.pipeline.stage(&started.stage);

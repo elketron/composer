@@ -501,11 +501,23 @@ impl Connection {
                     .iter()
                     .map(|t| t.summary())
                     .collect(),
+                works: crate::pipeline::pipelines(server)
+                    .into_iter()
+                    .flat_map(|p| {
+                        p.works()
+                            .into_iter()
+                            .filter_map(move |w| crate::pipeline::Work::load(p.clone(), &w))
+                    })
+                    .map(|w| w.summary())
+                    .collect(),
             }),
             ClientCommand::PipelineNew { kind, name } => {
                 crate::pipeline::new_pipeline(server, &kind, name.as_deref(), ChangedBy::App).map(
-                    |p| CommandResult::Pipeline {
-                        pipeline: p.summary(),
+                    |p| {
+                        crate::pipeline::prepare_board(server, &p.name);
+                        CommandResult::Pipeline {
+                            pipeline: p.summary(),
+                        }
                     },
                 )
             }
@@ -575,20 +587,10 @@ async fn run_work(
         Some(id) => server.sessions.get(&id).map_err(|e| e.to_string())?,
         None => {
             let found = crate::pipeline::find_work(server.workspace.root(), work)?;
-            let project = found
-                .project
-                .as_deref()
-                .and_then(|p| resolve_project(p, &server.config.projects.dir).ok());
-            let session = server
-                .sessions
-                .create("default", project)
-                .map_err(|e| e.to_string())?;
-            let label = format!("work {}/{}", found.pipeline.name, found.name);
-            session.update_info(&server.hub, |info| info.preview = Some(label));
-            session
+            crate::pipeline::work_session(server, &found, None)?
         }
     };
-    let started = crate::pipeline::run_stage(server, &parent, work, stage).await?;
+    let started = crate::pipeline::run_stage(server, &parent, work, stage, None).await?;
     Ok(CommandResult::Work {
         work: started.work.summary(),
     })

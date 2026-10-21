@@ -34,6 +34,8 @@ async fn pipelines_and_works() {
     std::fs::create_dir_all(projects.path().join("game")).unwrap();
     let mut config = Config::defaults();
     config.projects.dir = projects.path().display().to_string();
+    // Not here: bun and the network.
+    config.pipelines.build_board = false;
     let (dir, server, _provider, addr) = start_with(config, vec![]).await;
     let mut socket = connect(addr, &server.token).await;
 
@@ -41,6 +43,7 @@ async fn pipelines_and_works() {
     let Ok(CommandResult::Pipelines {
         pipelines,
         templates,
+        ..
     }) = command(&mut socket, 1, ClientCommand::PipelineList).await
     else {
         panic!()
@@ -94,6 +97,24 @@ async fn pipelines_and_works() {
             .is_some()
     );
 
+    // Its board app, named for the site, and the action that builds it (approved).
+    let board = std::fs::read_to_string(dir.path().join("sites/coding/ui/package.json")).unwrap();
+    assert!(board.contains("\"name\": \"coding-board\""), "{board}");
+    assert!(dir.path().join("sites/coding/ui/src/App.svelte").is_file());
+    let justfile = std::fs::read_to_string(dir.path().join("sites/coding/justfile")).unwrap();
+    assert!(justfile.contains("ui-build:"), "{justfile}");
+    let hash = composer_server::actions::Justfile::load(&dir.path().join("sites/coding"))
+        .await
+        .unwrap()
+        .hash("ui-build");
+    let approved = || server.approvals.is_approved("coding", "ui-build", &hash);
+    for _ in 0..50 {
+        if approved() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    assert!(approved());
     let err = command(&mut socket, 3, new_pipeline("coding", None))
         .await
         .unwrap_err();
@@ -177,7 +198,7 @@ async fn pipelines_and_works() {
         "{listed}"
     );
 
-    // The project's overview shows the work and where it is; approving the spec moves it on.
+    // The project's overview shows the work and where it is; a finished spec moves it on.
     let overview = |_| ClientCommand::ProjectOverview {
         project: "game".into(),
     };
@@ -190,17 +211,20 @@ async fn pipelines_and_works() {
     let spec = SiteUrl::new("coding", "save-system/01_spec/_stage.md").unwrap();
     let text = std::fs::read_to_string(work_dir.join("01_spec/_stage.md"))
         .unwrap()
-        .replace("status: waiting", "status: approved");
+        .replace("status: waiting", "status: done");
     server.write_page(&spec, &text, ChangedBy::App).unwrap();
     let Ok(CommandResult::Project { overview: o }) = command(&mut socket, 13, overview(())).await
     else {
         panic!()
     };
     assert_eq!(o.works[0].status.as_deref(), Some("02 plan · waiting"));
-    assert_eq!(o.works[0].stages[0].status, "approved");
+    assert_eq!(o.works[0].stages[0].status, "done");
 
-    let Ok(CommandResult::Pipelines { pipelines, .. }) =
-        command(&mut socket, 14, ClientCommand::PipelineList).await
+    let Ok(CommandResult::Pipelines {
+        pipelines,
+        works: all,
+        ..
+    }) = command(&mut socket, 14, ClientCommand::PipelineList).await
     else {
         panic!()
     };
@@ -209,6 +233,25 @@ async fn pipelines_and_works() {
         .map(|p| (p.site.as_str(), p.works))
         .collect();
     assert_eq!(works, [("coding", 1), ("shorts", 1)]);
+
+    // Every work, with its stages and what they wrote.
+    let urls: Vec<&str> = all.iter().map(|w| w.url.as_str()).collect();
+    assert_eq!(
+        urls,
+        [
+            "site://coding/save-system/index.md",
+            "site://shorts/trailer/index.md"
+        ]
+    );
+    std::fs::write(work_dir.join("01_spec/spec.md"), "# Spec\n").unwrap();
+    let Ok(CommandResult::Project { overview: o }) = command(&mut socket, 15, overview(())).await
+    else {
+        panic!()
+    };
+    assert_eq!(
+        o.works[0].stages[0].outputs,
+        ["site://coding/save-system/01_spec/spec.md"]
+    );
 
     // Inputs: the brief, `_config` (the work's own file wins), the work's files.
     let work = Work::load(pipeline(&server, "coding").unwrap(), "save-system").unwrap();

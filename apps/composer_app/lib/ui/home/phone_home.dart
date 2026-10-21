@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../state/works.dart';
 import '../../state/server_entry.dart';
 import '../../state/server_status.dart';
 import '../../state/types.dart';
@@ -70,7 +71,10 @@ class PhoneHome extends StatelessWidget {
           },
         ),
       ]),
-      bottomNavigationBar: PhoneTabs(tab: tab, needsYou: status.approvals.length + unread),
+      bottomNavigationBar: PhoneTabs(
+        tab: tab,
+        needsYou: status.approvals.length + unread + (status.pipelines?.works.where((w) => waitingStage(w) != null).length ?? 0),
+      ),
     );
   }
 

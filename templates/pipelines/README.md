@@ -2,7 +2,8 @@
 
 Each folder is a kind of pipeline. `new_pipeline(kind)` (or `pipeline.new`, New pipeline in the app,
 `:pipeline new` in the TUI) copies one into `sites/<name>/`, with `__PIPELINE__` replaced by the site's name.
-Add your own kind by adding a folder here with the same shape:
+Every pipeline also gets the board app (`templates/board/`) in its `ui/`. Add your own kind by adding a
+folder here with the same shape:
 
 ```text
 <kind>/

@@ -135,8 +135,17 @@
           "needs_project": false,
           "works": 0
         }
-      ]
+      ],
+      "works": []
     }
+  },
+  {
+    "type": "stage.ended",
+    "work": "site://video/launch-video/index.md",
+    "title": "launch-video",
+    "stage": "02_script",
+    "status": "review",
+    "summary": "Wrote script.md: 6 scenes, 1:52."
   },
   {
     "type": "ok",

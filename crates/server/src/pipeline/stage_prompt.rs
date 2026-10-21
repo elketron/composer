@@ -48,6 +48,19 @@ pub fn stage_context(workspace: &Workspace, id: &str, project: Option<&str>) -> 
         page(&work.url(), "work", ""),
         page(&format!("site://{site}/stages/{stage}.md"), "contract", ""),
     ];
+    if let Some(note) = ticket
+        .frontmatter
+        .get_str("note")
+        .filter(|n| !n.trim().is_empty())
+    {
+        sections.insert(
+            1,
+            format!(
+                "# Run again\n\nThe user had this stage run again, after reading what it wrote last time (it is \
+                 still in the stage folder). Their note:\n\n> {note}"
+            ),
+        );
+    }
     for (kind, label) in [
         (InputKind::Reference, "reference"),
         (InputKind::Working, "working"),

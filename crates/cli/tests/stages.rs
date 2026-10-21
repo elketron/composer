@@ -1,6 +1,8 @@
 //! A work's stages run as tickets worked by real `composer worker` processes: the first (no
 //! gate) goes on to the second by itself, the second (a gate) waits for review. The stage
-//! worker's prompt is the stage's scoped context, not the usual one.
+//! worker's prompt is the stage's scoped context, not the usual one. At the gate, `rerun` (with
+//! a note) runs it again and `approved` starts the third, written into `_stage.md` as the
+//! board app does.
 
 mod support;
 
@@ -28,6 +30,18 @@ async fn stages_run_in_order_and_stop_at_a_gate() {
                 VecDeque::from([
                     Reply::Call("write", json!({ "url": "site://flow/note/02_polish/final.md", "content": "---\ntitle: Final\ntype: page\n---\n# Final\nshorter\n" })),
                     Reply::Call("finish", json!({ "status": "done", "summary": "polished" })),
+                    Reply::Text("finished"),
+                    // Run again, with the user's note.
+                    Reply::Call("write", json!({ "url": "site://flow/note/02_polish/final.md", "content": "---\ntitle: Final\ntype: page\n---\n# Final\nshortest\n" })),
+                    Reply::Call("finish", json!({ "status": "done", "summary": "polished again" })),
+                    Reply::Text("finished"),
+                ]),
+            ),
+            (
+                "You run stage 03_publish",
+                VecDeque::from([
+                    Reply::Call("write", json!({ "url": "site://flow/note/03_publish/out.md", "content": "---\ntitle: Out\ntype: page\n---\n# Out\n" })),
+                    Reply::Call("finish", json!({ "status": "done", "summary": "published" })),
                     Reply::Text("finished"),
                 ]),
             ),
@@ -58,6 +72,11 @@ async fn stages_run_in_order_and_stop_at_a_gate() {
             "stages/01_draft.md",
             "---\ntitle: Draft\ntype: stage\ngate: false\n---\n# 01 · Draft\n\n## Inputs\n\n| | file | for |\n|---|---|---|\n\
              | working | `brief` | what |\n| reference | `_config/rules.md` | how |\n\n## Process\n\nDraft it.\n\n## Outputs\n\n- `01_draft/draft.md`\n",
+        ),
+        (
+            "stages/03_publish.md",
+            "---\ntitle: Publish\ntype: stage\n---\n# 03 · Publish\n\n## Inputs\n\n| | file | for |\n|---|---|---|\n\
+             | working | `02_polish/final.md` | the text |\n\n## Outputs\n\n- `03_publish/out.md`\n",
         ),
         (
             "stages/02_polish.md",
@@ -183,6 +202,12 @@ async fn stages_run_in_order_and_stop_at_a_gate() {
             ("0002".into(), WorkerState::Done)
         ]
     );
+    // Clients hear about the gate (right after the worker's own status).
+    until(&mut socket, 10, |e| {
+        matches!(e, ServerMessage::StageEnded { stage, status, summary, .. }
+            if stage == "02_polish" && status == "review" && summary == "polished")
+    })
+    .await;
     // Let the ending's page writes land.
     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
 
@@ -281,4 +306,63 @@ async fn stages_run_in_order_and_stop_at_a_gate() {
         panic!()
     };
     assert!(message.contains("02_polish waits for review"), "{message}");
+
+    // At the gate, as an editor writes it (the board does the same through the API).
+    let gate = |status: &str, note: &str| {
+        let path = flow.join("note/02_polish/_stage.md");
+        let raw = std::fs::read_to_string(&path).unwrap();
+        let raw = raw
+            .lines()
+            .map(|l| match l {
+                l if l.starts_with("status:") => format!("status: {status}"),
+                l if l.starts_with("note:") && !note.is_empty() => format!("note: \"{note}\""),
+                l => l.to_string(),
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        std::fs::write(&path, raw + "\n").unwrap();
+    };
+    gate("rerun", "Make it shorter.");
+    let ended = |stage: &'static str, status: &'static str| move |e: &ServerMessage| matches!(e, ServerMessage::StageEnded { stage: s, status: t, .. } if s == stage && t == status);
+    until(&mut socket, 60, ended("02_polish", "review")).await;
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    let rerun =
+        std::fs::read_to_string(dir.path().join("sites/orchestration/tickets/0003.md")).unwrap();
+    assert!(
+        rerun.contains("stage: 02_polish") && rerun.contains("note: \"Make it shorter.\""),
+        "{rerun}"
+    );
+    let again = requests
+        .lock()
+        .unwrap()
+        .iter()
+        .rev()
+        .map(system)
+        .find(|p| p.contains("stage 02_polish"))
+        .unwrap();
+    assert!(
+        again.contains("Their note:\n\n> Make it shorter."),
+        "{again}"
+    );
+    assert!(stage("02_polish").contains("summary: \"polished again\""));
+
+    // Continue: the third stage starts and, without a gate, finishes the work.
+    gate("approved", "");
+    until(&mut socket, 60, ended("03_publish", "done")).await;
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    assert!(stage("02_polish").contains("status: approved"));
+    assert!(
+        stage("03_publish").contains("status: done"),
+        "{}",
+        stage("03_publish")
+    );
+    assert!(flow.join("note/03_publish/out.md").is_file());
+    // Approving again (or any edit of the page) starts nothing.
+    gate("approved", "");
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    assert!(
+        !dir.path()
+            .join("sites/orchestration/tickets/0005.md")
+            .exists()
+    );
 }

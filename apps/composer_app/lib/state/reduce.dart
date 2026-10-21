@@ -249,6 +249,8 @@ import 'types.dart';
     next,
     [
       FetchCatalog(url),
+      // Works waiting at a gate (Needs you).
+      SendCommand(url, const ClientCommandPipelineList()),
       if (chat != null) SendCommand(url, ClientCommandSessionAttach(session: chat.session, since: chat.lastSeq)),
       if (side != null && side.session != chat?.session)
         SendCommand(url, ClientCommandSessionAttach(session: side.session, since: side.lastSeq)),
@@ -360,7 +362,9 @@ AppState _withUpload(AppState s, String url, int id, Upload Function(Upload uplo
   final (next, notes) = _notifications(s, handedBack, url, message);
   final (paged, effects) = _pageEffects(s, next, url, message);
   final (state, reviews) = _reviewEffects(paged, url, message);
-  return (state, [...switches, ...notes, ...effects, ...reviews]);
+  // A stage ended: the works (Needs you, the project view) are fetched again.
+  final works = message is ServerMessageStageEnded ? [SendCommand(url, const ClientCommandPipelineList())] : const <AppEffect>[];
+  return (state, [...switches, ...notes, ...effects, ...reviews, ...works]);
 }
 
 /// Tools after which a ticket's files may differ.
@@ -448,6 +452,24 @@ bool stopped(WorkerState state) => state == WorkerState.done || state == WorkerS
       );
     case ServerMessageApprovalResolved(:final request):
       return (s, [CancelNotification('approval:$request')]);
+    // A stage waits for you at its gate, or failed: its pipeline's board (or the work's page).
+    case ServerMessageStageEnded(:final work, :final title, :final stage, :final status, :final summary)
+        when status == 'review' || status == 'failed':
+      final site = work.replaceFirst('site://', '').split('/').first;
+      final label = stage.replaceFirst('_', ' ');
+      return (
+        s,
+        [
+          Notify(
+            key: 'stage:$work:$stage',
+            title: status == 'review' ? '$title · $label ready for review' : '$title · $label failed',
+            body: summary.isEmpty ? 'on $server' : summary,
+            url: url,
+            page: work,
+            app: s.status[url]?.hasApp(site) ?? false ? site : null,
+          ),
+        ],
+      );
     case ServerMessageWorkerStatus(:final worker, :final ticket, :final parent, state: final state)
         when stopped(state) && !viewing(parent):
       return (
@@ -575,8 +597,8 @@ AppState _event(AppState s, String url, ServerMessage message) => switch (messag
         }),
       ServerMessageOk(result: CommandResultProject(:final overview)) =>
         _updateStatus(s, url, (x) => x.copyWith(overviews: {...x.overviews, overview.folder: overview})),
-      ServerMessageOk(result: CommandResultPipelines(:final pipelines, :final templates)) =>
-        _updateStatus(s, url, (x) => x.copyWith(pipelines: Pipelines(pipelines: pipelines, templates: templates))),
+      ServerMessageOk(result: CommandResultPipelines(:final pipelines, :final templates, :final works)) =>
+        _updateStatus(s, url, (x) => x.copyWith(pipelines: Pipelines(pipelines: pipelines, templates: templates, works: works))),
       ServerMessageOk(result: CommandResultHarnesses(:final project, :final harnesses)) =>
         _updateStatus(s, url, (x) => x.copyWith(harnesses: {...x.harnesses, project: harnesses})),
       ServerMessageSlots(:final used) => _updateStatus(s, url, (x) => x.copyWith(slotsUsed: used)),

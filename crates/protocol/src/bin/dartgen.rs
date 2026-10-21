@@ -662,7 +662,15 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
                     needs_project: false,
                     works: 0,
                 }],
+                works: vec![],
             },
+        },
+        ServerMessage::StageEnded {
+            work: "site://video/launch-video/index.md".into(),
+            title: "launch-video".into(),
+            stage: "02_script".into(),
+            status: "review".into(),
+            summary: "Wrote script.md: 6 scenes, 1:52.".into(),
         },
         ServerMessage::Ok {
             id: 55,
@@ -1012,6 +1020,9 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
                 stages: vec![StageState {
                     name: "03_implement".into(),
                     status: "running".into(),
+                    ticket: Some("0031".into()),
+                    summary: None,
+                    outputs: vec!["site://coding/game-save-system/03_implement/notes.md".into()],
                 }],
                 project: Some("~/Projects/game".into()),
             }],

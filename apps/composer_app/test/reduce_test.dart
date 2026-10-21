@@ -129,7 +129,7 @@ void main() {
       expect(state.statusOf(home.url).chat!.items.single, isA<UserItem>());
 
       final (_, effects) = reduce(state, LinkChanged(home.url, LinkState.online));
-      final attach = effects.whereType<SendCommand>().single.command as ClientCommandSessionAttach;
+      final attach = effects.whereType<SendCommand>().map((e) => e.command).whereType<ClientCommandSessionAttach>().single;
       expect(attach.since, 7);
     });
 
@@ -453,10 +453,33 @@ void main() {
     test('coming online fetches the site list', () {
       final (_, effects) = reduce(loaded([home]), LinkChanged(home.url, LinkState.online));
       expect(effects.whereType<FetchCatalog>().single.url, home.url);
+      // And the works, for the ones waiting at a gate.
+      expect(effects.whereType<SendCommand>().map((e) => e.command), contains(isA<ClientCommandPipelineList>()));
     });
   });
 
   group('notifications', () {
+    test('a stage at its gate: notified (opening the board), the works fetched again, Needs you', () {
+      var state = loaded([home]);
+      const ended = ServerMessageStageEnded(
+          work: 'site://video/launch/index.md', title: 'launch', stage: '02_script', status: 'review', summary: 'six scenes');
+      final (_, effects) = reduce(state, ServerEvent(home.url, ended));
+      final note = effects.whereType<Notify>().single;
+      expect((note.title, note.body, note.page, note.app), ('launch · 02 script ready for review', 'six scenes', 'site://video/launch/index.md', null));
+      expect(effects.whereType<SendCommand>().single.command, isA<ClientCommandPipelineList>());
+      // With the board built, the notification opens it.
+      state = reduce(state, SitesLoaded(home.url, const [SiteSummary(name: 'video', title: 'Video', pages: 3, hasJustfile: true, hasUi: true, appBuilt: true)])).$1;
+      expect(reduce(state, ServerEvent(home.url, ended)).$2.whereType<Notify>().single.app, 'video');
+      // Done stages aren't notified.
+      const done = ServerMessageStageEnded(work: 'site://video/launch/index.md', title: 'launch', stage: '01_research', status: 'done', summary: '');
+      expect(reduce(state, ServerEvent(home.url, done)).$2.whereType<Notify>(), isEmpty);
+      const waiting = WorkSummary(url: 'site://video/launch/index.md', pipeline: 'video', title: 'launch', project: '~/Projects/game', stages: [
+        StageState(name: '01_research', status: 'done', outputs: []),
+        StageState(name: '02_script', status: 'review', outputs: []),
+      ]);
+      expect((waitingStage(waiting)?.name, workSite(waiting.url), linksProject(waiting, '/home/me/Projects/game')), ('02_script', 'video', true));
+    });
+
     ServerMessageApprovalRequest approval(String id) => ServerMessageApprovalRequest(
           request: id, session: 'a', site: 'tools', recipe: 'greet', args: const ['bob'], body: 'b', hash: 'h');
     SessionInfo info(String id, TurnState state, {String? ticket}) =>

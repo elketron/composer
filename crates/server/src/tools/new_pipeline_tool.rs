@@ -50,6 +50,7 @@ impl Tool for NewPipelineTool {
                 e
             }
         })?;
+        crate::pipeline::prepare_board(server, &pipeline.name);
         let stages: Vec<String> = pipeline
             .stages
             .iter()

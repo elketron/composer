@@ -96,6 +96,13 @@ pub struct RemindersConfig {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PipelinesConfig {
+    /// Build a new pipeline's board app right away (its `ui-build` action, needs `just` and `bun`).
+    #[serde(default = "default_true")]
+    pub build_board: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentConfig {
     /// Concurrent model requests across all sessions (the provider's parallelism).
     #[serde(default = "default_slots")]

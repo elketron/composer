@@ -877,6 +877,20 @@ review.
 - Edits to the output are made in place (reader `e`, the app's editor later); the next stage reads whatever is
   there.
 
+Built (milestone 23): the board is `templates/board/` (Svelte + `$sdk`), copied into a new pipeline's `ui/` with a
+`ui-build` action that `new_pipeline` approves and, with `[pipelines] build_board` (default on), runs in the
+background. It lists the pipeline's works (`pipeline.list` now returns `works`, and each `StageState` its `ticket`,
+`summary` and `outputs`), the stages of the one you pick, a stage's output (Edit saves it back), and at a gate
+Continue / Rerun… (a note) / Stop, written into `_stage.md` with `putPage`; Run (`work.run`) and + New work
+(`work.new`) too. `pipeline::run_gates` watches every `_stage.md` change (the board, the TUI's editor, an agent):
+`approved` starts the next stage if it hasn't run, under the session in `_stage.md`'s `session:` (else a new one),
+`rerun` runs the stage again with its `note:` (in the new ticket, and in the stage's context as "Run again"),
+`stopped` does nothing. A stage's end is broadcast as `stage.ended {work, title, stage, status, summary}`: the app
+notifies `review` and `failed` (tapping opens the board, or the work's page without one) and lists works waiting at
+a gate under Needs you (counted on the Chats tab); the TUI flashes it. Tested end to end in
+`crates/cli/tests/stages.rs` (rerun with a note, approve, the last stage, approving again starts nothing), and
+by hand: the board built itself for a new pipeline, and Continue in a browser started a real storyboard stage.
+
 ### Stale stages
 
 - `_stage.md` records the hash of every input the stage read. When an input changes (you edit
@@ -900,7 +914,7 @@ review.
     stage contracts, `_config` overrides, `_stage.md`; works in the project view.
 22. ✅ **running stages** — stages as tickets with scoped context, the `stage` agent, harness and model per stage,
     advancing without gates.
-23. **gates and the board app** — the board template app, gate state via pages, notifications and Needs you.
+23. ✅ **gates and the board app** — the board template app, gate state via pages, notifications and Needs you.
 24. **stale stages** — input hashes, staleness, rerun from a stage.
 25. **learning from edits** — kept agent output, recurring-edit detection, proposed amendments; Verify.
 

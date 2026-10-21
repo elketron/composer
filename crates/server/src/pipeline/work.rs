@@ -74,7 +74,41 @@ impl Work {
             .map(|s| StageState {
                 name: s.name.clone(),
                 status: self.stage_status(&s.name),
+                ticket: self.stage_field(&s.name, "ticket"),
+                summary: self.stage_field(&s.name, "summary"),
+                outputs: self.outputs(&s.name),
             })
+            .collect()
+    }
+
+    /// The pages a stage wrote: markdown in its folder (and one level down), not `_stage.md`.
+    pub fn outputs(&self, stage: &str) -> Vec<String> {
+        let dir = self.dir.join(stage);
+        let mut found = Vec::new();
+        for entry in std::fs::read_dir(&dir).into_iter().flatten().flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.starts_with('.') || name == "_stage.md" {
+                continue;
+            }
+            if entry.path().is_dir() {
+                for inner in std::fs::read_dir(entry.path())
+                    .into_iter()
+                    .flatten()
+                    .flatten()
+                {
+                    let file = inner.file_name().to_string_lossy().to_string();
+                    if file.ends_with(".md") && !file.starts_with('.') {
+                        found.push(format!("{name}/{file}"));
+                    }
+                }
+            } else if name.ends_with(".md") {
+                found.push(name);
+            }
+        }
+        found.sort();
+        found
+            .into_iter()
+            .map(|f| format!("site://{}/{}/{stage}/{f}", self.pipeline.name, self.name))
             .collect()
     }
 
