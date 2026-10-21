@@ -728,7 +728,7 @@ contract (what it reads, does, writes), loads only what its contract names, and 
 can edit before the next stage. Composer already has most of this (sites are markdown, tickets are contracts,
 recipes do the mechanical work, every page is an edit surface); what it lacks is repeatable staged work with
 review gates. Pipelines sit beside chat, the orchestrator and tickets; they don't replace them. Mockups:
-[docs/mockups/pipelines.html](mockups/pipelines.html).
+[docs/mockups/pipelines.html](mockups/pipelines.html) (pipelines and the project view).
 
 ### A pipeline is a site; a piece of work is a folder in it
 
@@ -756,16 +756,55 @@ site://coding/
     02_plan/ …
 ```
 
-- **A project across pipelines:** a work links a project; it doesn't own it. One project can have works in
-  several pipelines, each a different way of working on it: a game has its code in `coding`, its trailer in
-  `video`, its design research in `research`, each with that pipeline's board. Stages of any pipeline can
-  read the linked project's files (a trailer's storyboard can look at the game's assets); only code stages
-  write to it, in their ticket's worktree. The project's memory page and the palette list its works across
-  pipelines (`type:work project:<name>`).
+- **Projects stay where they are.** A project is what it is today: a folder on disk, normally
+  `~/Projects/<name>` (`[projects] dir`), usually a git repository, holding the code, assets and builds.
+  Pipelines never copy code into a site. Three things, kept apart:
+
+  | | where | what |
+  |---|---|---|
+  | project | `~/Projects/game` | the real thing: code, assets, builds, in git |
+  | pipeline | `site://coding` | a way of working: stage contracts, shared rules, the board |
+  | work | `site://coding/game-save-system/` | one piece's paper trail (brief, spec, plan, review) as markdown; `project: ~/Projects/game` |
+
+- A work links a project; it doesn't own it. One project can have works in several pipelines, each a
+  different way of working on it: `coding/game-save-system/` (its implement stage changes `~/Projects/game` in
+  a ticket worktree, its review stage merges it back) and `video/game-trailer/` (its stages read the game's
+  assets). The project's memory page and the palette list its works across pipelines (`type:work
+  project:<name>`).
+- Markdown and small images live in the work; code and anything big live in a project. A work whose output
+  isn't markdown (a trailer's Remotion code, rendered video) writes it to a project: the linked one, or one
+  of its own (`~/Projects/game-trailer`), which `new_work` can create as `new_project` does today. Only stages
+  that write code write to a project, always in their ticket's worktree; the others only read it.
 - A stage contract's frontmatter: `gate: true` (wait for the human after it), `harness:`, `model:`,
   `agent:` (default `stage`). Its Inputs name files relative to the work (`01_spec/spec.md`, `brief`) or the
   site (`_config/conventions.md`), and say which are reference and which are working. A work's `_config/` file
   wins over the site's of the same name.
+
+### The project view
+
+A project (always a folder on disk) is where everything about one thing meets: the works that link it in any
+pipeline, the chats and orchestrators in it, the workers on its tickets, its branches waiting to merge.
+
+- **Overview:** header (name, path, branch, uncommitted files); works grouped by pipeline with their stage and
+  gate; sessions (chats and orchestrators in the project, workers via their ticket); branches to merge
+  (finished tickets whose worktree is still there, with Changes); the project's memory page, short; its
+  switches (Claude Code on / off, the number of remembered tool rules); actions: new chat here, new work here,
+  changes, open the folder in the editor.
+- **Scope:** a project filter on top of the session list ("All · composer · game") narrows the list and the
+  palette to one project; the TUI's session picker takes the same filter. The row shows the few projects
+  with something going on (running, waiting for you, recent); **…** opens the project search.
+- **Finding a project:** there will be many, so every list of them searches. One search, by name and path,
+  over the projects folder plus any project a session or work links outside it; results show what is going
+  on in each (works, running sessions, waiting gates) and the active ones rank first. It is the Projects
+  tab's search field on phones, the scope's **…** and the palette (`project game`) on desktop, and `:scope`
+  with completion or `space P` (a picker) in the TUI. `GET /api/projects?q=` filters on the server, so a
+  long list doesn't have to reach the phone.
+- **Where:** desktop, a **Project** tab in the side pane (from the chat header's project chip, the palette, the
+  scope filter); phones, a fourth tab, **Projects** (Chats, Projects, Pages, Server): the projects, then one
+  project's overview as a screen; TUI, a view in the right pane like the changes view (`gp`, `:project view`),
+  whose rows open a session, a work's board or a ticket's changes.
+- **Server:** `project.overview {project}` (reply `project`): works (`type:work` pages linking it), git state,
+  tickets with a worktree, the memory page's URL, switches. Sessions come from the session list clients have.
 
 ### Running a stage: a ticket with scoped context
 
@@ -809,13 +848,15 @@ site://coding/
 
 ### Milestones
 
-20. **pipeline sites and works** — templates (`video`, `research`, `coding`), `new_pipeline`, `new_work`,
-    stage contracts, `_config` overrides, `_stage.md`.
-21. **running stages** — stages as tickets with scoped context, the `stage` agent, harness and model per stage,
+20. **project view** — `project.overview`, the overview (side pane tab, phone Projects tab, TUI view), the
+    project scope on the session list and palette, project search everywhere projects are listed.
+21. **pipeline sites and works** — templates (`video`, `research`, `coding`), `new_pipeline`, `new_work`,
+    stage contracts, `_config` overrides, `_stage.md`; works in the project view.
+22. **running stages** — stages as tickets with scoped context, the `stage` agent, harness and model per stage,
     advancing without gates.
-22. **gates and the board app** — the board template app, gate state via pages, notifications and Needs you.
-23. **stale stages** — input hashes, staleness, rerun from a stage.
-24. **learning from edits** — kept agent output, recurring-edit detection, proposed amendments; Verify.
+23. **gates and the board app** — the board template app, gate state via pages, notifications and Needs you.
+24. **stale stages** — input hashes, staleness, rerun from a stage.
+25. **learning from edits** — kept agent output, recurring-edit detection, proposed amendments; Verify.
 
 ## Open questions
 

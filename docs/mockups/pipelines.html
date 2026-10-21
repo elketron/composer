@@ -277,6 +277,25 @@
   .learn { border: 1px solid #b39ce066; background: #b39ce00a; border-radius: var(--radius); padding: 12px 14px; font-size: 13px; }
   .learn .lh { display: flex; gap: 8px; align-items: center; }
   .learn p { color: var(--muted); margin: 8px 0 0; }
+
+  .scope { display: flex; gap: 4px; padding: 8px 10px 0; flex-wrap: wrap; }
+  .scope .sc { font: 11.5px var(--font-mono); padding: 2px 8px; border: 1px solid var(--border); border-radius: var(--radius); color: var(--muted); }
+  .scope .sc.on { border-color: var(--accent); color: var(--text); background: var(--accent-dim); }
+  .proj-view { padding: 12px 16px; font-size: 13px; }
+  .ph { display: flex; align-items: center; gap: 8px; font-size: 15px; }
+  .ph .mono { font-size: 11.5px; }
+  .pw { display: flex; align-items: center; gap: 8px; padding: 6px 2px; border-bottom: 1px solid var(--border); font-size: 12.5px; min-width: 0; }
+  .pw b { font: 500 12.5px var(--font-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pw .s { margin-left: auto; font: 11px var(--font-mono); white-space: nowrap; }
+  .stg { display: inline-flex; gap: 3px; margin-left: 6px; }
+  .stg i { width: 8px; height: 8px; border-radius: 2px; border: 1px solid var(--border-strong); display: inline-block; }
+  .stg i.d { background: var(--ok); border-color: var(--ok); } .stg i.r { background: var(--warn); border-color: var(--warn); } .stg i.g { background: transparent; border-color: var(--warn); box-shadow: inset 0 0 0 2px #d6b06a66; }
+  .pmem { color: var(--muted); font-size: 12.5px; border-left: 2px solid var(--border-strong); padding-left: 10px; }
+  .ptabs { height: 58px; flex: none; display: flex; border-top: 1px solid var(--border); background: var(--surface); }
+  .ptabs a { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--faint); font-size: 12px; position: relative; }
+  .ptabs a.on { color: var(--text); box-shadow: inset 0 2px 0 var(--accent); }
+  .ptabs .cnt { font: 600 9px var(--font-mono); background: var(--warn); color: var(--bg); border-radius: 2px; padding: 0 3px; margin-left: 5px; }
+  pre.tui { margin: 0; font: 11.5px/1.35 var(--font-mono); color: var(--text); background: var(--bg); border: 1px solid var(--border-strong); border-radius: 6px; padding: 10px; overflow: hidden; }
   .works { display: flex; gap: 6px; padding: 8px 14px; border-bottom: 1px solid var(--border); overflow: hidden; }
   .works .w { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 9px; border: 1px solid var(--border); border-radius: var(--radius); font: 11.5px var(--font-mono); color: var(--muted); white-space: nowrap; }
   .works .w.on { background: var(--raised); border-color: var(--border-strong); color: var(--text); }
@@ -290,7 +309,7 @@
 <body>
 <div class="doc">
 <header>
-  <h1>composer: pipelines</h1>
+  <h1>composer: pipelines and the project view</h1>
   <p>Staged, reviewable work as a site: numbered stages with a contract each, scoped context for the stage worker,
   plain-file output you can edit, and gates where the pipeline asks for them. After
   <a href="../2603.16021v2.pdf">Interpretable Context Methodology</a>; the plan is phase 5 in <a href="../plan.md">plan.md</a>.
@@ -548,6 +567,135 @@
   </ul>
 </figcaption>
 </figure>
+
+
+<div class="section-title">The project view</div>
+<p class="muted" style="font-size:13px;max-width:900px;margin:0 0 24px">A project is always a folder on disk (<code>~/Projects/game</code>). Works in any pipeline link it, chats and orchestrators work in it, workers change it in worktrees. The project view puts all of that in one place, and the project scope narrows the session list and the palette to it.</p>
+
+<!-- ================= 7 ================= -->
+<figure>
+<div class="win" style="--right: 560px">
+  <div class="rail"><div class="srv on">O<span class="dot ok"></span><span class="n">1</span></div><div class="grow"></div></div>
+  <div class="col">
+    <div class="colhead"><span class="t grow">my-pc</span><span class="btn sm primary">+ New</span></div>
+    <div class="scope"><span class="sc">All</span><span class="sc">composer</span><span class="sc on">game</span><span class="sc">…</span></div>
+    <div class="scroll pad">
+      <div class="label">Needs you <span>1</span></div>
+      <div class="card"><a class="srow"><div class="top"><span class="dot warn pulse"></span><span class="agent">game-trailer</span><span class="when warn">review</span></div><div class="preview">02 script is ready for review</div><div class="proj">video pipeline</div></a></div>
+      <div class="label">Running</div>
+      <div class="card"><a class="srow on"><div class="top"><span class="dot warn"></span><span class="agent">orchestrator</span><span class="id">#g7</span><span class="when">now</span></div><div class="preview">Save system: implement is running</div><div class="proj">game</div>
+        <div class="workers"><div><span class="dot warn"></span><span class="t">0031</span><span class="d">implement save slots</span><span class="s" style="color:var(--warn)">running</span></div></div></a></div>
+      <div class="label">Recent</div>
+      <div class="card"><a class="srow"><div class="top"><span class="dot"></span><span class="agent">default</span><span class="id">#c2e0</span><span class="when">1d</span></div><div class="preview">What does the pause menu need?</div><div class="proj">game</div></a></div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="chathead"><span class="dot warn"></span><b>orchestrator</b><span class="sub">running · <span class="chip accent">game</span><span class="chip info">claude-code on</span> #g7</span></div>
+    <div class="scroll"><div class="msgs">
+      <div class="you">How far is everything on the game?</div>
+      <div class="agent"><p>The save system is in implement (ticket 0031, Claude Code). The trailer's script waits for you. The pause menu research is done; its write-up hasn't started. I opened the project beside us.</p></div>
+    </div></div>
+    <div class="composer"><div class="line"><div class="field">Message · ctrl-enter sends</div><div class="send stop"><svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="1"/></svg></div></div></div>
+  </div>
+  <div class="col">
+    <div class="tabs"><a>Page</a><a class="on">Project <span class="chip accent">game</span></a><span class="grow"></span><span class="tools"><span class="icon"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></span></span></div>
+    <div class="scroll proj-view">
+      <div class="ph"><b>game</b><span class="mono faint">~/Projects/game</span><span style="flex:1"></span><span class="chip accent">main</span><span class="chip warn">3 uncommitted</span></div>
+      <div class="label">Works</div>
+      <div class="pw"><span class="chip">coding</span><b>game-save-system</b><span class="stg"><i class="d"></i><i class="d"></i><i class="r"></i><i></i></span><span class="s" style="color:var(--warn)">03 implement · running</span></div>
+      <div class="pw"><span class="chip">video</span><b>game-trailer</b><span class="stg"><i class="d"></i><i class="g"></i><i></i><i></i></span><span class="s" style="color:var(--warn)">02 script · review</span></div>
+      <div class="pw"><span class="chip">research</span><b>pause-menu</b><span class="stg"><i class="d"></i><i class="d"></i><i class="d"></i><i></i></span><span class="s faint">04 write-up · waiting</span></div>
+      <div class="label">Branches to merge</div>
+      <div class="pw"><span class="mono">ticket/0028</span><b style="font-weight:400">controller remapping</b><span class="s"><span class="btn sm ghost">Changes</span></span></div>
+      <div class="label">Sessions</div>
+      <div class="pw"><span class="dot warn"></span><b>orchestrator</b><span class="mono faint">#g7</span><span class="s faint">now</span></div>
+      <div class="pw"><span class="dot"></span><b>default</b><span class="mono faint">#c2e0</span><span class="s faint">1d</span></div>
+      <div class="label">Memory</div>
+      <div class="pmem">Godot 4.4, C#. Saves go through <code>SaveService</code>; never write files from scenes. Trailer music is licensed from…<a> memory/projects/game</a></div>
+      <div class="label">Switches</div>
+      <div class="pw"><span class="switch on"></span><b style="font-weight:400">Claude Code</b><span class="s faint">sonnet · 2 tool rules</span></div>
+      <div style="display:flex;gap:8px;margin-top:14px"><span class="btn sm primary">New chat here</span><span class="btn sm">New work here</span><span class="btn sm ghost">Changes</span><span class="btn sm ghost">Open folder</span></div>
+    </div>
+  </div>
+</div>
+<figcaption>
+  <h2>7 · A project beside the chat, and the project scope</h2>
+  <p>The <b>Project</b> tab (from the chat header's project chip, the palette, or the scope) shows the project's works across pipelines with their stages, branches waiting to merge, its sessions, a short look at its memory page and its switches. The scope above the session list (<b>game</b>) narrows the list, Needs you and the palette to it; it shows the active projects, and <b>…</b> opens the project search (the palette, filtered to projects).</p>
+  <ul>
+    <li>Works show their stages as dots (done, review, running, waiting); a row opens the pipeline's board on that work.</li>
+    <li>The server gathers it in one call, <code>project.overview</code>: works, git state, tickets with a worktree, the memory page, switches.</li>
+  </ul>
+</figcaption>
+</figure>
+
+<!-- ================= 8 ================= -->
+<div class="row">
+<figure style="width:360px">
+<div class="phone">
+  <div class="status"><span>9:41</span><span>●●● 82%</span></div>
+  <div class="bar"><span class="title grow">my-pc</span></div>
+  <div class="body pad">
+    <div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4-4"/></svg>Search 34 projects</div>
+    <div class="label">Active</div>
+    <div class="card">
+      <a class="srow"><div class="top"><span class="dot warn"></span><span class="agent">game</span><span class="when warn">1 review</span></div><div class="preview">3 works · 1 running · 1 branch to merge</div><div class="proj">~/Projects/game</div></a>
+      <a class="srow"><div class="top"><span class="dot info"></span><span class="agent">composer</span><span class="when">2h</span></div><div class="preview">1 work · 2 chats</div><div class="proj">~/Projects/composer</div></a>
+    </div>
+    <div class="label">Recent</div>
+    <div class="card">
+      <a class="srow"><div class="top"><span class="dot"></span><span class="agent">website</span><span class="when">5d</span></div><div class="preview">1 chat</div><div class="proj">~/Projects/website</div></a>
+      <a class="srow"><div class="top"><span class="dot"></span><span class="agent">dotfiles</span><span class="when">2w</span></div><div class="preview">no works</div><div class="proj">~/Projects/dotfiles</div></a>
+    </div>
+    <div class="faint" style="font-size:12px;margin-top:10px">30 more: search to find them.</div>
+  </div>
+  <div class="ptabs"><a>Chats</a><a class="on">Projects<span class="cnt">1</span></a><a>Pages</a><a>Server</a></div>
+</div>
+<figcaption><h2>8a · The Projects tab</h2><p>A fourth tab on phones: the projects with something going on, then recent ones, each with what is waiting. The search on top finds any of them by name or path (the server filters, so a long list stays on the server).</p></figcaption>
+</figure>
+
+<figure style="width:360px">
+<div class="phone">
+  <div class="status"><span>9:41</span><span>●●● 82%</span></div>
+  <div class="bar"><span class="icon"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></span><span class="title grow">game</span><span class="chip accent">main</span></div>
+  <div class="body pad">
+    <div class="mono faint" style="font-size:11px">~/Projects/game · 3 uncommitted</div>
+    <div class="label">Works</div>
+    <div class="pw"><span class="chip">video</span><b>game-trailer</b><span class="s" style="color:var(--warn)">review</span></div>
+    <div class="pw"><span class="chip">coding</span><b>game-save-system</b><span class="s" style="color:var(--warn)">running</span></div>
+    <div class="pw"><span class="chip">research</span><b>pause-menu</b><span class="s faint">waiting</span></div>
+    <div class="label">Branches to merge</div>
+    <div class="pw"><span class="mono">0028</span><b style="font-weight:400">controller remapping</b><span class="s" style="color:var(--accent)">Changes</span></div>
+    <div class="label">Sessions</div>
+    <div class="pw"><span class="dot warn"></span><b>orchestrator</b><span class="s faint">now</span></div>
+    <div class="pw"><span class="dot"></span><b>default</b><span class="s faint">1d</span></div>
+  </div>
+  <div style="flex:none;display:flex;gap:8px;padding:10px 14px 14px;border-top:1px solid var(--border)"><span class="btn" style="flex:1">New work</span><span class="btn primary" style="flex:1">New chat</span></div>
+</div>
+<figcaption><h2>8b · One project on the phone</h2><p>The same overview as a screen; a work opens its board, a branch its review, a session its chat.</p></figcaption>
+</figure>
+
+<figure style="width:800px">
+<pre class="tui">┌ orchestrator · game · #g7 ───────┐ ┌ project · game · ~/Projects/game · main ┐
+│ you                              │ │ main · 3 uncommitted                    │
+│ How far is everything on the     │ │                                         │
+│ game?                            │ │ WORKS                                   │
+│                                  │ │ ▸ coding   game-save-system  03 running │
+│ orchestrator                     │ │ ▸ video    game-trailer      02 review  │
+│ The save system is in implement  │ │ ▸ research pause-menu        04 waiting │
+│ (ticket 0031, Claude Code). The  │ │                                         │
+│ trailer's script waits for you.  │ │ BRANCHES TO MERGE                       │
+│                                  │ │ ▸ ticket/0028  controller remapping     │
+│                                  │ │                                         │
+│                                  │ │ SESSIONS                                │
+│                                  │ │ ▸ orchestrator #g7          running     │
+│                                  │ │ ▸ default      #c2e0        1d          │
+│                                  │ │                                         │
+│                                  │ │ j/k move · enter open · n new chat      │
+└──────────────────────────────────┘ └─────────────────────────────────────────┘
+ NORMAL  ~/Projects/game │ ctx 12K/160K │ slots 1/2        project scope: game</pre>
+<figcaption><h2>9 · The TUI's project view</h2><p><code>gp</code> (or <code>:project view</code>) shows it in the right pane, like the changes view; enter opens the row: a session, a work's board (in the browser), a ticket's changes (<code>gd</code> for that worktree). <code>:scope game</code> (tab completes) narrows the session picker and <code>]w</code> to the project; <code>space P</code> is a project picker with a filter, like the session picker.</p></figcaption>
+</figure>
+</div>
 
 <div class="section-title">Not in this round</div>
 <ul class="problems">
