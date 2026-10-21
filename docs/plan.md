@@ -720,6 +720,103 @@ it when the project allows it (click: on / off); a worker's header has none (its
     changes, run stats.
 19. ✅ **desktop app** — mockups, then the wide layout.
 
+## Phase 5: pipelines (staged, scoped, gated work)
+
+From [Interpretable Context Methodology](2603.16021v2.pdf) (Van Clief & McDermott, 2026): for sequential
+work that a human reviews step by step, numbered folders of markdown are the orchestration. Each stage has a
+contract (what it reads, does, writes), loads only what its contract names, and writes plain files the human
+can edit before the next stage. Composer already has most of this (sites are markdown, tickets are contracts,
+recipes do the mechanical work, every page is an edit surface); what it lacks is repeatable staged work with
+review gates. Pipelines sit beside chat, the orchestrator and tickets; they don't replace them. Mockups:
+[docs/mockups/pipelines.html](mockups/pipelines.html).
+
+### A pipeline is a site; a piece of work is a folder in it
+
+- One site per kind of work (`video`, `research`, `coding`, or your own), made once from a **pipeline
+  template** (`templates/pipelines/<kind>/`, installed by `init`, merged by `update`) with `new_pipeline(kind)`.
+  The site is the factory: what the pipeline is, its stage contracts, the shared `_config`, the board app.
+- A **piece of work** is a folder in it (a video, a research question, a coding effort), made with
+  `new_work(pipeline, name, project?)`, `:work new` in the TUI, or New work in the app. It holds the brief and
+  what each stage wrote; doing it again is another folder. A coding work links its project (`project:`), and
+  its code stages run in ticket worktrees; two works on one project are just two folders.
+
+```text
+site://coding/
+  index.md                 type: pipeline: what it is, its stages in order          routing
+  _config/                 conventions.md, review.md, …                             reference (shared)
+  stages/
+    01_spec.md             type: stage: Inputs · Process · Outputs · Verify?         the contracts
+    02_plan.md …
+  ui/                      the board app: every work and its gates
+  composer-pipelines/      type: work                                               a piece of work
+    index.md               project, brief, status
+    _config/               optional overrides for this work                         reference (this work)
+    01_spec/               what the stage wrote                                     working
+    01_spec/_stage.md      status, input hashes, harness, model, when, ticket
+    02_plan/ …
+```
+
+- **A project across pipelines:** a work links a project; it doesn't own it. One project can have works in
+  several pipelines, each a different way of working on it: a game has its code in `coding`, its trailer in
+  `video`, its design research in `research`, each with that pipeline's board. Stages of any pipeline can
+  read the linked project's files (a trailer's storyboard can look at the game's assets); only code stages
+  write to it, in their ticket's worktree. The project's memory page and the palette list its works across
+  pipelines (`type:work project:<name>`).
+- A stage contract's frontmatter: `gate: true` (wait for the human after it), `harness:`, `model:`,
+  `agent:` (default `stage`). Its Inputs name files relative to the work (`01_spec/spec.md`, `brief`) or the
+  site (`_config/conventions.md`), and say which are reference and which are working. A work's `_config/` file
+  wins over the site's of the same name.
+
+### Running a stage: a ticket with scoped context
+
+- A stage runs as a ticket in `site://orchestration` (`pipeline: site://<site>/<stage>`), so harnesses, models
+  per project, worktrees, approvals, the Worker tab and merging all apply.
+- **Scoped context, for stages only:** instead of the usual system prompt (agent, `site://home`, memory list,
+  project), the stage worker gets, in order: the pipeline's `index.md` (where am I), the work's `index.md`
+  (what this piece is), the stage contract (what do I do), the reference files (rules to follow), then the
+  working files (input to transform), each block labelled. Chats and ordinary tickets keep today's prompt.
+- The worker writes into the work's stage folder (`<work>/02_plan/`) and calls `finish`. Pages it reads outside its Inputs are
+  still reachable with `open` (the contract is a starting set, not a jail).
+- Afterwards: no gate, the next stage starts; `gate: true`, the stage waits for review.
+
+### Gates in the board app
+
+- Each pipeline site has one board app (from its template): its works, and for the one you pick the stages in
+  order with their state (waiting, running, review, done, stale), the current output, and the gate buttons: **Continue**, **Rerun** (with an
+  optional note), **Stop**. It opens beside the chat in the App tab, and on phones from Pages.
+- A gate is plain page state: the app writes `status: approved` (or `rerun`, `stopped`) into the stage's
+  `_stage.md` with `putPage`; the server's watcher sees it and goes on. No new protocol; the TUI or an agent
+  can do the same by editing the page.
+- A waiting gate is notified like a reminder (phone and desktop) and listed under Needs you; tapping it opens
+  the board.
+- Edits to the output are made in place (reader `e`, the app's editor later); the next stage reads whatever is
+  there.
+
+### Stale stages
+
+- `_stage.md` records the hash of every input the stage read. When an input changes (you edit
+  `_config/voice.md` or an earlier output), the stages that read it, and the ones after them, show as stale;
+  **Rerun from here** reruns them in order. A shared `_config` file can make stages stale in several works: the
+  board lists them, and finished works are left alone unless you rerun them.
+
+### Learning from edits (later)
+
+- When a stage finishes, its untouched output is kept (`<stage>/.agent/`); at the gate, the difference is
+  your edit. When the same kind of edit recurs across works of a pipeline, an agent proposes an amendment to
+  the stage contract or `_config` (for the pipeline, or just this work) for you to approve.
+- Also later: a contract's `Verify` section (checks against earlier stages before `finish`), breakpoints in a
+  contract (pause mid-stage), provenance markers tracing output back to the input that produced it.
+
+### Milestones
+
+20. **pipeline sites and works** — templates (`video`, `research`, `coding`), `new_pipeline`, `new_work`,
+    stage contracts, `_config` overrides, `_stage.md`.
+21. **running stages** — stages as tickets with scoped context, the `stage` agent, harness and model per stage,
+    advancing without gates.
+22. **gates and the board app** — the board template app, gate state via pages, notifications and Needs you.
+23. **stale stages** — input hashes, staleness, rerun from a stage.
+24. **learning from edits** — kept agent output, recurring-edit detection, proposed amendments; Verify.
+
 ## Open questions
 
 - None blocking.

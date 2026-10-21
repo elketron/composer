@@ -1,6 +1,6 @@
 # composer
 
-Design and decisions: [docs/plan.md](docs/plan.md) (phase 1; phase 3: harnesses and attachments; phase 4: merging, approvals, following Claude Code), [docs/plan-app.md](docs/plan-app.md) (phase 2: the Flutter app). UI mockups: [docs/mockups/](docs/mockups/).
+Design and decisions: [docs/plan.md](docs/plan.md) (phase 1; phase 3: harnesses and attachments; phase 4: merging, approvals, following Claude Code; phase 5: pipelines), [docs/plan-app.md](docs/plan-app.md) (phase 2: the Flutter app). UI mockups: [docs/mockups/](docs/mockups/).
 
 ## Code conventions (Rust)
 
