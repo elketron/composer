@@ -34,7 +34,7 @@ const MODES: [(&str, &str); 4] = [
 ];
 
 /// Keys that only mean something in one place, handled by that component.
-const PLACES: [(&str, &[(&str, &str)]); 6] = [
+const PLACES: [(&str, &[(&str, &str)]); 7] = [
     (
         "Writing (Insert mode)",
         &[
@@ -65,6 +65,19 @@ const PLACES: [(&str, &[(&str, &str)]); 6] = [
             ("enter", "open the file in $EDITOR at the cursor's line"),
             ("m", "a worker's ticket: merge its branch into the project"),
             ("X X", "a worker's ticket: discard its branch and worktree"),
+            ("q / esc", "close"),
+        ],
+    ),
+    (
+        "Project view (gp)",
+        &[
+            ("j / k", "move between the rows that open something"),
+            (
+                "enter",
+                "open it: a work's page, a branch's changes, a session",
+            ),
+            ("n", "a new chat in this project"),
+            ("r", "reload"),
             ("q / esc", "close"),
         ],
     ),

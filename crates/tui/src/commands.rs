@@ -4,7 +4,7 @@ use crate::action::Action;
 use crate::store::types::PickerKind;
 
 /// Every command, as shown by help: (usage, what it does).
-pub const COMMANDS: [(&str, &str); 15] = [
+pub const COMMANDS: [(&str, &str); 17] = [
     (
         ":new [agent]",
         "start a new session (default agent, or e.g. orchestrator)",
@@ -17,6 +17,14 @@ pub const COMMANDS: [(&str, &str); 15] = [
     (
         ":project [name|none]",
         "set the active project: a folder in the projects dir (or ~/path); `none` unsets it",
+    ),
+    (
+        ":project view [name]",
+        "a project's works, sessions, branches and memory (gp; default: this session's)",
+    ),
+    (
+        ":scope [name|none]",
+        "narrow the session picker to a project (space P finds projects)",
     ),
     (
         ":harness [on|off] [name]",
@@ -61,7 +69,14 @@ pub fn parse_command(line: &str) -> Result<Action, String> {
             .map(Action::AttachSession)
             .ok_or_else(|| "usage: :attach <session id>".into()),
         "workers" => Ok(Action::OpenPicker(PickerKind::Orchestration)),
-        "project" | "p" => Ok(Action::SetProject(arg.filter(|a| a != "none"))),
+        "project" | "p" => match arg.as_deref() {
+            Some("view") => Ok(Action::ProjectView(None)),
+            Some(view) if view.starts_with("view ") => {
+                Ok(Action::ProjectView(Some(view[5..].trim().to_string())))
+            }
+            _ => Ok(Action::SetProject(arg.filter(|a| a != "none"))),
+        },
+        "scope" => Ok(Action::Scope(arg)),
         "harness" => {
             let words: Vec<&str> = arg.as_deref().unwrap_or("").split_whitespace().collect();
             let (on, rest) = match words.first() {
@@ -166,6 +181,19 @@ mod tests {
             Action::TicketDiscard("7".into())
         );
         assert!(parse_command("discard").is_err());
+        assert_eq!(
+            parse_command("project view").unwrap(),
+            Action::ProjectView(None)
+        );
+        assert_eq!(
+            parse_command("project view game").unwrap(),
+            Action::ProjectView(Some("game".into()))
+        );
+        assert_eq!(
+            parse_command("project game").unwrap(),
+            Action::SetProject(Some("game".into()))
+        );
+        assert_eq!(parse_command("scope").unwrap(), Action::Scope(None));
         assert!(parse_command("attach").is_err());
         assert!(parse_command("frobnicate").is_err());
     }

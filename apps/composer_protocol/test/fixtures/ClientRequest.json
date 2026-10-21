@@ -66,28 +66,33 @@
   },
   {
     "id": 12,
+    "type": "project.overview",
+    "project": "game"
+  },
+  {
+    "id": 13,
     "type": "ticket.merge",
     "ticket": "0007"
   },
   {
-    "id": 13,
+    "id": 14,
     "type": "ticket.discard",
     "ticket": "0007"
   },
   {
-    "id": 14,
+    "id": 15,
     "type": "subscribe",
     "urls": [
       "*"
     ]
   },
   {
-    "id": 15,
+    "id": 16,
     "type": "worker.hello",
     "session": "a3f1"
   },
   {
-    "id": 16,
+    "id": 17,
     "type": "worker.event",
     "event": {
       "type": "turn.started",
@@ -96,16 +101,16 @@
     }
   },
   {
-    "id": 17,
+    "id": 18,
     "type": "slot.acquire"
   },
   {
-    "id": 18,
+    "id": 19,
     "type": "slot.release",
     "grant": 7
   },
   {
-    "id": 19,
+    "id": 20,
     "type": "approval.ask",
     "site": "t",
     "recipe": "r",
@@ -114,30 +119,30 @@
     "hash": "h"
   },
   {
-    "id": 20,
+    "id": 21,
     "type": "worker.finish",
     "state": "failed",
     "summary": "why"
   },
   {
-    "id": 21,
+    "id": 22,
     "type": "tool.list",
     "session": "a3f1"
   },
   {
-    "id": 22,
+    "id": 23,
     "type": "harness.list",
     "project": "composer"
   },
   {
-    "id": 23,
+    "id": 24,
     "type": "harness.set",
     "project": "composer",
     "entry": "claude-code",
     "on": false
   },
   {
-    "id": 24,
+    "id": 25,
     "type": "tool.call",
     "session": "a3f1",
     "name": "open",

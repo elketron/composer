@@ -6,7 +6,7 @@ import '../../theme/composer_theme.dart';
 import '../../theme/tokens.dart' as t;
 import '../store_scope.dart';
 
-/// Chats · Pages · Server, with a count on Chats of what needs you.
+/// Chats · Projects · Pages · Server, with a count on Chats of what needs you.
 class PhoneTabs extends StatelessWidget {
   const PhoneTabs({super.key, required this.tab, required this.needsYou});
 
@@ -47,6 +47,7 @@ class PhoneTabs extends StatelessWidget {
           height: 58,
           child: Row(children: [
             item(PhoneTab.chats, Icons.chat_bubble_outline, 'Chats', count: needsYou),
+            item(PhoneTab.projects, Icons.folder_outlined, 'Projects'),
             item(PhoneTab.pages, Icons.description_outlined, 'Pages'),
             item(PhoneTab.server, Icons.dns_outlined, 'Server'),
           ]),

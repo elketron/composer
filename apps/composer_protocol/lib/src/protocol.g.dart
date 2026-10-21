@@ -249,6 +249,7 @@ sealed class ClientCommand {
         'project.set' => ClientCommandProjectSet.fromJson(json),
         'harness.list' => ClientCommandHarnessList.fromJson(json),
         'harness.set' => ClientCommandHarnessSet.fromJson(json),
+        'project.overview' => ClientCommandProjectOverview.fromJson(json),
         'ticket.changes' => ClientCommandTicketChanges.fromJson(json),
         'ticket.merge' => ClientCommandTicketMerge.fromJson(json),
         'ticket.discard' => ClientCommandTicketDiscard.fromJson(json),
@@ -481,6 +482,25 @@ final class ClientCommandHarnessSet extends ClientCommand {
         'project': project,
         'entry': entry,
         'on': on,
+      };
+}
+
+/// What is going on in a project (a name in the projects directory, or a path); the reply is
+/// `project`.
+final class ClientCommandProjectOverview extends ClientCommand {
+  const ClientCommandProjectOverview({
+    required this.project,
+  });
+
+  final String project;
+
+  factory ClientCommandProjectOverview.fromJson(Map<String, Object?> json) => ClientCommandProjectOverview(
+        project: json['project'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'project.overview',
+        'project': project,
       };
 }
 
@@ -795,6 +815,7 @@ sealed class CommandResult {
         'harnesses' => CommandResultHarnesses.fromJson(json),
         'changes' => CommandResultChanges.fromJson(json),
         'merged' => CommandResultMerged.fromJson(json),
+        'project' => CommandResultProject.fromJson(json),
         _ => CommandResultUnknown(json),
       };
 
@@ -975,6 +996,23 @@ final class CommandResultMerged extends CommandResult {
       };
 }
 
+final class CommandResultProject extends CommandResult {
+  const CommandResultProject({
+    required this.overview,
+  });
+
+  final ProjectOverview overview;
+
+  factory CommandResultProject.fromJson(Map<String, Object?> json) => CommandResultProject(
+        overview: ProjectOverview.fromJson(json['overview'] as Map<String, Object?>),
+      );
+
+  Map<String, Object?> toJson() => {
+        'kind': 'project',
+        'overview': overview.toJson(),
+      };
+}
+
 /// A `kind` this version doesn't know (a newer server): kept as raw JSON.
 final class CommandResultUnknown extends CommandResult {
   const CommandResultUnknown(this.raw);
@@ -1126,6 +1164,28 @@ enum PageChangeKind {
   String toJson() => wire;
 }
 
+/// The start of a page.
+class PageExcerpt {
+  const PageExcerpt({
+    required this.url,
+    required this.excerpt,
+  });
+
+  final String url;
+
+  final String excerpt;
+
+  factory PageExcerpt.fromJson(Map<String, Object?> json) => PageExcerpt(
+        url: json['url'] as String,
+        excerpt: json['excerpt'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'url': url,
+        'excerpt': excerpt,
+      };
+}
+
 /// `GET /api/pages/{site}/{path}`. The `ETag` header carries `hash`.
 class PageResponse {
   const PageResponse({
@@ -1217,12 +1277,88 @@ class ProjectDiff {
       };
 }
 
+/// `project.overview`: what is going on in one project.
+class ProjectOverview {
+  const ProjectOverview({
+    required this.name,
+    required this.path,
+    required this.folder,
+    this.branch,
+    required this.uncommitted,
+    required this.works,
+    required this.branches,
+    this.memory,
+    required this.harnesses,
+    required this.toolRules,
+  });
+
+  final String name;
+
+  /// `~/Projects/<name>`.
+  final String path;
+
+  /// The absolute folder, as sessions' `project` holds it.
+  final String folder;
+
+  /// Checked-out branch; `None` outside git or with a detached HEAD.
+  final String? branch;
+
+  /// Files changed and not committed (git).
+  final int uncommitted;
+
+  /// Works of any pipeline that link it.
+  final List<WorkSummary> works;
+
+  /// Tickets whose worktree of it is still there: their branch waits to be merged or discarded.
+  final List<TicketBranchSummary> branches;
+
+  /// Its memory page (`site://memory/projects/<name>`), when there is one.
+  final PageExcerpt? memory;
+
+  /// External harnesses config.toml allows here, and whether each is on.
+  final List<HarnessSwitch> harnesses;
+
+  /// Tool rules remembered for it (Claude Code's `always`).
+  final int toolRules;
+
+  factory ProjectOverview.fromJson(Map<String, Object?> json) => ProjectOverview(
+        name: json['name'] as String,
+        path: json['path'] as String,
+        folder: json['folder'] as String,
+        branch: json['branch'] == null ? null : json['branch'] as String,
+        uncommitted: (json['uncommitted'] as num).toInt(),
+        works: (json['works'] as List).map((e) => WorkSummary.fromJson(e as Map<String, Object?>)).toList(),
+        branches: (json['branches'] as List).map((e) => TicketBranchSummary.fromJson(e as Map<String, Object?>)).toList(),
+        memory: json['memory'] == null ? null : PageExcerpt.fromJson(json['memory'] as Map<String, Object?>),
+        harnesses: (json['harnesses'] as List).map((e) => HarnessSwitch.fromJson(e as Map<String, Object?>)).toList(),
+        toolRules: (json['tool_rules'] as num).toInt(),
+      );
+
+  Map<String, Object?> toJson() => {
+        'name': name,
+        'path': path,
+        'folder': folder,
+        if (branch != null) 'branch': branch,
+        'uncommitted': uncommitted,
+        'works': works.map((e) => e.toJson()).toList(),
+        'branches': branches.map((e) => e.toJson()).toList(),
+        if (memory != null) 'memory': memory?.toJson(),
+        'harnesses': harnesses.map((e) => e.toJson()).toList(),
+        'tool_rules': toolRules,
+      };
+}
+
 /// `GET /api/projects`: the folders in the projects directory, most recently changed first.
 class ProjectSummary {
   const ProjectSummary({
     required this.name,
     required this.path,
     required this.modified,
+    this.folder,
+    this.sessions = 0,
+    this.running = 0,
+    this.waiting = 0,
+    this.lastUsed,
   });
 
   /// Folder name; what `project.set` and `session.create` accept.
@@ -1234,16 +1370,41 @@ class ProjectSummary {
   /// RFC 3339.
   final String modified;
 
+  /// The absolute folder, as sessions' `project` holds it.
+  final String? folder;
+
+  /// Chats and orchestrators in it (workers count with their orchestrator).
+  final int sessions;
+
+  /// Of those, the ones busy now (or with a worker busy).
+  final int running;
+
+  /// Approvals waiting in its sessions.
+  final int waiting;
+
+  /// When one of its sessions last did something (RFC 3339).
+  final String? lastUsed;
+
   factory ProjectSummary.fromJson(Map<String, Object?> json) => ProjectSummary(
         name: json['name'] as String,
         path: json['path'] as String,
         modified: json['modified'] as String,
+        folder: json['folder'] == null ? null : json['folder'] as String,
+        sessions: json['sessions'] == null ? 0 : (json['sessions'] as num).toInt(),
+        running: json['running'] == null ? 0 : (json['running'] as num).toInt(),
+        waiting: json['waiting'] == null ? 0 : (json['waiting'] as num).toInt(),
+        lastUsed: json['last_used'] == null ? null : json['last_used'] as String,
       );
 
   Map<String, Object?> toJson() => {
         'name': name,
         'path': path,
         'modified': modified,
+        if (folder != null) 'folder': folder,
+        'sessions': sessions,
+        'running': running,
+        'waiting': waiting,
+        if (lastUsed != null) 'last_used': lastUsed,
       };
 }
 
@@ -2128,6 +2289,46 @@ class SiteSummary {
       };
 }
 
+/// A ticket's branch that is still there.
+class TicketBranchSummary {
+  const TicketBranchSummary({
+    required this.ticket,
+    required this.title,
+    required this.branch,
+    this.status,
+    required this.commits,
+  });
+
+  final String ticket;
+
+  final String title;
+
+  /// `ticket/<id>`.
+  final String branch;
+
+  /// The ticket's `status:`.
+  final String? status;
+
+  /// Commits on it the project's branch doesn't have.
+  final int commits;
+
+  factory TicketBranchSummary.fromJson(Map<String, Object?> json) => TicketBranchSummary(
+        ticket: json['ticket'] as String,
+        title: json['title'] as String,
+        branch: json['branch'] as String,
+        status: json['status'] == null ? null : json['status'] as String,
+        commits: (json['commits'] as num).toInt(),
+      );
+
+  Map<String, Object?> toJson() => {
+        'ticket': ticket,
+        'title': title,
+        'branch': branch,
+        if (status != null) 'status': status,
+        'commits': commits,
+      };
+}
+
 /// A ticket branch against the branch it would be merged into.
 class TicketReview {
   const TicketReview({
@@ -2251,6 +2452,40 @@ enum TurnState {
       values.firstWhere((v) => v.wire == json, orElse: () => throw FormatException('unknown TurnState: $json'));
 
   String toJson() => wire;
+}
+
+/// A piece of work in a pipeline (`site://<pipeline>/<work>/index.md`, `type: work`).
+class WorkSummary {
+  const WorkSummary({
+    required this.url,
+    required this.pipeline,
+    required this.title,
+    this.status,
+  });
+
+  final String url;
+
+  /// The pipeline's site.
+  final String pipeline;
+
+  final String title;
+
+  /// Its `status:` (the stage it is at, `done`, …).
+  final String? status;
+
+  factory WorkSummary.fromJson(Map<String, Object?> json) => WorkSummary(
+        url: json['url'] as String,
+        pipeline: json['pipeline'] as String,
+        title: json['title'] as String,
+        status: json['status'] == null ? null : json['status'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'url': url,
+        'pipeline': pipeline,
+        'title': title,
+        if (status != null) 'status': status,
+      };
 }
 
 enum WorkerState {

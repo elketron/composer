@@ -204,4 +204,7 @@ pub enum CommandResult {
     Merged {
         commit: String,
     },
+    Project {
+        overview: crate::http::ProjectOverview,
+    },
 }

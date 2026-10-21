@@ -336,13 +336,14 @@ final class ProjectsLoaded extends AppAction {
 }
 
 /// Show `tab` in the side pane (wide screens); for `changes`, the ticket it shows; for
-/// `worker`, the session.
+/// `worker`, the session; for `project`, the project's folder.
 final class SideTabSelected extends AppAction {
-  const SideTabSelected(this.url, this.tab, {this.ticket, this.session});
+  const SideTabSelected(this.url, this.tab, {this.ticket, this.session, this.project});
   final String url;
   final SideTab tab;
   final String? ticket;
   final String? session;
+  final String? project;
 }
 
 /// Fold or unfold the session list (wide screens).
@@ -365,5 +366,40 @@ final class LayoutLoaded extends AppAction {
 /// Close the side pane, keeping what it showed (wide screens).
 final class SideClosed extends AppAction {
   const SideClosed(this.url);
+  final String url;
+}
+
+/// Search the projects (empty: the full list).
+final class ProjectSearchChanged extends AppAction {
+  const ProjectSearchChanged(this.url, this.query);
+  final String url;
+  final String query;
+}
+
+final class ProjectsFound extends AppAction {
+  const ProjectsFound(this.url, this.query, this.hits, {this.error});
+  final String url;
+  final String query;
+  final List<ProjectSummary> hits;
+  final String? error;
+}
+
+/// Ask what is going on in a project (its folder, or a name); the reply fills `overviews`.
+final class ProjectOverviewRequested extends AppAction {
+  const ProjectOverviewRequested(this.url, this.project);
+  final String url;
+  final String project;
+}
+
+/// Narrow the session list and the palette to a project (its folder); null: all.
+final class ScopeChanged extends AppAction {
+  const ScopeChanged(this.url, this.project);
+  final String url;
+  final String? project;
+}
+
+/// Fetch the sites, agents and projects again (the project counts change).
+final class CatalogRequested extends AppAction {
+  const CatalogRequested(this.url);
   final String url;
 }

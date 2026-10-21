@@ -21,9 +21,39 @@ pub struct SessionStore {
     pub turns_done: u64,
     /// Workers' last `worker.status`, by session id (seen since the TUI started).
     pub workers: HashMap<String, WorkerState>,
+    /// The project (name or folder) the session picker is narrowed to (`:scope`).
+    pub scope: Option<String>,
 }
 
 impl SessionStore {
+    /// A session's project: its own, or for a worker (whose project is its ticket's worktree)
+    /// its orchestrator's.
+    pub fn project_of(&self, session: &SessionInfo) -> Option<String> {
+        match (&session.ticket, &session.parent) {
+            (Some(_), Some(parent)) => self
+                .sessions
+                .iter()
+                .find(|s| &s.id == parent)
+                .and_then(|p| p.project.clone()),
+            _ => session.project.clone(),
+        }
+    }
+
+    /// Whether a session is in the scope (always, without one). The scope matches the folder
+    /// or its last part (`game` for `/home/me/Projects/game`).
+    pub fn in_scope(&self, session: &SessionInfo) -> bool {
+        let Some(scope) = &self.scope else {
+            return true;
+        };
+        self.project_of(session).is_some_and(|folder| {
+            folder == *scope
+                || folder.rsplit('/').next() == Some(scope.as_str())
+                || scope
+                    .strip_prefix("~/")
+                    .is_some_and(|rest| folder.ends_with(&format!("/{rest}")))
+        })
+    }
+
     pub fn current_info(&self) -> Option<&SessionInfo> {
         let current = self.current.as_deref()?;
         self.sessions.iter().find(|s| s.id == current)

@@ -1,6 +1,7 @@
 use composer_protocol::Attachment;
 use composer_protocol::http::{
-    PageResponse, ProjectDiff, PutPageRequest, PutPageResponse, SearchHit, SiteSummary,
+    PageResponse, ProjectDiff, ProjectSummary, PutPageRequest, PutPageResponse, SearchHit,
+    SiteSummary,
 };
 
 use crate::store::types::PageView;
@@ -75,6 +76,12 @@ impl ApiClient {
         self.get("/api/sites").await
     }
 
+    /// Projects matching `query`, the ones with something going on first.
+    pub async fn projects(&self, query: &str) -> Result<Vec<ProjectSummary>, String> {
+        self.get(&format!("/api/projects?q={}", urlencoding_minimal(query)))
+            .await
+    }
+
     async fn get<T: serde::de::DeserializeOwned>(&self, path: &str) -> Result<T, String> {
         let response = self
             .http
@@ -131,4 +138,17 @@ fn page_path(url: &str) -> Result<String, String> {
         .ok_or_else(|| format!("not a site url: {url}"))?;
     let rest = rest.split('#').next().unwrap_or(rest).trim_end_matches('/');
     Ok(format!("/api/pages/{rest}"))
+}
+
+/// Enough escaping for a search query in a URL.
+fn urlencoding_minimal(text: &str) -> String {
+    text.bytes()
+        .map(|b| match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                (b as char).to_string()
+            }
+            b' ' => "+".to_string(),
+            _ => format!("%{b:02X}"),
+        })
+        .collect()
 }

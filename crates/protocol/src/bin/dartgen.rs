@@ -12,8 +12,9 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use composer_protocol::http::{
-    AgentSummary, AppMessage, ChangedFile, PageResponse, ProjectDiff, ProjectSummary,
-    PutPageRequest, PutPageResponse, SearchHit, ServerInfo, SiteSummary, TicketReview,
+    AgentSummary, AppMessage, ChangedFile, PageExcerpt, PageResponse, ProjectDiff, ProjectOverview,
+    ProjectSummary, PutPageRequest, PutPageResponse, SearchHit, ServerInfo, SiteSummary,
+    TicketBranchSummary, TicketReview, WorkSummary,
 };
 use composer_protocol::*;
 use serde_json::{Map, Value, json};
@@ -69,6 +70,7 @@ fn definitions() -> Map<String, Value> {
     let _ = generator.subschema_for::<SearchHit>();
     let _ = generator.subschema_for::<AppMessage>();
     let _ = generator.subschema_for::<ProjectDiff>();
+    let _ = generator.subschema_for::<ProjectOverview>();
     let _ = generator.subschema_for::<ChangedFile>();
     let _ = generator.subschema_for::<AgentSummary>();
     let _ = generator.subschema_for::<ProjectSummary>();
@@ -819,6 +821,9 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
         ClientCommand::TicketChanges {
             ticket: "0007".into(),
         },
+        ClientCommand::ProjectOverview {
+            project: "game".into(),
+        },
         ClientCommand::TicketMerge {
             ticket: "0007".into(),
         },
@@ -930,6 +935,41 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
             name: "composer".into(),
             path: "~/Projects/composer".into(),
             modified: "2026-10-20T07:00:00+02:00".into(),
+            folder: "/home/me/Projects/composer".into(),
+            sessions: 2,
+            running: 1,
+            waiting: 0,
+            last_used: Some("2026-10-21T09:00:00+00:00".into()),
+        }),
+        serde_json::to_value(ProjectOverview {
+            name: "game".into(),
+            path: "~/Projects/game".into(),
+            folder: "/home/me/Projects/game".into(),
+            branch: Some("main".into()),
+            uncommitted: 3,
+            works: vec![WorkSummary {
+                url: "site://coding/game-save-system/index.md".into(),
+                pipeline: "coding".into(),
+                title: "Save system".into(),
+                status: Some("03 implement".into()),
+            }],
+            branches: vec![TicketBranchSummary {
+                ticket: "0028".into(),
+                title: "Controller remapping".into(),
+                branch: "ticket/0028".into(),
+                status: Some("done".into()),
+                commits: 2,
+            }],
+            memory: Some(PageExcerpt {
+                url: "site://memory/projects/game.md".into(),
+                excerpt: "Godot 4.4, C#.".into(),
+            }),
+            harnesses: vec![HarnessSwitch {
+                entry: "claude-code".into(),
+                allowed: true,
+                on: true,
+            }],
+            tool_rules: 2,
         }),
     ]
     .into_iter()

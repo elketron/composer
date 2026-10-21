@@ -806,6 +806,15 @@ pipeline, the chats and orchestrators in it, the workers on its tickets, its bra
 - **Server:** `project.overview {project}` (reply `project`): works (`type:work` pages linking it), git state,
   tickets with a worktree, the memory page's URL, switches. Sessions come from the session list clients have.
 
+Built (milestone 20): `crates/server/src/project/project_list.rs` (the list, search, counts; a worker counts with
+its orchestrator, since its own project is its worktree) and `project_overview.rs`; `GET /api/projects?q=&limit=`,
+`project.overview` (reply `project`). Search matches names, and paths only for projects outside the projects
+directory (every path in it contains `~/Projects`). App: `lib/ui/projects/` (overview, list with search, phone
+screen, picker), the Projects tab, the side pane's Project tab (the header's project chip opens it), the scope row
+(`…` opens the picker), Projects in the palette. TUI: `gp` / `:project view [name]`, `:scope`, `space P`; rows
+open a work's page, a branch's worker with its changes view, or a session. A new chat from a worker's session now
+gets its orchestrator's project, not the worktree. Works show once pipelines (21) write `type: work` pages.
+
 ### Running a stage: a ticket with scoped context
 
 - A stage runs as a ticket in `site://orchestration` (`pipeline: site://<site>/<stage>`), so harnesses, models
@@ -848,7 +857,7 @@ pipeline, the chats and orchestrators in it, the workers on its tickets, its bra
 
 ### Milestones
 
-20. **project view** — `project.overview`, the overview (side pane tab, phone Projects tab, TUI view), the
+20. ✅ **project view** — `project.overview`, the overview (side pane tab, phone Projects tab, TUI view), the
     project scope on the session list and palette, project search everywhere projects are listed.
 21. **pipeline sites and works** — templates (`video`, `research`, `coding`), `new_pipeline`, `new_work`,
     stage contracts, `_config` overrides, `_stage.md`; works in the project view.

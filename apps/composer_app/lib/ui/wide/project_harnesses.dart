@@ -24,11 +24,14 @@ class _ProjectHarnessesState extends State<ProjectHarnesses> {
   @override
   void initState() {
     super.initState();
-    // What each project allows, asked once when shown.
-    final store = StoreScope.read(context);
-    for (final project in widget.status.projects) {
-      store.dispatch(HarnessesRequested(widget.url, project.path));
-    }
+    // What each project allows, asked once when shown (after the frame: not while building).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final store = StoreScope.read(context);
+      for (final project in widget.status.projects) {
+        store.dispatch(HarnessesRequested(widget.url, project.folder ?? project.path));
+      }
+    });
   }
 
   @override

@@ -55,6 +55,21 @@ void main() {
     await tester.tap(find.byKey(const Key('harness-chip-claude-code')));
     await pumpUntil(tester, find.text('claude-code on'));
 
+    // The project chip opens the project beside the chat: works, branches, sessions.
+    await tester.tap(find.byKey(const Key('project-chip')));
+    await pumpUntil(tester, find.text('BRANCHES TO MERGE'));
+    await settle(tester, seconds: 3);
+
+    // The scope: … finds a project and narrows the session list to it.
+    await tester.tap(find.byKey(const Key('scope-more')));
+    await pumpUntil(tester, find.byKey(const Key('project-search')));
+    await tester.enterText(find.byKey(const Key('project-search')), 'pro');
+    await pumpUntil(tester, find.byKey(const Key('project-proj')));
+    await settle(tester, seconds: 2);
+    await tester.tap(find.byKey(const Key('project-proj')).last);
+    await pumpUntil(tester, find.byKey(const Key('scope-proj')));
+    await settle(tester, seconds: 2);
+
     // The reader in the side pane.
     await tester.tap(find.byKey(const Key('browse')));
     await pumpUntil(tester, find.byKey(const Key('side-tab-page')));

@@ -1,5 +1,5 @@
 use composer_protocol::SessionInfo;
-use composer_protocol::http::{SearchHit, SiteSummary};
+use composer_protocol::http::{ProjectSummary, SearchHit, SiteSummary};
 
 use crate::effect::Effect;
 use crate::store::SessionStore;
@@ -39,7 +39,10 @@ impl PickerStore {
             PickerKind::Sessions => {
                 // A tree: each top-level session (most recent first), then its workers.
                 let sessions = &store.sessions;
-                let top = sessions.iter().filter(|s| s.parent.is_none());
+                // `:scope` narrows it to one project.
+                let top = sessions
+                    .iter()
+                    .filter(|s| s.parent.is_none() && store.in_scope(s));
                 self.all = top
                     .flat_map(|parent| {
                         let children = sessions
@@ -52,6 +55,7 @@ impl PickerStore {
                 self.filter();
                 vec![]
             }
+            PickerKind::Projects => vec![Effect::LoadProjects(String::new())],
             PickerKind::Orchestration => {
                 let members = store.orchestration();
                 self.all = members.iter().map(|s| session_item(s, store)).collect();
@@ -67,6 +71,7 @@ impl PickerStore {
         self.selected = 0;
         match self.kind {
             PickerKind::Pages => vec![Effect::Search(self.query.clone())],
+            PickerKind::Projects => vec![Effect::LoadProjects(self.query.clone())],
             PickerKind::Sites | PickerKind::Sessions | PickerKind::Orchestration => {
                 self.filter();
                 vec![]
@@ -116,6 +121,39 @@ impl PickerStore {
             })
             .collect();
         self.filter();
+    }
+
+    /// The server's matches for `query`; stale ones (an older query) are dropped.
+    pub fn projects(&mut self, query: &str, projects: Vec<ProjectSummary>) {
+        if self.kind != PickerKind::Projects || query != self.query {
+            return;
+        }
+        self.items = projects
+            .into_iter()
+            .map(|p| {
+                let mut right = Vec::new();
+                if p.waiting > 0 {
+                    right.push(format!("{} waiting", p.waiting));
+                }
+                if p.running > 0 {
+                    right.push(format!("{} running", p.running));
+                }
+                if right.is_empty() && p.sessions > 0 {
+                    right.push(format!("{} chats", p.sessions));
+                }
+                PickerItem {
+                    target: PickerTarget::Project(if p.folder.is_empty() {
+                        p.path.clone()
+                    } else {
+                        p.folder
+                    }),
+                    title: p.name,
+                    detail: p.path,
+                    right: right.join(" · "),
+                }
+            })
+            .collect();
+        self.selected = self.selected.min(self.items.len().saturating_sub(1));
     }
 
     pub fn move_selection(&mut self, delta: i32) {

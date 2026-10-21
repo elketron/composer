@@ -25,6 +25,8 @@ pub enum PickerKind {
     Sessions,
     /// The current session's orchestrator and its workers.
     Orchestration,
+    /// Projects (searched on the server).
+    Projects,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -39,6 +41,8 @@ pub struct PickerItem {
 pub enum PickerTarget {
     Url(String),
     Session(String),
+    /// A project's folder.
+    Project(String),
 }
 
 /// One row-group in the chat.
@@ -126,6 +130,8 @@ pub enum Pending {
     Attach(String),
     /// `harness.list` / `harness.set`: show the result.
     Harnesses,
+    /// `project.overview` for the project view.
+    Overview,
     /// `ticket.merge` / `ticket.discard` of this ticket.
     Merged(String),
     Discarded(String),

@@ -64,6 +64,47 @@
   {
     "name": "composer",
     "path": "~/Projects/composer",
-    "modified": "2026-10-20T07:00:00+02:00"
+    "modified": "2026-10-20T07:00:00+02:00",
+    "folder": "/home/me/Projects/composer",
+    "sessions": 2,
+    "running": 1,
+    "waiting": 0,
+    "last_used": "2026-10-21T09:00:00+00:00"
+  },
+  {
+    "name": "game",
+    "path": "~/Projects/game",
+    "folder": "/home/me/Projects/game",
+    "branch": "main",
+    "uncommitted": 3,
+    "works": [
+      {
+        "url": "site://coding/game-save-system/index.md",
+        "pipeline": "coding",
+        "title": "Save system",
+        "status": "03 implement"
+      }
+    ],
+    "branches": [
+      {
+        "ticket": "0028",
+        "title": "Controller remapping",
+        "branch": "ticket/0028",
+        "status": "done",
+        "commits": 2
+      }
+    ],
+    "memory": {
+      "url": "site://memory/projects/game.md",
+      "excerpt": "Godot 4.4, C#."
+    },
+    "harnesses": [
+      {
+        "entry": "claude-code",
+        "allowed": true,
+        "on": true
+      }
+    ],
+    "tool_rules": 2
   }
 ]

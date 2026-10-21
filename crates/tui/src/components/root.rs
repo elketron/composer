@@ -7,7 +7,7 @@ use ratatui::widgets::Block;
 use crate::action::Action;
 use crate::components::{
     ApprovalPopup, ChangesView, ChatPane, CommandLine, Component, Help, PageViewer, Picker,
-    StatusBar,
+    ProjectView, StatusBar,
 };
 use crate::store::AppState;
 use crate::store::types::{FlashLevel, Mode, Pane};
@@ -21,6 +21,7 @@ pub struct Root {
     pub chat: ChatPane,
     pub page: PageViewer,
     changes: ChangesView,
+    project: ProjectView,
     status: StatusBar,
     command: CommandLine,
     picker: Picker,
@@ -35,6 +36,7 @@ impl Root {
             chat: ChatPane::new(),
             page: PageViewer::new(),
             changes: ChangesView::new(),
+            project: ProjectView::new(),
             status: StatusBar,
             command: CommandLine::new(),
             picker: Picker,
@@ -43,9 +45,11 @@ impl Root {
         }
     }
 
-    /// The right pane: the changes view when open, else the page viewer.
+    /// The right pane: the project view or the changes view when open, else the page viewer.
     fn render_right(&self, frame: &mut Frame, area: Rect, state: &AppState) {
-        if state.project.open {
+        if state.project_view.open {
+            self.project.render(frame, area, state);
+        } else if state.project.open {
             self.changes.render(frame, area, state);
         } else {
             self.page.render(frame, area, state);
@@ -97,6 +101,7 @@ impl Component for Root {
             Mode::Hint => self.page.handle_key(key, state),
             Mode::Normal => match state.ui.focus {
                 Pane::Chat => self.chat.handle_key(key, state),
+                Pane::Page if state.project_view.open => self.project.handle_key(key, state),
                 Pane::Page if state.project.open => self.changes.handle_key(key, state),
                 Pane::Page => self.page.handle_key(key, state),
             },

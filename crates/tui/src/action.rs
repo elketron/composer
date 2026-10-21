@@ -46,6 +46,19 @@ pub enum Action {
     /// The next (1) or previous (-1) session of this orchestration: orchestrator, workers.
     CycleOrchestration(i32),
     SetProject(Option<String>),
+    /// Start a chat in this project (a folder).
+    NewSessionIn(String),
+    /// Show a project's overview (a name or folder; `None`: the current session's project).
+    ProjectView(Option<String>),
+    /// `gp`: the project view on or off.
+    ToggleProjectView,
+    /// Narrow the session picker to a project (a name or folder); `None`: all.
+    Scope(Option<String>),
+    /// The project list for the picker, for `query`.
+    ProjectsLoaded {
+        query: String,
+        projects: Vec<composer_protocol::http::ProjectSummary>,
+    },
     /// Show the project's external harnesses, or turn one (`claude-code[:model]`) on or off.
     Harness {
         on: Option<bool>,

@@ -58,6 +58,12 @@ impl EffectRunner {
                     });
                 });
             }
+            Effect::LoadProjects(query) => {
+                tokio::spawn(async move {
+                    let projects = api.projects(&query).await.unwrap_or_default();
+                    dispatcher.dispatch(Action::ProjectsLoaded { query, projects });
+                });
+            }
             Effect::LoadSites => {
                 tokio::spawn(async move {
                     dispatcher.dispatch(Action::SitesLoaded(api.sites().await.unwrap_or_default()));

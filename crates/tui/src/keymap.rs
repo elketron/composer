@@ -63,6 +63,11 @@ impl Keymap {
                 "sessions and workers",
             ),
             (
+                vec![space, key('P')],
+                Action::OpenPicker(PickerKind::Projects),
+                "find a project (opens its view)",
+            ),
+            (
                 vec![space, key('o')],
                 Action::OpenPicker(PickerKind::Orchestration),
                 "this orchestration: orchestrator and workers, with what each is doing",
@@ -116,6 +121,11 @@ impl Keymap {
                 vec![key('g'), key('d')],
                 Action::ToggleChanges,
                 "changes of the active project (git)",
+            ),
+            (
+                vec![key('g'), key('p')],
+                Action::ToggleProjectView,
+                "the project: its works, sessions, branches, memory",
             ),
             (
                 vec![key('t')],

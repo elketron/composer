@@ -7,6 +7,7 @@ import '../../theme/tokens.dart' as t;
 import '../home/chats_tab.dart';
 import '../home/new_chat_sheet.dart';
 import '../store_scope.dart';
+import 'scope_row.dart';
 
 /// The wide layout's session list: the phone's Chats (Needs you, Running, Recent) under the
 /// server's name, with New and folding it away.
@@ -47,6 +48,7 @@ class SessionColumn extends StatelessWidget {
               ),
             ]),
           ),
+          ScopeRow(url: server.url, status: status),
           const SizedBox(height: 6),
           Expanded(child: ChatsTab(url: server.url, status: status, wide: true)),
         ]),

@@ -67,6 +67,13 @@ impl Component for StatusBar {
                     slots.push_str(&format!(" · {} waiting", state.conn.slots_waiting));
                 }
                 left.push(Span::styled(slots, theme::muted()));
+                if let Some(scope) = &state.session.scope {
+                    left.push(sep());
+                    left.push(Span::styled(
+                        format!("scope {scope}"),
+                        Style::new().fg(theme::ACCENT),
+                    ));
+                }
             }
             ConnState::Connecting => {
                 left.push(Span::styled("connecting…", Style::new().fg(theme::WARN)))

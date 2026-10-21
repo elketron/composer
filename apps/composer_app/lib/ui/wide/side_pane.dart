@@ -9,6 +9,8 @@ import '../../theme/tokens.dart' as t;
 import '../chat/review_view.dart';
 import '../home/server_tab.dart';
 import '../pages/reader.dart';
+import '../../state/projects.dart';
+import '../projects/project_overview_view.dart';
 import '../store_scope.dart';
 import 'worker_pane.dart';
 
@@ -34,11 +36,13 @@ class SidePane extends StatelessWidget {
     final app = status.page.appSite;
     final ticket = status.sideTicket;
     final worker = status.sideChat;
+    final project = status.sideProject;
     final tabs = <(SideTab, String, String?)>[
       (SideTab.page, 'Page', null),
       if (app != null) (SideTab.app, 'App', app),
       if (ticket != null) (SideTab.changes, 'Changes', ticket),
       if (worker != null) (SideTab.worker, 'Worker', status.session(worker.session)?.ticket ?? '#${worker.session}'),
+      if (project != null) (SideTab.project, 'Project', projectName(project)),
       if (side == SideTab.server) (SideTab.server, 'Server', null),
     ];
     // Kept built (offstage) so the app doesn't reload on every tab switch.
@@ -47,6 +51,7 @@ class SidePane extends StatelessWidget {
       if (app != null) SideTab.app: Reader(key: ValueKey('side-app-$app'), url: url, status: status, show: SideTab.app),
       if (ticket != null) SideTab.changes: ReviewView(key: ValueKey('side-changes-$ticket'), url: url, ticket: ticket, header: true),
       if (worker != null) SideTab.worker: WorkerPane(key: ValueKey('side-worker-${worker.session}'), url: url, status: status, chat: worker),
+      if (project != null) SideTab.project: ProjectOverviewView(key: ValueKey('side-project-$project'), url: url, status: status, folder: project),
       if (side == SideTab.server) SideTab.server: ServerTab(server: server, status: status, wide: true),
     };
     final order = bodies.keys.toList();
@@ -71,7 +76,12 @@ class SidePane extends StatelessWidget {
                           label: label,
                           badge: badge,
                           on: tab == side,
-                          onTap: () => store.dispatch(SideTabSelected(url, tab, ticket: tab == SideTab.changes ? ticket : null)),
+                          onTap: () => store.dispatch(SideTabSelected(
+                            url,
+                            tab,
+                            ticket: tab == SideTab.changes ? ticket : null,
+                            project: tab == SideTab.project ? project : null,
+                          )),
                         ),
                     ]),
                   ),

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../state/actions.dart';
+import '../../state/projects.dart';
 import '../../state/types.dart';
 import '../../theme/composer_theme.dart';
 import '../../theme/tokens.dart' as t;
@@ -12,6 +13,7 @@ import '../chat/review_page.dart';
 import '../home/activity_dot.dart';
 import '../home/new_chat_sheet.dart';
 import '../pages/page_navigation.dart';
+import '../projects/project_picker.dart';
 import '../store_scope.dart';
 
 /// Opens the palette (ctrl-k) for the active server.
@@ -73,6 +75,7 @@ class _CommandPaletteState extends State<CommandPalette> {
     final chat = status.chat;
     final session = chat == null ? null : status.session(chat.session);
     final q = _query.text.trim().toLowerCase();
+    final scope = status.scope;
     bool matches(String text) => q.isEmpty || q.split(' ').every((word) => text.toLowerCase().contains(word));
 
     final actions = <_Entry>[
@@ -89,13 +92,15 @@ class _CommandPaletteState extends State<CommandPalette> {
       _Entry('Actions', state.layout.sessionsCollapsed ? 'Show the sessions' : 'Fold the sessions', () => store.dispatch(const SessionsToggled()),
           hint: 'ctrl b'),
       _Entry('Actions', 'This server', () => store.dispatch(SideTabSelected(url, SideTab.server))),
+      _Entry('Actions', 'Find a project…', () => showProjectPicker(parent, url, (p) => store.dispatch(SideTabSelected(url, SideTab.project, project: p.folder ?? p.path)))),
+      if (scope != null) _Entry('Actions', 'Show all sessions', () => store.dispatch(ScopeChanged(url, null)), detail: 'now only ${projectName(scope)}'),
       for (final site in status.sites.where((s) => s.appBuilt))
         _Entry('Actions', 'Open the ${site.name} app', () => openApp(parent, url, site.name), detail: site.description),
       for (final (i, other) in state.servers.indexed)
         if (other.url != url) _Entry('Actions', 'Switch to ${other.name}', () => store.dispatch(ServerSelected(other.url)), hint: i < 9 ? 'ctrl ${i + 1}' : null),
     ];
     final sessions = [
-      for (final s in status.sessions)
+      for (final s in scope == null ? status.sessions : projectSessions(status, scope))
         _Entry(
           'Sessions',
           '${s.agent} #${s.id}',
@@ -104,6 +109,21 @@ class _CommandPaletteState extends State<CommandPalette> {
           activity: status.activity(s),
         ),
     ];
+    // Typing `project` (or a project's name) finds projects; choosing one opens it beside the chat.
+    final projectQuery = q.startsWith('project') ? q.substring('project'.length).trim() : q;
+    final projects = q.isEmpty
+        ? const <_Entry>[]
+        : [
+            for (final p in status.projects)
+              if ((p.name.toLowerCase().contains(projectQuery) || p.path.toLowerCase().contains(projectQuery)) && p.folder != null)
+                _Entry(
+                  'Projects',
+                  p.name,
+                  () => store.dispatch(SideTabSelected(url, SideTab.project, project: p.folder)),
+                  detail: p.path,
+                  hint: p.waiting > 0 ? '${p.waiting} waiting' : (p.running > 0 ? '${p.running} running' : null),
+                ),
+          ];
     final pages = q.isEmpty || status.search.query != _query.text
         ? const <_Entry>[]
         : [
@@ -112,6 +132,7 @@ class _CommandPaletteState extends State<CommandPalette> {
           ];
     return [
       ...actions.where((e) => matches('${e.label} ${e.detail ?? ''}')),
+      ...projects.take(q.startsWith('project') ? 12 : 4),
       ...sessions.where((e) => matches('${e.label} ${e.detail ?? ''}')).take(q.isEmpty ? 6 : 12),
       ...pages.take(8),
     ];

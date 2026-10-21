@@ -375,6 +375,39 @@ void main() {
       expect((folded.layout.sessionsCollapsed, (save.single as SaveLayout).layout.sessionsCollapsed), (true, true));
     });
 
+    test('projects: search (late answers dropped), the overview beside the chat, the scope', () {
+      const url = 'https://home.ts.net';
+      var (state, effects) = reduce(loaded([home]), const ProjectSearchChanged(url, 'ga'));
+      expect((effects.single as SearchProjects).query, 'ga');
+      expect(state.statusOf(url).projectSearch.hits, isNull, reason: 'loading');
+      const game = ProjectSummary(name: 'game', path: '~/Projects/game', modified: '', folder: '/home/me/Projects/game');
+      state = reduce(state, const ProjectSearchChanged(url, 'gam')).$1;
+      expect(reduce(state, const ProjectsFound(url, 'ga', [game])).$1.statusOf(url).projectSearch.hits, isNull, reason: 'an older query');
+      state = reduce(state, const ProjectsFound(url, 'gam', [game])).$1;
+      expect(state.statusOf(url).projectSearch.hits, [game]);
+
+      (state, effects) = reduce(state, const SideTabSelected(url, SideTab.project, project: '/home/me/Projects/game'));
+      expect(((effects.single as SendCommand).command as ClientCommandProjectOverview).project, '/home/me/Projects/game');
+      expect((state.statusOf(url).side, state.statusOf(url).sideProject), (SideTab.project, '/home/me/Projects/game'));
+      const overview = ProjectOverview(
+        name: 'game',
+        path: '~/Projects/game',
+        folder: '/home/me/Projects/game',
+        uncommitted: 0,
+        works: [],
+        branches: [],
+        harnesses: [],
+        toolRules: 0,
+      );
+      state = reduce(state, ServerEvent(url, const ServerMessageOk(id: 3, result: CommandResultProject(overview: overview)))).$1;
+      expect(state.statusOf(url).overviews['/home/me/Projects/game'], overview);
+
+      state = reduce(state, const ScopeChanged(url, '/home/me/Projects/game')).$1;
+      expect(state.statusOf(url).scope, '/home/me/Projects/game');
+      expect(reduce(state, const ScopeChanged(url, null)).$1.statusOf(url).scope, isNull);
+      expect(reduce(state, const CatalogRequested(url)).$2.single, isA<FetchCatalog>());
+    });
+
     test('apps show in the reader; closing keeps the follow choice', () {
       var state = reduce(opened('site://orchestration'), AppRequested(home.url, 'orchestration')).$1;
       expect(state.statusOf(home.url).page.appSite, 'orchestration');

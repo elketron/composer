@@ -66,6 +66,18 @@ impl TicketBranch {
         git(&self.worktree, &["merge-base", &head, "HEAD"])
     }
 
+    /// Commits on the branch that the main checkout's HEAD doesn't have (uncommitted work not
+    /// counted): cheap, for lists.
+    pub fn commit_count(&self) -> Result<u32, String> {
+        let head = git(&self.main, &["rev-parse", "HEAD"])?;
+        Ok(git(
+            &self.worktree,
+            &["rev-list", "--count", &format!("{head}..HEAD")],
+        )?
+        .parse()
+        .unwrap_or(0))
+    }
+
     pub fn review(&self) -> Result<TicketReview, String> {
         let tip = self.tip()?;
         let head = git(&self.main, &["rev-parse", "HEAD"])?;

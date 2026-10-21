@@ -3,11 +3,11 @@
 import 'package:composer_protocol/composer_protocol.dart';
 
 /// The phone layout's tabs.
-enum PhoneTab { chats, pages, server }
+enum PhoneTab { chats, projects, pages, server }
 
 /// What the side pane beside the chat shows (wide screens). On phones `page` and `app` pick what
 /// the reader screen shows.
-enum SideTab { page, app, changes, worker, server }
+enum SideTab { page, app, changes, worker, project, server }
 
 /// How the wide layout was left: kept between runs.
 class LayoutPrefs {
@@ -44,6 +44,16 @@ class PageSearch {
 
   /// Null while loading (or with an empty query).
   final List<SearchHit>? hits;
+  final String? error;
+}
+
+/// A project search (`GET /api/projects?q=`): the query and what came back.
+class ProjectSearch {
+  const ProjectSearch({this.query = '', this.hits, this.error});
+  final String query;
+
+  /// Null while loading (or with an empty query: then the full list is `ServerStatus.projects`).
+  final List<ProjectSummary>? hits;
   final String? error;
 }
 

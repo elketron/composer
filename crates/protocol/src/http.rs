@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::common::Url;
+use crate::common::{HarnessSwitch, Url};
 
 /// `GET /api/info`: what this server is (for the app's server list).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -67,6 +67,85 @@ pub struct ProjectSummary {
     pub path: String,
     /// RFC 3339.
     pub modified: String,
+    /// The absolute folder, as sessions' `project` holds it.
+    #[serde(default)]
+    pub folder: String,
+    /// Chats and orchestrators in it (workers count with their orchestrator).
+    #[serde(default)]
+    pub sessions: u32,
+    /// Of those, the ones busy now (or with a worker busy).
+    #[serde(default)]
+    pub running: u32,
+    /// Approvals waiting in its sessions.
+    #[serde(default)]
+    pub waiting: u32,
+    /// When one of its sessions last did something (RFC 3339).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_used: Option<String>,
+}
+
+/// `project.overview`: what is going on in one project.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct ProjectOverview {
+    pub name: String,
+    /// `~/Projects/<name>`.
+    pub path: String,
+    /// The absolute folder, as sessions' `project` holds it.
+    pub folder: String,
+    /// Checked-out branch; `None` outside git or with a detached HEAD.
+    pub branch: Option<String>,
+    /// Files changed and not committed (git).
+    pub uncommitted: u32,
+    /// Works of any pipeline that link it.
+    pub works: Vec<WorkSummary>,
+    /// Tickets whose worktree of it is still there: their branch waits to be merged or discarded.
+    pub branches: Vec<TicketBranchSummary>,
+    /// Its memory page (`site://memory/projects/<name>`), when there is one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub memory: Option<PageExcerpt>,
+    /// External harnesses config.toml allows here, and whether each is on.
+    pub harnesses: Vec<HarnessSwitch>,
+    /// Tool rules remembered for it (Claude Code's `always`).
+    pub tool_rules: u32,
+}
+
+/// A piece of work in a pipeline (`site://<pipeline>/<work>/index.md`, `type: work`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct WorkSummary {
+    pub url: Url,
+    /// The pipeline's site.
+    pub pipeline: String,
+    pub title: String,
+    /// Its `status:` (the stage it is at, `done`, …).
+    pub status: Option<String>,
+}
+
+/// A ticket's branch that is still there.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct TicketBranchSummary {
+    pub ticket: String,
+    pub title: String,
+    /// `ticket/<id>`.
+    pub branch: String,
+    /// The ticket's `status:`.
+    pub status: Option<String>,
+    /// Commits on it the project's branch doesn't have.
+    pub commits: u32,
+}
+
+/// The start of a page.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct PageExcerpt {
+    pub url: Url,
+    pub excerpt: String,
 }
 
 /// `GET /api/pages/{site}/{path}`. The `ETag` header carries `hash`.

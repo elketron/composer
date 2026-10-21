@@ -157,7 +157,28 @@ import 'types.dart';
       AppRequested(:final url, :final site) =>
         _withPage(_side(s, url, SideTab.app), url, (p) => (p.copyWith(appSite: site, error: null), const [])),
       ReaderClosed(:final url) => _withPage(_side(s, url, null), url, (p) => (PageState(follow: p.follow), const [])),
-      SideTabSelected(:final url, :final tab, :final ticket, :final session) => _sideTab(s, url, tab, ticket, session),
+      SideTabSelected(:final url, :final tab, :final ticket, :final session, :final project) => tab == SideTab.project && project != null
+          ? (
+              _updateStatus(s, url, (x) => x.copyWith(side: tab, sideProject: project)),
+              [SendCommand(url, ClientCommandProjectOverview(project: project))],
+            )
+          : _sideTab(s, url, tab, ticket, session),
+      ProjectSearchChanged(:final url, :final query) => (
+          _updateStatus(s, url, (x) => x.copyWith(projectSearch: ProjectSearch(query: query, hits: query.trim().isEmpty ? const [] : null))),
+          [if (query.trim().isNotEmpty) SearchProjects(url, query)],
+        ),
+      ProjectsFound(:final url, :final query, :final hits, :final error) => (
+          // A late answer for an older query is dropped.
+          _updateStatus(
+            s,
+            url,
+            (x) => x.projectSearch.query == query ? x.copyWith(projectSearch: ProjectSearch(query: query, hits: hits, error: error)) : x,
+          ),
+          const [],
+        ),
+      ProjectOverviewRequested(:final url, :final project) => (s, [SendCommand(url, ClientCommandProjectOverview(project: project))]),
+      CatalogRequested(:final url) => (s, [FetchCatalog(url)]),
+      ScopeChanged(:final url, :final project) => (_updateStatus(s, url, (x) => x.copyWith(scope: project)), const []),
       SideClosed(:final url) => (_side(s, url, null), const []),
       SessionsToggled() => _layout(s, s.layout.copyWith(sessionsCollapsed: !s.layout.sessionsCollapsed)),
       SideResized(:final width) => _layout(s, s.layout.copyWith(sideWidth: width)),
@@ -537,6 +558,8 @@ AppState _event(AppState s, String url, ServerMessage message) => switch (messag
             unread: finished ? {...x.unread, session.id} : null,
           );
         }),
+      ServerMessageOk(result: CommandResultProject(:final overview)) =>
+        _updateStatus(s, url, (x) => x.copyWith(overviews: {...x.overviews, overview.folder: overview})),
       ServerMessageOk(result: CommandResultHarnesses(:final project, :final harnesses)) =>
         _updateStatus(s, url, (x) => x.copyWith(harnesses: {...x.harnesses, project: harnesses})),
       ServerMessageSlots(:final used) => _updateStatus(s, url, (x) => x.copyWith(slotsUsed: used)),

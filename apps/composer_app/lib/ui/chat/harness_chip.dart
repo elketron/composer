@@ -33,12 +33,13 @@ class _HarnessChipState extends State<HarnessChip> {
   }
 
   /// What the project allows (once per project; the reply is kept in the status).
-  void _ask() {
-    final store = StoreScope.read(context);
-    if (!store.state.statusOf(widget.url).harnesses.containsKey(widget.project)) {
-      store.dispatch(HarnessesRequested(widget.url, widget.project));
-    }
-  }
+  void _ask() => WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final store = StoreScope.read(context);
+        if (!store.state.statusOf(widget.url).harnesses.containsKey(widget.project)) {
+          store.dispatch(HarnessesRequested(widget.url, widget.project));
+        }
+      });
 
   @override
   Widget build(BuildContext context) {

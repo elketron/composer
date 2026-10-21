@@ -79,6 +79,14 @@ class EffectRunner {
           (attachment) => dispatch(UploadFinished(url, id, attachment: attachment)),
           onError: (Object e) => dispatch(UploadFinished(url, id, error: e is ServerError ? e.message : '$e')),
         );
+      case SearchProjects(:final url, :final query):
+        final server = _connections[url]?.server;
+        if (server != null) {
+          fetchProjects(url, server.token, query: query).then(
+            (hits) => dispatch(ProjectsFound(url, query, hits)),
+            onError: (Object e) => dispatch(ProjectsFound(url, query, const [], error: describeError(e))),
+          );
+        }
       case SearchPages(:final url, :final query):
         final server = _connections[url]?.server;
         if (server != null) {

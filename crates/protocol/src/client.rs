@@ -76,6 +76,11 @@ pub enum ClientCommand {
         on: bool,
     },
 
+    /// What is going on in a project (a name in the projects directory, or a path); the reply is
+    /// `project`.
+    #[serde(rename = "project.overview")]
+    ProjectOverview { project: String },
+
     /// A ticket's changes against the branch it would be merged into; the reply is `changes`.
     #[serde(rename = "ticket.changes")]
     TicketChanges { ticket: String },

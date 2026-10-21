@@ -10,6 +10,8 @@ pub enum Effect {
     FetchPage(String),
     Search(String),
     LoadSites,
+    /// `GET /api/projects?q=` → `ProjectsLoaded`.
+    LoadProjects(String),
     /// Sites and every page, for completing `:` commands.
     LoadCatalog,
     /// Look up the site before opening its app (answered by `AppChecked`).

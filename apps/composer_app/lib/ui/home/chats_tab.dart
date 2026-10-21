@@ -1,6 +1,7 @@
 import 'package:composer_protocol/composer_protocol.dart';
 import 'package:flutter/material.dart';
 
+import '../../state/projects.dart';
 import '../../state/server_status.dart';
 import '../../theme/composer_theme.dart';
 import '../../theme/tokens.dart' as t;
@@ -28,7 +29,9 @@ class ChatsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final sessions = status.sessions;
+    // The wide layout's project scope narrows it to one project.
+    final scope = wide ? status.scope : null;
+    final sessions = scope == null ? status.sessions : projectSessions(status, scope);
     final ids = {for (final s in sessions) s.id};
     // Workers show inside their orchestrator's card; on their own only when the orchestrator is gone.
     final top = sessions.where((s) => s.parent == null || !ids.contains(s.parent)).toList();
@@ -37,7 +40,7 @@ class ChatsTab extends StatelessWidget {
     final unread = sessions.where((s) => status.unread.contains(s.id) && !running(s)).toList();
     final busy = top.where(running).toList();
     final rest = top.where((s) => !running(s) && !status.unread.contains(s.id)).toList();
-    final needsYou = status.approvals.length + unread.length;
+    final needsYou = status.approvals.where((a) => sessions.any((s) => s.id == a.session)).length + unread.length;
 
     Widget card(SessionInfo s) => Padding(
           padding: const EdgeInsets.only(bottom: 8),
@@ -59,7 +62,7 @@ class ChatsTab extends StatelessWidget {
         children: [
           if (needsYou > 0) ...[
             SectionLabel('Needs you', trailing: _Count(needsYou)),
-            for (final a in status.approvals)
+            for (final a in status.approvals.where((a) => sessions.any((s) => s.id == a.session)))
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: ApprovalTile(url: url, approval: a, agent: status.session(a.session)?.agent),

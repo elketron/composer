@@ -138,3 +138,10 @@ final class SaveLayout extends AppEffect {
   const SaveLayout(this.layout);
   final LayoutPrefs layout;
 }
+
+/// `GET /api/projects?q=` (`ProjectsFound`).
+final class SearchProjects extends AppEffect {
+  const SearchProjects(this.url, this.query);
+  final String url;
+  final String query;
+}

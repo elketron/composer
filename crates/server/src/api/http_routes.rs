@@ -15,7 +15,6 @@ use crate::agent::AgentDefinition;
 use crate::api::ApiError;
 use crate::server::Server;
 use crate::session::submit;
-use crate::tools::{expand_home, tilde};
 
 /// `GET /api/info`: what this server is.
 pub async fn info(State(server): State<Arc<Server>>) -> Json<ServerInfo> {
@@ -43,32 +42,18 @@ pub async fn agents(State(server): State<Arc<Server>>) -> Json<Vec<AgentSummary>
     )
 }
 
-/// The folders in the projects directory, most recently changed first; hidden ones left out.
-pub async fn projects(State(server): State<Arc<Server>>) -> Json<Vec<ProjectSummary>> {
-    let dir = expand_home(&server.config.projects.dir);
-    let mut projects: Vec<(std::time::SystemTime, ProjectSummary)> = std::fs::read_dir(&dir)
-        .into_iter()
-        .flatten()
-        .filter_map(Result::ok)
-        .filter(|e| e.file_type().is_ok_and(|t| t.is_dir()))
-        .filter_map(|e| {
-            let name = e.file_name().into_string().ok()?;
-            if name.starts_with('.') {
-                return None;
-            }
-            let modified = e.metadata().and_then(|m| m.modified()).ok()?;
-            Some((
-                modified,
-                ProjectSummary {
-                    path: tilde(&e.path()),
-                    modified: chrono::DateTime::<chrono::Local>::from(modified).to_rfc3339(),
-                    name,
-                },
-            ))
-        })
-        .collect();
-    projects.sort_by_key(|p| std::cmp::Reverse(p.0));
-    Json(projects.into_iter().map(|(_, p)| p).collect())
+/// `GET /api/projects?q=/// The folders in the projects directory, most recently changed first; hidden ones left out.limit=`: the projects matching `q` (folders in the projects directory and
+/// any a session works in), the ones with something going on first.
+pub async fn projects(
+    State(server): State<Arc<Server>>,
+    Query(params): Query<HashMap<String, String>>,
+) -> Json<Vec<ProjectSummary>> {
+    let query = params.get("q").map(String::as_str).unwrap_or("");
+    let mut projects = crate::project::project_list(&server, query);
+    if let Some(limit) = params.get("limit").and_then(|l| l.parse().ok()) {
+        projects.truncate(limit);
+    }
+    Json(projects)
 }
 
 pub async fn sites(State(server): State<Arc<Server>>) -> Result<Json<Vec<SiteSummary>>, ApiError> {

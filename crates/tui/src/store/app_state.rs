@@ -8,7 +8,7 @@ use crate::store::types::{
 };
 use crate::store::{
     ApprovalStore, AttachmentStore, ConnectionStore, PageStore, PickerStore, ProjectStore,
-    SessionStore, UiStore,
+    ProjectViewStore, SessionStore, UiStore,
 };
 
 /// All shared state. `reduce` is the only way it changes; it does no IO.
@@ -21,6 +21,8 @@ pub struct AppState {
     pub picker: PickerStore,
     pub approvals: ApprovalStore,
     pub project: ProjectStore,
+    /// The project view (`gp`).
+    pub project_view: ProjectViewStore,
     pub catalog: Catalog,
     /// Files attached to the message being written.
     pub attachments: AttachmentStore,
@@ -40,6 +42,7 @@ impl AppState {
             picker: PickerStore::new(),
             approvals: ApprovalStore::default(),
             project: ProjectStore::default(),
+            project_view: ProjectViewStore::default(),
             catalog: Catalog::default(),
             attachments: AttachmentStore::default(),
             default_agent: startup.agent.clone(),
@@ -193,7 +196,11 @@ impl AppState {
             },
             Action::NewSession { agent } => {
                 let agent = agent.unwrap_or_else(|| self.default_agent.clone());
-                let project = self.session.current_info().and_then(|s| s.project.clone());
+                // A worker's project is its worktree: the new chat gets the orchestrator's.
+                let project = self
+                    .session
+                    .current_info()
+                    .and_then(|s| self.session.project_of(s));
                 self.send(
                     ClientCommand::SessionCreate { agent, project },
                     Pending::CreateSession,
@@ -274,9 +281,59 @@ impl AppState {
                 if !self.project.open {
                     return vec![];
                 }
+                // One view in the right pane at a time.
+                self.project_view.open = false;
                 self.reduce(Action::FocusPane(Pane::Page));
                 self.refresh_changes()
             }
+            Action::ToggleProjectView if self.project_view.open => {
+                self.project_view.open = false;
+                vec![]
+            }
+            Action::ToggleProjectView => self.reduce(Action::ProjectView(None)),
+            Action::ProjectView(project) => {
+                let Some(project) = project.or_else(|| {
+                    self.session
+                        .current_info()
+                        .and_then(|s| self.session.project_of(s))
+                }) else {
+                    self.ui
+                        .flash("no project here: :project view <name>", FlashLevel::Warn);
+                    return vec![];
+                };
+                self.project.open = false;
+                self.project_view.open = true;
+                self.project_view.loading = true;
+                if self.project_view.project.as_deref() != Some(project.as_str()) {
+                    self.project_view.overview = None;
+                }
+                self.project_view.project = Some(project.clone());
+                self.reduce(Action::FocusPane(Pane::Page));
+                self.send(
+                    ClientCommand::ProjectOverview { project },
+                    Pending::Overview,
+                )
+            }
+            Action::Scope(scope) => {
+                self.session.scope = scope.filter(|s| s != "none");
+                let text = match &self.session.scope {
+                    Some(scope) => format!("sessions narrowed to {scope} (:scope none for all)"),
+                    None => "all sessions".to_string(),
+                };
+                self.ui.flash(text, FlashLevel::Info);
+                vec![]
+            }
+            Action::ProjectsLoaded { query, projects } => {
+                self.picker.projects(&query, projects);
+                vec![]
+            }
+            Action::NewSessionIn(project) => self.send(
+                ClientCommand::SessionCreate {
+                    agent: self.default_agent.clone(),
+                    project: Some(project),
+                },
+                Pending::CreateSession,
+            ),
             Action::RefreshChanges => self.refresh_changes(),
             Action::TicketMerge(ticket) => {
                 let Some(ticket) =
@@ -400,6 +457,9 @@ impl AppState {
                 match self.picker.selected_target() {
                     Some(PickerTarget::Url(url)) => self.reduce(Action::OpenUrl(url)),
                     Some(PickerTarget::Session(id)) => self.attach(&id, true),
+                    Some(PickerTarget::Project(folder)) => {
+                        self.reduce(Action::ProjectView(Some(folder)))
+                    }
                     None => vec![],
                 }
             }
@@ -710,6 +770,10 @@ impl AppState {
                     })
                     .collect();
                 self.ui.flash(states.join(" · "), FlashLevel::Info);
+                vec![]
+            }
+            (Pending::Overview, CommandResult::Project { overview }) => {
+                self.project_view.loaded(overview);
                 vec![]
             }
             (Pending::Merged(ticket), CommandResult::Merged { commit }) => {

@@ -87,9 +87,12 @@ Future<List<SiteSummary>> fetchSites(String url, String token) async {
 Future<List<AgentSummary>> fetchAgents(String url, String token) async =>
     [for (final e in await _getList(url, token, '/api/agents')) AgentSummary.fromJson(e as Map<String, Object?>)];
 
-/// `GET /api/projects`; empty from an older server.
-Future<List<ProjectSummary>> fetchProjects(String url, String token) async =>
-    [for (final e in await _getList(url, token, '/api/projects')) ProjectSummary.fromJson(e as Map<String, Object?>)];
+/// `GET /api/projects?q=`: matching projects, the ones with something going on first; empty from an
+/// older server.
+Future<List<ProjectSummary>> fetchProjects(String url, String token, {String query = ''}) async => [
+      for (final e in await _getList(url, token, query.isEmpty ? '/api/projects' : '/api/projects?q=${Uri.encodeQueryComponent(query)}'))
+        ProjectSummary.fromJson(e as Map<String, Object?>),
+    ];
 
 /// `GET /api/search?q=`: full text and `key:value` filters, as the agents' `search`.
 Future<List<SearchHit>> searchPages(String url, String token, String query) async => [

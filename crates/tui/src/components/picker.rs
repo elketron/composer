@@ -52,6 +52,7 @@ impl Component for Picker {
             PickerKind::Sites => " sites ",
             PickerKind::Sessions => " sessions ",
             PickerKind::Orchestration => " orchestration ",
+            PickerKind::Projects => " projects ",
         };
         let block = Block::new()
             .borders(Borders::ALL)

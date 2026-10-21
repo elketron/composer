@@ -476,6 +476,10 @@ impl Connection {
                 }
                 Ok(CommandResult::Tools { tools })
             }
+            ClientCommand::ProjectOverview { project } => {
+                crate::project::project_overview(server, &project)
+                    .map(|overview| CommandResult::Project { overview })
+            }
             ClientCommand::HarnessList { project } => {
                 let folder = resolve_project(&project, &server.config.projects.dir)?;
                 Ok(CommandResult::Harnesses {

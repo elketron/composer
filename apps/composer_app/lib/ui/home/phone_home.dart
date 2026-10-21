@@ -12,6 +12,8 @@ import '../status_dot.dart';
 import '../store_scope.dart';
 import 'chats_tab.dart';
 import 'pages_tab.dart';
+import '../projects/project_list_view.dart';
+import '../projects/project_screen.dart';
 import 'phone_tabs.dart';
 import 'server_tab.dart';
 
@@ -57,6 +59,12 @@ class PhoneHome extends StatelessWidget {
         Expanded(
           child: switch (tab) {
             PhoneTab.chats => ChatsTab(key: ValueKey('chats ${server.url}'), url: server.url, status: status),
+            PhoneTab.projects => ProjectListView(
+                key: ValueKey('projects ${server.url}'),
+                url: server.url,
+                status: status,
+                onPick: (p) => ProjectScreen.open(context, server.url, p.folder ?? p.path),
+              ),
             PhoneTab.pages => PagesTab(key: ValueKey('pages ${server.url}'), url: server.url, status: status),
             PhoneTab.server => ServerTab(server: server, status: status),
           },
