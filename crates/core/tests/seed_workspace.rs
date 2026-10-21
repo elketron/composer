@@ -97,6 +97,7 @@ fn index_search_and_backlinks() {
         [
             "site://agents/default.md",
             "site://agents/orchestrator.md",
+            "site://agents/stage.md",
             "site://agents/worker.md"
         ]
     );

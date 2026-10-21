@@ -13,6 +13,7 @@ Agent definitions. Each page is one agent: frontmatter configures it, the body i
 | [default](default.md) | general assistant; the agent you chat with |
 | [orchestrator](orchestrator.md) | breaks plans into tickets and runs workers |
 | [worker](worker.md) | carries out one ticket |
+| [stage](stage.md) | runs one stage of a pipeline work (`run_stage`), with only that stage's context |
 
 Worker agents (`role: worker`) are the ones `spawn_worker` can start. Add more for specific jobs
 (a `coder`, a `reviewer`, a `tester`): copy [worker](worker.md), change its prompt and tools, keep

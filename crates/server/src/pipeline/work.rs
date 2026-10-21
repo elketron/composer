@@ -49,17 +49,22 @@ impl Work {
 
     /// A stage's state: its `_stage.md`'s `status:`, `waiting` without one.
     pub fn stage_status(&self, stage: &str) -> String {
-        std::fs::read_to_string(self.dir.join(stage).join("_stage.md"))
-            .ok()
-            .and_then(|raw| {
-                let url = SiteUrl::new(
-                    &self.pipeline.name,
-                    &format!("{}/{stage}/_stage.md", self.name),
-                )
-                .ok()?;
-                Page::parse(url, raw).frontmatter.get_str("status")
-            })
+        self.stage_field(stage, "status")
             .unwrap_or_else(|| "waiting".into())
+    }
+
+    /// A field of a stage's `_stage.md`.
+    pub fn stage_field(&self, stage: &str, key: &str) -> Option<String> {
+        let raw = std::fs::read_to_string(self.dir.join(stage).join("_stage.md")).ok()?;
+        let url = SiteUrl::new(
+            &self.pipeline.name,
+            &format!("{}/{stage}/_stage.md", self.name),
+        )
+        .ok()?;
+        Page::parse(url, raw)
+            .frontmatter
+            .get_str(key)
+            .filter(|v| !v.is_empty())
     }
 
     pub fn stages(&self) -> Vec<StageState> {

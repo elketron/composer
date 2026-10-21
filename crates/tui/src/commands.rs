@@ -4,7 +4,7 @@ use crate::action::Action;
 use crate::store::types::PickerKind;
 
 /// Every command, as shown by help: (usage, what it does).
-pub const COMMANDS: [(&str, &str); 19] = [
+pub const COMMANDS: [(&str, &str); 20] = [
     (
         ":new [agent]",
         "start a new session (default agent, or e.g. orchestrator)",
@@ -33,6 +33,10 @@ pub const COMMANDS: [(&str, &str); 19] = [
     (
         ":work new <pipeline> <name> [project]",
         "start a piece of work in a pipeline (default project: the project view's or this session's)",
+    ),
+    (
+        ":work run [work] [stage]",
+        "run a work's next stage, or one again (default: the work of the open page; R in the project view)",
     ),
     (
         ":harness [on|off] [name]",
@@ -113,7 +117,22 @@ pub fn parse_command(line: &str) -> Result<Action, String> {
                     name: name.into(),
                     project: Some(project.into()),
                 }),
-                _ => Err("usage: :work new <pipeline> <name> [project]".into()),
+                ["run"] => Ok(Action::WorkRun {
+                    work: None,
+                    stage: None,
+                }),
+                ["run", work] => Ok(Action::WorkRun {
+                    work: Some(work.into()),
+                    stage: None,
+                }),
+                ["run", work, stage] => Ok(Action::WorkRun {
+                    work: Some(work.into()),
+                    stage: Some(stage.into()),
+                }),
+                _ => Err(
+                    "usage: :work new <pipeline> <name> [project] · :work run [work] [stage]"
+                        .into(),
+                ),
             }
         }
         "harness" => {
@@ -237,6 +256,13 @@ mod tests {
             }
         );
         assert!(parse_command("work new coding").is_err());
+        assert_eq!(
+            parse_command("work run coding/save-system 02_plan").unwrap(),
+            Action::WorkRun {
+                work: Some("coding/save-system".into()),
+                stage: Some("02_plan".into())
+            }
+        );
         assert_eq!(
             parse_command("project view").unwrap(),
             Action::ProjectView(None)

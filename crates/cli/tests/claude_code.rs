@@ -126,6 +126,7 @@ async fn claude_code_works_tickets() {
     let base_url = fake_model(Scripts {
         orchestrator: VecDeque::from(vec![Reply::Text("noted"); 10]),
         worker: VecDeque::new(),
+        ..Scripts::default()
     })
     .await;
     let dir = tempfile::tempdir().unwrap();

@@ -106,3 +106,9 @@ pub struct NewWorkArgs {
     pub project: Option<String>,
     pub brief: Option<String>,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct RunStageArgs {
+    pub work: String,
+    pub stage: Option<String>,
+}

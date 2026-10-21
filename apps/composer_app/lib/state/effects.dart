@@ -153,3 +153,11 @@ final class CreateWork extends AppEffect {
   final ClientCommandWorkNew work;
   final String? template;
 }
+
+/// `work.run`; says what started (or why not), then refreshes `project`'s overview.
+final class RunWork extends AppEffect {
+  const RunWork(this.url, this.command, {this.project});
+  final String url;
+  final ClientCommandWorkRun command;
+  final String? project;
+}

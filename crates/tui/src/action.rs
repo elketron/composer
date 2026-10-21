@@ -66,6 +66,12 @@ pub enum Action {
         name: String,
         project: Option<String>,
     },
+    /// `:work run [work] [stage]`: run a work's next stage (or `stage`); default work: the one
+    /// the open page is in.
+    WorkRun {
+        work: Option<String>,
+        stage: Option<String>,
+    },
     /// Narrow the session picker to a project (a name or folder); `None`: all.
     Scope(Option<String>),
     /// The project list for the picker, for `query`.

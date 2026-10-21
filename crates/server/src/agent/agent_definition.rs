@@ -69,7 +69,7 @@ impl AgentDefinition {
     /// `finish` tool.
     pub fn is_worker(&self) -> bool {
         match self.role.as_deref() {
-            Some(role) => role == "worker",
+            Some(role) => role == "worker" || role == "stage",
             None => self
                 .tools
                 .as_ref()
@@ -77,11 +77,17 @@ impl AgentDefinition {
         }
     }
 
-    /// Every worker agent in `site://agents`, by name.
+    /// A worker that runs pipeline stages only (`role: stage`).
+    pub fn is_stage(&self) -> bool {
+        self.role.as_deref() == Some("stage")
+    }
+
+    /// Every worker agent in `site://agents` `spawn_worker` can start, by name (not the
+    /// stage ones).
     pub fn workers(workspace: &Workspace, index: &Index) -> Vec<Self> {
         Self::all(workspace, index)
             .into_iter()
-            .filter(Self::is_worker)
+            .filter(|a| a.is_worker() && !a.is_stage())
             .collect()
     }
 

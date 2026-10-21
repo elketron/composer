@@ -15,6 +15,12 @@ pub fn system_prompt(
     index: &Index,
     session: &SessionInfo,
 ) -> String {
+    // A pipeline stage's worker gets its stage's scoped context instead of the usual one.
+    if let Some(stage) = session.ticket.as_deref().and_then(|ticket| {
+        crate::pipeline::stage_context(workspace, ticket, session.project.as_deref())
+    }) {
+        return format!("{}\n\n---\n\n{stage}", agent.prompt);
+    }
     let mut sections = vec![agent.prompt.clone()];
 
     if let Some(home) = page_body(workspace, "site://home") {

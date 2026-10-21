@@ -108,6 +108,19 @@ pub enum ClientCommand {
         brief: Option<String>,
     },
 
+    /// Runs a stage of a work (`site://coding/save-system`, or `coding/save-system`) as a
+    /// ticket: `stage` (`02_plan`), else the first one not finished. Stages without a gate go
+    /// on to the next by themselves. The stage workers belong to `session`, else to a new
+    /// session in the work's project. The reply is `work`.
+    #[serde(rename = "work.run")]
+    WorkRun {
+        work: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        stage: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        session: Option<SessionId>,
+    },
+
     /// A ticket's changes against the branch it would be merged into; the reply is `changes`.
     #[serde(rename = "ticket.changes")]
     TicketChanges { ticket: String },

@@ -350,6 +350,27 @@ impl AppState {
                     Pending::Work,
                 )
             }
+            Action::WorkRun { work, stage } => {
+                let work = work.or_else(|| {
+                    // The work the open page is in: site://<pipeline>/<work>/….
+                    let url = &self.page.current.as_ref()?.url;
+                    let parts: Vec<&str> = url.strip_prefix("site://")?.split('/').collect();
+                    (parts.len() >= 3).then(|| format!("{}/{}", parts[0], parts[1]))
+                });
+                let Some(work) = work else {
+                    self.ui
+                        .flash("which work? :work run <pipeline>/<work>", FlashLevel::Warn);
+                    return vec![];
+                };
+                self.send(
+                    ClientCommand::WorkRun {
+                        work,
+                        stage,
+                        session: self.session.current.clone(),
+                    },
+                    Pending::WorkRun,
+                )
+            }
             Action::Scope(scope) => {
                 self.session.scope = scope.filter(|s| s != "none");
                 let text = match &self.session.scope {
@@ -854,6 +875,20 @@ impl AppState {
                 );
                 self.project_view.open = false;
                 self.reduce(Action::OpenUrl(work.url))
+            }
+            (Pending::WorkRun, CommandResult::Work { work }) => {
+                self.ui.flash(
+                    format!(
+                        "{}: {} (its worker shows under this session)",
+                        work.url.trim_end_matches("/index.md"),
+                        work.status.unwrap_or_default()
+                    ),
+                    FlashLevel::Info,
+                );
+                if self.project_view.open {
+                    return self.reduce(Action::ProjectView(self.project_view.project.clone()));
+                }
+                vec![]
             }
             (Pending::Merged(ticket), CommandResult::Merged { commit }) => {
                 self.ui.flash(

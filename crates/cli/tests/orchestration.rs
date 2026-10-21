@@ -37,6 +37,7 @@ async fn orchestrator_runs_a_worker_process_on_a_ticket() {
             Reply::Call("finish", json!({ "status": "done", "summary": "wrote the note" })),
             Reply::Text("finished"),
         ]),
+        ..Scripts::default()
     })
     .await;
 

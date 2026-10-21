@@ -13,6 +13,7 @@ mod new_project_tool;
 mod new_site_tool;
 mod new_work_tool;
 mod open_tool;
+mod run_stage_tool;
 mod run_tool;
 mod scaffold;
 mod search_tool;

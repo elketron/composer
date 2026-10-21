@@ -105,6 +105,12 @@ class EffectRunner {
               (result) => dispatch(TicketReplied(url, ticket, result: result)),
               onError: (Object e) => dispatch(TicketReplied(url, ticket, error: describeError(e))),
             );
+      case RunWork(:final url, :final command, :final project):
+        _request(url, command, dispatch).then((result) {
+          if (result is! CommandResultWork) return;
+          dispatch(NoticeShown('${command.work}: ${result.work.status ?? 'started'}'));
+          if (project != null) dispatch(ProjectOverviewRequested(url, project));
+        });
       case CreateWork(:final url, :final work, :final template):
         final connection = _connections[url];
         if (connection == null) {

@@ -136,6 +136,8 @@ pub enum Pending {
     Pipelines,
     Pipeline,
     Work,
+    /// `work.run`: say which stage runs.
+    WorkRun,
     /// `ticket.merge` / `ticket.discard` of this ticket.
     Merged(String),
     Discarded(String),

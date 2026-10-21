@@ -155,7 +155,7 @@ impl WorkerRegistry {
             .filter(|a| !a.is_empty())
             .or_else(|| page.frontmatter.get_str("agent").filter(|a| !a.is_empty()))
             .unwrap_or_else(|| "worker".into());
-        check_worker_agent(server, &agent)?;
+        check_worker_agent(server, &agent, page.frontmatter.get_str("stage").is_some())?;
         let harness = Self::harness(
             &harness
                 .map(|h| h.trim().to_string())
@@ -477,7 +477,21 @@ impl WorkerRegistry {
                 .unwrap_or_default()
         };
         let default = harness.default_model(server);
-        let model = pick_model(&settings, name, default.as_deref())?;
+        // A ticket can ask for a model (a pipeline stage's `model:`).
+        let wanted = page
+            .frontmatter
+            .get_str("model")
+            .filter(|m| !m.is_empty() && m != "default");
+        if let Some(wanted) = &wanted
+            && !harness.chooses_model()
+            && Some(wanted) != default.as_ref()
+        {
+            return Err(format!(
+                "`{name}` runs only {}; the ticket asks for {wanted}",
+                default.unwrap_or_default()
+            ));
+        }
+        let model = pick_model(&settings, name, wanted.as_deref().or(default.as_deref()))?;
         if !harness.chooses_model() && model != default {
             return Err(format!(
                 "this project allows only {}; `{name}` runs {}",
@@ -503,8 +517,11 @@ impl WorkerRegistry {
                 "`{what}` is turned off for this project (turn it on with `:harness on {what}`)"
             ));
         }
-        // Its own worktree (git projects), so workers on one project don't collide.
+        // Its own worktree (git projects), so workers on one project don't collide; not for a
+        // ticket that only reads the project (`worktree: false`).
+        let reads_only = page.frontmatter.get_str("worktree").as_deref() == Some("false");
         let worktree = match &project {
+            Some(_) if reads_only => None,
             Some(folder) => ticket_worktree(
                 Path::new(folder),
                 &server.home.state().join("worktrees"),
@@ -706,6 +723,27 @@ impl WorkerRegistry {
         if !notify {
             return;
         }
+        // A pipeline stage's ticket: its work goes on (or waits); the parent hears only when
+        // the run stops for the user, and only if it is an agent that runs stages.
+        if let Ok(page) = ticket_page(server, &handle.ticket)
+            && let Some(note) =
+                crate::pipeline::stage_ended(server, &page, &handle.parent, state, &summary)
+        {
+            if let Some(note) = note
+                && let Ok(parent) = server.sessions.get(&handle.parent)
+                && AgentDefinition::load(&server.workspace, &parent.info().agent)
+                    .is_ok_and(|a| a.allows_tool("run_stage"))
+            {
+                let message = user_message(
+                    note,
+                    MessageSource::Worker {
+                        session: worker.to_string(),
+                    },
+                );
+                submit(server, &parent, message);
+            }
+            return;
+        }
         if let Ok(orchestrator) = server.sessions.get(&handle.parent) {
             let on_branch = branch
                 .map(|b| {
@@ -800,8 +838,13 @@ fn ticket_page(server: &Server, id: &str) -> Result<Page, String> {
     })
 }
 
-fn check_worker_agent(server: &Server, agent: &str) -> Result<(), String> {
+fn check_worker_agent(server: &Server, agent: &str, stage: bool) -> Result<(), String> {
     let definition = AgentDefinition::load(&server.workspace, agent).map_err(|e| e.to_string())?;
+    if definition.is_stage() && !stage {
+        return Err(format!(
+            "`{agent}` runs pipeline stages only (`run_stage`), not other tickets"
+        ));
+    }
     if definition.is_worker() {
         return Ok(());
     }

@@ -845,6 +845,25 @@ gets its orchestrator's project, not the worktree. Works show once pipelines (21
   still reachable with `open` (the contract is a starting set, not a jail).
 - Afterwards: no gate, the next stage starts; `gate: true`, the stage waits for review.
 
+Built (milestone 22): `crates/server/src/pipeline/run.rs` and `stage_prompt.rs`. `run_stage` (agent tool; `work.run
+{work, stage?, session?}`, reply `work`; `:work run [work] [stage]` and `R` in the TUI's project view; Run on a work's
+row and in the palette in the app) writes the stage's ticket (`agent: stage`, the contract's `harness:` and
+`model:`, the work's `project:`, `worktree: false` unless the contract writes code, `pipeline:`, `work:`, `stage:`),
+marks its `_stage.md` running (ticket, started) and spawns the worker under the session that asked (a new one in
+the work's project when a client gives none). The next stage by default is the first not done or approved; one
+waiting for review is refused until approved or named. When the worker ends, `stage_ended` writes the stage's
+`status` (`done`, `review` for a gate, `failed`, `paused`), `finished` and `summary`; a done stage without a gate
+starts the next. The parent session is told only when the run stops for the user, and only if its agent has
+`run_stage` (a plain chat isn't interrupted). The stage worker's system prompt is the `stage` agent's (`role:
+stage`: only stage tickets, not in `spawn_worker`'s list) followed by the scoped context: the pipeline, the work,
+the contract, the reference files, then the working files (`<page url role for>`), and where to write; no Home,
+no memory list. Claude Code stages get the same context appended to their system prompt. A ticket's `model:`
+now picks the model (refused where the harness runs only one), and `worktree: false` keeps a ticket in the
+project folder. Composer's own stage workers can't read project files (only Claude Code stages work in the
+folder), and their prompt says so. Tested end to end with real worker processes (`crates/cli/tests/stages.rs`)
+and once with a real model: a video work's research ran, the script stage followed by itself and stopped for
+review.
+
 ### Gates in the board app
 
 - Each pipeline site has one board app (from its template): its works, and for the one you pick the stages in
@@ -879,7 +898,7 @@ gets its orchestrator's project, not the worktree. Works show once pipelines (21
     project scope on the session list and palette, project search everywhere projects are listed.
 21. ✅ **pipeline sites and works** — templates (`video`, `research`, `coding`), `new_pipeline`, `new_work`,
     stage contracts, `_config` overrides, `_stage.md`; works in the project view.
-22. **running stages** — stages as tickets with scoped context, the `stage` agent, harness and model per stage,
+22. ✅ **running stages** — stages as tickets with scoped context, the `stage` agent, harness and model per stage,
     advancing without gates.
 23. **gates and the board app** — the board template app, gate state via pages, notifications and Needs you.
 24. **stale stages** — input hashes, staleness, rerun from a stage.

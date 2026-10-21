@@ -5,6 +5,7 @@ import 'package:composer_app/state/effects.dart';
 import 'package:composer_app/state/reduce.dart';
 import 'package:composer_app/state/server_entry.dart';
 import 'package:composer_app/state/types.dart';
+import 'package:composer_app/state/works.dart';
 import 'package:composer_protocol/composer_protocol.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -428,6 +429,16 @@ void main() {
       expect(state.statusOf(url).newWork.created, work.url);
       expect((effects.single as SendCommand).command, isA<ClientCommandPipelineList>(), reason: 'the lists show it');
       expect(reduce(state, const NewWorkReset(url)).$1.statusOf(url).newWork.created, isNull);
+
+      final run = reduce(state, const WorkRunRequested(url, 'coding/save-system', project: '/p/game')).$2.single as RunWork;
+      expect((run.command.work, run.command.stage, run.project), ('coding/save-system', null, '/p/game'));
+      const waiting = WorkSummary(url: 'site://coding/a/index.md', pipeline: 'coding', title: 'a', stages: [
+        StageState(name: '01_spec', status: 'approved'),
+        StageState(name: '02_plan', status: 'waiting'),
+      ]);
+      expect((workSpec(waiting.url), runnable(waiting)), ('coding/a', true));
+      const inReview = WorkSummary(url: 'site://coding/b/index.md', pipeline: 'coding', title: 'b', stages: [StageState(name: '01_spec', status: 'review')]);
+      expect(runnable(inReview), isFalse);
     });
 
     test('apps show in the reader; closing keeps the follow choice', () {

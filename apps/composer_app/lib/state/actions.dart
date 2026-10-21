@@ -435,3 +435,13 @@ final class NewWorkReset extends AppAction {
   const NewWorkReset(this.url);
   final String url;
 }
+
+/// Run a work's next stage (or `stage`), with the stage workers under the open chat; `project`
+/// (a folder) has its overview refreshed after.
+final class WorkRunRequested extends AppAction {
+  const WorkRunRequested(this.url, this.work, {this.stage, this.project});
+  final String url;
+  final String work;
+  final String? stage;
+  final String? project;
+}

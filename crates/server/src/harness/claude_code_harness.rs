@@ -110,6 +110,13 @@ impl Harness for ClaudeCodeHarness {
             .cloned()
             .collect();
 
+        // A pipeline stage: its scoped context too.
+        let appended =
+            match crate::pipeline::stage_context(&server.workspace, &request.ticket, Some(&folder))
+            {
+                Some(stage) => format!("{}\n\n---\n\n{stage}", system_prompt(&request.agent)),
+                None => system_prompt(&request.agent),
+            };
         // The prompt goes first: the list options after it take every following word.
         let mut command = tokio::process::Command::new(&config.command);
         command
@@ -130,7 +137,7 @@ impl Harness for ClaudeCodeHarness {
             .args(["--max-turns", &config.max_turns.to_string()])
             .args(["--mcp-config", &mcp.to_string()])
             .arg("--strict-mcp-config")
-            .args(["--append-system-prompt", &system_prompt(&request.agent)]);
+            .args(["--append-system-prompt", &appended]);
         match &request.resume {
             Some(_) => command.args(["--resume", &harness_session]),
             None => command.args(["--session-id", &harness_session]),

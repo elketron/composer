@@ -198,6 +198,18 @@ impl Connection {
                 });
                 None
             }
+            ClientCommand::WorkRun {
+                work,
+                stage,
+                session,
+            } => {
+                let (connection, server) = (self.clone(), server.clone());
+                tokio::spawn(async move {
+                    let result = run_work(&server, &work, stage.as_deref(), session).await;
+                    connection.reply(id, result);
+                });
+                None
+            }
             ClientCommand::TicketMerge { ticket } => {
                 let (connection, server) = (self.clone(), server.clone());
                 tokio::task::spawn_blocking(move || {
@@ -526,6 +538,7 @@ impl Connection {
             | ClientCommand::TicketChanges { .. }
             | ClientCommand::TicketMerge { .. }
             | ClientCommand::TicketDiscard { .. }
+            | ClientCommand::WorkRun { .. }
             | ClientCommand::ToolCall { .. }
             | ClientCommand::SlotAcquire
             | ClientCommand::SlotRelease { .. }
@@ -548,4 +561,35 @@ fn resolve_attachments(
         .iter()
         .map(|a| resolve(&server.home, session, a).map(|(a, _)| a))
         .collect()
+}
+
+/// `work.run`: the stage's worker belongs to `session`, else to a new session in the work's
+/// project.
+async fn run_work(
+    server: &Arc<Server>,
+    work: &str,
+    stage: Option<&str>,
+    session: Option<String>,
+) -> Result<CommandResult, String> {
+    let parent = match session {
+        Some(id) => server.sessions.get(&id).map_err(|e| e.to_string())?,
+        None => {
+            let found = crate::pipeline::find_work(server.workspace.root(), work)?;
+            let project = found
+                .project
+                .as_deref()
+                .and_then(|p| resolve_project(p, &server.config.projects.dir).ok());
+            let session = server
+                .sessions
+                .create("default", project)
+                .map_err(|e| e.to_string())?;
+            let label = format!("work {}/{}", found.pipeline.name, found.name);
+            session.update_info(&server.hub, |info| info.preview = Some(label));
+            session
+        }
+    };
+    let started = crate::pipeline::run_stage(server, &parent, work, stage).await?;
+    Ok(CommandResult::Work {
+        work: started.work.summary(),
+    })
 }

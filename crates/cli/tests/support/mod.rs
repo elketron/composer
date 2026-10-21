@@ -28,23 +28,38 @@ pub enum Reply {
 pub struct Scripts {
     pub orchestrator: VecDeque<Reply>,
     pub worker: VecDeque<Reply>,
+    /// Workers whose system prompt contains the key get their own queue (workers that run at
+    /// the same time).
+    pub keyed: Vec<(&'static str, VecDeque<Reply>)>,
 }
 
 /// The role is told apart by the tools offered: only orchestrators get `spawn_worker`,
 /// only workers `finish`.
 async fn completions(
-    State(scripts): State<Arc<Mutex<Scripts>>>,
+    State((scripts, log)): State<(Arc<Mutex<Scripts>>, Requests)>,
     Json(body): Json<Value>,
 ) -> impl IntoResponse {
+    log.lock().unwrap().push(body.clone());
     let tools: Vec<String> = body["tools"]
         .as_array()
         .into_iter()
         .flatten()
         .filter_map(|t| t["function"]["name"].as_str().map(str::to_string))
         .collect();
+    let system = body["messages"][0]["content"]
+        .as_str()
+        .unwrap_or_default()
+        .to_string();
     let reply = {
         let mut scripts = scripts.lock().unwrap();
-        let queue = if tools.iter().any(|t| t == "finish") {
+        let keyed = scripts
+            .keyed
+            .iter_mut()
+            .find(|(key, _)| system.contains(key))
+            .map(|(_, queue)| queue);
+        let queue = if let Some(queue) = keyed {
+            queue
+        } else if tools.iter().any(|t| t == "finish") {
             &mut scripts.worker
         } else if tools.iter().any(|t| t == "spawn_worker") {
             &mut scripts.orchestrator
@@ -80,18 +95,27 @@ fn sse(reply: Reply) -> axum::response::Response {
     ([("content-type", "text/event-stream")], body).into_response()
 }
 
+/// Every request the fake model got, in order.
+pub type Requests = Arc<Mutex<Vec<Value>>>;
+
 pub async fn fake_model(scripts: Scripts) -> String {
+    fake_model_logged(scripts).await.0
+}
+
+/// The same, keeping the requests (to look at the prompts).
+pub async fn fake_model_logged(scripts: Scripts) -> (String, Requests) {
+    let log = Requests::default();
     let app = axum::Router::new()
         .route(
             "/v1/models",
             get(|| async { Json(json!({ "data": [{ "id": "fake" }] })) }),
         )
         .route("/v1/chat/completions", post(completions))
-        .with_state(Arc::new(Mutex::new(scripts)));
+        .with_state((Arc::new(Mutex::new(scripts)), log.clone()));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move { axum::serve(listener, app).await });
-    format!("http://{addr}/v1")
+    (format!("http://{addr}/v1"), log)
 }
 
 pub type Socket =
@@ -155,6 +179,7 @@ pub async fn busy_worker(after: &'static str, git_project: bool) -> Option<BusyW
             Reply::Text(after),
         ]),
         worker: VecDeque::from([Reply::Hang]),
+        ..Scripts::default()
     })
     .await;
 

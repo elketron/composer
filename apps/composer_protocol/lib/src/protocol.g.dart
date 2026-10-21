@@ -253,6 +253,7 @@ sealed class ClientCommand {
         'pipeline.list' => ClientCommandPipelineList.fromJson(json),
         'pipeline.new' => ClientCommandPipelineNew.fromJson(json),
         'work.new' => ClientCommandWorkNew.fromJson(json),
+        'work.run' => ClientCommandWorkRun.fromJson(json),
         'ticket.changes' => ClientCommandTicketChanges.fromJson(json),
         'ticket.merge' => ClientCommandTicketMerge.fromJson(json),
         'ticket.discard' => ClientCommandTicketDiscard.fromJson(json),
@@ -576,6 +577,37 @@ final class ClientCommandWorkNew extends ClientCommand {
         'name': name,
         if (project != null) 'project': project,
         if (brief != null) 'brief': brief,
+      };
+}
+
+/// Runs a stage of a work (`site://coding/save-system`, or `coding/save-system`) as a
+/// ticket: `stage` (`02_plan`), else the first one not finished. Stages without a gate go
+/// on to the next by themselves. The stage workers belong to `session`, else to a new
+/// session in the work's project. The reply is `work`.
+final class ClientCommandWorkRun extends ClientCommand {
+  const ClientCommandWorkRun({
+    required this.work,
+    this.stage,
+    this.session,
+  });
+
+  final String work;
+
+  final String? stage;
+
+  final String? session;
+
+  factory ClientCommandWorkRun.fromJson(Map<String, Object?> json) => ClientCommandWorkRun(
+        work: json['work'] as String,
+        stage: json['stage'] == null ? null : json['stage'] as String,
+        session: json['session'] == null ? null : json['session'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'work.run',
+        'work': work,
+        if (stage != null) 'stage': stage,
+        if (session != null) 'session': session,
       };
 }
 

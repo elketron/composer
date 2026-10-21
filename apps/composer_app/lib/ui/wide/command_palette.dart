@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import '../../state/actions.dart';
 import '../../state/projects.dart';
 import '../../state/types.dart';
+import '../../state/works.dart';
 import '../../theme/composer_theme.dart';
 import '../../theme/tokens.dart' as t;
 import '../chat/navigation.dart';
@@ -91,6 +92,12 @@ class _CommandPaletteState extends State<CommandPalette> {
       ],
       for (final w in status.sessions.where((s) => s.ticket != null && (status.workers[s.id] ?? s.worker) == WorkerState.done))
         _Entry('Actions', 'Review changes of ticket ${w.ticket}', () => openReview(parent, url, w.ticket!), detail: w.preview, hint: 'merge · discard'),
+      // The works of this project (as its overview last said) whose next stage can start.
+      for (final w in status.overviews[scope ?? session?.project]?.works ?? const <WorkSummary>[])
+        if (runnable(w))
+          _Entry('Actions', 'Run the next stage of ${workSpec(w.url)}',
+              () => store.dispatch(WorkRunRequested(url, workSpec(w.url), project: scope ?? session?.project)),
+              detail: w.status),
       _Entry('Actions', 'Open the reader', () => openPage(parent, url, status.page.page?.url ?? 'site://home'), hint: 'ctrl p'),
       _Entry('Actions', state.layout.sessionsCollapsed ? 'Show the sessions' : 'Fold the sessions', () => store.dispatch(const SessionsToggled()),
           hint: 'ctrl b'),

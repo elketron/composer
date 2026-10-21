@@ -27,6 +27,8 @@ pub struct ProjectView {
 struct Row {
     line: Line<'static>,
     open: Vec<Action>,
+    /// A work's row: `R` runs its next stage.
+    work: Option<String>,
 }
 
 impl ProjectView {
@@ -45,10 +47,12 @@ impl ProjectView {
         let heading = |text: &str| Row {
             line: Line::from(Span::styled(text.to_string(), theme::faint())),
             open: vec![],
+            work: None,
         };
         let blank = || Row {
             line: Line::raw(""),
             open: vec![],
+            work: None,
         };
         let close = Action::ToggleProjectView;
 
@@ -66,6 +70,7 @@ impl ProjectView {
         rows.push(Row {
             line: Line::from(head),
             open: vec![],
+            work: None,
         });
 
         if !o.works.is_empty() {
@@ -88,6 +93,12 @@ impl ProjectView {
                 rows.push(Row {
                     line: Line::from(spans),
                     open: vec![close.clone(), Action::OpenUrl(w.url.clone())],
+                    work: Some(
+                        w.url
+                            .trim_start_matches("site://")
+                            .trim_end_matches("/index.md")
+                            .to_string(),
+                    ),
                 });
             }
         }
@@ -127,6 +138,7 @@ impl ProjectView {
                         ),
                     ]),
                     open,
+                    work: None,
                 });
             }
         }
@@ -147,6 +159,7 @@ impl ProjectView {
                     theme::faint(),
                 )),
                 open: vec![],
+                work: None,
             });
         }
         for s in mine {
@@ -165,6 +178,7 @@ impl ProjectView {
             rows.push(Row {
                 line: Line::from(Span::styled(memory.excerpt.clone(), theme::muted())),
                 open: vec![close.clone(), Action::OpenUrl(memory.url.clone())],
+                work: None,
             });
         }
         let switches: Vec<_> = o
@@ -194,6 +208,7 @@ impl ProjectView {
                         ),
                     ]),
                     open: vec![],
+                    work: None,
                 });
             }
         }
@@ -245,6 +260,7 @@ fn session_row(s: &composer_protocol::SessionInfo, indent: &str, state: &AppStat
                 Action::AttachSession(s.id.clone()),
             ]
         },
+        work: None,
     }
 }
 
@@ -269,6 +285,14 @@ impl Component for ProjectView {
                         Action::ToggleProjectView,
                         Action::NewSessionIn(o.folder.clone()),
                     ];
+                }
+            }
+            KeyCode::Char('R') => {
+                if let Some(work) = openable.get(self.cursor).and_then(|r| r.work.clone()) {
+                    return vec![Action::WorkRun {
+                        work: Some(work),
+                        stage: None,
+                    }];
                 }
             }
             KeyCode::Char('r') => {
@@ -343,7 +367,7 @@ impl Component for ProjectView {
         }
         lines.push(Line::raw(""));
         lines.push(Line::from(Span::styled(
-            "  j/k move · enter open · n new chat here · r reload · q close · :work new <pipeline> <name> adds a work",
+            "  j/k move · enter open · n new chat here · R run a work's next stage · r reload · q close · :work new <pipeline> <name> adds a work",
             theme::faint(),
         )));
         // Keep the cursor's row in view.

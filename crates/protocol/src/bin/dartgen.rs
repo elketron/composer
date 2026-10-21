@@ -876,6 +876,11 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
             project: Some("game".into()),
             brief: Some("Three save slots.".into()),
         },
+        ClientCommand::WorkRun {
+            work: "coding/save-system".into(),
+            stage: Some("02_plan".into()),
+            session: None,
+        },
         ClientCommand::TicketMerge {
             ticket: "0007".into(),
         },

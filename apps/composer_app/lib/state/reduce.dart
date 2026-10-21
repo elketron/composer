@@ -188,6 +188,10 @@ import 'types.dart';
           // The new work (and maybe pipeline) shows in the lists.
           [if (work != null) SendCommand(url, const ClientCommandPipelineList())],
         ),
+      WorkRunRequested(:final url, :final work, :final stage, :final project) => (
+          s,
+          [RunWork(url, ClientCommandWorkRun(work: work, stage: stage, session: s.status[url]?.chat?.session), project: project)],
+        ),
       NewWorkReset(:final url) => (_updateStatus(s, url, (x) => x.copyWith(newWork: const NewWork())), const []),
       ScopeChanged(:final url, :final project) => (_updateStatus(s, url, (x) => x.copyWith(scope: project)), const []),
       SideClosed(:final url) => (_side(s, url, null), const []),

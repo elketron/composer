@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../state/actions.dart';
 import '../../state/projects.dart';
+import '../../state/works.dart';
 import '../../state/server_status.dart';
 import '../../theme/composer_theme.dart';
 import '../../theme/tokens.dart' as t;
@@ -116,6 +117,14 @@ class _ProjectOverviewViewState extends State<ProjectOverviewView> {
               if (w.stages.isNotEmpty) ...[StageDots(w.stages), const SizedBox(width: 6)],
               Expanded(child: Text(w.title, overflow: TextOverflow.ellipsis, style: mono(size: 12.5, color: t.text))),
               Text(w.status ?? '', style: mono(size: 11, color: t.muted)),
+              if (runnable(w)) ...[
+                const SizedBox(width: 8),
+                InkWell(
+                  key: Key('work-run-${w.url}'),
+                  onTap: () => store.dispatch(WorkRunRequested(url, workSpec(w.url), project: widget.folder)),
+                  child: Text('Run', style: mono(size: 11.5, color: t.accent)),
+                ),
+              ],
             ],
           ),
       ],
