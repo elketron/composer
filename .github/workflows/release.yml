@@ -55,6 +55,15 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
+      # The project's 8 GB Gradle heap plus the Kotlin daemon and the NDK build don't fit the
+      # runner (it shuts down mid-build); the user-home properties win over the project's.
+      - name: Gradle memory for the runner
+        run: |
+          mkdir -p ~/.gradle
+          {
+            echo "org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -XX:+HeapDumpOnOutOfMemoryError"
+            echo "kotlin.daemon.jvmargs=-Xmx2g"
+          } >> ~/.gradle/gradle.properties
       - name: Signing key from secrets
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
