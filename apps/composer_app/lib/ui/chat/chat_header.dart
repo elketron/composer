@@ -6,7 +6,7 @@ import '../../theme/tokens.dart' as t;
 
 /// Agent, id, state and context use of the open session.
 class ChatHeader extends StatelessWidget {
-  const ChatHeader({super.key, required this.sessionId, this.session, this.parent, this.onClose, this.onBrowse, this.onClearProject, this.menu});
+  const ChatHeader({super.key, required this.sessionId, this.session, this.parent, this.onClose, this.onBrowse, this.menu, this.chips});
 
   final String sessionId;
   final SessionInfo? session;
@@ -18,11 +18,11 @@ class ChatHeader extends StatelessWidget {
   /// Open the sites (site://home) in the reader.
   final VoidCallback? onBrowse;
 
-  /// Unset the session's project.
-  final VoidCallback? onClearProject;
-
   /// ⋮ (wide layout).
   final Widget? menu;
+
+  /// Project and harness chips (wide layout), in place of the project's name.
+  final List<Widget>? chips;
 
   @override
   Widget build(BuildContext context) {
@@ -50,17 +50,11 @@ class ChatHeader extends StatelessWidget {
             message: 'Context in use (prompt tokens of the last model call)',
             child: Text('${(s.contextTokens / 1000).toStringAsFixed(1)}k ctx', style: mono(size: 11, color: t.faint)),
           ),
-        if (s?.project != null) ...[
+        if (chips != null)
+          for (final chip in chips!) Padding(padding: const EdgeInsets.only(left: 8), child: chip)
+        else if (s?.project != null) ...[
           const SizedBox(width: 10),
           Tooltip(message: s!.project!, child: Text(s.project!.split('/').last, style: mono(size: 11, color: t.faint))),
-          if (onClearProject != null)
-            IconButton(
-              key: const Key('clear-project'),
-              tooltip: 'Unset the project',
-              visualDensity: VisualDensity.compact,
-              onPressed: onClearProject,
-              icon: const Icon(Icons.close, size: 13, color: t.faint),
-            ),
         ],
         if (onBrowse != null)
           IconButton(

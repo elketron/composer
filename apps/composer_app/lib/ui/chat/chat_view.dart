@@ -5,8 +5,6 @@ import '../../state/chat_state.dart';
 import '../../state/server_status.dart';
 import '../../theme/tokens.dart' as t;
 import '../pages/page_navigation.dart';
-import '../../state/actions.dart';
-import '../store_scope.dart';
 import '../../state/chat_items.dart';
 import '../../state/chat_rows.dart';
 import 'activity_line.dart';
@@ -14,6 +12,8 @@ import 'agent_text.dart';
 import 'approval_card.dart';
 import 'chat_header.dart';
 import 'chat_menu.dart';
+import 'harness_chip.dart';
+import 'project_chip.dart';
 import 'chat_item_view.dart';
 import 'steps_view.dart';
 import 'worker_card.dart';
@@ -75,8 +75,14 @@ class ChatView extends StatelessWidget {
           parent: parent,
           onClose: onClose,
           onBrowse: () => openPage(context, url, 'site://home'),
-          onClearProject: () => StoreScope.read(context).dispatch(ProjectChosen(url, null)),
           menu: ChatMenu(url: url, session: session),
+          // A worker's project is its worktree: no chips to change it.
+          chips: session == null || session.ticket != null
+              ? null
+              : [
+                  ProjectChip(url: url, project: session.project),
+                  if (session.project != null) HarnessChip(url: url, project: session.project!),
+                ],
         ),
       if (!compact) OrchestrationBar(url: url, status: status, session: chat.session),
       Expanded(

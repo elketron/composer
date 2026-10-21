@@ -51,11 +51,10 @@ void main() {
 
     // The approval arrives (and is notified); the daemon clicks Approve on the notification,
     // which answers it; the turn goes on and finishes (and is notified).
-    final bar = find.byKey(const Key('approval-bar'));
-    await pumpUntil(tester, bar, seconds: 240);
-    await pumpUntil(tester, find.byWidgetPredicate((w) => w is Text && w.data == 'A recipe needs your approval'));
+    final approval = find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key as ValueKey<String>).value.startsWith('approve-'));
+    await pumpUntil(tester, approval, seconds: 240);
     final end = DateTime.now().add(const Duration(seconds: 30));
-    while (bar.evaluate().isNotEmpty) {
+    while (approval.evaluate().isNotEmpty) {
       if (DateTime.now().isAfter(end)) fail('the approval was not answered from the notification');
       await tester.pump(const Duration(milliseconds: 100));
       await Future<void>.delayed(const Duration(milliseconds: 200));

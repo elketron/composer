@@ -59,18 +59,18 @@ void main() {
     await tester.pump();
     await tester.tap(find.byKey(const Key('send')));
 
-    // Your message shows up, then the agent asks to run the recipe.
+    // Your message shows up, then the agent asks to run the recipe: in the chat and under Needs
+    // you in the session list.
     await pumpUntil(tester, richText('Run the greet recipe'), seconds: 30);
-    await pumpUntil(tester, find.byKey(const Key('approval-bar')), seconds: 240);
-    await tester.tap(find.byKey(const Key('approval-bar')));
     final approve = find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key as ValueKey<String>).value.startsWith('approve-'));
-    await pumpUntil(tester, approve);
+    await pumpUntil(tester, approve, seconds: 240);
+    expect(approve, findsNWidgets(2));
     await settle(tester, seconds: 4);
     await tester.tap(approve.last);
 
-    // The sheet closes and the reply quotes the output.
+    // Both close and the reply quotes the output.
     await pumpUntil(tester, richText('zebra-42'), seconds: 240);
-    expect(find.byKey(const Key('approval-bar')), findsNothing);
+    expect(approve, findsNothing);
     expect(richText('greet'), findsWidgets);
     await settle(tester, seconds: 4);
   });

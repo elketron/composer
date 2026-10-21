@@ -708,8 +708,8 @@ its page and otherwise leaves the tab you chose; an app stays loaded while anoth
 list and the pane's width are kept in `layout.json` beside the server list. Shortcuts go through
 `AppShortcuts` (a keyboard handler, so they work after the focused widget went away; plain keys not while
 typing): ctrl-k, ctrl-n, ctrl-p, ctrl-b, ctrl-shift-d, alt-↑/↓, ctrl-], esc, y / a / n. The old rail and
-server page are gone. Not built from the mockups: the header's project and Claude Code chips (the header
-keeps its project label; ⋮ changes both).
+server page are gone. The chat header's chips: the project (click: the project sheet) and Claude Code for
+it when the project allows it (click: on / off); a worker's header has none (its project is its worktree).
 
 ### Milestones
 

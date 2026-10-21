@@ -10,6 +10,7 @@
 
 import 'package:composer_app/main.dart' as app;
 import 'package:composer_app/ui/pages/app_view.dart';
+import 'package:composer_app/ui/wide/session_column.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -45,6 +46,15 @@ void main() {
     await pumpUntil(tester, find.byKey(const Key('chat-menu')));
     await settle(tester, seconds: 2);
 
+    // The header's chips: the project, and Claude Code off and on again for it.
+    await pumpUntil(tester, find.byKey(const Key('project-chip')));
+    await pumpUntil(tester, find.byKey(const Key('harness-chip-claude-code')));
+    await tester.tap(find.byKey(const Key('harness-chip-claude-code')));
+    await pumpUntil(tester, find.text('claude-code off'));
+    await settle(tester, seconds: 2);
+    await tester.tap(find.byKey(const Key('harness-chip-claude-code')));
+    await pumpUntil(tester, find.text('claude-code on'));
+
     // The reader in the side pane.
     await tester.tap(find.byKey(const Key('browse')));
     await pumpUntil(tester, find.byKey(const Key('side-tab-page')));
@@ -59,6 +69,11 @@ void main() {
     await settle(tester, seconds: 5);
 
     // Its worker beside the orchestrator (the Worker tab), then as the chat; its changes from ⋮.
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('worker-line-$worker')),
+      200,
+      scrollable: find.descendant(of: find.byType(SessionColumn), matching: find.byType(Scrollable)).first,
+    );
     await tester.tap(find.byKey(const Key('worker-line-$worker')));
     await pumpUntil(tester, find.byKey(const Key('open-as-chat')));
     await settle(tester, seconds: 3);

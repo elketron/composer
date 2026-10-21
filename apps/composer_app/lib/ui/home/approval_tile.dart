@@ -42,7 +42,8 @@ class ApprovalTile extends StatelessWidget {
         const SizedBox(height: 4),
         Text(approvalHeadline(approval), style: mono(size: 13, color: t.text)),
         const SizedBox(height: 8),
-        Row(children: [
+        // Wraps in a narrow column (the wide layout's session list).
+        Wrap(spacing: 8, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
           FilledButton(
             key: Key('approve-${approval.request}'),
             style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
@@ -50,20 +51,17 @@ class ApprovalTile extends StatelessWidget {
             child: const Text('Approve'),
           ),
           if (approvalCanAlways(approval)) ...[
-            const SizedBox(width: 8),
             OutlinedButton(
               style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
               onPressed: () => answer(ApprovalDecision.always),
               child: const Text('Always'),
             ),
           ],
-          const SizedBox(width: 8),
           OutlinedButton(
             style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
             onPressed: () => answer(ApprovalDecision.deny),
             child: const Text('Deny'),
           ),
-          const SizedBox(width: 4),
           TextButton(
             style: TextButton.styleFrom(foregroundColor: t.muted, visualDensity: VisualDensity.compact),
             onPressed: () => _showBody(context),
