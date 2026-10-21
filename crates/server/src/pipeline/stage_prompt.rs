@@ -100,8 +100,13 @@ pub fn stage_context(workspace: &Workspace, id: &str, project: Option<&str>) -> 
         .get_str("harness")
         .is_some_and(|h| !h.is_empty() && h != "composer");
     match project {
-        Some(project) if contract.worktree => env.push_str(&format!(
+        // A git project's ticket works in its own worktree (`state/worktrees/<ticket>`); any
+        // other project in the folder itself.
+        Some(project) if contract.worktree && project.contains("/state/worktrees/") => env.push_str(&format!(
             "\n- the project's code is your current folder ({project}), a worktree on this ticket's own branch: change it there and commit"
+        )),
+        Some(project) if contract.worktree => env.push_str(&format!(
+            "\n- the project is your current folder ({project}), not a git repository: change it there (keep earlier outputs; don't overwrite what other stages made)"
         )),
         Some(project) if in_folder => {
             env.push_str(&format!("\n- the project is your current folder ({project}): read it, don't change it"))

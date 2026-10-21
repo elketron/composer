@@ -50,7 +50,22 @@ pub fn complete(line: &str, state: &AppState) -> Completions {
         "new" => agents(arg, state),
         "open" | "o" => pages(arg, state),
         "app" => app_sites(arg, state),
+        "work" => subcommands(
+            arg,
+            &[
+                (
+                    "new",
+                    "a piece of work in a pipeline: new <pipeline> <name> [project]",
+                ),
+                ("run", "its next stage, or one again: run [work] [stage]"),
+            ],
+        ),
+        "pipeline" | "pipelines" => subcommands(
+            arg,
+            &[("new", "a pipeline from a template: new <kind> [name]")],
+        ),
         "project" | "p" => {
+            let view = subcommands(arg, &[("view", "its works, sessions, branches and memory")]);
             let unset = state
                 .session
                 .current_info()
@@ -65,7 +80,7 @@ pub fn complete(line: &str, state: &AppState) -> Completions {
             } else {
                 Vec::new()
             };
-            unset.into_iter().chain(folders).collect()
+            view.into_iter().chain(unset).chain(folders).collect()
         }
         _ => Vec::new(),
     };
@@ -79,15 +94,49 @@ fn starts_with(text: &str, prefix: &str) -> bool {
     text.to_lowercase().starts_with(&prefix.to_lowercase())
 }
 
+/// One candidate per command. A command with several forms (`:project`, `:project view`)
+/// lists them as its detail.
 fn command_names(prefix: &str) -> Vec<Candidate> {
-    COMMANDS
+    let mut names: Vec<(&str, Vec<(&str, &str)>)> = Vec::new();
+    for (usage, help) in COMMANDS {
+        let usage = usage.trim_start_matches(':');
+        let Some(name) = usage.split_whitespace().next() else {
+            continue;
+        };
+        let form = usage[name.len()..].trim();
+        match names.iter_mut().find(|(n, _)| *n == name) {
+            Some((_, forms)) => forms.push((form, help)),
+            None => names.push((name, vec![(form, help)])),
+        }
+    }
+    names
+        .into_iter()
+        .filter(|(name, _)| starts_with(name, prefix))
+        .map(|(name, forms)| Candidate {
+            text: name.to_string(),
+            detail: match forms.as_slice() {
+                [(_, help)] => (*help).to_string(),
+                forms => forms
+                    .iter()
+                    .map(|(form, _)| *form)
+                    .collect::<Vec<_>>()
+                    .join(" · "),
+            },
+        })
+        .collect()
+}
+
+/// A command's subcommands, as its first argument.
+fn subcommands(arg: &str, choices: &[(&str, &str)]) -> Vec<Candidate> {
+    if arg.contains(char::is_whitespace) {
+        return Vec::new();
+    }
+    choices
         .iter()
-        .filter_map(|(usage, help)| {
-            let name = usage.trim_start_matches(':').split_whitespace().next()?;
-            starts_with(name, prefix).then(|| Candidate {
-                text: name.to_string(),
-                detail: (*help).to_string(),
-            })
+        .filter(|(name, _)| starts_with(name, arg))
+        .map(|(name, detail)| Candidate {
+            text: name.to_string(),
+            detail: detail.to_string(),
         })
         .collect()
 }
@@ -342,7 +391,22 @@ mod tests {
     #[test]
     fn command_names_with_their_help() {
         assert_eq!(texts("a"), ["attach", "app"]);
-        assert_eq!(texts("").len(), COMMANDS.len());
+        // One per command, however many forms it has.
+        let all = texts("");
+        let mut unique = all.clone();
+        unique.sort();
+        unique.dedup();
+        assert_eq!(all.len(), unique.len(), "{all:?}");
+        assert_eq!(texts("pro"), ["project"]);
+        assert_eq!(texts("wor"), ["workers", "work"]);
+        let work = &complete("work", &state()).items[1];
+        assert_eq!(
+            work.detail,
+            "new <pipeline> <name> [project] · run [work] [stage]"
+        );
+        assert_eq!(texts("work "), ["new", "run"]);
+        assert_eq!(texts("work r"), ["run"]);
+        assert!(texts("work run ").is_empty());
         let first = &complete("comp", &state()).items[0];
         assert_eq!(first.text, "compact");
         assert!(first.detail.contains("summarize"));
