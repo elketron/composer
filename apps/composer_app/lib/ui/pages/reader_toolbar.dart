@@ -4,6 +4,7 @@ import '../../state/actions.dart';
 import '../../state/page_state.dart';
 import '../../state/server_status.dart';
 import '../../state/site_url.dart';
+import '../../state/types.dart';
 import '../../theme/composer_theme.dart';
 import '../../theme/tokens.dart' as t;
 import '../store_scope.dart';
@@ -20,8 +21,9 @@ class ReaderToolbar extends StatelessWidget {
   Widget build(BuildContext context) {
     final store = StoreScope.read(context);
     final PageState p = status.page;
-    final shown = p.appSite != null ? 'site://${p.appSite}  ·  app' : (p.page?.url ?? p.loading ?? '');
-    final site = p.appSite ?? (p.page == null ? null : splitSiteUrl(p.page!.url).$1);
+    final app = p.appSite != null && status.side == SideTab.app;
+    final shown = app ? 'site://${p.appSite}  ·  app' : (p.page?.url ?? p.loading ?? '');
+    final site = app ? p.appSite : (p.page == null ? null : splitSiteUrl(p.page!.url).$1);
     Widget button(IconData icon, String tip, VoidCallback? onPressed, {Color? color, Key? key}) => IconButton(
           key: key,
           tooltip: tip,
@@ -39,7 +41,7 @@ class ReaderToolbar extends StatelessWidget {
         const SizedBox(width: 6),
         Expanded(child: Text(shown, overflow: TextOverflow.ellipsis, style: mono(size: 12, color: t.muted))),
         if (site != null && status.hasApp(site))
-          p.appSite == null
+          !app
               ? TextButton(key: const Key('open-app'), onPressed: () => store.dispatch(AppRequested(url, site)), child: const Text('App'))
               : TextButton(onPressed: () => store.dispatch(PageRequested(url, 'site://$site')), child: const Text('Page')),
         Tooltip(

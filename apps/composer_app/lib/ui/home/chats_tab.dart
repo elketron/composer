@@ -4,7 +4,10 @@ import 'package:flutter/material.dart';
 import '../../state/server_status.dart';
 import '../../theme/composer_theme.dart';
 import '../../theme/tokens.dart' as t;
+import '../../state/actions.dart';
+import '../../state/types.dart';
 import '../chat/navigation.dart';
+import '../store_scope.dart';
 import 'activity_dot.dart';
 import 'approval_tile.dart';
 import 'new_chat_sheet.dart';
@@ -14,10 +17,14 @@ import 'session_card.dart';
 /// A server's sessions by what they need: you (approvals, finished work you haven't seen),
 /// running, and the rest, newest first.
 class ChatsTab extends StatelessWidget {
-  const ChatsTab({super.key, required this.url, required this.status});
+  const ChatsTab({super.key, required this.url, required this.status, this.wide = false});
 
   final String url;
   final ServerStatus status;
+
+  /// In the wide layout's session column: no floating button, the open chat marked, workers
+  /// open from their orchestrator's card.
+  final bool wide;
 
   @override
   Widget build(BuildContext context) {
@@ -34,13 +41,21 @@ class ChatsTab extends StatelessWidget {
 
     Widget card(SessionInfo s) => Padding(
           padding: const EdgeInsets.only(bottom: 8),
-          child: SessionCard(status: status, session: s, unread: status.unread.contains(s.id), onTap: () => openSession(context, url, s.id)),
+          child: SessionCard(
+            status: status,
+            session: s,
+            unread: status.unread.contains(s.id),
+            selected: wide && status.chat?.session == s.id,
+            onTap: () => openSession(context, url, s.id),
+            // Beside its orchestrator, in the side pane's Worker tab.
+            onWorker: wide ? (w) => StoreScope.read(context).dispatch(SideTabSelected(url, SideTab.worker, session: w.id)) : null,
+          ),
         );
 
     return Stack(children: [
       ListView(
         key: const PageStorageKey('chats'),
-        padding: const EdgeInsets.fromLTRB(14, 0, 14, 88),
+        padding: wide ? const EdgeInsets.fromLTRB(10, 0, 10, 16) : const EdgeInsets.fromLTRB(14, 0, 14, 88),
         children: [
           if (needsYou > 0) ...[
             SectionLabel('Needs you', trailing: _Count(needsYou)),
@@ -60,8 +75,9 @@ class ChatsTab extends StatelessWidget {
             ),
         ],
       ),
-      Positioned(
-        right: 14,
+      if (!wide)
+        Positioned(
+          right: 14,
         bottom: 14,
         child: FilledButton.icon(
           key: const Key('new-chat'),

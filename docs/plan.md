@@ -700,6 +700,17 @@ pane with tabs (Page, App, Changes, Worker; Server from the rail); the session l
 beside the chat instead of replacing it; ctrl-k palette (sessions, pages, actions), ctrl-n new chat dialog,
 the chat's ⋮ menu as on phones, approvals answerable with y / a / n.
 
+Built (milestone 19): `apps/composer_app/lib/ui/wide/` (`WideLayout`, `ServerRail`, `SessionColumn`,
+`SessionStrip`, `SidePane`, `WorkerPane`, `CommandPalette`, `ProjectHarnesses`). The side pane's tab and ticket
+live in `ServerStatus` (`side`, `sideTicket`), the Worker tab's session as a second attached chat
+(`sideChat`; neither chat detaches a session the other shows). Following the agent opens a closed pane on
+its page and otherwise leaves the tab you chose; an app stays loaded while another tab is up. The folded
+list and the pane's width are kept in `layout.json` beside the server list. Shortcuts go through
+`AppShortcuts` (a keyboard handler, so they work after the focused widget went away; plain keys not while
+typing): ctrl-k, ctrl-n, ctrl-p, ctrl-b, ctrl-shift-d, alt-↑/↓, ctrl-], esc, y / a / n. The old rail and
+server page are gone. Not built from the mockups: the header's project and Claude Code chips (the header
+keeps its project label; ⋮ changes both).
+
 ### Milestones
 
 16. ✅ **ticket merging** — review diff against the merge base, merge / discard with checks, CLI, TUI, app
@@ -707,7 +718,7 @@ the chat's ⋮ menu as on phones, approvals answerable with y / a / n.
 17. ✅ **Claude Code approvals** — `permission` MCP tool, tool approvals in both clients, `always` rules.
 18. ✅ **following Claude Code** — partial messages, tool summaries and diffs, sub-agent nesting, live
     changes, run stats.
-19. **desktop app** — mockups, then the wide layout.
+19. ✅ **desktop app** — mockups, then the wide layout.
 
 ## Open questions
 

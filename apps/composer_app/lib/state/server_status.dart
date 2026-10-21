@@ -8,7 +8,7 @@ const _keep = Object();
 
 /// What the app knows about a server right now (not persisted).
 class ServerStatus {
-  const ServerStatus({this.link = LinkState.connecting, this.error, this.retryAt, this.info, this.sessions = const [], this.approvals = const [], this.chat, this.page = const PageState(), this.sites = const [], this.workers = const {}, this.agents = const [], this.projects = const [], this.unread = const {}, this.recent = const [], this.search = const PageSearch(), this.slotsUsed = 0, this.harnesses = const {}, this.reviews = const {}});
+  const ServerStatus({this.link = LinkState.connecting, this.error, this.retryAt, this.info, this.sessions = const [], this.approvals = const [], this.chat, this.page = const PageState(), this.sites = const [], this.workers = const {}, this.agents = const [], this.projects = const [], this.unread = const {}, this.recent = const [], this.search = const PageSearch(), this.slotsUsed = 0, this.harnesses = const {}, this.reviews = const {}, this.side, this.sideTicket, this.sideChat, this.opened = false});
 
   static const initial = ServerStatus();
 
@@ -62,6 +62,19 @@ class ServerStatus {
   /// Tickets on the review screen, by id.
   final Map<String, TicketReviewState> reviews;
 
+  /// The side pane's tab; null: closed (wide screens).
+  final SideTab? side;
+
+  /// The ticket the Changes tab shows.
+  final String? sideTicket;
+
+  /// The session the Worker tab shows live (attached beside the open chat).
+  final ChatState? sideChat;
+
+  /// A chat was opened on this server since the app started (the wide layout opens the latest
+  /// one by itself only before that).
+  final bool opened;
+
   bool hasApp(String site) => sites.any((s) => s.name == site && s.appBuilt);
 
   SessionInfo? session(String id) => sessions.where((s) => s.id == id).firstOrNull;
@@ -109,6 +122,10 @@ class ServerStatus {
     int? slotsUsed,
     Map<String, List<HarnessSwitch>>? harnesses,
     Map<String, TicketReviewState>? reviews,
+    Object? side = _keep,
+    Object? sideTicket = _keep,
+    Object? sideChat = _keep,
+    bool? opened,
   }) =>
       ServerStatus(
         link: link ?? this.link,
@@ -129,5 +146,9 @@ class ServerStatus {
         slotsUsed: slotsUsed ?? this.slotsUsed,
         harnesses: harnesses ?? this.harnesses,
         reviews: reviews ?? this.reviews,
+        side: identical(side, _keep) ? this.side : side as SideTab?,
+        sideTicket: identical(sideTicket, _keep) ? this.sideTicket : sideTicket as String?,
+        sideChat: identical(sideChat, _keep) ? this.sideChat : sideChat as ChatState?,
+        opened: opened ?? this.opened,
       );
 }

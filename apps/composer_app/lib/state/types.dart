@@ -5,6 +5,31 @@ import 'package:composer_protocol/composer_protocol.dart';
 /// The phone layout's tabs.
 enum PhoneTab { chats, pages, server }
 
+/// What the side pane beside the chat shows (wide screens). On phones `page` and `app` pick what
+/// the reader screen shows.
+enum SideTab { page, app, changes, worker, server }
+
+/// How the wide layout was left: kept between runs.
+class LayoutPrefs {
+  const LayoutPrefs({this.sessionsCollapsed = false, this.sideWidth = 460});
+
+  /// The session list folded to a strip.
+  final bool sessionsCollapsed;
+
+  /// The side pane's width, in logical pixels.
+  final double sideWidth;
+
+  LayoutPrefs copyWith({bool? sessionsCollapsed, double? sideWidth}) =>
+      LayoutPrefs(sessionsCollapsed: sessionsCollapsed ?? this.sessionsCollapsed, sideWidth: sideWidth ?? this.sideWidth);
+
+  Map<String, Object?> toJson() => {'sessions_collapsed': sessionsCollapsed, 'side_width': sideWidth};
+
+  factory LayoutPrefs.fromJson(Map<String, Object?> json) => LayoutPrefs(
+        sessionsCollapsed: json['sessions_collapsed'] == true,
+        sideWidth: (json['side_width'] as num?)?.toDouble() ?? 460,
+      );
+}
+
 /// A page an agent or app changed lately (the Pages tab).
 class RecentPage {
   const RecentPage(this.url, this.by);

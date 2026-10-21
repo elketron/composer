@@ -48,6 +48,10 @@ ThemeData composerTheme() {
     listTileTheme: ListTileThemeData(shape: shape, selectedColor: t.text, selectedTileColor: t.raised, iconColor: t.muted),
     bottomSheetTheme: const BottomSheetThemeData(backgroundColor: t.surface, shape: RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(t.radius)))),
     tooltipTheme: TooltipThemeData(decoration: BoxDecoration(color: t.overlay, borderRadius: BorderRadius.circular(t.radius), border: Border.all(color: t.borderStrong)), textStyle: const TextStyle(color: t.text, fontSize: 12)),
+    dialogTheme: DialogThemeData(
+      backgroundColor: t.overlay,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(t.radius), side: const BorderSide(color: t.borderStrong)),
+    ),
     snackBarTheme: SnackBarThemeData(backgroundColor: t.overlay, contentTextStyle: const TextStyle(color: t.text), shape: shape, behavior: SnackBarBehavior.floating),
   );
 }

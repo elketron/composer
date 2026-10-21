@@ -18,6 +18,10 @@ void main() {
     expect(parsePairInput('home.ts.net').url, 'https://home.ts.net');
     expect(parsePairInput('home.ts.net').code, isNull);
     expect(parsePairInput('localhost:7420').url, 'http://localhost:7420');
+    final both = parsePairInput('http://10.0.2.2:7420 AB12-CD34');
+    expect((both.url, both.code), ('http://10.0.2.2:7420', 'AB12-CD34'));
+    // Half typed: no exception, nothing to pair with yet.
+    expect(parsePairInput('http://10.0.2.2:74b').code, isNull);
     expect(parsePairInput('http://127.0.0.1:7420/').url, 'http://127.0.0.1:7420');
   });
 

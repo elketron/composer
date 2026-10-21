@@ -6,7 +6,7 @@ import '../../theme/tokens.dart' as t;
 
 /// Agent, id, state and context use of the open session.
 class ChatHeader extends StatelessWidget {
-  const ChatHeader({super.key, required this.sessionId, this.session, this.parent, this.onClose, this.onBrowse, this.onClearProject});
+  const ChatHeader({super.key, required this.sessionId, this.session, this.parent, this.onClose, this.onBrowse, this.onClearProject, this.menu});
 
   final String sessionId;
   final SessionInfo? session;
@@ -20,6 +20,9 @@ class ChatHeader extends StatelessWidget {
 
   /// Unset the session's project.
   final VoidCallback? onClearProject;
+
+  /// ⋮ (wide layout).
+  final Widget? menu;
 
   @override
   Widget build(BuildContext context) {
@@ -66,6 +69,7 @@ class ChatHeader extends StatelessWidget {
             onPressed: onBrowse,
             icon: const Icon(Icons.menu_book_outlined, size: 18, color: t.muted),
           ),
+        ?menu,
         if (onClose != null)
           IconButton(tooltip: 'Close the chat', onPressed: onClose, icon: const Icon(Icons.close, size: 18, color: t.muted)),
       ]),

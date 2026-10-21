@@ -39,8 +39,10 @@ void main() {
     expect(find.byKey(const Key('pair-code')), findsNothing);
 
     await tester.tap(find.byKey(const Key('pair')));
+    // The server in the side pane (the rail's settings) says it is online.
+    await pumpUntil(tester, find.byKey(const Key('rail-settings')));
+    await tester.tap(find.byKey(const Key('rail-settings')));
     await pumpUntil(tester, find.text('online'));
-    expect(find.textContaining('slots 2', findRichText: true), findsOneWidget);
-    expect(find.text('SESSIONS'), findsWidgets); // the rail and the server page
+    expect(find.textContaining('of 2 in use'), findsOneWidget);
   });
 }

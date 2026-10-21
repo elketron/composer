@@ -16,6 +16,7 @@ class AppState {
     this.foreground = true,
     this.notifiedApprovals = const {},
     this.tab = PhoneTab.chats,
+    this.layout = const LayoutPrefs(),
   });
 
   static const initial = AppState();
@@ -47,6 +48,9 @@ class AppState {
   /// The phone layout's tab.
   final PhoneTab tab;
 
+  /// The wide layout's collapsed session list and side pane width.
+  final LayoutPrefs layout;
+
   ServerEntry? get activeServer => servers.where((s) => s.url == active).firstOrNull;
 
   ServerStatus statusOf(String url) => status[url] ?? ServerStatus.initial;
@@ -62,6 +66,7 @@ class AppState {
     bool? foreground,
     Set<String>? notifiedApprovals,
     PhoneTab? tab,
+    LayoutPrefs? layout,
   }) =>
       AppState(
         loaded: loaded ?? this.loaded,
@@ -74,5 +79,6 @@ class AppState {
         foreground: foreground ?? this.foreground,
         notifiedApprovals: notifiedApprovals ?? this.notifiedApprovals,
         tab: tab ?? this.tab,
+        layout: layout ?? this.layout,
       );
 }

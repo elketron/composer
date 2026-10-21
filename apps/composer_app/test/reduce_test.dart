@@ -333,6 +333,48 @@ void main() {
       expect(reduce(state, done).$2.whereType<TicketCommand>(), hasLength(1));
     });
 
+    test('the side pane: tabs, a worker attached beside the chat, events to both', () {
+      final sessions = ServerEvent(
+        home.url,
+        ServerMessageOk(id: 1, result: CommandResultSessions(sessions: [
+          SessionInfo(id: 'o', agent: 'orchestrator', state: TurnState.idle, lastSeq: 3, updated: ''),
+          SessionInfo(id: 'w', agent: 'worker', ticket: '0007', parent: 'o', state: TurnState.running, lastSeq: 2, updated: ''),
+        ])),
+      );
+      var state = reduce(loaded([home]), sessions).$1;
+      state = reduce(state, SessionOpened(home.url, 'o')).$1;
+      expect(state.statusOf(home.url).opened, isTrue);
+
+      final (beside, attach) = reduce(state, SideTabSelected(home.url, SideTab.worker, session: 'w'));
+      expect((attach.single as SendCommand).command, isA<ClientCommandSessionAttach>());
+      expect((beside.statusOf(home.url).side, beside.statusOf(home.url).sideChat?.session), (SideTab.worker, 'w'));
+      state = beside;
+
+      // A worker event reaches the side chat only; the orchestrator's both (if both show it).
+      state = reduce(state, ServerEvent(home.url, const ServerMessageMessageDelta(session: 'w', seq: 3, text: 'hi'))).$1;
+      expect(state.statusOf(home.url).sideChat?.streaming?.content, 'hi');
+      expect(state.statusOf(home.url).chat?.streaming, isNull);
+
+      // Opening the worker as the chat keeps it attached (the side pane still shows it).
+      final (swapped, effects) = reduce(state, SessionOpened(home.url, 'w'));
+      expect(effects.whereType<SendCommand>().map((e) => e.command.runtimeType), [ClientCommandSessionDetach, ClientCommandSessionAttach]);
+      expect((effects.first as SendCommand).command, isA<ClientCommandSessionDetach>().having((c) => c.session, 'session', 'o'));
+      final closing = reduce(swapped, SessionClosed(home.url)).$2;
+      expect(closing, isEmpty, reason: 'the side pane still shows w');
+
+      // Page / app tabs, closing keeps them, the layout toggles are saved.
+      state = reduce(state, PageRequested(home.url, 'site://plans')).$1;
+      expect(state.statusOf(home.url).side, SideTab.page);
+      state = reduce(state, AppRequested(home.url, 'orchestration')).$1;
+      expect(state.statusOf(home.url).side, SideTab.app);
+      state = reduce(state, PageRequested(home.url, 'site://memory')).$1;
+      expect(state.statusOf(home.url).page.appSite, 'orchestration', reason: 'the app tab stays');
+      state = reduce(state, SideClosed(home.url)).$1;
+      expect((state.statusOf(home.url).side, state.statusOf(home.url).page.appSite), (null, 'orchestration'));
+      final (folded, save) = reduce(state, const SessionsToggled());
+      expect((folded.layout.sessionsCollapsed, (save.single as SaveLayout).layout.sessionsCollapsed), (true, true));
+    });
+
     test('apps show in the reader; closing keeps the follow choice', () {
       var state = reduce(opened('site://orchestration'), AppRequested(home.url, 'orchestration')).$1;
       expect(state.statusOf(home.url).page.appSite, 'orchestration');

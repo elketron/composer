@@ -10,14 +10,19 @@ import '../add_server_page.dart';
 import '../format.dart';
 import '../status_dot.dart';
 import '../store_scope.dart';
+import '../pages/page_navigation.dart';
+import '../wide/project_harnesses.dart';
 import 'section_label.dart';
 
 /// Connections, out of the way of daily use: this server, the others, adding and removing.
 class ServerTab extends StatelessWidget {
-  const ServerTab({super.key, required this.server, required this.status});
+  const ServerTab({super.key, required this.server, required this.status, this.wide = false});
 
   final ServerEntry server;
   final ServerStatus status;
+
+  /// In the wide layout's side pane: with the projects' external harnesses.
+  final bool wide;
 
   @override
   Widget build(BuildContext context) {
@@ -63,6 +68,19 @@ class ServerTab extends StatelessWidget {
           ],
         ]),
       ),
+      if (wide) ...[
+        ProjectHarnesses(url: server.url, status: status),
+        const SectionLabel('Sites'),
+        Wrap(spacing: 6, runSpacing: 6, children: [
+          for (final site in status.sites)
+            ActionChip(
+              key: Key('site-${site.name}'),
+              label: Text(site.appBuilt ? '${site.name} · app' : site.name, style: mono(size: 11.5, color: site.appBuilt ? t.accent : t.muted)),
+              tooltip: (site.description ?? '').isNotEmpty ? site.description : 'site://${site.name}',
+              onPressed: () => site.appBuilt ? openApp(context, server.url, site.name) : openPage(context, server.url, 'site://${site.name}'),
+            ),
+        ]),
+      ],
       const SectionLabel('Servers'),
       Container(
         decoration: BoxDecoration(color: t.surface, border: Border.all(color: t.border), borderRadius: BorderRadius.circular(t.radius)),

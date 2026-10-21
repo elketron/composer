@@ -119,10 +119,18 @@ class Notifier {
       ),
     );
     final payload = jsonEncode({'url': note.url, 'session': note.session, 'approval': note.approval, 'page': note.page});
-    await _plugin.show(id: idOf(note.key), title: note.title, body: note.body, notificationDetails: details, payload: payload);
+    try {
+      await _plugin.show(id: idOf(note.key), title: note.title, body: note.body, notificationDetails: details, payload: payload);
+    } catch (_) {
+      // No notification service (a desktop without one): the app shows it all anyway.
+    }
   }
 
   Future<void> cancel(String key) async {
-    if (await _ready) await _plugin.cancel(id: idOf(key));
+    try {
+      if (await _ready) await _plugin.cancel(id: idOf(key));
+    } catch (_) {
+      // As above.
+    }
   }
 }

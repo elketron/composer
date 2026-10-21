@@ -46,7 +46,8 @@ import 'types.dart';
       ServerEvent(:final url, :final message) => _serverEvent(s, url, message),
       SessionOpened(:final url, :final session) => _open(s, url, session),
       SessionClosed(:final url) => _close(s, url),
-      NewSessionRequested(:final url, :final agent, :final project) => (s, [CreateSession(url, agent, project: project)]),
+      NewSessionRequested(:final url, :final agent, :final project, :final text) =>
+        (s, [CreateSession(url, agent, project: project, text: text)]),
       MessageSubmitted(:final url, :final text) => _submit(s, url, text),
       FilesPicked(:final url, :final files) => _picked(s, url, files),
       UploadProgressed(:final url, :final id, :final progress) => (
@@ -111,7 +112,7 @@ import 'types.dart';
           ],
         ),
       CommandFailed(:final message) => (s.copyWith(notice: Notice((s.notice?.id ?? 0) + 1, message)), const []),
-      PageRequested(:final url, :final page) => _withPage(s, url, (p) => _navigate(url, p, page)),
+      PageRequested(:final url, :final page) => _withPage(_side(s, url, SideTab.page), url, (p) => _navigate(url, p, page)),
       PageBack(:final url) => _withPage(s, url, (p) {
           if (p.back.isEmpty) return (p, const []);
           final target = p.back.last;
@@ -121,7 +122,6 @@ import 'types.dart';
               forward: [...p.forward, if (p.page != null) p.page!.url],
               loading: target,
               error: null,
-              appSite: null,
             ),
             [FetchPage(url, target)],
           );
@@ -135,7 +135,6 @@ import 'types.dart';
               back: [...p.back, if (p.page != null) p.page!.url],
               loading: target,
               error: null,
-              appSite: null,
             ),
             [FetchPage(url, target)],
           );
@@ -143,7 +142,7 @@ import 'types.dart';
       PageReloadRequested(:final url) => _withPage(
           s,
           url,
-          (p) => p.page == null ? (p, const []) : (p.copyWith(appSite: null), [FetchPage(url, p.page!.url)]),
+          (p) => p.page == null ? (p, const []) : (p, [FetchPage(url, p.page!.url)]),
         ),
       PageLoaded(:final url, :final requested, :final page) => _withPage(s, url, (p) {
           final wanted = p.loading == requested || (p.loading == null && p.page != null && samePage(p.page!.url, requested));
@@ -155,8 +154,14 @@ import 'types.dart';
           (p) => p.loading == requested ? (p.copyWith(loading: null, error: '$requested: $error'), const []) : (p, const []),
         ),
       FollowToggled(:final url) => _withPage(s, url, (p) => (p.copyWith(follow: !p.follow), const [])),
-      AppRequested(:final url, :final site) => _withPage(s, url, (p) => (p.copyWith(appSite: site, error: null), const [])),
-      ReaderClosed(:final url) => _withPage(s, url, (p) => (PageState(follow: p.follow), const [])),
+      AppRequested(:final url, :final site) =>
+        _withPage(_side(s, url, SideTab.app), url, (p) => (p.copyWith(appSite: site, error: null), const [])),
+      ReaderClosed(:final url) => _withPage(_side(s, url, null), url, (p) => (PageState(follow: p.follow), const [])),
+      SideTabSelected(:final url, :final tab, :final ticket, :final session) => _sideTab(s, url, tab, ticket, session),
+      SideClosed(:final url) => (_side(s, url, null), const []),
+      SessionsToggled() => _layout(s, s.layout.copyWith(sessionsCollapsed: !s.layout.sessionsCollapsed)),
+      SideResized(:final width) => _layout(s, s.layout.copyWith(sideWidth: width)),
+      LayoutLoaded(:final layout) => (s.copyWith(layout: layout), const []),
       SitesLoaded(:final url, :final sites) => (_updateStatus(s, url, (x) => x.copyWith(sites: sites)), const []),
       NoticeShown(:final text) => (s.copyWith(notice: Notice((s.notice?.id ?? 0) + 1, text)), const []),
     };
@@ -202,13 +207,15 @@ import 'types.dart';
     url,
     (x) => x.copyWith(link: link, error: error, retryAt: retryAt, approvals: online ? const [] : null),
   );
-  final chat = next.status[url]?.chat;
+  final chat = next.status[url]?.chat, side = next.status[url]?.sideChat;
   if (!online) return (next, const []);
   return (
     next,
     [
       FetchCatalog(url),
       if (chat != null) SendCommand(url, ClientCommandSessionAttach(session: chat.session, since: chat.lastSeq)),
+      if (side != null && side.session != chat?.session)
+        SendCommand(url, ClientCommandSessionAttach(session: side.session, since: side.lastSeq)),
     ],
   );
 }
@@ -223,21 +230,48 @@ import 'types.dart';
       (x) => x.copyWith(
         chat: ChatState(session: session, liveAfter: x.session(session)?.lastSeq ?? 0),
         unread: x.unread.contains(session) ? ({...x.unread}..remove(session)) : null,
+        opened: true,
       ),
     ),
     [
-      if (current != null) SendCommand(url, ClientCommandSessionDetach(session: current.session)),
+      if (current != null && current.session != s.status[url]?.sideChat?.session)
+        SendCommand(url, ClientCommandSessionDetach(session: current.session)),
       SendCommand(url, ClientCommandSessionAttach(session: session)),
     ],
   );
 }
+
+/// The side pane shows `tab` (null: closed).
+AppState _side(AppState s, String url, SideTab? tab) => _updateStatus(s, url, (x) => x.copyWith(side: tab));
+
+(AppState, List<AppEffect>) _sideTab(AppState s, String url, SideTab tab, String? ticket, String? session) {
+  final next = _updateStatus(s, url, (x) => x.copyWith(side: tab, sideTicket: ticket ?? x.sideTicket));
+  // A ticket's changes come fresh each time they're shown.
+  if (tab == SideTab.changes && ticket != null) {
+    return _ticketCommand(next, url, ticket, ClientCommandTicketChanges(ticket: ticket));
+  }
+  final status = next.status[url];
+  final old = status?.sideChat?.session;
+  if (tab != SideTab.worker || session == null || status == null || old == session) return (next, const []);
+  // Attached as well (a full replay; the open chat skips what it has seen), and the one it
+  // replaces let go unless the open chat still shows it.
+  return (
+    _updateStatus(next, url, (x) => x.copyWith(sideChat: ChatState(session: session, liveAfter: x.session(session)?.lastSeq ?? 0))),
+    [
+      if (old != null && old != status.chat?.session) SendCommand(url, ClientCommandSessionDetach(session: old)),
+      SendCommand(url, ClientCommandSessionAttach(session: session)),
+    ],
+  );
+}
+
+(AppState, List<AppEffect>) _layout(AppState s, LayoutPrefs layout) => (s.copyWith(layout: layout), [SaveLayout(layout)]);
 
 (AppState, List<AppEffect>) _close(AppState s, String url) {
   final current = s.status[url]?.chat;
   if (current == null) return (s, const []);
   return (
     _updateStatus(s, url, (x) => x.copyWith(chat: null)),
-    [SendCommand(url, ClientCommandSessionDetach(session: current.session))],
+    [if (current.session != s.status[url]?.sideChat?.session) SendCommand(url, ClientCommandSessionDetach(session: current.session))],
   );
 }
 
@@ -344,7 +378,8 @@ bool stopped(WorkerState state) => state == WorkerState.done || state == WorkerS
     // Follow the agent, live events of the open session only.
     ServerMessageAgentNavigated(:final session, :final seq, url: final target)
         when page.follow && status.chat?.session == session && seq > status.chat!.liveAfter =>
-      _withPage(next, url, (p) => _navigate(url, p, target)),
+      // A closed side pane opens on the page; another tab stays up.
+      _withPage(status.side == null ? _side(next, url, SideTab.page) : next, url, (p) => _navigate(url, p, target)),
     _ => (next, const []),
   };
 }
@@ -474,7 +509,6 @@ Notify _approvalNote(String url, String server, ServerMessageApprovalRequest a) 
     p.copyWith(
       loading: target,
       error: null,
-      appSite: null,
       back: push ? [...p.back, current] : null,
       forward: push ? const [] : null,
     ),
@@ -520,10 +554,11 @@ AppState _event(AppState s, String url, ServerMessage message) => switch (messag
           return x.copyWith(workers: {...x.workers, worker: state}, unread: finished ? {...x.unread, worker} : null);
         }),
       _ when sessionEvent(message) != null => _updateStatus(s, url, (x) {
-          final chat = x.chat;
-          if (chat == null) return x;
-          final next = applyChatEvent(chat, message);
-          return identical(next, chat) ? x : x.copyWith(chat: next);
+          final chat = x.chat, side = x.sideChat;
+          final nextChat = chat == null ? null : applyChatEvent(chat, message);
+          final nextSide = side == null ? null : applyChatEvent(side, message);
+          if (identical(nextChat, chat) && identical(nextSide, side)) return x;
+          return x.copyWith(chat: nextChat, sideChat: nextSide);
         }),
       _ => s,
     };

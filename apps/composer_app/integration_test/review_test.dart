@@ -1,4 +1,4 @@
-// A finished ticket's changes, reviewed and merged from the orchestrator's chat.
+// A finished ticket's changes, reviewed and merged beside the orchestrator's chat.
 //
 // Needs a paired server in COMPOSER_APP_DATA (run pairing_test.dart first) with an orchestrator
 // session whose chat has a worker's report for a ticket with changes on its branch (`ticket/<id>`,
@@ -9,6 +9,7 @@
 
 import 'package:composer_app/main.dart' as app;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
@@ -38,13 +39,17 @@ void main() {
 
   testWidgets('review and merge a ticket', (tester) async {
     app.main();
-    await pumpUntil(tester, find.text('online'));
     await pumpUntil(tester, find.byKey(const Key('session-$session')));
     await tester.tap(find.byKey(const Key('session-$session')).first);
 
-    // The worker's card leads to its changes.
-    await pumpUntil(tester, find.byKey(const Key('review-$ticket')));
-    await tester.tap(find.byKey(const Key('review-$ticket')));
+    // ctrl-k: review the ticket's changes (the Changes tab beside the chat).
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyK);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await pumpUntil(tester, find.byKey(const Key('palette-query')));
+    await tester.enterText(find.byKey(const Key('palette-query')), 'review $ticket');
+    await settle(tester, seconds: 1);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await pumpUntil(tester, find.textContaining('ticket/$ticket → '));
     final merge = find.byKey(const Key('merge-ticket'));
     await pumpUntil(tester, merge);

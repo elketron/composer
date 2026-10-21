@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:composer_protocol/composer_protocol.dart';
 
 import '../state/actions.dart';
 import '../state/effects.dart';
 import '../state/server_entry.dart';
 import 'background_keeper.dart';
+import 'layout_store.dart';
 import 'notifier.dart';
 import 'server_api.dart';
 import 'server_connection.dart';
@@ -17,6 +20,7 @@ class EffectRunner {
   final _keeper = BackgroundKeeper();
   final Map<String, ServerConnection> _connections = {};
   ServerStore? _store;
+  Timer? _layoutSave;
 
   /// Opened on first use (the keyring check is async).
   Future<ServerStore> get _servers async => _store ??= await ServerStore.open();
@@ -25,6 +29,11 @@ class EffectRunner {
     switch (effect) {
       case LoadServers():
         _load(dispatch);
+        LayoutStore.load().then((layout) => dispatch(LayoutLoaded(layout)));
+      case SaveLayout(:final layout):
+        // Dragging saves often: only the last one counts.
+        _layoutSave?.cancel();
+        _layoutSave = Timer(const Duration(milliseconds: 400), () => LayoutStore.save(layout));
       case SaveServers(:final servers):
         _servers.then((store) => store.save(servers));
       case Pair(:final url, :final code, :final deviceName):
@@ -88,9 +97,11 @@ class EffectRunner {
               (result) => dispatch(TicketReplied(url, ticket, result: result)),
               onError: (Object e) => dispatch(TicketReplied(url, ticket, error: describeError(e))),
             );
-      case CreateSession(:final url, :final agent, :final project):
+      case CreateSession(:final url, :final agent, :final project, :final text):
         _request(url, ClientCommandSessionCreate(agent: agent, project: project), dispatch).then((result) {
-          if (result is CommandResultSession) dispatch(SessionOpened(url, result.session.id));
+          if (result is! CommandResultSession) return;
+          dispatch(SessionOpened(url, result.session.id));
+          if (text != null && text.trim().isNotEmpty) dispatch(MessageSubmitted(url, text));
         });
     }
   }

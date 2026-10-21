@@ -13,6 +13,7 @@ import 'activity_line.dart';
 import 'agent_text.dart';
 import 'approval_card.dart';
 import 'chat_header.dart';
+import 'chat_menu.dart';
 import 'chat_item_view.dart';
 import 'steps_view.dart';
 import 'worker_card.dart';
@@ -22,7 +23,7 @@ import 'orchestration_bar.dart';
 /// A session's chat: transcript (newest at the bottom, following the stream), its approvals,
 /// and the composer.
 class ChatView extends StatelessWidget {
-  const ChatView({super.key, required this.url, required this.status, required this.chat, this.onClose, this.header = true});
+  const ChatView({super.key, required this.url, required this.status, required this.chat, this.onClose, this.header = true, this.compact = false});
 
   final String url;
   final ServerStatus status;
@@ -31,6 +32,10 @@ class ChatView extends StatelessWidget {
 
   /// Phones put the session in the app bar instead.
   final bool header;
+
+  /// Beside another chat (the side pane's Worker tab): no orchestration strip and no composer,
+  /// which writes to the open chat.
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -71,14 +76,15 @@ class ChatView extends StatelessWidget {
           onClose: onClose,
           onBrowse: () => openPage(context, url, 'site://home'),
           onClearProject: () => StoreScope.read(context).dispatch(ProjectChosen(url, null)),
+          menu: ChatMenu(url: url, session: session),
         ),
-      OrchestrationBar(url: url, status: status, session: chat.session),
+      if (!compact) OrchestrationBar(url: url, status: status, session: chat.session),
       Expanded(
         child: rows.isEmpty
             ? Center(child: Text(chat.lastSeq == 0 ? 'Say something to start.' : '', style: const TextStyle(color: t.faint)))
             : SelectionArea(
                 child: ListView.builder(
-                  key: PageStorageKey('chat-$url-${chat.session}'),
+                  key: PageStorageKey('chat-$url-${chat.session}${compact ? '-side' : ''}'),
                   reverse: true,
                   padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
                   itemCount: rows.length,
@@ -99,7 +105,7 @@ class ChatView extends StatelessWidget {
                 ),
               ),
       ),
-      MessageComposer(key: ValueKey('composer-$url-${chat.session}'), url: url, busy: busy),
+      if (!compact) MessageComposer(key: ValueKey('composer-$url-${chat.session}'), url: url, busy: busy),
     ]);
   }
 }

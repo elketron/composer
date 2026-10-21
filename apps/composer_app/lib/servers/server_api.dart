@@ -18,6 +18,10 @@ const _timeout = Duration(seconds: 10);
   if (words.length >= 4 && words[0] == 'composer' && words[1] == 'login') {
     return (url: normalizeUrl(words[2]), code: words[3]);
   }
+  // An address and the code beside it: `10.0.2.2:7420 AB12-CD34`.
+  if (words.length == 2 && RegExp(r'^[A-Za-z0-9]{4}-[A-Za-z0-9]{4}$').hasMatch(words[1])) {
+    return (url: normalizeUrl(words[0]), code: words[1]);
+  }
   final text = words.join();
   final uri = Uri.tryParse(text.contains('://') ? text : 'https://$text');
   final code = uri?.queryParameters['code'];
@@ -35,7 +39,9 @@ String normalizeUrl(String input) {
     final local = text.startsWith('localhost') || text.startsWith('127.') || text.startsWith('[::1]');
     text = '${local ? 'http' : 'https'}://$text';
   }
-  final uri = Uri.parse(text);
+  // Half typed (`host:78a`) isn't an address yet: kept as typed, never thrown.
+  final uri = Uri.tryParse(text);
+  if (uri == null) return text;
   final base = uri.replace(query: '', fragment: '').toString().replaceAll(RegExp(r'[?#]+$'), '');
   return base.replaceAll(RegExp(r'/+$'), '');
 }

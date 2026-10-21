@@ -6,6 +6,7 @@ import '../../state/approval_text.dart';
 import '../../theme/composer_theme.dart';
 import '../../theme/tokens.dart' as t;
 import '../store_scope.dart';
+import 'navigation.dart';
 
 /// A recipe, a merge or a tool waiting for your answer: what it is, and Approve / Deny (and
 /// Always, for a tool with a rule).
@@ -70,6 +71,11 @@ class ApprovalCard extends StatelessWidget {
               child: const Text('Deny'),
             ),
           ),
+          // Keys answer it while its chat is open (wide layout).
+          if (isWide(context)) ...[
+            const SizedBox(width: 10),
+            Text(approvalCanAlways(approval) ? 'y / a / n' : 'y / n', style: mono(size: 11, color: t.faint)),
+          ],
         ]),
       ]),
     );

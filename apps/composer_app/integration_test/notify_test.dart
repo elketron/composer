@@ -33,8 +33,10 @@ void main() {
 
   testWidgets('approve from a notification, then hear the turn finish', (tester) async {
     app.main();
-    await pumpUntil(tester, find.text('online'));
+    await pumpUntil(tester, find.byKey(const Key('new-session')));
     await tester.tap(find.byKey(const Key('new-session')));
+    await pumpUntil(tester, find.byKey(const Key('start-chat')));
+    await tester.tap(find.byKey(const Key('start-chat')));
     await pumpUntil(tester, find.byKey(const Key('message')));
     await tester.enterText(
       find.byKey(const Key('message')),

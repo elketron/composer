@@ -10,7 +10,7 @@ import 'activity_dot.dart';
 /// A session in the Chats list: agent, state, last message, its project, and for an
 /// orchestrator the workers it runs, one line each.
 class SessionCard extends StatelessWidget {
-  const SessionCard({super.key, required this.status, required this.session, required this.onTap, this.unread = false});
+  const SessionCard({super.key, required this.status, required this.session, required this.onTap, this.unread = false, this.selected = false, this.onWorker});
 
   final ServerStatus status;
   final SessionInfo session;
@@ -18,6 +18,12 @@ class SessionCard extends StatelessWidget {
 
   /// Finished something you haven't seen.
   final bool unread;
+
+  /// The chat on screen (wide layout).
+  final bool selected;
+
+  /// A worker line was tapped; null: the card's tap.
+  final void Function(SessionInfo worker)? onWorker;
 
   @override
   Widget build(BuildContext context) {
@@ -28,8 +34,11 @@ class SessionCard extends StatelessWidget {
         : (unread ? 'new · ${ago(session.updated)}' : ago(session.updated));
     final project = session.project?.split('/').last;
     return Material(
-      color: t.surface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(t.radius), side: const BorderSide(color: t.border)),
+      color: selected ? t.raised : t.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(t.radius),
+        side: BorderSide(color: selected ? t.accent.withValues(alpha: 0.5) : t.border),
+      ),
       child: InkWell(
         key: Key('session-${session.id}'),
         borderRadius: BorderRadius.circular(t.radius),
@@ -57,9 +66,12 @@ class SessionCard extends StatelessWidget {
                 decoration: const BoxDecoration(border: Border(left: BorderSide(color: t.borderStrong))),
                 child: Column(children: [
                   for (final w in workers)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 2),
-                      child: Row(children: [
+                    InkWell(
+                      key: Key('worker-line-${w.id}'),
+                      onTap: onWorker == null ? null : () => onWorker!(w),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 2),
+                        child: Row(children: [
                         ActivityDot(status.activity(w)),
                         const SizedBox(width: 8),
                         Text(w.ticket ?? '#${w.id}', style: mono(size: 12, color: t.text)),
@@ -72,8 +84,10 @@ class SessionCard extends StatelessWidget {
                             style: const TextStyle(fontSize: 12, color: t.muted),
                           ),
                         ),
+                        const SizedBox(width: 8),
                         Text(status.activity(w), style: mono(size: 11, color: activityColor(status.activity(w)))),
-                      ]),
+                        ]),
+                      ),
                     ),
                 ]),
               ),

@@ -99,12 +99,15 @@ final class SessionClosed extends AppAction {
 }
 
 final class NewSessionRequested extends AppAction {
-  const NewSessionRequested(this.url, {this.agent = 'default', this.project});
+  const NewSessionRequested(this.url, {this.agent = 'default', this.project, this.text});
   final String url;
   final String agent;
 
   /// A name in the projects directory, or a path; null for none.
   final String? project;
+
+  /// A first message, sent once it is open.
+  final String? text;
 }
 
 final class MessageSubmitted extends AppAction {
@@ -330,4 +333,37 @@ final class ProjectsLoaded extends AppAction {
   const ProjectsLoaded(this.url, this.projects);
   final String url;
   final List<ProjectSummary> projects;
+}
+
+/// Show `tab` in the side pane (wide screens); for `changes`, the ticket it shows; for
+/// `worker`, the session.
+final class SideTabSelected extends AppAction {
+  const SideTabSelected(this.url, this.tab, {this.ticket, this.session});
+  final String url;
+  final SideTab tab;
+  final String? ticket;
+  final String? session;
+}
+
+/// Fold or unfold the session list (wide screens).
+final class SessionsToggled extends AppAction {
+  const SessionsToggled();
+}
+
+/// The side pane was dragged to `width`.
+final class SideResized extends AppAction {
+  const SideResized(this.width);
+  final double width;
+}
+
+/// The saved layout, read at start.
+final class LayoutLoaded extends AppAction {
+  const LayoutLoaded(this.layout);
+  final LayoutPrefs layout;
+}
+
+/// Close the side pane, keeping what it showed (wide screens).
+final class SideClosed extends AppAction {
+  const SideClosed(this.url);
+  final String url;
 }
