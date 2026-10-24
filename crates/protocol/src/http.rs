@@ -156,6 +156,23 @@ pub struct StageState {
     pub changed: Vec<Url>,
 }
 
+/// An MCP server from `config.toml` (`[mcp.<name>]`), whose tools agents may list.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct McpServerInfo {
+    pub name: String,
+    /// `stdio` or `http`.
+    pub transport: String,
+    /// `ready`, `failed` (see `error`) or `off` (`enabled = false`).
+    pub state: String,
+    pub error: Option<String>,
+    /// Its tools as agents list them (`github__get_issue`).
+    pub tools: Vec<String>,
+    /// The agents whose `tools:` include some of them.
+    pub agents: Vec<String>,
+}
+
 /// A pipeline: a site of staged work (`type: pipeline`), or a template one is made from
 /// (`templates/pipelines/<kind>/`: `site` is the kind).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

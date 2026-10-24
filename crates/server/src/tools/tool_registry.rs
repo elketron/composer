@@ -4,6 +4,8 @@ use composer_protocol::ToolInfo;
 use serde_json::Value;
 
 use crate::agent::AgentDefinition;
+use crate::mcp_clients::McpServers;
+use crate::server::Server;
 use crate::provider::{ModelToolCall, ToolSpec};
 use crate::tools::actions_tool::ActionsTool;
 use crate::tools::edit_tool::EditTool;
@@ -66,9 +68,41 @@ impl ToolRegistry {
             .collect()
     }
 
-    /// The same, for the protocol (`tool.list`).
-    pub fn infos_for(&self, agent: &AgentDefinition) -> Vec<ToolInfo> {
-        self.specs_for(agent)
+    /// The native tools `agent` lists, then the MCP tools it lists (servers it can reach).
+    /// A worker process gets its MCP tools from the parent, which runs them: one process per
+    /// MCP server, and approvals where the clients are.
+    pub async fn specs_with_mcp(
+        &self,
+        server: &Server,
+        session: &str,
+        agent: &AgentDefinition,
+    ) -> Vec<ToolSpec> {
+        let mut specs = self.specs_for(agent);
+        match &server.parent {
+            Some(parent) if !agent.mcp_servers().is_empty() => match parent.tools(session).await {
+                Ok(tools) => specs.extend(
+                    tools
+                        .into_iter()
+                        .filter(|t| t.name.contains("__"))
+                        .map(|t| ToolSpec {
+                            name: t.name,
+                            description: t.description,
+                            parameters: t.parameters,
+                        }),
+                ),
+                Err(e) => tracing::warn!("MCP tools from the parent: {e}"),
+            },
+            Some(_) => {}
+            None => specs.extend(server.mcp.specs_for(agent).await),
+        }
+        specs
+    }
+
+    /// The same, for the protocol (`tool.list`, answered by the parent).
+    pub async fn infos_for(&self, mcp: &McpServers, agent: &AgentDefinition) -> Vec<ToolInfo> {
+        let mut specs = self.specs_for(agent);
+        specs.extend(mcp.specs_for(agent).await);
+        specs
             .into_iter()
             .map(|spec| ToolInfo {
                 name: spec.name,
@@ -98,6 +132,18 @@ impl ToolRegistry {
             .iter()
             .find(|t| t.name() == name && context.agent.allows_tool(t.name()))
         else {
+            if let Some(parent) = &context.server.parent
+                && name.contains("__")
+                && context.agent.allows_mcp_tool(name)
+            {
+                return parent
+                    .call_tool(context.session.id(), name, args)
+                    .await
+                    .unwrap_or_else(|e| (e, true));
+            }
+            if let Some(result) = context.server.mcp.call(context, name, args).await {
+                return result;
+            }
             return (format!("unknown tool `{name}`"), true);
         };
         match tool.call(context, args).await {

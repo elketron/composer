@@ -943,6 +943,70 @@ approved from the TUI.
 24. ✅ **stale stages** — input hashes, staleness, rerun from a stage.
 25. ✅ **learning from edits** — kept agent output, recurring-edit detection, proposed amendments; Verify.
 
+## Phase 6: MCP servers
+
+Micro apps cover most of what a site needs, but some tools live elsewhere: GitHub, a browser, a database, Home
+Assistant. Composer's agents become **MCP clients**: an MCP server configured once gives its tools to the
+agents that list them, on either harness. (`composer mcp`, phase 3, is the other direction: composer's tools
+for a worker's Claude Code run.)
+
+### Configuring a server
+
+```toml
+[mcp.github]
+command = "github-mcp-server"           # stdio: a child process, JSON-RPC lines
+args = ["stdio"]
+env = { GITHUB_PERSONAL_ACCESS_TOKEN = "${GITHUB_TOKEN}" }
+# or streamable HTTP:
+# url = "https://example.com/mcp"
+# headers = { Authorization = "Bearer ${EXAMPLE_TOKEN}" }
+allow = ["get_*", "list_*", "search_*"]  # run without asking
+enabled = true
+```
+
+- In `config.toml`, not a page: it holds secrets and starts processes, so it stays outside agent reach.
+  `${VAR}` is taken from composer's environment, so tokens needn't be written in the file.
+- A server starts at the first turn that needs it (an agent listing it), and stays up. When it exits or
+  fails, the next use connects again; the failure is the call's result and the server's state.
+  `notifications/tools/list_changed` refreshes its tools.
+
+### Tools for agents
+
+- A server's tool `create_issue` is the tool `github__create_issue`, its description prefixed `[github]`.
+- **Opt-in per agent**: `tools: [open, …, github__*]` (a server's tools) or `github__get_issue` (one).
+  An agent without a `tools:` list gets every native tool, but no MCP tools: a big server's schemas would
+  crowd a small model's context.
+- Workers on Claude Code get them through `composer mcp` like the native ones (as
+  `mcp__composer__github__create_issue`), so approvals and rules are the same on both harnesses.
+- Results: the text content, joined; `structuredContent` as JSON when there is no text; images and
+  resources are named, not inlined (for now). `isError` makes a failed call the model can recover from.
+
+### Approvals
+
+- A call is an `mcp` approval (`MCP github: create_issue`, its arguments as the body) in the session, on any
+  client and the phone, unless the server's `allow` matches the tool or the user said **always** to it
+  before (`state/tool_rules.json`, under `mcp:<server>`).
+- Without a client to answer (a pipeline stage at night) the call waits like any approval; cancelling the
+  turn denies it.
+
+### Seeing them
+
+- `mcp.list`: each server's state (`ready`, `failed` with the error, `off`), its tools, and which agents list
+  it; listing connects the servers that are on, so it is also a test of them. The TUI's `:mcp` shows it.
+- A native worker process doesn't start servers of its own: the parent lists and runs its MCP tools
+  (`tool.list` / `tool.call`), so there is one process per server and the approval is asked where the
+  clients are.
+
+### Not yet
+
+Resources, prompts, sampling and elicitation; OAuth sign-in for remote servers (headers with a token work);
+a server per session or per project.
+
+### Milestones
+
+26. ✅ **MCP servers** — `[mcp.<name>]` (stdio and streamable HTTP), tools for the agents that list them (both
+    harnesses), approvals with `allow` and always, `mcp.list` and `:mcp`.
+
 ## Open questions
 
 - None blocking.

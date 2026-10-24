@@ -89,7 +89,9 @@ enum ApprovalKind {
   merge('merge'),
   tool('tool'),
   /// A change to a pipeline's stage contract or `_config` page, learned from your edits.
-  amendment('amendment');
+  amendment('amendment'),
+  /// A call to an MCP server's tool (`rule`: the tool, for `always`; it holds everywhere).
+  mcp('mcp');
 
   const ApprovalKind(this.wire);
   final String wire;
@@ -252,6 +254,7 @@ sealed class ClientCommand {
         'harness.list' => ClientCommandHarnessList.fromJson(json),
         'harness.set' => ClientCommandHarnessSet.fromJson(json),
         'project.overview' => ClientCommandProjectOverview.fromJson(json),
+        'mcp.list' => ClientCommandMcpList.fromJson(json),
         'pipeline.list' => ClientCommandPipelineList.fromJson(json),
         'pipeline.new' => ClientCommandPipelineNew.fromJson(json),
         'work.new' => ClientCommandWorkNew.fromJson(json),
@@ -507,6 +510,19 @@ final class ClientCommandProjectOverview extends ClientCommand {
   Map<String, Object?> toJson() => {
         'type': 'project.overview',
         'project': project,
+      };
+}
+
+/// The MCP servers in `config.toml`, connecting those that are on (so it is also a test of
+/// them); the reply is `mcp_servers`.
+final class ClientCommandMcpList extends ClientCommand {
+  const ClientCommandMcpList();
+
+  factory ClientCommandMcpList.fromJson(Map<String, Object?> json) => ClientCommandMcpList(
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'mcp.list',
       };
 }
 
@@ -925,6 +941,7 @@ sealed class CommandResult {
         'changes' => CommandResultChanges.fromJson(json),
         'merged' => CommandResultMerged.fromJson(json),
         'project' => CommandResultProject.fromJson(json),
+        'mcp_servers' => CommandResultMcpServers.fromJson(json),
         'pipelines' => CommandResultPipelines.fromJson(json),
         'pipeline' => CommandResultPipeline.fromJson(json),
         'work' => CommandResultWork.fromJson(json),
@@ -1125,6 +1142,23 @@ final class CommandResultProject extends CommandResult {
       };
 }
 
+final class CommandResultMcpServers extends CommandResult {
+  const CommandResultMcpServers({
+    required this.servers,
+  });
+
+  final List<McpServerInfo> servers;
+
+  factory CommandResultMcpServers.fromJson(Map<String, Object?> json) => CommandResultMcpServers(
+        servers: (json['servers'] as List).map((e) => McpServerInfo.fromJson(e as Map<String, Object?>)).toList(),
+      );
+
+  Map<String, Object?> toJson() => {
+        'kind': 'mcp_servers',
+        'servers': servers.map((e) => e.toJson()).toList(),
+      };
+}
+
 final class CommandResultPipelines extends CommandResult {
   const CommandResultPipelines({
     required this.pipelines,
@@ -1221,6 +1255,52 @@ class HarnessSwitch {
         'entry': entry,
         'allowed': allowed,
         'on': on,
+      };
+}
+
+/// An MCP server from `config.toml` (`[mcp.<name>]`), whose tools agents may list.
+class McpServerInfo {
+  const McpServerInfo({
+    required this.name,
+    required this.transport,
+    required this.state,
+    this.error,
+    required this.tools,
+    required this.agents,
+  });
+
+  final String name;
+
+  /// `stdio` or `http`.
+  final String transport;
+
+  /// `ready`, `failed` (see `error`) or `off` (`enabled = false`).
+  final String state;
+
+  final String? error;
+
+  /// Its tools as agents list them (`github__get_issue`).
+  final List<String> tools;
+
+  /// The agents whose `tools:` include some of them.
+  final List<String> agents;
+
+  factory McpServerInfo.fromJson(Map<String, Object?> json) => McpServerInfo(
+        name: json['name'] as String,
+        transport: json['transport'] as String,
+        state: json['state'] as String,
+        error: json['error'] == null ? null : json['error'] as String,
+        tools: (json['tools'] as List).map((e) => e as String).toList(),
+        agents: (json['agents'] as List).map((e) => e as String).toList(),
+      );
+
+  Map<String, Object?> toJson() => {
+        'name': name,
+        'transport': transport,
+        'state': state,
+        if (error != null) 'error': error,
+        'tools': tools,
+        'agents': agents,
       };
 }
 

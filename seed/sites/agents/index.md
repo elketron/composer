@@ -39,4 +39,7 @@ System prompt here.
 
 - Keep prompts short: [Home](site://home) already explains the web, don't repeat it.
 - `tools` and `sites` are enforced by the server, not just advice.
+- MCP servers set up in the user's `config.toml` (the TUI's `:mcp` lists them) add tools named
+  `<server>__<tool>`. List `github__*` (or one, `github__get_issue`) in `tools` to give them to an agent;
+  one without a `tools` list gets none. Their calls ask the user unless the server allows them.
 - Changing an agent changes all future sessions using it; tell the user when you do.

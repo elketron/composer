@@ -4,7 +4,7 @@ use crate::action::Action;
 use crate::store::types::PickerKind;
 
 /// Every command, as shown by help: (usage, what it does).
-pub const COMMANDS: [(&str, &str); 20] = [
+pub const COMMANDS: [(&str, &str); 21] = [
     (
         ":new [agent]",
         "start a new session (default agent, or e.g. orchestrator)",
@@ -41,6 +41,10 @@ pub const COMMANDS: [(&str, &str); 20] = [
     (
         ":harness [on|off] [name]",
         "the project's external harnesses; turn Claude Code (or claude-code:<model>) on or off",
+    ),
+    (
+        ":mcp",
+        "the MCP servers in config.toml: connects them and says which work, their tools and agents",
     ),
     (
         ":merge [ticket]",
@@ -154,6 +158,7 @@ pub fn parse_command(line: &str) -> Result<Action, String> {
                 _ => Err("usage: :harness [on|off] [claude-code[:model]]".into()),
             }
         }
+        "mcp" => Ok(Action::McpServers),
         "merge" => Ok(Action::TicketMerge(arg)),
         "discard" => arg
             .map(Action::TicketDiscard)
@@ -240,6 +245,7 @@ mod tests {
         );
         assert!(parse_command("discard").is_err());
         assert_eq!(parse_command("pipeline").unwrap(), Action::Pipelines);
+        assert_eq!(parse_command("mcp").unwrap(), Action::McpServers);
         assert_eq!(
             parse_command("pipeline new video shorts").unwrap(),
             Action::PipelineNew {

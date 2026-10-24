@@ -52,6 +52,8 @@ pub enum Action {
     ProjectView(Option<String>),
     /// `gp`: the project view on or off.
     ToggleProjectView,
+    /// `:mcp`: the MCP servers, their state and tools.
+    McpServers,
     /// `:pipeline`: the pipelines and the templates new ones come from.
     Pipelines,
     /// `:pipeline new <kind> [name]`: a pipeline site from a template.

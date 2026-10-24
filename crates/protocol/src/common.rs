@@ -174,6 +174,8 @@ pub enum ApprovalKind {
     Tool,
     /// A change to a pipeline's stage contract or `_config` page, learned from your edits.
     Amendment,
+    /// A call to an MCP server's tool (`rule`: the tool, for `always`; it holds everywhere).
+    Mcp,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

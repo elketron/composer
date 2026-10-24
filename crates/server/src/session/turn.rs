@@ -139,7 +139,10 @@ async fn run_turn(
         AgentDefinition::load(&server.workspace, &session.info().agent)
             .map_err(|e| e.to_string())?,
     );
-    let tools = server.tools.specs_for(&agent);
+    let tools = server
+        .tools
+        .specs_with_mcp(server, session.id(), &agent)
+        .await;
     let context = ToolContext {
         server: server.clone(),
         session: session.clone(),

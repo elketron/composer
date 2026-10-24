@@ -132,6 +132,8 @@ pub enum Pending {
     Harnesses,
     /// `project.overview` for the project view.
     Overview,
+    /// `mcp.list`: say how the servers are.
+    McpServers,
     /// `pipeline.list`, `pipeline.new`, `work.new`: say what there is, open what was made.
     Pipelines,
     Pipeline,

@@ -230,6 +230,38 @@ impl Connection {
                 });
                 None
             }
+            // MCP servers may need connecting first: answered from a task.
+            ClientCommand::ToolList { session } => {
+                let (connection, server) = (self.clone(), server.clone());
+                tokio::spawn(async move {
+                    let result = match server.workers.tool_context(&server, &session) {
+                        Ok(context) => {
+                            let mut tools =
+                                server.tools.infos_for(&server.mcp, &context.agent).await;
+                            // External harnesses ask the user through it.
+                            if server.workers.get(&session).is_some_and(|h| h.resumable) {
+                                tools.push(permission_tool_info());
+                            }
+                            Ok(CommandResult::Tools { tools })
+                        }
+                        Err(message) => Err(message),
+                    };
+                    connection.reply(id, result);
+                });
+                None
+            }
+            ClientCommand::McpList => {
+                let (connection, server) = (self.clone(), server.clone());
+                tokio::spawn(async move {
+                    let agents = {
+                        let index = server.index.read().expect("index lock");
+                        AgentDefinition::all(&server.workspace, &index)
+                    };
+                    let servers = server.mcp.list(&agents).await;
+                    connection.reply(id, Ok(CommandResult::McpServers { servers }));
+                });
+                None
+            }
             ClientCommand::ToolCall {
                 session,
                 name,
@@ -479,15 +511,6 @@ impl Connection {
                 server.workers.finish(server, &id, state, summary);
                 Ok(CommandResult::Done)
             }
-            ClientCommand::ToolList { session } => {
-                let context = server.workers.tool_context(server, &session)?;
-                let mut tools = server.tools.infos_for(&context.agent);
-                // External harnesses ask the user through it.
-                if server.workers.get(&session).is_some_and(|h| h.resumable) {
-                    tools.push(permission_tool_info());
-                }
-                Ok(CommandResult::Tools { tools })
-            }
             ClientCommand::ProjectOverview { project } => {
                 crate::project::project_overview(server, &project)
                     .map(|overview| CommandResult::Project { overview })
@@ -552,6 +575,8 @@ impl Connection {
             | ClientCommand::TicketDiscard { .. }
             | ClientCommand::WorkRun { .. }
             | ClientCommand::ToolCall { .. }
+            | ClientCommand::ToolList { .. }
+            | ClientCommand::McpList
             | ClientCommand::SlotAcquire
             | ClientCommand::SlotRelease { .. }
             | ClientCommand::ApprovalAsk { .. } => Err("handled asynchronously".into()),

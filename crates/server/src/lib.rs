@@ -15,6 +15,7 @@ mod home;
 mod hub;
 mod init;
 pub mod mcp;
+pub mod mcp_clients;
 pub mod pipeline;
 pub mod project;
 pub mod provider;
@@ -30,8 +31,8 @@ pub mod worker;
 
 pub use config::Config;
 pub use config_sections::{
-    AgentConfig, AttachmentsConfig, ClaudeCodeConfig, PipelinesConfig, ProjectSettings,
-    ProjectsConfig, ProviderConfig, RemindersConfig, ServerConfig,
+    AgentConfig, AttachmentsConfig, ClaudeCodeConfig, McpServerConfig, PipelinesConfig,
+    ProjectSettings, ProjectsConfig, ProviderConfig, RemindersConfig, ServerConfig,
 };
 pub use error::{Result, ServerError};
 pub use hash::content_hash;

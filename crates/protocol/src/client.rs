@@ -81,6 +81,11 @@ pub enum ClientCommand {
     #[serde(rename = "project.overview")]
     ProjectOverview { project: String },
 
+    /// The MCP servers in `config.toml`, connecting those that are on (so it is also a test of
+    /// them); the reply is `mcp_servers`.
+    #[serde(rename = "mcp.list")]
+    McpList,
+
     /// The pipelines (sites of staged work) and the templates new ones are made from; the reply
     /// is `pipelines`.
     #[serde(rename = "pipeline.list")]

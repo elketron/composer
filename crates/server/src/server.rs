@@ -23,6 +23,7 @@ use crate::init::local_token;
 use crate::provider::{OpenAiProvider, Provider};
 use crate::session::{Session, SessionManager};
 use crate::slot_pool::SlotPool;
+use crate::mcp_clients::McpServers;
 use crate::tools::ToolRegistry;
 use crate::worker::{ParentLink, WorkerRegistry};
 
@@ -37,6 +38,8 @@ pub struct Server {
     pub hub: EventHub,
     pub sessions: SessionManager,
     pub tools: ToolRegistry,
+    /// MCP servers from `config.toml`, their tools for the agents that list them.
+    pub mcp: McpServers,
     pub approvals: Approvals,
     pub pending_approvals: PendingApprovals,
     /// Required on every request (header or `?token=`).
@@ -124,6 +127,7 @@ impl Server {
             sessions: SessionManager::load(&sessions_dir)?,
             slots,
             tools: ToolRegistry::standard(),
+            mcp: McpServers::new(&config.mcp),
             approvals,
             pending_approvals: PendingApprovals::default(),
             workers: WorkerRegistry::default(),

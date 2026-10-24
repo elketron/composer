@@ -1,10 +1,11 @@
+use std::collections::BTreeMap;
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
 use crate::config_sections::{
-    AgentConfig, AttachmentsConfig, ClaudeCodeConfig, PipelinesConfig, ProjectsConfig,
-    ProviderConfig, RemindersConfig, ServerConfig,
+    AgentConfig, AttachmentsConfig, ClaudeCodeConfig, McpServerConfig, PipelinesConfig,
+    ProjectsConfig, ProviderConfig, RemindersConfig, ServerConfig,
 };
 use crate::error::{Result, ServerError};
 
@@ -27,6 +28,9 @@ pub struct Config {
     pub claude_code: ClaudeCodeConfig,
     #[serde(default = "section")]
     pub attachments: AttachmentsConfig,
+    /// MCP servers by name, `[mcp.github]`.
+    #[serde(default)]
+    pub mcp: BTreeMap<String, McpServerConfig>,
 }
 
 impl Config {

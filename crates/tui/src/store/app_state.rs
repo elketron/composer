@@ -314,6 +314,10 @@ impl AppState {
                     Pending::Overview,
                 )
             }
+            Action::McpServers => {
+                self.ui.flash("connecting the MCP servers…", FlashLevel::Info);
+                self.send(ClientCommand::McpList, Pending::McpServers)
+            }
             Action::Pipelines => self.send(ClientCommand::PipelineList, Pending::Pipelines),
             Action::PipelineNew { kind, name } => {
                 self.send(ClientCommand::PipelineNew { kind, name }, Pending::Pipeline)
@@ -489,6 +493,7 @@ impl AppState {
                         ApprovalKind::Recipe => format!("{}-{}.just", a.site, a.recipe),
                         ApprovalKind::Merge => format!("merge-{}.txt", a.request),
                         ApprovalKind::Tool => format!("tool-{}.txt", a.request),
+                        ApprovalKind::Mcp => format!("mcp-{}.json", a.request),
                         ApprovalKind::Amendment => format!("amendment-{}.diff", a.request),
                     },
                     text: a.body.clone(),
@@ -858,6 +863,11 @@ impl AppState {
                 self.ui.flash(states.join(" · "), FlashLevel::Info);
                 vec![]
             }
+            (Pending::McpServers, CommandResult::McpServers { servers }) => {
+                let (text, level) = mcp_summary(&servers);
+                self.ui.flash(text, level);
+                vec![]
+            }
             (Pending::Overview, CommandResult::Project { overview }) => {
                 self.project_view.loaded(overview);
                 vec![]
@@ -969,8 +979,53 @@ impl AppState {
     }
 }
 
+/// `:mcp`'s line: each server's state, tool count and agents; a warning when one failed.
+fn mcp_summary(servers: &[composer_protocol::http::McpServerInfo]) -> (String, FlashLevel) {
+    if servers.is_empty() {
+        return (
+            "no MCP servers: add [mcp.<name>] to config.toml, then list its tools in an agent's \
+             tools: (<name>__*)"
+                .into(),
+            FlashLevel::Info,
+        );
+    }
+    // The ones that work first: a long error at the end is what gets cut.
+    let mut servers: Vec<&composer_protocol::http::McpServerInfo> = servers.iter().collect();
+    servers.sort_by_key(|s| match s.state.as_str() {
+        "ready" => 0,
+        "failed" => 2,
+        _ => 1,
+    });
+    let parts: Vec<String> = servers
+        .iter()
+        .map(|s| {
+            let agents = if s.agents.is_empty() {
+                "no agent lists it".to_string()
+            } else {
+                format!("for {}", s.agents.join(", "))
+            };
+            match s.state.as_str() {
+                "ready" => format!("{} ready, {} tools, {agents}", s.name, s.tools.len()),
+                "failed" => format!(
+                    "{} failed: {}",
+                    s.name,
+                    s.error.as_deref().unwrap_or("unknown error")
+                ),
+                state => format!("{} {state}", s.name),
+            }
+        })
+        .collect();
+    let level = if servers.iter().any(|s| s.state == "failed") {
+        FlashLevel::Warn
+    } else {
+        FlashLevel::Info
+    };
+    (format!("mcp: {}", parts.join(" · ")), level)
+}
+
 #[cfg(test)]
 mod tests {
+    use composer_protocol::http::McpServerInfo;
     use composer_protocol::{ChatMessage, Role, SessionInfo, TurnState};
 
     use super::*;
@@ -1355,5 +1410,28 @@ mod tests {
             "{}",
             flash.text
         );
+    }
+
+    #[test]
+    fn mcp_lines() {
+        let server = |name: &str, state: &str, error: Option<&str>| McpServerInfo {
+            name: name.into(),
+            transport: "stdio".into(),
+            state: state.into(),
+            error: error.map(Into::into),
+            tools: vec!["a__x".into(), "a__y".into()],
+            agents: vec!["default".into()],
+        };
+        let (text, level) = mcp_summary(&[
+            server("github", "ready", None),
+            server("broken", "failed", Some("starting `x`: not found")),
+            server("docs", "off", None),
+        ]);
+        assert_eq!(
+            text,
+            "mcp: github ready, 2 tools, for default · docs off · broken failed: starting `x`: not found"
+        );
+        assert_eq!(level, FlashLevel::Warn);
+        assert!(mcp_summary(&[]).0.starts_with("no MCP servers"));
     }
 }

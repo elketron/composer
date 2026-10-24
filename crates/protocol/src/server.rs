@@ -220,6 +220,9 @@ pub enum CommandResult {
     Project {
         overview: crate::http::ProjectOverview,
     },
+    McpServers {
+        servers: Vec<crate::http::McpServerInfo>,
+    },
     Pipelines {
         pipelines: Vec<crate::http::PipelineSummary>,
         templates: Vec<crate::http::PipelineSummary>,

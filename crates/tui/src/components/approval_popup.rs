@@ -26,7 +26,7 @@ impl Component for ApprovalPopup {
                 if state
                     .approvals
                     .current()
-                    .is_some_and(|a| a.kind == ApprovalKind::Tool && a.rule.is_some()) =>
+                    .is_some_and(|a| can_always(a.kind) && a.rule.is_some()) =>
             {
                 vec![Action::ApprovalDecide(ApprovalDecision::Always)]
             }
@@ -55,6 +55,7 @@ impl Component for ApprovalPopup {
             ApprovalKind::Recipe => "run recipe?",
             ApprovalKind::Merge => "merge?",
             ApprovalKind::Tool => "allow tool?",
+            ApprovalKind::Mcp => "allow MCP tool?",
             ApprovalKind::Amendment => "amend the pipeline?",
         };
         let title = if more > 0 {
@@ -133,13 +134,17 @@ impl Component for ApprovalPopup {
                 Some(rule) => format!("a always: allow {rule} in this project from now on"),
                 None => "outside its allowlist".to_string(),
             },
+            ApprovalKind::Mcp => match &approval.rule {
+                Some(rule) => format!("a always: allow {rule} from now on, for any agent that lists it"),
+                None => "an MCP server's tool".to_string(),
+            },
         };
         lines.push(Line::from(Span::styled(note, theme::faint())));
         let mut keys = vec![
             Span::styled("y", Style::new().fg(theme::OK)),
             Span::styled(" approve   ", theme::faint()),
         ];
-        if approval.kind == ApprovalKind::Tool && approval.rule.is_some() {
+        if can_always(approval.kind) && approval.rule.is_some() {
             keys.push(Span::styled("a", Style::new().fg(theme::OK)));
             keys.push(Span::styled(" always   ", theme::faint()));
         }
@@ -154,4 +159,9 @@ impl Component for ApprovalPopup {
         lines.push(Line::from(keys));
         frame.render_widget(Paragraph::new(lines), inner);
     }
+}
+
+/// Kinds where `always` remembers a rule.
+fn can_always(kind: ApprovalKind) -> bool {
+    matches!(kind, ApprovalKind::Tool | ApprovalKind::Mcp)
 }

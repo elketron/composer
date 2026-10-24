@@ -11,6 +11,7 @@ String approvalQuestion(ServerMessageApprovalRequest a) => switch (a.kind ?? App
       ApprovalKind.recipe => 'Run recipe?',
       ApprovalKind.merge => 'Merge?',
       ApprovalKind.tool => 'Allow tool?',
+      ApprovalKind.mcp => 'Allow MCP tool?',
       ApprovalKind.amendment => 'Amend the pipeline?',
     };
 
@@ -21,8 +22,12 @@ String approvalNote(ServerMessageApprovalRequest a) => switch (a.kind ?? Approva
       ApprovalKind.tool => a.rule == null
           ? 'Claude Code wants a tool outside its allowlist.'
           : 'Always allows ${a.rule} in this project from now on.',
+      ApprovalKind.mcp => a.rule == null
+          ? "A call to an MCP server's tool."
+          : 'Always allows ${a.rule} from now on, for any agent that lists it.',
       ApprovalKind.amendment => 'Learned from your edits at its gate: every work reads the change from then on. Dismiss leaves it as it is.',
     };
 
 /// Whether `always` is an answer to it.
-bool approvalCanAlways(ServerMessageApprovalRequest a) => a.kind == ApprovalKind.tool && a.rule != null;
+bool approvalCanAlways(ServerMessageApprovalRequest a) =>
+    (a.kind == ApprovalKind.tool || a.kind == ApprovalKind.mcp) && a.rule != null;

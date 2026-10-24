@@ -125,6 +125,27 @@ pub struct AgentConfig {
     pub max_workers: u32,
 }
 
+/// An MCP server whose tools composer's agents may use, `[mcp.<name>]`: a `command` (stdio) or
+/// a `url` (streamable HTTP). `${VAR}` in `env` and `headers` is taken from composer's environment.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+pub struct McpServerConfig {
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub command: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub args: Vec<String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub env: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub url: String,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub headers: BTreeMap<String, String>,
+    /// Tools that run without asking: names or `prefix*` (`get_*`); `*` for all.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub allow: Vec<String>,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+}
+
 /// llama.cpp's `llama-server` on this machine; set your own in config.toml.
 fn default_base_url() -> String {
     "http://127.0.0.1:8080/v1".into()

@@ -113,4 +113,27 @@ impl AgentDefinition {
             .as_ref()
             .is_none_or(|tools| tools.iter().any(|t| t == tool))
     }
+
+    /// Whether `tools:` lists this MCP tool (`github__get_issue`), by name or as `github__*`.
+    /// Never without a `tools:` list: MCP tools are opt-in.
+    pub fn allows_mcp_tool(&self, tool: &str) -> bool {
+        self.tools.as_ref().is_some_and(|tools| {
+            tools
+                .iter()
+                .any(|t| t.contains("__") && crate::mcp_clients::glob_matches(t, tool))
+        })
+    }
+
+    /// The MCP servers whose tools `tools:` lists (`github` for `github__*`).
+    pub fn mcp_servers(&self) -> Vec<String> {
+        let mut servers: Vec<String> = self
+            .tools
+            .iter()
+            .flatten()
+            .filter_map(|t| t.split_once("__").map(|(server, _)| server.to_string()))
+            .collect();
+        servers.sort();
+        servers.dedup();
+        servers
+    }
 }
