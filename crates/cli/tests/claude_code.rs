@@ -167,12 +167,17 @@ async fn claude_code_works_tickets() {
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).unwrap();
     }
+    // A dependency cache it may read, and one that doesn't exist (skipped).
+    let deps = root.join("deps");
+    std::fs::create_dir_all(&deps).unwrap();
     std::fs::write(
         home.config_file(),
         format!(
-            "[provider]\nbase_url = \"{base_url}\"\n\n[projects.\"{}\"]\nexternal_harnesses = [\"claude-code\"]\nallowed_tools = [\"Bash(cargo test:*)\"]\nmodels = [\"claude-code:sonnet\"]\n\n[claude_code]\ncommand = \"{}\"\n",
+            "[provider]\nbase_url = \"{base_url}\"\n\n[projects.\"{}\"]\nexternal_harnesses = [\"claude-code\"]\nallowed_tools = [\"Bash(cargo test:*)\"]\nmodels = [\"claude-code:sonnet\"]\n\n[claude_code]\ncommand = \"{}\"\nread_dirs = [\"{}\", \"{}/missing\"]\n",
             project.display(),
-            fake.display()
+            fake.display(),
+            deps.display(),
+            root.display()
         ),
     )
     .unwrap();
@@ -311,6 +316,15 @@ async fn claude_code_works_tickets() {
         args.contains(&mine.file) && !args.contains(&theirs.file),
         "{args}"
     );
+    // The cache: a working folder it may read but not edit.
+    let rule = format!("/{}/**", deps.display());
+    assert!(args.contains(&format!("--add-dir\n{}\n", deps.display())), "{args}");
+    assert!(
+        args.contains(&format!("--disallowedTools\nEdit({rule})\nWrite({rule})\n--allowedTools\n")),
+        "{args}"
+    );
+    assert!(args.contains(&format!("Read({rule})")), "{args}");
+    assert!(!args.contains("missing"), "{args}");
     // The project's models pick the model.
     assert!(args.contains("--model\nsonnet\n"), "{args}");
     let events =

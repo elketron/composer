@@ -68,6 +68,10 @@ allowed_tools = ["Read", "Edit", "Write", "Glob", "Grep", "mcp__composer", "Bash
 # Anything else is asked of you (an approval in the worker's chat; "always" remembers it for the
 # project, in state/tool_rules.json). false: denied without asking.
 ask = true
+# Folders it may read (Read, Glob, Grep) but never edit: dependency sources and model caches, so it
+# can look up how a library really works. Missing ones are skipped. Only source folders: ~/.cargo
+# itself can hold credentials.toml, ~/.cache/huggingface a token.
+read_dirs = ["~/.cargo/registry/src", "~/.cargo/git/checkouts", "~/.rustup/toolchains", "~/.cache/huggingface/hub", "~/go/pkg/mod", "~/.pub-cache/hosted", "~/.pub-cache/git", "~/.nuget/packages", "~/.bun/install/cache", "~/.cache/uv", "~/.gradle/caches/modules-2/files-2.1", "~/.m2/repository"]
 
 [attachments]
 # Largest upload, in MB.

@@ -86,6 +86,10 @@ pub struct ClaudeCodeConfig {
     /// session); `false` denies it without asking.
     #[serde(default = "default_true")]
     pub ask: bool,
+    /// Folders it may read (Read, Glob, Grep) but never edit: dependency sources and model
+    /// caches. `~/` or absolute; the ones that don't exist are skipped.
+    #[serde(default = "default_claude_read_dirs")]
+    pub read_dirs: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -177,6 +181,27 @@ fn default_claude_max_turns() -> u32 {
 
 fn default_claude_timeout() -> u64 {
     60
+}
+
+/// Where package managers keep sources a model can read. Only the source folders: `~/.cargo`
+/// itself can hold `credentials.toml`, `~/.cache/huggingface` a `token`.
+fn default_claude_read_dirs() -> Vec<String> {
+    [
+        "~/.cargo/registry/src",
+        "~/.cargo/git/checkouts",
+        "~/.rustup/toolchains",
+        "~/.cache/huggingface/hub",
+        "~/go/pkg/mod",
+        "~/.pub-cache/hosted",
+        "~/.pub-cache/git",
+        "~/.nuget/packages",
+        "~/.bun/install/cache",
+        "~/.cache/uv",
+        "~/.gradle/caches/modules-2/files-2.1",
+        "~/.m2/repository",
+    ]
+    .map(String::from)
+    .to_vec()
 }
 
 fn default_claude_tools() -> Vec<String> {

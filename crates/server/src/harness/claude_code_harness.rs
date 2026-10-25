@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
 
@@ -103,11 +103,17 @@ impl Harness for ClaudeCodeHarness {
             "args": ["mcp", "--session", request.session, "--parent", format!("http://{listen}")],
             "env": { "COMPOSER_HOME": server.home.root() },
         }}});
+        let read_dirs = read_dirs(&config.read_dirs);
         let tools: Vec<String> = config
             .allowed_tools
             .iter()
             .chain(&request.settings.allowed_tools)
             .cloned()
+            .chain(read_dirs.iter().map(|(_, rule)| format!("Read({rule})")))
+            .collect();
+        let denied: Vec<String> = read_dirs
+            .iter()
+            .flat_map(|(_, rule)| [format!("Edit({rule})"), format!("Write({rule})")])
             .collect();
 
         // A pipeline stage: its scoped context too.
@@ -117,6 +123,19 @@ impl Harness for ClaudeCodeHarness {
                 Some(stage) => format!("{}\n\n---\n\n{stage}", system_prompt(&request.agent)),
                 None => system_prompt(&request.agent),
             };
+        let appended = if read_dirs.is_empty() {
+            appended
+        } else {
+            let list: Vec<String> = read_dirs
+                .iter()
+                .map(|(path, _)| path.display().to_string())
+                .collect();
+            format!(
+                "{appended}\n\nDependency sources and model caches you may read with Read, Glob \
+                 and Grep (not the shell), never change: {}",
+                list.join(", ")
+            )
+        };
         // The prompt goes first: the list options after it take every following word.
         let mut command = tokio::process::Command::new(&config.command);
         command
@@ -151,6 +170,12 @@ impl Harness for ClaudeCodeHarness {
         }
         for dir in dirs {
             command.arg("--add-dir").arg(dir);
+        }
+        for (dir, _) in &read_dirs {
+            command.arg("--add-dir").arg(dir);
+        }
+        if !denied.is_empty() {
+            command.arg("--disallowedTools").args(&denied);
         }
         command.arg("--allowedTools").args(&tools);
 
@@ -246,6 +271,26 @@ fn system_prompt(agent: &str) -> String {
     )
 }
 
+/// `[claude_code] read_dirs` that exist, each with its path in Claude Code's rule syntax
+/// (`~/x/**`, or `//abs/**` for an absolute path).
+pub(crate) fn read_dirs(dirs: &[String]) -> Vec<(PathBuf, String)> {
+    dirs.iter()
+        .filter_map(|dir| {
+            let dir = dir.trim_end_matches('/');
+            let rule = if dir.starts_with("~/") {
+                format!("{dir}/**")
+            } else if dir.starts_with('/') {
+                format!("/{dir}/**")
+            } else {
+                tracing::warn!("[claude_code] read_dirs: `{dir}` is neither ~/… nor absolute");
+                return None;
+            };
+            let path = crate::tools::expand_home(dir);
+            path.is_dir().then_some((path, rule))
+        })
+        .collect()
+}
+
 /// A random UUID (v4), as the CLI wants for `--session-id`.
 fn new_session_id() -> String {
     let mut b: [u8; 16] = rand::random();
@@ -272,5 +317,17 @@ mod tests {
         assert_eq!(id.len(), 36);
         assert_eq!(&id[14..15], "4");
         assert_ne!(id, new_session_id());
+    }
+
+    #[test]
+    fn read_dirs_become_rules() {
+        let dir = tempfile::tempdir().unwrap();
+        let absolute = dir.path().display().to_string();
+        let found = read_dirs(&[
+            format!("{absolute}/"),
+            format!("{absolute}/missing"),
+            "relative/dir".into(),
+        ]);
+        assert_eq!(found, vec![(dir.path().to_path_buf(), format!("/{absolute}/**"))]);
     }
 }

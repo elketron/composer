@@ -513,7 +513,10 @@ Built (milestone 13):
   Checked against the project before it becomes a worktree; refused with the snippet to add otherwise.
 - **`[claude_code]`:** `command` (default `claude`), `model` (empty: the CLI's default), `max_turns` (60),
   `timeout_minutes` (60), `allowed_tools` (read/edit/write/search, the composer MCP tools, and
-  `git status|diff|log|add|commit`).
+  `git status|diff|log|add|commit`), `read_dirs` (dependency sources and model caches: `~/.cargo/registry/src`,
+  `~/.rustup/toolchains`, `~/.cache/huggingface/hub`, Go, Dart, NuGet, Bun, uv, Gradle, Maven; each existing one
+  is an `--add-dir` with `Read(…/**)` allowed and `Edit`/`Write` in `--disallowedTools`, and is named in the
+  appended prompt; source folders only, never `~/.cargo` or `~/.cache/huggingface` themselves, which hold tokens).
 - **Login:** only an already logged-in CLI is used: `claude auth status --json` (with the same cleared
   environment) must say `loggedIn`. Never read or reuse its token. Not logged in or not installed: the
   spawn fails with the error and the ticket stays as it was; no retry.
