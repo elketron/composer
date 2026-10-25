@@ -96,4 +96,10 @@ pub trait HarnessRun: Send + Sync {
     fn paused(&self) -> Option<Pause> {
         None
     }
+
+    /// Set when the run used all its turns without finishing: what it last said. Its
+    /// orchestrator can continue it (a resume) instead of failing the ticket.
+    fn stuck(&self) -> Option<String> {
+        None
+    }
 }

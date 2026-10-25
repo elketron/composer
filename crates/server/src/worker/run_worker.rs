@@ -14,9 +14,9 @@ use crate::config::Config;
 use crate::error::{Result, ServerError};
 use crate::home::Home;
 use crate::init::local_token;
-use crate::provider::OpenAiProvider;
+use crate::provider::{ModelMessage, OpenAiProvider};
 use crate::server::Server;
-use crate::session::submit;
+use crate::session::{TURN_LIMIT, Session, compact_and_wait, submit};
 use crate::worker::ParentLink;
 
 const NUDGE: &str = "You ended your turn without calling `finish`. If the ticket is done, make sure its \
@@ -94,12 +94,37 @@ pub async fn run_worker(home: Home, options: WorkerOptions) -> Result<()> {
     );
 
     let mut nudged = false;
+    let mut at_limit = false;
     loop {
         tokio::select! {
             event = turns.recv() => match event {
+                // The turn ran out of steps: say so before it is done.
+                Ok(event) if matches!(&*event, ServerMessage::MessageDone { session, message, .. }
+                    if *session == options.session
+                        && message.content.starts_with(&format!("Turn stopped: {TURN_LIMIT}"))) => {
+                    at_limit = true;
+                }
                 Ok(event) if matches!(&*event, ServerMessage::TurnDone { session, .. } if *session == options.session) => {
                     if server.worker_finished() {
                         break;
+                    }
+                    if std::mem::take(&mut at_limit) {
+                        // Not a failure yet: its orchestrator looks at it and decides.
+                        match link.stuck(recent_steps(&session)).await {
+                            Ok((message, compact)) => {
+                                nudged = false;
+                                // It writes its own summary (and memory) before going on.
+                                if compact && let Err(e) = compact_and_wait(&server, &session).await {
+                                    tracing::warn!("compacting before going on: {e}");
+                                }
+                                submit(&server, &session, user(message));
+                            }
+                            Err(reason) => {
+                                let _ = link.finish(WorkerState::Failed, format!("reached its turn limit; {reason}")).await;
+                                break;
+                            }
+                        }
+                        continue;
                     }
                     if nudged {
                         let _ = link
@@ -122,6 +147,40 @@ pub async fn run_worker(home: Home, options: WorkerOptions) -> Result<()> {
     // Let the last events reach the parent before the process exits.
     tokio::time::sleep(Duration::from_millis(300)).await;
     Ok(())
+}
+
+/// What the worker did last, for its orchestrator: its last tool calls and what it last said.
+fn recent_steps(session: &Session) -> String {
+    let history = session.history();
+    let mut calls = Vec::new();
+    let mut said = None;
+    for message in history.iter().rev() {
+        if let ModelMessage::Assistant {
+            content,
+            tool_calls,
+            ..
+        } = message
+        {
+            if said.is_none() && !content.trim().is_empty() {
+                said = Some(content.trim().to_string());
+            }
+            for call in tool_calls.iter().rev() {
+                let args: String = call.arguments.chars().take(120).collect();
+                calls.push(format!("- {}({args})", call.name));
+            }
+        }
+        if calls.len() >= 12 {
+            break;
+        }
+    }
+    calls.truncate(12);
+    calls.reverse();
+    let mut text = format!("Its last tool calls:\n{}", calls.join("\n"));
+    if let Some(said) = said {
+        let said: String = said.chars().take(600).collect();
+        text.push_str(&format!("\n\nIt last said: {said}"));
+    }
+    text
 }
 
 /// The ticket's files in the first message: images as images, text and PDFs as marked text.

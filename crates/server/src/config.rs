@@ -86,7 +86,8 @@ mod tests {
     fn partial_sections() {
         let c = Config::parse("[agent]\nslots = 1\n").unwrap();
         assert_eq!(c.agent.slots, 1);
-        assert_eq!(c.agent.max_steps, 40);
+        assert_eq!(c.agent.turn_tokens, 200_000);
+        assert_eq!(c.agent.max_steps, 0);
         assert_eq!(Config::parse(&c.to_toml()).unwrap(), c);
     }
 

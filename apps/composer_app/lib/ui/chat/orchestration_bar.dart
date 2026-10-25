@@ -46,6 +46,7 @@ class OrchestrationBar extends StatelessWidget {
       'done' => (t.ok, 'done'),
       'failed' => (t.err, 'failed'),
       'paused' => (t.warn, 'paused'),
+      'stuck' => (t.warn, 'at its turn limit'),
       _ => (t.faint, 'idle'),
     };
     return Tooltip(

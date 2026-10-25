@@ -300,6 +300,22 @@ impl Connection {
                 });
                 None
             }
+            ClientCommand::WorkerStuck { summary } => {
+                let (connection, server) = (self.clone(), server.clone());
+                tokio::spawn(async move {
+                    let worker = connection.worker_session.lock().expect("worker lock").clone();
+                    let result = match worker {
+                        Some(worker) => server
+                            .workers
+                            .stuck(&server, &worker, summary)
+                            .await
+                            .map(|(message, compact)| CommandResult::WorkerGoOn { message, compact }),
+                        None => Err("not a worker connection".into()),
+                    };
+                    connection.reply(id, result);
+                });
+                None
+            }
             ClientCommand::ApprovalAsk {
                 site,
                 recipe,
@@ -593,6 +609,7 @@ impl Connection {
             | ClientCommand::McpList
             | ClientCommand::SlotAcquire
             | ClientCommand::SlotRelease { .. }
+            | ClientCommand::WorkerStuck { .. }
             | ClientCommand::ApprovalAsk { .. } => Err("handled asynchronously".into()),
             ClientCommand::Subscribe { urls } => {
                 *self.subscriptions.lock().expect("subs lock") = urls;

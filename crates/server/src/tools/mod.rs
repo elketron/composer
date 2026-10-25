@@ -2,6 +2,7 @@
 
 mod actions_tool;
 mod args;
+mod continue_worker_tool;
 mod edit_tool;
 mod finish_tool;
 mod list_sites_tool;
@@ -19,6 +20,7 @@ pub(crate) mod scaffold;
 mod search_tool;
 mod set_project_tool;
 mod spawn_worker_tool;
+mod stop_worker_tool;
 mod tool_context;
 mod tool_registry;
 mod write_tool;

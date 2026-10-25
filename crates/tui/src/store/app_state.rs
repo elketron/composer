@@ -766,6 +766,13 @@ impl AppState {
                         format!("worker #{worker} paused ticket {ticket} (usage limit)"),
                         FlashLevel::Warn,
                     ),
+                    composer_protocol::WorkerState::Stuck => (
+                        format!(
+                            "worker #{worker} reached its turn limit on ticket {ticket}; its \
+                             orchestrator decides whether it goes on"
+                        ),
+                        FlashLevel::Warn,
+                    ),
                 };
                 // Watching it finish: back to the orchestrator, which gets its result next.
                 // Not while you're typing, or the message would go to the orchestrator.

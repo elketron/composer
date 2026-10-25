@@ -160,6 +160,20 @@ Each site's `index.md` explains its purpose and conventions; the agent opens it 
 - The worker process is a server instance without an API: model slots are lent by the parent (`slot.acquire`/`slot.release`), recipe approvals are asked through the parent (`approval.ask`; approval prompts reach every client), and its session events go to the parent (`worker.event`), which re-sequences them into the worker session's transcript. The worker keeps its model history in `state/workers/sessions/<id>/`.
 - **Harnesses** (`crates/server/src/harness/`): the registry claims the ticket and creates the session, then a harness starts the run: `composer` (own agent loop, the default) or the one a ticket's `harness:` names. Runs are child processes in their own process group. Cancelling a worker session (`turn.cancel`) stops the whole group and fails the ticket as "cancelled by the user"; a message to a running worker goes to its harness (own workers refuse it for now).
 - `finish(done|failed, summary)` (worker only) ends it: the server sets the ticket status and sends the orchestrator a message (source: the worker), which starts its next turn. A worker that ends its turn without `finish` is reminded once; a process that exits without it fails the ticket.
+- **Turn limit:** a turn may use `agent.turn_tokens` (default 200k): what the model writes plus what its steps
+  bring into the context (the prompt's growth from one call to the next, so mostly tool results), not the
+  context it started with or the prompt sent again each step. Without usage from the provider it is estimated
+  (4 chars a token). `agent.max_steps` (default 0, off) still caps model calls. Claude Code has no token
+  budget for a subscription (`--max-budget-usd` is API money), so its runs keep `max_turns`.
+  A worker that reaches it (an own worker) or `max_turns` (Claude
+  Code's `error_max_turns`) without `finish` doesn't fail: it is `stuck` (ticket `status: stuck`,
+  `WorkerState::Stuck`) and its orchestrator gets a message with its last tool calls and what it last said.
+  `continue_worker(ticket, message)` gives it another round (an own worker waits in its process on
+  `worker.stuck`, whose reply is the message; a Claude Code run is resumed), counted in the ticket's
+  `continued:`; `compact: true` (own workers) has it compact its session first, the same compaction as
+  `:compact` (its memory pass and summary, by its own model), then go on; Claude Code compacts its own; `stop_worker(ticket, reason)` fails it. The orchestrator is told to continue one that makes
+  progress, with what it sees blocking it, and to ask the user when it goes in circles. Only when the parent's
+  agent has `continue_worker`, and not for pipeline stages; otherwise it fails as before.
 - **Plans vs tickets:** plans in `site://plans` hold longer-lived intent; tickets are units of work that link back to a plan.
 - Ticket frontmatter drives lifecycle: `open → claimed → done | failed`. Worker writes its result into the ticket.
 - On completion the orchestrator gets a push message.
@@ -1033,6 +1047,9 @@ a server per session or per project.
 26. ✅ **MCP servers** — `[mcp.<name>]` (stdio and streamable HTTP), tools for the agents that list them (both
     harnesses), approvals with `allow` and always, `mcp.list` and `:mcp`.
 27. ✅ **Config reload** — `config.toml` applies on save (and `:reload`); what still needs a restart is named.
+28. ✅ **Fewer approvals** — chained commands checked part by part, read-only commands inside the worker's
+    folders and builds/tests in its folder run without asking; `read_dirs`; stuck workers wait for their
+    orchestrator instead of failing at the turn limit, now a token budget (`agent.turn_tokens`, 200k).
 
 ## Open questions
 

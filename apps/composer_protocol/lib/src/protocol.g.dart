@@ -271,6 +271,7 @@ sealed class ClientCommand {
         'slot.release' => ClientCommandSlotRelease.fromJson(json),
         'approval.ask' => ClientCommandApprovalAsk.fromJson(json),
         'worker.finish' => ClientCommandWorkerFinish.fromJson(json),
+        'worker.stuck' => ClientCommandWorkerStuck.fromJson(json),
         'tool.list' => ClientCommandToolList.fromJson(json),
         'tool.call' => ClientCommandToolCall.fromJson(json),
         _ => ClientCommandUnknown(json),
@@ -864,6 +865,26 @@ final class ClientCommandWorkerFinish extends ClientCommand {
       };
 }
 
+/// The worker reached its turn limit without finishing: `summary` says what it was doing.
+/// The reply (`worker_go_on`) comes when its orchestrator continues it; an error when it is
+/// stopped instead, or when nobody can decide.
+final class ClientCommandWorkerStuck extends ClientCommand {
+  const ClientCommandWorkerStuck({
+    required this.summary,
+  });
+
+  final String summary;
+
+  factory ClientCommandWorkerStuck.fromJson(Map<String, Object?> json) => ClientCommandWorkerStuck(
+        summary: json['summary'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'worker.stuck',
+        'summary': summary,
+      };
+}
+
 /// The tools a running worker's agent may call; the reply is `tools`.
 final class ClientCommandToolList extends ClientCommand {
   const ClientCommandToolList({
@@ -949,6 +970,7 @@ sealed class CommandResult {
         'sessions' => CommandResultSessions.fromJson(json),
         'slot_granted' => CommandResultSlotGranted.fromJson(json),
         'approval' => CommandResultApproval.fromJson(json),
+        'worker_go_on' => CommandResultWorkerGoOn.fromJson(json),
         'tools' => CommandResultTools.fromJson(json),
         'tool_output' => CommandResultToolOutput.fromJson(json),
         'harnesses' => CommandResultHarnesses.fromJson(json),
@@ -1042,6 +1064,30 @@ final class CommandResultApproval extends CommandResult {
   Map<String, Object?> toJson() => {
         'kind': 'approval',
         'approved': approved,
+      };
+}
+
+/// Go on after the turn limit, with the orchestrator's `message`; `compact`: compact the
+/// session first.
+final class CommandResultWorkerGoOn extends CommandResult {
+  const CommandResultWorkerGoOn({
+    required this.message,
+    this.compact = false,
+  });
+
+  final String message;
+
+  final bool compact;
+
+  factory CommandResultWorkerGoOn.fromJson(Map<String, Object?> json) => CommandResultWorkerGoOn(
+        message: json['message'] as String,
+        compact: json['compact'] == null ? false : json['compact'] as bool,
+      );
+
+  Map<String, Object?> toJson() => {
+        'kind': 'worker_go_on',
+        'message': message,
+        'compact': compact,
       };
 }
 
@@ -3013,7 +3059,9 @@ enum WorkerState {
   done('done'),
   failed('failed'),
   /// Stopped before finishing, to be resumed later (a usage limit was hit).
-  paused('paused');
+  paused('paused'),
+  /// Reached its turn limit (tokens, or Claude Code's turns) without finishing; waits for its orchestrator to continue or stop it.
+  stuck('stuck');
 
   const WorkerState(this.wire);
   final String wire;

@@ -186,6 +186,12 @@ pub enum ClientCommand {
     #[serde(rename = "worker.finish")]
     WorkerFinish { state: WorkerState, summary: String },
 
+    /// The worker reached its turn limit without finishing: `summary` says what it was doing.
+    /// The reply (`worker_go_on`) comes when its orchestrator continues it; an error when it is
+    /// stopped instead, or when nobody can decide.
+    #[serde(rename = "worker.stuck")]
+    WorkerStuck { summary: String },
+
     // ---- from harness tool servers (`composer mcp`) ----
     /// The tools a running worker's agent may call; the reply is `tools`.
     #[serde(rename = "tool.list")]

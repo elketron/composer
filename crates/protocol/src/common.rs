@@ -210,4 +210,6 @@ pub enum WorkerState {
     Failed,
     /// Stopped before finishing, to be resumed later (a usage limit was hit).
     Paused,
+    /// Reached its turn limit (tokens, or Claude Code's turns) without finishing; waits for its orchestrator to continue or stop it.
+    Stuck,
 }

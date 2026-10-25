@@ -36,6 +36,8 @@ struct Seen {
     resets_at: Option<i64>,
     result: Option<String>,
     timed_out: bool,
+    /// The result was `error_max_turns`.
+    max_turns: bool,
 }
 
 impl ClaudeCodeRun {
@@ -110,6 +112,17 @@ impl HarnessRun for ClaudeCodeRun {
 
     fn paused(&self) -> Option<Pause> {
         self.seen.lock().expect("seen lock").pause.clone()
+    }
+
+    fn stuck(&self) -> Option<String> {
+        let seen = self.seen.lock().expect("seen lock");
+        (seen.max_turns && !seen.timed_out).then(|| {
+            let max_turns = self.server.config().claude_code.max_turns;
+            match seen.result.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+                Some(said) => format!("used its {max_turns} turns; it last said: {}", cut(said, 600)),
+                None => format!("used its {max_turns} turns"),
+            }
+        })
     }
 }
 
@@ -211,13 +224,13 @@ fn apply(
             }
         }
         StreamEvent::Result {
+            subtype,
             is_error,
             text,
             api_error_status,
             turns,
             duration_ms,
             cost_usd,
-            ..
         } => {
             let stats = [
                 turns.map(|t| ("turns", t.to_string())),
@@ -245,6 +258,7 @@ fn apply(
                         until: seen.resets_at,
                     });
                 }
+                seen.max_turns = subtype == "error_max_turns";
                 seen.result = Some(text);
             }
             sink.event(ServerMessage::TurnDone {

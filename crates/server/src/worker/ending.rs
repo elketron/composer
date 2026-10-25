@@ -20,6 +20,16 @@ impl Ending {
         }
     }
 
+    /// Used all its turns without finishing; its orchestrator decides.
+    pub fn stuck(summary: String) -> Self {
+        Self {
+            state: WorkerState::Stuck,
+            summary,
+            pause: None,
+            notify: true,
+        }
+    }
+
     pub fn paused(summary: String, reason: &'static str, until: Option<i64>) -> Self {
         Self {
             state: WorkerState::Paused,

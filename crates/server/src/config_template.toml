@@ -20,8 +20,12 @@ name = ""
 [agent]
 # Model requests at once, across all sessions (your model server's parallelism).
 slots = 2
-# Model calls per turn before the turn is stopped.
-max_steps = 40
+# Tokens a turn may use before it stops: what the model writes plus what its steps bring in (tool
+# results), not the context it started with. A worker then waits for its orchestrator to continue
+# or stop it. 0: no limit.
+turn_tokens = 200000
+# Model calls per turn before it stops, as well. 0: no limit.
+max_steps = 0
 # Prompt tokens at which a session is compacted.
 compaction_threshold = 160000
 # A recipe run is killed after this many seconds.

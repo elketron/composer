@@ -108,12 +108,13 @@ class ServerStatus {
   }
 
   /// What a session is doing: `running`, `waiting`, `approval`, `idle`, or a worker's
-  /// `starting` / `done` / `failed` / `paused`.
+  /// `starting` / `done` / `failed` / `paused` / `stuck` (at its turn limit, waiting for its orchestrator).
   String activity(SessionInfo s) => switch ((s.state, workers[s.id] ?? s.worker)) {
         // A finished worker is finished, whatever its last turn state said.
         (_, WorkerState.done) => 'done',
         (_, WorkerState.failed) => 'failed',
         (_, WorkerState.paused) => 'paused',
+        (_, WorkerState.stuck) => 'stuck',
         (TurnState.running, _) => 'running',
         (TurnState.waiting, _) => 'waiting',
         (TurnState.awaitingApproval, _) => 'approval',

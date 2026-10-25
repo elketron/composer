@@ -159,6 +159,16 @@ impl ParentLink {
             .map(|_| ())
     }
 
+    /// At the turn limit: waits until the orchestrator continues (its message) or stops (an
+    /// error) this worker.
+    /// The reply: the message, and whether to compact first.
+    pub async fn stuck(&self, summary: String) -> Result<(String, bool), String> {
+        match self.request(ClientCommand::WorkerStuck { summary }).await? {
+            CommandResult::WorkerGoOn { message, compact } => Ok((message, compact)),
+            other => Err(format!("unexpected reply to worker.stuck: {other:?}")),
+        }
+    }
+
     /// The tools the running worker `session` may call.
     pub async fn tools(&self, session: &str) -> Result<Vec<ToolInfo>, String> {
         match self

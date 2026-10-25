@@ -59,6 +59,8 @@ case "$mode" in
     echo '{"type":"result","subtype":"success","is_error":false,"result":"done"}' ;;
   silent)
     echo '{"type":"result","subtype":"success","is_error":false,"result":"I could not do it"}' ;;
+  turns)
+    echo '{"type":"result","subtype":"error_max_turns","is_error":true,"result":"still reading the parser","num_turns":60}' ;;
   slow)
     sleep 30 ;;
 esac
@@ -396,6 +398,28 @@ async fn claude_code_works_tickets() {
         "not asked again: {mcp}"
     );
     assert!(server.pending_approvals.all().is_empty());
+
+    // Out of turns: stuck, not failed; its orchestrator continues it (a resume) and it finishes.
+    std::fs::write(bin.join("mode"), "turns").unwrap();
+    ticket(&root, "0010", &project);
+    let worker = spawn(&server, &orchestrator, "0010").await.unwrap();
+    until_status(&root, "0010", "stuck").await;
+    assert_eq!(
+        server.sessions.get(&worker).unwrap().info().worker,
+        Some(WorkerState::Stuck)
+    );
+    std::fs::write(bin.join("mode"), "finish").unwrap();
+    server
+        .workers
+        .go_on(&server, "0010", "the parser is in src/parse.rs".into(), false)
+        .await
+        .unwrap();
+    until_status(&root, "0010", "done").await;
+    let args = std::fs::read_to_string(bin.join("args.txt")).unwrap();
+    assert!(
+        args.contains("--resume") && args.contains("the parser is in src/parse.rs"),
+        "{args}"
+    );
 
     // A run that ends without finish fails, with what it last said; a message resumes it.
     std::fs::write(bin.join("mode"), "silent").unwrap();

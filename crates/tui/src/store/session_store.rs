@@ -90,6 +90,7 @@ impl SessionStore {
             (_, Some(WorkerState::Done)) => "done",
             (_, Some(WorkerState::Failed)) => "failed",
             (_, Some(WorkerState::Paused)) => "paused",
+            (_, Some(WorkerState::Stuck)) => "stuck",
             (TurnState::Running, _) => "running",
             (TurnState::Waiting, _) => "waiting",
             (TurnState::AwaitingApproval, _) => "approval",

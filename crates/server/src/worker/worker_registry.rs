@@ -3,6 +3,7 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
 
 use composer_core::Page;
@@ -23,7 +24,7 @@ use crate::server::Server;
 use crate::session::{Session, submit};
 use crate::tools::{ToolContext, resolve_project};
 use crate::worker::ending::Ending;
-use crate::worker::ticket::{set_field, set_status, ticket_url};
+use crate::worker::ticket::{set_field, set_status, set_ticket_fields, ticket_url};
 use crate::worker::{StopReason, WorkerHandle, ticket_closed};
 
 /// How long a worker that called `finish` has to exit before it is stopped.
@@ -35,12 +36,19 @@ const SHUTDOWN_WAIT: Duration = Duration::from_secs(10);
 /// What a paused worker is told when it goes on by itself.
 const GO_ON: &str = "You were paused; you can go on now. Continue the ticket where you left off.";
 
+/// Tells a waiting own worker to go on (the orchestrator's message, and whether to compact
+/// first) or to stop (why).
+type GoOnReply = oneshot::Sender<Result<(String, bool), String>>;
+
 /// Workers started by this server, by worker session id.
 #[derive(Default)]
 pub struct WorkerRegistry {
     running: Mutex<HashMap<String, WorkerHandle>>,
     /// Harnesses that hit a usage limit, until when (unix seconds).
     paused: Mutex<HashMap<&'static str, i64>>,
+    /// Own workers at their turn limit, waiting in their process: how to tell them to go on
+    /// (the orchestrator's message) or stop (why).
+    waiting: Mutex<HashMap<String, GoOnReply>>,
 }
 
 /// Where and how a ticket is worked.
@@ -651,9 +659,14 @@ impl WorkerRegistry {
                             .unwrap_or_else(|| "; send it a message to go on".into());
                         Ending::paused(format!("{}{when}", pause.reason), "limit", pause.until)
                     }
-                    None => Ending::failed(format!(
-                        "the worker ended ({ended}) without calling finish; its log is state/workers/{sid}.log"
-                    )),
+                    None => match run.stuck() {
+                        Some(summary) if decided_by_parent(&watch_server, &handle) => {
+                            Ending::stuck(summary)
+                        }
+                        _ => Ending::failed(format!(
+                            "the worker ended ({ended}) without calling finish; its log is state/workers/{sid}.log"
+                        )),
+                    },
                 },
             };
             watch_server.workers.end(&watch_server, &sid, ending);
@@ -675,7 +688,100 @@ impl WorkerRegistry {
         );
     }
 
+    /// An own worker reached its turn limit: it waits here until its orchestrator continues
+    /// it (the reply is the orchestrator's message) or stops it (an error, why).
+    pub async fn stuck(
+        &self,
+        server: &Arc<Server>,
+        worker: &str,
+        summary: String,
+    ) -> Result<(String, bool), String> {
+        let handle = self.get(worker).ok_or("not a running worker")?;
+        if !decided_by_parent(server, &handle) {
+            return Err("its orchestrator can't continue workers (no continue_worker tool)".into());
+        }
+        let (reply, answer) = oneshot::channel();
+        self.waiting
+            .lock()
+            .expect("waiting lock")
+            .insert(worker.to_string(), reply);
+        mark_stuck(server, worker, &handle.ticket, &handle.parent, &summary);
+        answer
+            .await
+            .unwrap_or_else(|_| Err("the worker was stopped".into()))
+    }
+
+    /// `continue_worker`: the stuck worker on `ticket` goes on, told `message`. An own worker
+    /// is waiting in its process (`compact`: it compacts its session first); an external run
+    /// ended at its turn limit and is resumed.
+    pub async fn go_on(
+        &self,
+        server: &Arc<Server>,
+        ticket: &str,
+        message: String,
+        compact: bool,
+    ) -> Result<String, String> {
+        let message = format!("From your orchestrator, after your turn limit: {message}");
+        if let Some((worker, reply)) = self.take_waiting(ticket) {
+            count_continue(server, ticket);
+            set_running(server, &worker, ticket);
+            let _ = reply.send(Ok((message, compact)));
+            let first = if compact { "compacts its session, then " } else { "" };
+            return Ok(format!("worker #{worker} {first}goes on with ticket {ticket}"));
+        }
+        let session = stuck_session(server, ticket)?;
+        if compact {
+            return Err(
+                "a Claude Code worker compacts its own context; continue it without `compact`".into(),
+            );
+        }
+        count_continue(server, ticket);
+        self.resume(server, &session, message, vec![]).await?;
+        Ok(format!("worker #{} goes on with ticket {ticket}", session.id()))
+    }
+
+    /// `stop_worker`: the stuck worker on `ticket` fails it, with `reason`.
+    pub fn stop_stuck(&self, server: &Arc<Server>, ticket: &str, reason: &str) -> Result<String, String> {
+        let reason = format!("stopped by its orchestrator at the turn limit: {reason}");
+        if let Some((worker, reply)) = self.take_waiting(ticket) {
+            // It fails the ticket itself (`finish`), as any worker ends.
+            let _ = reply.send(Err(reason));
+            return Ok(format!("worker #{worker} stops; ticket {ticket} fails"));
+        }
+        let session = stuck_session(server, ticket)?;
+        if let Ok(page) = ticket_page(server, ticket) {
+            let raw = set_field(&set_status(&page.raw, "failed"), "reason", &reason);
+            server
+                .write_page(&page.url, &raw, ChangedBy::Agent)
+                .map_err(|e| e.to_string())?;
+        }
+        session.update_info(&server.hub, |info| info.worker = Some(WorkerState::Failed));
+        let info = session.info();
+        server.hub.send(ServerMessage::WorkerStatus {
+            worker: info.id.clone(),
+            ticket: ticket.to_string(),
+            parent: info.parent.unwrap_or_default(),
+            state: WorkerState::Failed,
+        });
+        Ok(format!("ticket {ticket} failed"))
+    }
+
+    /// The own worker waiting on `ticket`, and its reply.
+    fn take_waiting(
+        &self,
+        ticket: &str,
+    ) -> Option<(String, GoOnReply)> {
+        let worker = self
+            .running()
+            .into_iter()
+            .find(|(_, handle)| handle.ticket == ticket)
+            .map(|(worker, _)| worker)?;
+        let reply = self.waiting.lock().expect("waiting lock").remove(&worker)?;
+        Some((worker, reply))
+    }
+
     fn end(&self, server: &Arc<Server>, worker: &str, ending: Ending) {
+        self.waiting.lock().expect("waiting lock").remove(worker);
         let Some(handle) = self.running.lock().expect("workers lock").remove(worker) else {
             return;
         };
@@ -694,6 +800,7 @@ impl WorkerRegistry {
         let status = match state {
             WorkerState::Done => "done",
             WorkerState::Paused => "paused",
+            WorkerState::Stuck => "stuck",
             _ => "failed",
         };
         let mut branch = None;
@@ -723,6 +830,10 @@ impl WorkerRegistry {
             state,
         });
         if !notify {
+            return;
+        }
+        if state == WorkerState::Stuck {
+            tell_stuck(server, worker, &handle.ticket, &handle.parent, &summary);
             return;
         }
         // A pipeline stage's ticket: its work goes on (or waits); the parent hears only when
@@ -768,6 +879,129 @@ impl WorkerRegistry {
             submit(server, &orchestrator, message);
         }
     }
+}
+
+/// Whether the worker's orchestrator decides what happens after its turn limit: its agent has
+/// `continue_worker`. Pipeline stages go by their pipeline instead.
+fn decided_by_parent(server: &Server, handle: &WorkerHandle) -> bool {
+    let stage = ticket_page(server, &handle.ticket)
+        .is_ok_and(|page| page.frontmatter.get_str("stage").is_some());
+    !stage
+        && server
+            .sessions
+            .get(&handle.parent)
+            .ok()
+            .and_then(|parent| AgentDefinition::load(&server.workspace, &parent.info().agent).ok())
+            .is_some_and(|agent| agent.allows_tool("continue_worker"))
+}
+
+/// An own worker at its turn limit: the ticket and session say so, the orchestrator is told.
+fn mark_stuck(server: &Arc<Server>, worker: &str, ticket: &str, parent: &str, summary: &str) {
+    if let Ok(page) = ticket_page(server, ticket)
+        && let Err(e) = server.write_page(&page.url, &set_status(&page.raw, "stuck"), ChangedBy::Agent)
+    {
+        tracing::error!("updating ticket {ticket}: {e}");
+    }
+    if let Ok(session) = server.sessions.get(worker) {
+        session.update_info(&server.hub, |info| {
+            info.state = TurnState::Idle;
+            info.worker = Some(WorkerState::Stuck);
+        });
+    }
+    server.hub.send(ServerMessage::WorkerStatus {
+        worker: worker.to_string(),
+        ticket: ticket.to_string(),
+        parent: parent.to_string(),
+        state: WorkerState::Stuck,
+    });
+    tell_stuck(server, worker, ticket, parent, summary);
+}
+
+/// The orchestrator's message about a stuck worker: what it was doing and what it can do.
+fn tell_stuck(server: &Arc<Server>, worker: &str, ticket: &str, parent: &str, summary: &str) {
+    let Ok(orchestrator) = server.sessions.get(parent) else {
+        return;
+    };
+    let continued = continued(server, ticket);
+    let before = match continued {
+        0 => String::new(),
+        n => format!(" You have continued it {n} time(s) on this ticket already."),
+    };
+    // An own worker's context can be compacted first; Claude Code compacts its own.
+    let compact = match server.sessions.get(worker).map(|s| s.info()) {
+        Ok(info) if server.workers.get(worker).is_some() => {
+            let size = match info.context_tokens {
+                0 => String::new(),
+                n => format!(" (its context is {n} tokens)"),
+            };
+            format!(
+                " If its context is full of old steps{size}, add `compact: true`: it saves what \
+                 matters and summarizes its session first."
+            )
+        }
+        _ => String::new(),
+    };
+    let content = format!(
+        "[worker #{worker} reached its turn limit on ticket {ticket} without finishing]\n\
+         {summary}\n\n\
+         It waits for you.{before} Look at the ticket and the worker's session: is it making \
+         progress? If it is, `continue_worker({ticket}, message)` gives it another round; put \
+         what you see blocking it in the message.{compact} If it goes in circles, or you can't tell, ask \
+         the user before continuing. `stop_worker({ticket}, reason)` fails the ticket."
+    );
+    let message = user_message(
+        content,
+        MessageSource::Worker {
+            session: worker.to_string(),
+        },
+    );
+    submit(server, &orchestrator, message);
+}
+
+/// How many times the ticket's worker was continued after its turn limit (`continued:`).
+fn continued(server: &Server, ticket: &str) -> u32 {
+    ticket_page(server, ticket)
+        .ok()
+        .and_then(|page| page.frontmatter.get_str("continued"))
+        .and_then(|n| n.parse().ok())
+        .unwrap_or(0)
+}
+
+fn count_continue(server: &Server, ticket: &str) {
+    let next = (continued(server, ticket) + 1).to_string();
+    if let Err(e) = set_ticket_fields(server, ticket, &[("continued", &next)]) {
+        tracing::warn!("counting a continue of ticket {ticket}: {e}");
+    }
+}
+
+/// A waiting own worker goes on: claimed again, running.
+fn set_running(server: &Arc<Server>, worker: &str, ticket: &str) {
+    if let Ok(page) = ticket_page(server, ticket)
+        && let Err(e) = server.write_page(&page.url, &set_status(&page.raw, "claimed"), ChangedBy::Agent)
+    {
+        tracing::error!("updating ticket {ticket}: {e}");
+    }
+    if let Ok(session) = server.sessions.get(worker) {
+        session.update_info(&server.hub, |info| info.worker = Some(WorkerState::Running));
+        let parent = session.info().parent.unwrap_or_default();
+        server.hub.send(ServerMessage::WorkerStatus {
+            worker: worker.to_string(),
+            ticket: ticket.to_string(),
+            parent,
+            state: WorkerState::Running,
+        });
+    }
+}
+
+/// The session of an external run that ended stuck on `ticket`.
+fn stuck_session(server: &Server, ticket: &str) -> Result<Arc<Session>, String> {
+    let info = server
+        .sessions
+        .list()
+        .into_iter()
+        .find(|s| s.ticket.as_deref() == Some(ticket) && s.worker == Some(WorkerState::Stuck))
+        .ok_or_else(|| format!("no worker is stuck on ticket {ticket}"))?;
+    server.sessions.get(&info.id).map_err(|e| e.to_string())
 }
 
 fn stop(handle: &WorkerHandle, reason: StopReason) {

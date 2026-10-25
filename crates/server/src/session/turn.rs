@@ -9,6 +9,7 @@ use crate::agent::{AgentDefinition, system_prompt};
 use crate::attachments::{ForModel, for_model};
 use crate::provider::{ModelMessage, ModelRequest, ModelToolCall};
 use crate::server::Server;
+use crate::session::turn_budget::TurnBudget;
 use crate::session::Session;
 use crate::session::compaction::compact;
 use crate::session::model_call::{model_step, parse_args, prepare_history, tool_step};
@@ -128,6 +129,9 @@ fn accept_user_message(server: &Arc<Server>, session: &Arc<Session>, message: Ch
     session.update_info(&server.hub, |info| info.preview = Some(preview));
 }
 
+/// How a turn that used up its tokens (or steps) ends: "Turn stopped: reached the turn limit (…)".
+pub const TURN_LIMIT: &str = "reached the turn limit";
+
 /// Model call → tools → model call ... until the model answers without tool calls.
 /// Before each call, a context over the threshold is compacted first.
 async fn run_turn(
@@ -150,7 +154,23 @@ async fn run_turn(
         cancel: cancel.clone(),
     };
 
-    for _ in 0..server.config().agent.max_steps {
+    let (turn_tokens, max_steps) = {
+        let config = server.config();
+        (config.agent.turn_tokens, config.agent.max_steps)
+    };
+    let mut budget = TurnBudget::new(turn_tokens);
+    let mut steps = 0;
+    loop {
+        if budget.exceeded() {
+            return Err(format!(
+                "{TURN_LIMIT} ({} of {turn_tokens} tokens in one turn)",
+                budget.used()
+            ));
+        }
+        if max_steps > 0 && steps >= max_steps {
+            return Err(format!("{TURN_LIMIT} ({max_steps} model calls in one turn)"));
+        }
+        steps += 1;
         if session.info().context_tokens >= server.config().agent.compaction_threshold {
             compact(server, session, cancel, true).await?;
         }
@@ -175,6 +195,13 @@ async fn run_turn(
             true,
         )
         .await?;
+        let written: String = step
+            .tool_calls
+            .iter()
+            .map(|c| c.arguments.as_str())
+            .chain([step.content.as_str(), step.thinking.as_str()])
+            .collect();
+        budget.model_call(step.usage.as_ref(), &written);
         if let Some(usage) = step.usage {
             session.update_info(&server.hub, |info| {
                 info.context_tokens = usage.prompt_tokens + usage.completion_tokens
@@ -192,6 +219,7 @@ async fn run_turn(
         }
         for call in &step.tool_calls {
             let (result, _) = tool_step(server, &context, call).await;
+            budget.tool_results(&result);
             session
                 .push_history(ModelMessage::Tool {
                     call_id: call.id.clone(),
@@ -200,10 +228,6 @@ async fn run_turn(
                 .map_err(|e| e.to_string())?;
         }
     }
-    Err(format!(
-        "reached the limit of {} model calls in one turn",
-        server.config().agent.max_steps
-    ))
 }
 
 /// Compacts an idle session now (`:compact`). Errors if a turn is running.
@@ -212,29 +236,41 @@ pub fn compact_now(server: &Arc<Server>, session: &Arc<Session>) -> Result<(), S
         return Err("a turn is running; compact when it is done".into());
     }
     let (server, session) = (server.clone(), session.clone());
-    tokio::spawn(async move {
-        let cancel = session.new_turn_token();
-        let id = session.id().to_string();
-        let text = match compact(&server, &session, &cancel, false).await {
-            Ok(0) => Some("Nothing to compact yet.".to_string()),
-            Ok(_) => None,
-            Err(error) => Some(format!("Compaction failed: {error}")),
-        };
-        if let Some(text) = text {
-            let message = system_message(text);
-            session.emit(&server.hub, |seq| ServerMessage::MessageDone {
-                session: id,
-                seq,
-                message,
-            });
-        }
-        session.update_info(&server.hub, |info| info.state = TurnState::Idle);
-        // Messages that arrived meanwhile start their turn now.
-        if session.stop_running() {
-            tokio::spawn(drive(server, session));
-        }
-    });
+    tokio::spawn(async move { compact_started(&server, &session).await });
     Ok(())
+}
+
+/// Like [`compact_now`], but waits until it is done: a worker its orchestrator told to compact
+/// before it goes on.
+pub async fn compact_and_wait(server: &Arc<Server>, session: &Arc<Session>) -> Result<(), String> {
+    if !session.try_start() {
+        return Err("a turn is running; compact when it is done".into());
+    }
+    compact_started(server, session).await;
+    Ok(())
+}
+
+async fn compact_started(server: &Arc<Server>, session: &Arc<Session>) {
+    let cancel = session.new_turn_token();
+    let id = session.id().to_string();
+    let text = match compact(server, session, &cancel, false).await {
+        Ok(0) => Some("Nothing to compact yet.".to_string()),
+        Ok(_) => None,
+        Err(error) => Some(format!("Compaction failed: {error}")),
+    };
+    if let Some(text) = text {
+        let message = system_message(text);
+        session.emit(&server.hub, |seq| ServerMessage::MessageDone {
+            session: id,
+            seq,
+            message,
+        });
+    }
+    session.update_info(&server.hub, |info| info.state = TurnState::Idle);
+    // Messages that arrived meanwhile start their turn now.
+    if session.stop_running() {
+        tokio::spawn(drive(server.clone(), session.clone()));
+    }
 }
 
 fn record_assistant(

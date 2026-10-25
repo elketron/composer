@@ -209,6 +209,13 @@ pub enum CommandResult {
     Approval {
         approved: bool,
     },
+    /// Go on after the turn limit, with the orchestrator's `message`; `compact`: compact the
+    /// session first.
+    WorkerGoOn {
+        message: String,
+        #[serde(default)]
+        compact: bool,
+    },
     Tools {
         tools: Vec<ToolInfo>,
     },

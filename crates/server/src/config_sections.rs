@@ -115,8 +115,13 @@ pub struct AgentConfig {
     /// Concurrent model requests across all sessions (the provider's parallelism).
     #[serde(default = "default_slots")]
     pub slots: u32,
-    /// Model calls per turn before the turn is stopped.
-    #[serde(default = "default_max_steps")]
+    /// Tokens a turn may use before it stops (a worker's orchestrator then decides whether it
+    /// goes on): what the model writes plus what its steps bring into the context. The context
+    /// it started with isn't counted. 0: no limit.
+    #[serde(default = "default_turn_tokens")]
+    pub turn_tokens: u32,
+    /// Model calls per turn before it stops, on top of `turn_tokens`. 0 (the default): no limit.
+    #[serde(default)]
     pub max_steps: u32,
     /// Prompt tokens at which compaction starts (milestone 5).
     #[serde(default = "default_compaction_threshold")]
@@ -238,8 +243,8 @@ fn default_slots() -> u32 {
     2
 }
 
-fn default_max_steps() -> u32 {
-    40
+fn default_turn_tokens() -> u32 {
+    200_000
 }
 
 fn default_compaction_threshold() -> u32 {

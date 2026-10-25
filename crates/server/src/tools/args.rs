@@ -84,6 +84,16 @@ pub struct MergeTicketArgs {
     pub ticket: String,
 }
 
+/// `continue_worker` and `stop_worker`.
+#[derive(Debug, Deserialize)]
+pub struct SteerWorkerArgs {
+    pub ticket: String,
+    pub message: String,
+    /// `continue_worker` only: compact the worker's session first.
+    #[serde(default)]
+    pub compact: bool,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct FinishArgs {
     /// `done` or `failed`.

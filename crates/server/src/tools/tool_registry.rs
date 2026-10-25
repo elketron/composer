@@ -11,7 +11,9 @@ use crate::tools::actions_tool::ActionsTool;
 use crate::tools::edit_tool::EditTool;
 use crate::tools::finish_tool::FinishTool;
 use crate::tools::list_sites_tool::ListSitesTool;
+use crate::tools::continue_worker_tool::ContinueWorkerTool;
 use crate::tools::merge_ticket_tool::MergeTicketTool;
+use crate::tools::stop_worker_tool::StopWorkerTool;
 use crate::tools::new_app_tool::NewAppTool;
 use crate::tools::new_pipeline_tool::NewPipelineTool;
 use crate::tools::new_project_tool::NewProjectTool;
@@ -51,6 +53,8 @@ impl ToolRegistry {
                 Arc::new(RunStageTool),
                 Arc::new(SpawnWorkerTool),
                 Arc::new(MergeTicketTool),
+                Arc::new(ContinueWorkerTool),
+                Arc::new(StopWorkerTool),
                 Arc::new(FinishTool),
             ],
         }
