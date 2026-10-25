@@ -1,4 +1,6 @@
 # composer settings. Every field is optional; these are the defaults.
+# Saving this file applies it to the running server (`:reload` in the TUI does it too), except
+# [provider], server.bind, agent.slots and attachments.max_mb: those need `composer serve` restarted.
 
 [provider]
 # An OpenAI-compatible API, including /v1 (llama.cpp's llama-server, vLLM, Ollama at

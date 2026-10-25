@@ -46,7 +46,7 @@ pub fn router(server: Arc<Server>) -> Router {
         .route(
             "/api/sessions/{id}/attachments",
             post(attachment_routes::upload).layer(DefaultBodyLimit::max(
-                ((server.config.attachments.max_mb * attachment_routes::FILES_PER_REQUEST + 1)
+                ((server.config().attachments.max_mb * attachment_routes::FILES_PER_REQUEST + 1)
                     * 1024
                     * 1024) as usize,
             )),

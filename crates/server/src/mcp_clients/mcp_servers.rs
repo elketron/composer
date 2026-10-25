@@ -20,7 +20,8 @@ const RETRY_AFTER: Duration = Duration::from_secs(30);
 /// exited or failed connects again on the next use.
 pub struct McpServers {
     configs: BTreeMap<String, McpServerConfig>,
-    slots: BTreeMap<String, tokio::sync::Mutex<Slot>>,
+    /// Shared with the next config's `McpServers` while the server's config is unchanged.
+    slots: BTreeMap<String, Arc<tokio::sync::Mutex<Slot>>>,
 }
 
 impl McpServers {
@@ -42,10 +43,24 @@ impl McpServers {
             slots: usable
                 .iter()
                 .filter(|(_, c)| c.enabled)
-                .map(|(name, _)| (name.clone(), tokio::sync::Mutex::default()))
+                .map(|(name, _)| (name.clone(), Arc::default()))
                 .collect(),
             configs: usable,
         }
+    }
+
+    /// The servers of a new config: an unchanged server keeps its connection, a changed or
+    /// removed one is dropped (its process stops once no call is using it).
+    pub fn reconfigured(&self, configs: &BTreeMap<String, McpServerConfig>) -> Self {
+        let mut next = Self::new(configs);
+        for (name, slot) in &mut next.slots {
+            if let Some(kept) = self.slots.get(name)
+                && self.configs.get(name) == next.configs.get(name)
+            {
+                *slot = kept.clone();
+            }
+        }
+        next
     }
 
     /// The server's connection, made now if there is none. `retry`: also when it failed a

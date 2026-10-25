@@ -34,6 +34,7 @@ pub fn scope(message: &ServerMessage) -> EventScope<'_> {
         SessionUpdated { .. }
         | WorkerStatus { .. }
         | Slots { .. }
+        | ConfigReloaded { .. }
         | ReminderDue { .. }
         | StageEnded { .. } => EventScope::Global,
         Ok { .. } | Error { .. } => EventScope::Reply,

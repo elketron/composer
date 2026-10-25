@@ -73,7 +73,7 @@ impl Tool for NewProjectTool {
             }
         };
 
-        let projects = expand_home(&server.config.projects.dir);
+        let projects = expand_home(&server.config().projects.dir);
         let folder = projects.join(name);
         if folder.exists() {
             return Err(format!(

@@ -183,7 +183,7 @@ async fn main() -> anyhow::Result<()> {
                 );
             }
             let server = Server::start(home.clone()).await?;
-            let bind = bind.unwrap_or_else(|| server.config.server.bind.clone());
+            let bind = bind.unwrap_or_else(|| server.config().server.bind.clone());
             let listener = tokio::net::TcpListener::bind(&bind).await?;
             tracing::info!("listening on http://{bind}");
             server.serve(listener).await?;

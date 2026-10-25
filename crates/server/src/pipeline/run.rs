@@ -392,7 +392,7 @@ pub fn work_session(
     let project = work
         .project
         .as_deref()
-        .and_then(|p| crate::tools::resolve_project(p, &server.config.projects.dir).ok());
+        .and_then(|p| crate::tools::resolve_project(p, &server.config().projects.dir).ok());
     let session = server
         .sessions
         .create("default", project)

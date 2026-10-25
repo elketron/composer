@@ -4,7 +4,7 @@ use crate::action::Action;
 use crate::store::types::PickerKind;
 
 /// Every command, as shown by help: (usage, what it does).
-pub const COMMANDS: [(&str, &str); 21] = [
+pub const COMMANDS: [(&str, &str); 22] = [
     (
         ":new [agent]",
         "start a new session (default agent, or e.g. orchestrator)",
@@ -45,6 +45,10 @@ pub const COMMANDS: [(&str, &str); 21] = [
     (
         ":mcp",
         "the MCP servers in config.toml: connects them and says which work, their tools and agents",
+    ),
+    (
+        ":reload",
+        "read config.toml again (the server also does when you save it); says what needs a restart",
     ),
     (
         ":merge [ticket]",
@@ -159,6 +163,7 @@ pub fn parse_command(line: &str) -> Result<Action, String> {
             }
         }
         "mcp" => Ok(Action::McpServers),
+        "reload" => Ok(Action::ReloadConfig),
         "merge" => Ok(Action::TicketMerge(arg)),
         "discard" => arg
             .map(Action::TicketDiscard)
@@ -246,6 +251,7 @@ mod tests {
         assert!(parse_command("discard").is_err());
         assert_eq!(parse_command("pipeline").unwrap(), Action::Pipelines);
         assert_eq!(parse_command("mcp").unwrap(), Action::McpServers);
+        assert_eq!(parse_command("reload").unwrap(), Action::ReloadConfig);
         assert_eq!(
             parse_command("pipeline new video shorts").unwrap(),
             Action::PipelineNew {

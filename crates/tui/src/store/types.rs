@@ -134,6 +134,8 @@ pub enum Pending {
     Overview,
     /// `mcp.list`: say how the servers are.
     McpServers,
+    /// `config.reload`: say what changed.
+    ReloadConfig,
     /// `pipeline.list`, `pipeline.new`, `work.new`: say what there is, open what was made.
     Pipelines,
     Pipeline,

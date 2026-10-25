@@ -166,7 +166,7 @@ impl Connection {
             ClientCommand::HarnessSet { project, entry, on } => {
                 let (connection, server) = (self.clone(), server.clone());
                 tokio::spawn(async move {
-                    let result = match resolve_project(&project, &server.config.projects.dir) {
+                    let result = match resolve_project(&project, &server.config().projects.dir) {
                         Ok(folder) => server
                             .workers
                             .switch(&server, &folder, &entry, on)
@@ -237,7 +237,7 @@ impl Connection {
                     let result = match server.workers.tool_context(&server, &session) {
                         Ok(context) => {
                             let mut tools =
-                                server.tools.infos_for(&server.mcp, &context.agent).await;
+                                server.tools.infos_for(&server.mcp(), &context.agent).await;
                             // External harnesses ask the user through it.
                             if server.workers.get(&session).is_some_and(|h| h.resumable) {
                                 tools.push(permission_tool_info());
@@ -257,7 +257,7 @@ impl Connection {
                         let index = server.index.read().expect("index lock");
                         AgentDefinition::all(&server.workspace, &index)
                     };
-                    let servers = server.mcp.list(&agents).await;
+                    let servers = server.mcp().list(&agents).await;
                     connection.reply(id, Ok(CommandResult::McpServers { servers }));
                 });
                 None
@@ -399,7 +399,7 @@ impl Connection {
                 AgentDefinition::load(&server.workspace, &agent).map_err(|e| e.to_string())?;
                 let project = project
                     .as_deref()
-                    .map(|p| resolve_project(p, &server.config.projects.dir))
+                    .map(|p| resolve_project(p, &server.config().projects.dir))
                     .transpose()?;
                 let session = server
                     .sessions
@@ -484,7 +484,7 @@ impl Connection {
                 let project = path
                     .as_deref()
                     .filter(|p| !p.trim().is_empty())
-                    .map(|p| resolve_project(p, &server.config.projects.dir))
+                    .map(|p| resolve_project(p, &server.config().projects.dir))
                     .transpose()?;
                 s.update_info(&server.hub, |info| info.project = project);
                 Ok(CommandResult::Session { session: s.info() })
@@ -562,10 +562,24 @@ impl Connection {
             )
             .map(|w| CommandResult::Work { work: w.summary() }),
             ClientCommand::HarnessList { project } => {
-                let folder = resolve_project(&project, &server.config.projects.dir)?;
+                let folder = resolve_project(&project, &server.config().projects.dir)?;
                 Ok(CommandResult::Harnesses {
                     harnesses: server.workers.switches(server, &folder),
                     project: folder,
+                })
+            }
+            ClientCommand::ConfigReload => {
+                let reloaded = server.reload_config().map_err(|e| e.to_string())?;
+                if let Some(restart_needed) = &reloaded {
+                    // The other clients learn it as the watcher would have told them.
+                    server.hub.send(ServerMessage::ConfigReloaded {
+                        restart_needed: restart_needed.clone(),
+                        error: None,
+                    });
+                }
+                Ok(CommandResult::ConfigReloaded {
+                    changed: reloaded.is_some(),
+                    restart_needed: reloaded.unwrap_or_default(),
                 })
             }
             ClientCommand::WorkerEvent { .. }

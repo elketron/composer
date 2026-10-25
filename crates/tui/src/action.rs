@@ -54,6 +54,8 @@ pub enum Action {
     ToggleProjectView,
     /// `:mcp`: the MCP servers, their state and tools.
     McpServers,
+    /// `:reload`: the server reads config.toml again.
+    ReloadConfig,
     /// `:pipeline`: the pipelines and the templates new ones come from.
     Pipelines,
     /// `:pipeline new <kind> [name]`: a pipeline site from a template.

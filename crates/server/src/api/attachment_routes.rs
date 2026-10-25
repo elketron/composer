@@ -47,7 +47,7 @@ pub async fn upload(
             .map_err(|e| ApiError(StatusCode::PAYLOAD_TOO_LARGE, e.to_string()))?;
         let (server, id) = (server.clone(), id.clone());
         let attachment = tokio::task::spawn_blocking(move || {
-            save(&server.home, &server.config.attachments, &id, &name, &bytes)
+            save(&server.home, &server.config().attachments, &id, &name, &bytes)
         })
         .await
         .map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?

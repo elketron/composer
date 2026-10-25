@@ -255,6 +255,7 @@ sealed class ClientCommand {
         'harness.set' => ClientCommandHarnessSet.fromJson(json),
         'project.overview' => ClientCommandProjectOverview.fromJson(json),
         'mcp.list' => ClientCommandMcpList.fromJson(json),
+        'config.reload' => ClientCommandConfigReload.fromJson(json),
         'pipeline.list' => ClientCommandPipelineList.fromJson(json),
         'pipeline.new' => ClientCommandPipelineNew.fromJson(json),
         'work.new' => ClientCommandWorkNew.fromJson(json),
@@ -523,6 +524,19 @@ final class ClientCommandMcpList extends ClientCommand {
 
   Map<String, Object?> toJson() => {
         'type': 'mcp.list',
+      };
+}
+
+/// Reads `config.toml` again now (the server also does when the file changes); the reply is
+/// `config_reloaded`. A file that doesn't parse is an error and the running config stays.
+final class ClientCommandConfigReload extends ClientCommand {
+  const ClientCommandConfigReload();
+
+  factory ClientCommandConfigReload.fromJson(Map<String, Object?> json) => ClientCommandConfigReload(
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'config.reload',
       };
 }
 
@@ -942,6 +956,7 @@ sealed class CommandResult {
         'merged' => CommandResultMerged.fromJson(json),
         'project' => CommandResultProject.fromJson(json),
         'mcp_servers' => CommandResultMcpServers.fromJson(json),
+        'config_reloaded' => CommandResultConfigReloaded.fromJson(json),
         'pipelines' => CommandResultPipelines.fromJson(json),
         'pipeline' => CommandResultPipeline.fromJson(json),
         'work' => CommandResultWork.fromJson(json),
@@ -1156,6 +1171,30 @@ final class CommandResultMcpServers extends CommandResult {
   Map<String, Object?> toJson() => {
         'kind': 'mcp_servers',
         'servers': servers.map((e) => e.toJson()).toList(),
+      };
+}
+
+final class CommandResultConfigReloaded extends CommandResult {
+  const CommandResultConfigReloaded({
+    required this.changed,
+    required this.restartNeeded,
+  });
+
+  /// False: the file says what the server already runs with.
+  final bool changed;
+
+  /// Changed settings that only take effect after a restart (`provider`, `agent.slots`, …).
+  final List<String> restartNeeded;
+
+  factory CommandResultConfigReloaded.fromJson(Map<String, Object?> json) => CommandResultConfigReloaded(
+        changed: json['changed'] as bool,
+        restartNeeded: (json['restart_needed'] as List).map((e) => e as String).toList(),
+      );
+
+  Map<String, Object?> toJson() => {
+        'kind': 'config_reloaded',
+        'changed': changed,
+        'restart_needed': restartNeeded,
       };
 }
 
@@ -1864,6 +1903,7 @@ sealed class ServerMessage {
         'worker.status' => ServerMessageWorkerStatus.fromJson(json),
         'stage.ended' => ServerMessageStageEnded.fromJson(json),
         'reminder.due' => ServerMessageReminderDue.fromJson(json),
+        'config.reloaded' => ServerMessageConfigReloaded.fromJson(json),
         'slots' => ServerMessageSlots.fromJson(json),
         _ => ServerMessageUnknown(json),
       };
@@ -2466,6 +2506,30 @@ final class ServerMessageReminderDue extends ServerMessage {
         'due': due,
         'late': late,
         if (session != null) 'session': session,
+      };
+}
+
+/// `config.toml` changed and the server read it again. `error`: it doesn't parse, and the
+/// server keeps running with the config it had.
+final class ServerMessageConfigReloaded extends ServerMessage {
+  const ServerMessageConfigReloaded({
+    required this.restartNeeded,
+    this.error,
+  });
+
+  final List<String> restartNeeded;
+
+  final String? error;
+
+  factory ServerMessageConfigReloaded.fromJson(Map<String, Object?> json) => ServerMessageConfigReloaded(
+        restartNeeded: (json['restart_needed'] as List).map((e) => e as String).toList(),
+        error: json['error'] == null ? null : json['error'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'config.reloaded',
+        'restart_needed': restartNeeded,
+        if (error != null) 'error': error,
       };
 }
 

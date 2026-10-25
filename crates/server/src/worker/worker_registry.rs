@@ -338,7 +338,7 @@ impl WorkerRegistry {
             .filter(|h| h.external())
             .map(|h| HarnessSwitch {
                 entry: h.name().to_string(),
-                allowed: check_harness_allowed(&server.config, Some(project), h.name()).is_ok(),
+                allowed: check_harness_allowed(&server.config(), Some(project), h.name()).is_ok(),
                 on: !off.iter().any(|e| e == h.name()),
             })
             .collect();
@@ -422,7 +422,7 @@ impl WorkerRegistry {
 
     fn check_capacity(&self, server: &Server, id: &str) -> Result<(), String> {
         let running = self.running();
-        if running.len() >= server.config.agent.max_workers as usize {
+        if running.len() >= server.config().agent.max_workers as usize {
             let busy: Vec<String> = running
                 .iter()
                 .map(|(s, h)| format!("#{s} on {}", h.ticket))
@@ -462,7 +462,7 @@ impl WorkerRegistry {
         let project = ticket_project(server, page, parent_project);
         // Checked against the project itself, before it becomes a worktree path.
         let settings = if harness.external() {
-            let mut settings = check_harness_allowed(&server.config, project.as_deref(), name)?;
+            let mut settings = check_harness_allowed(&server.config(), project.as_deref(), name)?;
             // What the user said `always` to, in this project.
             if let Some(project) = &project {
                 settings
@@ -473,7 +473,7 @@ impl WorkerRegistry {
         } else {
             project
                 .as_deref()
-                .map(|p| project_settings(&server.config, p))
+                .map(|p| project_settings(&server.config(), p))
                 .unwrap_or_default()
         };
         let default = harness.default_model(server);
@@ -817,7 +817,7 @@ fn ticket_project(server: &Server, page: &Page, parent_project: Option<String>) 
     page.frontmatter
         .get_str("project")
         .filter(|p| !p.is_empty())
-        .and_then(|p| resolve_project(&p, &server.config.projects.dir).ok())
+        .and_then(|p| resolve_project(&p, &server.config().projects.dir).ok())
         .or(parent_project)
 }
 

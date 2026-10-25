@@ -67,7 +67,7 @@ impl ClaudeCodeRun {
         ));
         *run.reader.lock().expect("reader lock") = Some(reader);
 
-        let (timer, minutes) = (run.clone(), server.config.claude_code.timeout_minutes);
+        let (timer, minutes) = (run.clone(), server.config().claude_code.timeout_minutes);
         tokio::spawn(async move {
             tokio::select! {
                 _ = tokio::time::sleep(Duration::from_secs(minutes * 60)) => {
@@ -94,7 +94,7 @@ impl HarnessRun for ClaudeCodeRun {
             tracing::warn!("recording the exit of ticket {}: {e}", self.ticket);
         }
         let seen = self.seen.lock().expect("seen lock");
-        let minutes = self.server.config.claude_code.timeout_minutes;
+        let minutes = self.server.config().claude_code.timeout_minutes;
         match (&seen.result, seen.timed_out) {
             (_, true) => format!("stopped after {minutes} minutes"),
             (Some(said), false) if !said.trim().is_empty() => {

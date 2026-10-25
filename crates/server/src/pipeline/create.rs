@@ -173,7 +173,7 @@ pub fn new_work(server: &Server, new: NewWork, by: ChangedBy) -> Result<Work, St
     let project = match new.project.map(str::trim).filter(|p| !p.is_empty()) {
         Some(p) => Some(tilde(Path::new(&resolve_project(
             p,
-            &server.config.projects.dir,
+            &server.config().projects.dir,
         )?))),
         None if pipeline.needs_project => {
             return Err(format!(
@@ -311,7 +311,7 @@ pub fn prepare_board(server: &std::sync::Arc<Server>, site: &str) {
         {
             tracing::warn!("approving {site}'s ui-build: {e}");
         }
-        if !server.config.pipelines.build_board {
+        if !server.config().pipelines.build_board {
             return;
         }
         let env = crate::actions::RecipeEnv {

@@ -220,7 +220,7 @@ async fn claude_code_works_tickets() {
     // Ticket attachments: files from this project's sessions reach it; another project's don't.
     let mine = composer_server::attachments::save(
         &Home::new(&root),
-        &server.config.attachments,
+        &server.config().attachments,
         orchestrator.id(),
         "spec.md",
         b"# spec",
@@ -232,7 +232,7 @@ async fn claude_code_works_tickets() {
         .unwrap();
     let theirs = composer_server::attachments::save(
         &Home::new(&root),
-        &server.config.attachments,
+        &server.config().attachments,
         elsewhere.id(),
         "secret.md",
         b"# secret",

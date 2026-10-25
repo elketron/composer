@@ -39,7 +39,7 @@ impl Tool for SetProjectTool {
             .filter(|p| !p.is_empty())
         {
             None => None,
-            Some(path) => Some(resolve_project(path, &context.server.config.projects.dir)?),
+            Some(path) => Some(resolve_project(path, &context.server.config().projects.dir)?),
         };
         let message = match &project {
             Some(path) => format!("active project: {path}"),

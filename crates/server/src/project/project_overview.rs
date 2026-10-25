@@ -17,7 +17,7 @@ const EXCERPT_CHARS: usize = 280;
 
 /// `project` is a name in the projects directory or a path.
 pub fn project_overview(server: &Server, project: &str) -> Result<ProjectOverview, String> {
-    let folder = resolve_project(project, &server.config.projects.dir)?;
+    let folder = resolve_project(project, &server.config().projects.dir)?;
     let path = Path::new(&folder);
     let name = path
         .file_name()
@@ -57,7 +57,7 @@ fn works(server: &Server, folder: &str) -> Vec<WorkSummary> {
         .filter(|e| {
             e.frontmatter
                 .get_str("project")
-                .and_then(|p| resolve_project(&p, &server.config.projects.dir).ok())
+                .and_then(|p| resolve_project(&p, &server.config().projects.dir).ok())
                 .as_deref()
                 == Some(folder)
         })

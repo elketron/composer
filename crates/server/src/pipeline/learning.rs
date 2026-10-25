@@ -85,7 +85,7 @@ pub fn gate_approved(server: &Arc<Server>, work: &Work, stage: &str) {
         return;
     }
     set_stage_fields(server, work, stage, &[("edited", "true")]);
-    let threshold = server.config.pipelines.learn_after as usize;
+    let threshold = server.config().pipelines.learn_after as usize;
     if threshold == 0 {
         return;
     }

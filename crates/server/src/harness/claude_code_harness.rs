@@ -42,7 +42,7 @@ impl Harness for ClaudeCodeHarness {
     }
 
     fn default_model(&self, server: &Server) -> Option<String> {
-        Some(server.config.claude_code.model.clone()).filter(|m| !m.is_empty())
+        Some(server.config().claude_code.model.clone()).filter(|m| !m.is_empty())
     }
 
     async fn start(
@@ -50,7 +50,7 @@ impl Harness for ClaudeCodeHarness {
         server: &Arc<Server>,
         request: StartRequest,
     ) -> Result<Arc<dyn HarnessRun>, String> {
-        let config = &server.config.claude_code;
+        let config = &server.config().claude_code;
         let listen = server
             .listen_addr()
             .ok_or("the server is not listening yet")?;

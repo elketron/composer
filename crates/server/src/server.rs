@@ -30,7 +30,8 @@ use crate::worker::{ParentLink, WorkerRegistry};
 /// The running harness. Shared as `Arc<Server>` by the API, turns and tools.
 pub struct Server {
     pub home: Home,
-    pub config: Config,
+    /// `config.toml`, swapped when it changes ([`Server::reload_config`]); read it with [`Server::config`].
+    config: RwLock<Arc<Config>>,
     pub workspace: Workspace,
     pub index: RwLock<Index>,
     pub provider: Arc<dyn Provider>,
@@ -39,7 +40,7 @@ pub struct Server {
     pub sessions: SessionManager,
     pub tools: ToolRegistry,
     /// MCP servers from `config.toml`, their tools for the agents that list them.
-    pub mcp: McpServers,
+    mcp: RwLock<Arc<McpServers>>,
     pub approvals: Approvals,
     pub pending_approvals: PendingApprovals,
     /// Required on every request (header or `?token=`).
@@ -127,7 +128,7 @@ impl Server {
             sessions: SessionManager::load(&sessions_dir)?,
             slots,
             tools: ToolRegistry::standard(),
-            mcp: McpServers::new(&config.mcp),
+            mcp: RwLock::new(Arc::new(McpServers::new(&config.mcp))),
             approvals,
             pending_approvals: PendingApprovals::default(),
             workers: WorkerRegistry::default(),
@@ -144,9 +145,69 @@ impl Server {
             workspace,
             provider,
             hub,
-            config,
+            config: RwLock::new(Arc::new(config)),
             home,
         }))
+    }
+
+    /// The config as it is now; a reload swaps it, so don't keep it across awaits for long.
+    pub fn config(&self) -> Arc<Config> {
+        self.config.read().expect("config lock").clone()
+    }
+
+    /// The MCP servers of the current config.
+    pub fn mcp(&self) -> Arc<McpServers> {
+        self.mcp.read().expect("mcp lock").clone()
+    }
+
+    /// Reads `config.toml` again and runs with it from now on. Returns `None` when nothing
+    /// changed, else the changed settings that still need a restart. A file that doesn't parse
+    /// is an error and the old config stays. Running turns and workers keep what they started with.
+    pub fn reload_config(&self) -> Result<Option<Vec<String>>> {
+        let next = Config::load(&self.home.config_file())?;
+        let mut current = self.config.write().expect("config lock");
+        if **current == next {
+            return Ok(None);
+        }
+        let restart_needed = [
+            ("provider", current.provider != next.provider),
+            ("server.bind", current.server.bind != next.server.bind),
+            ("agent.slots", current.agent.slots != next.agent.slots),
+            (
+                "attachments.max_mb",
+                current.attachments.max_mb != next.attachments.max_mb,
+            ),
+        ]
+        .into_iter()
+        .filter(|(_, changed)| *changed)
+        .map(|(name, _)| name.to_string())
+        .collect();
+        if current.mcp != next.mcp {
+            let mut mcp = self.mcp.write().expect("mcp lock");
+            *mcp = Arc::new(mcp.reconfigured(&next.mcp));
+        }
+        *current = Arc::new(next);
+        tracing::info!("config.toml reloaded");
+        Ok(Some(restart_needed))
+    }
+
+    /// [`Server::reload_config`] after the file changed, told to every client.
+    pub fn config_file_changed(&self) {
+        let message = match self.reload_config() {
+            Ok(None) => return,
+            Ok(Some(restart_needed)) => ServerMessage::ConfigReloaded {
+                restart_needed,
+                error: None,
+            },
+            Err(e) => {
+                tracing::warn!("config.toml: {e}; keeping the running config");
+                ServerMessage::ConfigReloaded {
+                    restart_needed: vec![],
+                    error: Some(e.to_string()),
+                }
+            }
+        };
+        self.hub.send(message);
     }
 
     /// The local token, or a paired device's token.
@@ -156,8 +217,9 @@ impl Server {
 
     /// `server.name` from config.toml, else the hostname.
     pub fn name(&self) -> String {
-        if !self.config.server.name.trim().is_empty() {
-            return self.config.server.name.trim().to_string();
+        let config = self.config();
+        if !config.server.name.trim().is_empty() {
+            return config.server.name.trim().to_string();
         }
         std::fs::read_to_string("/etc/hostname")
             .map(|h| h.trim().to_string())

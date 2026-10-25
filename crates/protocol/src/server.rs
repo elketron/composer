@@ -177,6 +177,15 @@ pub enum ServerMessage {
         session: Option<SessionId>,
     },
 
+    /// `config.toml` changed and the server read it again. `error`: it doesn't parse, and the
+    /// server keeps running with the config it had.
+    #[serde(rename = "config.reloaded")]
+    ConfigReloaded {
+        restart_needed: Vec<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
+
     /// Model slot usage, shared by all sessions and workers.
     #[serde(rename = "slots")]
     Slots { used: u32, total: u32, waiting: u32 },
@@ -222,6 +231,12 @@ pub enum CommandResult {
     },
     McpServers {
         servers: Vec<crate::http::McpServerInfo>,
+    },
+    ConfigReloaded {
+        /// False: the file says what the server already runs with.
+        changed: bool,
+        /// Changed settings that only take effect after a restart (`provider`, `agent.slots`, …).
+        restart_needed: Vec<String>,
     },
     Pipelines {
         pipelines: Vec<crate::http::PipelineSummary>,

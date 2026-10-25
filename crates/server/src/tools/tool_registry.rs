@@ -93,7 +93,7 @@ impl ToolRegistry {
                 Err(e) => tracing::warn!("MCP tools from the parent: {e}"),
             },
             Some(_) => {}
-            None => specs.extend(server.mcp.specs_for(agent).await),
+            None => specs.extend(server.mcp().specs_for(agent).await),
         }
         specs
     }
@@ -141,7 +141,7 @@ impl ToolRegistry {
                     .await
                     .unwrap_or_else(|e| (e, true));
             }
-            if let Some(result) = context.server.mcp.call(context, name, args).await {
+            if let Some(result) = context.server.mcp().call(context, name, args).await {
                 return result;
             }
             return (format!("unknown tool `{name}`"), true);

@@ -318,6 +318,7 @@ impl AppState {
                 self.ui.flash("connecting the MCP servers…", FlashLevel::Info);
                 self.send(ClientCommand::McpList, Pending::McpServers)
             }
+            Action::ReloadConfig => self.send(ClientCommand::ConfigReload, Pending::ReloadConfig),
             Action::Pipelines => self.send(ClientCommand::PipelineList, Pending::Pipelines),
             Action::PipelineNew { kind, name } => {
                 self.send(ClientCommand::PipelineNew { kind, name }, Pending::Pipeline)
@@ -708,6 +709,14 @@ impl AppState {
                 ) = (used, total, waiting);
                 vec![]
             }
+            ServerMessage::ConfigReloaded {
+                restart_needed,
+                error,
+            } => {
+                let (text, level) = config_reload_line(true, &restart_needed, error.as_deref());
+                self.ui.flash(text, level);
+                vec![]
+            }
             ServerMessage::PageChanged { url, .. } if self.page.shows(&url) => {
                 self.page.reload().into_iter().collect()
             }
@@ -868,6 +877,20 @@ impl AppState {
                 self.ui.flash(text, level);
                 vec![]
             }
+            (
+                Pending::ReloadConfig,
+                CommandResult::ConfigReloaded {
+                    changed,
+                    restart_needed,
+                },
+            ) => {
+                // A change was also broadcast, and that flash says it.
+                if !changed {
+                    let (text, level) = config_reload_line(false, &restart_needed, None);
+                    self.ui.flash(text, level);
+                }
+                vec![]
+            }
             (Pending::Overview, CommandResult::Project { overview }) => {
                 self.project_view.loaded(overview);
                 vec![]
@@ -977,6 +1000,35 @@ impl AppState {
     pub fn mode(&self) -> Mode {
         self.ui.mode
     }
+}
+
+/// The line for a config reload: done, unchanged, didn't parse, or done but some of it needs a
+/// restart of the server.
+fn config_reload_line(
+    changed: bool,
+    restart_needed: &[String],
+    error: Option<&str>,
+) -> (String, FlashLevel) {
+    if let Some(error) = error {
+        let error = error.lines().next().unwrap_or(error);
+        return (
+            format!("config.toml: {error}; the server keeps the config it had"),
+            FlashLevel::Error,
+        );
+    }
+    if !changed {
+        return ("config.toml: no changes".into(), FlashLevel::Info);
+    }
+    if restart_needed.is_empty() {
+        return ("config.toml reloaded".into(), FlashLevel::Info);
+    }
+    (
+        format!(
+            "config.toml reloaded; restart `composer serve` for {}",
+            restart_needed.join(", ")
+        ),
+        FlashLevel::Warn,
+    )
 }
 
 /// `:mcp`'s line: each server's state, tool count and agents; a warning when one failed.
@@ -1410,6 +1462,30 @@ mod tests {
             "{}",
             flash.text
         );
+    }
+
+    #[test]
+    fn config_reload_lines() {
+        assert_eq!(
+            config_reload_line(true, &[], None),
+            ("config.toml reloaded".into(), FlashLevel::Info)
+        );
+        assert_eq!(
+            config_reload_line(false, &[], None).0,
+            "config.toml: no changes"
+        );
+        let (text, level) = config_reload_line(true, &["provider".into()], None);
+        assert_eq!(
+            text,
+            "config.toml reloaded; restart `composer serve` for provider"
+        );
+        assert_eq!(level, FlashLevel::Warn);
+        let (text, level) = config_reload_line(true, &[], Some("TOML parse error at line 3\nmore"));
+        assert_eq!(
+            text,
+            "config.toml: TOML parse error at line 3; the server keeps the config it had"
+        );
+        assert_eq!(level, FlashLevel::Error);
     }
 
     #[test]

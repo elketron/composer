@@ -78,7 +78,7 @@ fn accept_user_message(server: &Arc<Server>, session: &Arc<Session>, message: Ch
     }
     let mut images = message.images.clone();
     let mut files = Vec::new();
-    let max_inline = server.config.attachments.inline_max_kb * 1024;
+    let max_inline = server.config().attachments.inline_max_kb * 1024;
     for attachment in &message.attachments {
         match for_model(&server.home, session.id(), attachment, max_inline) {
             Ok(ForModel::Image(reference)) => images.push(reference),
@@ -150,8 +150,8 @@ async fn run_turn(
         cancel: cancel.clone(),
     };
 
-    for _ in 0..server.config.agent.max_steps {
-        if session.info().context_tokens >= server.config.agent.compaction_threshold {
+    for _ in 0..server.config().agent.max_steps {
+        if session.info().context_tokens >= server.config().agent.compaction_threshold {
             compact(server, session, cancel, true).await?;
         }
         // The prompt is rebuilt every step: memory or the active project may have changed.
@@ -202,7 +202,7 @@ async fn run_turn(
     }
     Err(format!(
         "reached the limit of {} model calls in one turn",
-        server.config.agent.max_steps
+        server.config().agent.max_steps
     ))
 }
 

@@ -22,8 +22,8 @@ pub async fn info(State(server): State<Arc<Server>>) -> Json<ServerInfo> {
         name: server.name(),
         version: env!("CARGO_PKG_VERSION").to_string(),
         model: server.provider.model().to_string(),
-        slots: server.config.agent.slots,
-        projects_dir: server.config.projects.dir.clone(),
+        slots: server.config().agent.slots,
+        projects_dir: server.config().projects.dir.clone(),
     })
 }
 

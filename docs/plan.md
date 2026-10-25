@@ -72,6 +72,11 @@ Plus `templates/sdk` (TS) and `templates/app` (Svelte scaffold).
   - **Parallelism 2:** ~40–50 t/s with one stream, ~20–30 t/s each with two. The parent server owns a **global slot limiter** (default 2 slots) shared by all sessions, workers and compaction turns.
 - **Sessions:** free-form, many per project. A session may have an **active project** (a real code directory outside the workspace), set with `:project <name>` in the TUI, `composer --project <name>`, or by the agent via `set_project(path)`. A name (or relative path) is a folder in the projects directory (`[projects] dir` in config.toml, default `~/Projects`, also where `new_project` creates projects); `~/...` and absolute paths are taken as they are, and the CLI's `--project .` is the current directory. `:project none` (or the × by the project in the app's chat header) unsets it; `new_project` makes the new project active. A new session (`:new`) starts in the current session's project. Persisted in `state/sessions/`.
 - **File watcher:** keeps the index fresh, pushes page changes to connected clients.
+- **Config reload:** saving `config.toml` applies it to the running server (also `config.reload`, `:reload` in
+  the TUI); every client gets `config.reloaded`. A file that doesn't parse keeps the running config and the
+  error is told. `provider`, `server.bind`, `agent.slots` and `attachments.max_mb` are read at startup: a change
+  to them is named in `restart_needed`. Changed or removed MCP servers are disconnected, unchanged ones kept.
+  Running turns and workers keep the settings they started with.
 - **Static serving:** built micro apps at `http://localhost:PORT/<site>/`, opened with `xdg-open`.
 
 ### Agent tools
@@ -1006,6 +1011,7 @@ a server per session or per project.
 
 26. ✅ **MCP servers** — `[mcp.<name>]` (stdio and streamable HTTP), tools for the agents that list them (both
     harnesses), approvals with `allow` and always, `mcp.list` and `:mcp`.
+27. ✅ **Config reload** — `config.toml` applies on save (and `:reload`); what still needs a restart is named.
 
 ## Open questions
 

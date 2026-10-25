@@ -53,7 +53,7 @@ pub async fn answer_permission(server: &Arc<Server>, session: &str, args: Value)
     {
         return allow();
     }
-    if !server.config.claude_code.ask {
+    if !server.config().claude_code.ask {
         return deny("This tool is not in the allowlist; the user doesn't take questions here.");
     }
     let Ok(worker) = server.sessions.get(session) else {

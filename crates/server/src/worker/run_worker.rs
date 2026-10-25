@@ -84,7 +84,7 @@ pub async fn run_worker(home: Home, options: WorkerOptions) -> Result<()> {
         &session,
         with_attachments(
             &server.home,
-            server.config.attachments.inline_max_kb * 1024,
+            server.config().attachments.inline_max_kb * 1024,
             user(format!(
                 "Your ticket: {ticket_url}\n\nOpen it and the pages in its Context, do the Task, check every \
                  \"Done when\" item, write the Result section, then call finish."

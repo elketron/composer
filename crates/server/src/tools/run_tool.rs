@@ -95,7 +95,7 @@ impl Tool for RunTool {
             session: context.session.id().to_string(),
             project: context.session.info().project,
         };
-        let timeout = Duration::from_secs(server.config.agent.recipe_timeout_secs);
+        let timeout = Duration::from_secs(server.config().agent.recipe_timeout_secs);
         let output = run_recipe(
             &justfile,
             &recipe.name,

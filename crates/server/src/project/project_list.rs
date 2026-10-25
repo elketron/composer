@@ -29,7 +29,7 @@ pub fn session_project(sessions: &[SessionInfo], session: &SessionInfo) -> Optio
 pub fn project_list(server: &Server, query: &str) -> Vec<ProjectSummary> {
     let worktrees = server.home.state().join("worktrees");
     let mut folders: BTreeMap<String, (String, SystemTime)> = BTreeMap::new();
-    let dir = expand_home(&server.config.projects.dir);
+    let dir = expand_home(&server.config().projects.dir);
     for entry in std::fs::read_dir(&dir).into_iter().flatten().flatten() {
         let Ok(name) = entry.file_name().into_string() else {
             continue;

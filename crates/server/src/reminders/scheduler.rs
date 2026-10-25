@@ -29,7 +29,7 @@ pub async fn run_reminders(server: Arc<Server>) {
 
 /// Delivers every reminder due at `now` (local time) and returns them.
 pub fn check_reminders(server: &Arc<Server>, now: NaiveDateTime) -> Vec<DueReminder> {
-    let default_time = parse_time(&server.config.reminders.default_time)
+    let default_time = parse_time(&server.config().reminders.default_time)
         .unwrap_or_else(|| NaiveTime::from_hms_opt(9, 0, 0).expect("valid time"));
     // Collected first: writing the pages needs the index lock.
     let due = due_reminders(&server.index.read().expect("index lock"), now, default_time);

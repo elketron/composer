@@ -86,6 +86,11 @@ pub enum ClientCommand {
     #[serde(rename = "mcp.list")]
     McpList,
 
+    /// Reads `config.toml` again now (the server also does when the file changes); the reply is
+    /// `config_reloaded`. A file that doesn't parse is an error and the running config stays.
+    #[serde(rename = "config.reload")]
+    ConfigReload,
+
     /// The pipelines (sites of staged work) and the templates new ones are made from; the reply
     /// is `pipelines`.
     #[serde(rename = "pipeline.list")]
