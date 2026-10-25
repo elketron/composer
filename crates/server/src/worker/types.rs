@@ -24,6 +24,8 @@ pub struct WorkerHandle {
     pub resumable: bool,
     /// The ticket's project (not its worktree), for the per-project switches.
     pub project: Option<String>,
+    /// Where it works: the ticket's worktree, else the project folder.
+    pub folder: Option<String>,
     /// The model it runs, when the harness says.
     pub model: Option<String>,
     /// Set when composer stops it, so its end reads as that rather than a crash.

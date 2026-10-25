@@ -6,7 +6,7 @@ use serde_json::Value;
 
 /// Commands whose first word alone says little: their rule keeps the subcommand too
 /// (`Bash(git push:*)`, not `Bash(git:*)`).
-const SUBCOMMAND_TOOLS: &[&str] = &[
+pub(crate) const SUBCOMMAND_TOOLS: &[&str] = &[
     "git", "cargo", "npm", "pnpm", "yarn", "npx", "bun", "docker", "kubectl", "go", "pip", "uv",
     "just", "dart", "flutter", "gh",
 ];

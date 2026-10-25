@@ -567,6 +567,7 @@ impl WorkerRegistry {
         } = launch;
         let (sid, ticket) = (request.session.clone(), request.ticket.clone());
         let model = request.model.clone();
+        let folder = request.project.clone();
         session.update_info(&server.hub, |info| {
             info.worker = Some(WorkerState::Starting)
         });
@@ -586,6 +587,7 @@ impl WorkerRegistry {
             run: run.clone(),
             resumable: harness.external(),
             project,
+            folder,
             model,
             stop: Arc::new(Mutex::new(None)),
         };

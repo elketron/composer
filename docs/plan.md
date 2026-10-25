@@ -678,6 +678,24 @@ with a flag first (`git -C x …`) there is no rule. The child gets `MCP_TOOL_TI
 so a question can wait. Checked with the real CLI: asked, approved from the TUI, then `always` and a
 second run that wasn't asked.
 
+**Fewer questions** (`harness/command_policy.rs`; a brain run asked 43 times, 40 of them chained reads like
+`cd ~/.cargo/registry/src/*/ort-*; cat Cargo.toml | head; grep -rn … src`): a Bash command is split into
+its parts (`;`, `&&`, `||`, `|`, newlines) and runs without asking when every part is allowed:
+- by a rule: `[claude_code] allowed_tools`, the project's, or an earlier `always` (`Bash(x:*)`, `Bash(x *)`,
+  `Bash(exact)`);
+- as a read-only command (`cat`, `ls`, `head`, `grep`, `rg` without `--pre`, `find` without
+  `-exec`/`-delete`, `sed` that only prints, `sort` without `-o`, `git log|diff|show|blame|…`, …) whose
+  every path argument, `cd` target and `<` input stays inside the worker's folder, the project, the
+  `read_dirs` or `/tmp` (globs and `..` handled; `cd` is followed through the chain);
+- as a build or test in the worker's folder (`cargo build|test|clippy|run|…`, `flutter`/`dart`
+  `test|analyze`, `npm|pnpm|yarn|bun test|run`, `go`, `dotnet`, `pytest`, `just`, `make`), or a program
+  built there (`./target/release/x`). `VAR=x`, `time`, `timeout N` in front are looked through; `PATH=`
+  and `LD_*` are not.
+- Anything it can't see through asks with no `always`: `$(…)`, backticks, `$VAR`, subshells, heredocs,
+  `&`, writing to a file (`> /dev/null` and `2>&1` are fine). Otherwise `always` stores a rule per part
+  that asked (`Bash(python3:*), Bash(hf:*)`), except for read-only commands that asked because of a path:
+  a rule would let them read anything, so those are allowed once.
+
 ### Following a Claude Code run
 
 - **Streaming:** `--include-partial-messages`; text and thinking deltas become `message.delta` /

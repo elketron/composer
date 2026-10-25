@@ -8,6 +8,9 @@ use composer_protocol::{ApprovalDecision, ApprovalKind, ToolInfo};
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
+use crate::harness::claude_code_harness::read_dirs;
+use crate::harness::command_policy::{CommandContext, Verdict, check_command};
+use crate::harness::project_settings;
 use crate::harness::tool_rules::rule_for;
 use crate::server::Server;
 
@@ -53,6 +56,16 @@ pub async fn answer_permission(server: &Arc<Server>, session: &str, args: Value)
     {
         return allow();
     }
+    // A shell command: each part on its own, and what `always` would add for the parts that ask.
+    let mut rules = project.as_ref().and_then(|_| rule_for(&tool, &input)).into_iter().collect();
+    if tool == "Bash"
+        && let (Some(folder), Some(command)) = (&handle.folder, input["command"].as_str())
+    {
+        match bash_verdict(server, folder, project.as_deref(), command) {
+            Verdict::Allowed => return allow(),
+            Verdict::Ask { rules: parts } => rules = parts,
+        }
+    }
     if !server.config().claude_code.ask {
         return deny("This tool is not in the allowlist; the user doesn't take questions here.");
     }
@@ -71,7 +84,7 @@ pub async fn answer_permission(server: &Arc<Server>, session: &str, args: Value)
             cancel.cancel();
         })
     };
-    let rule = project.as_ref().and_then(|_| rule_for(&tool, &input));
+    let rule = (!rules.is_empty() && project.is_some()).then(|| rules.join(", "));
     let decision = server
         .ask_approval(
             &worker,
@@ -86,10 +99,12 @@ pub async fn answer_permission(server: &Arc<Server>, session: &str, args: Value)
     match decision {
         Some(ApprovalDecision::Approve) => allow(),
         Some(ApprovalDecision::Always) => {
-            if let (Some(project), Some(rule)) = (&project, &rule)
-                && let Err(e) = server.tool_rules.add(project, rule)
-            {
-                tracing::warn!("saving the tool rule {rule}: {e}");
+            if let Some(project) = &project {
+                for rule in rule.iter().flat_map(|_| &rules) {
+                    if let Err(e) = server.tool_rules.add(project, rule) {
+                        tracing::warn!("saving the tool rule {rule}: {e}");
+                    }
+                }
             }
             allow()
         }
@@ -99,6 +114,28 @@ pub async fn answer_permission(server: &Arc<Server>, session: &str, args: Value)
         ),
         None => deny("The run is ending."),
     }
+}
+
+/// Whether `command` runs without asking, in the worker's `folder`: see `command_policy`.
+fn bash_verdict(server: &Server, folder: &str, project: Option<&str>, command: &str) -> Verdict {
+    let config = server.config();
+    let folder = crate::tools::expand_home(folder);
+    let mut read_roots = vec![folder.clone(), std::path::PathBuf::from("/tmp")];
+    read_roots.extend(project.map(crate::tools::expand_home));
+    read_roots.extend(read_dirs(&config.claude_code.read_dirs).into_iter().map(|(dir, _)| dir));
+    let mut rules = config.claude_code.allowed_tools.clone();
+    if let Some(project) = project {
+        rules.extend(project_settings(&config, project).allowed_tools);
+        rules.extend(server.tool_rules.rules(project));
+    }
+    check_command(
+        command,
+        &CommandContext {
+            folder: &folder,
+            read_roots: &read_roots,
+            rules: &rules,
+        },
+    )
 }
 
 /// `Bash: npm test`, `Write /etc/hosts`, `WebFetch https://…`, or the tool's name.

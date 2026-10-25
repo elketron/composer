@@ -48,8 +48,10 @@ case "$mode" in
     echo '{"type":"result","subtype":"error_during_execution","is_error":true,"result":"usage limit reached","api_error_status":429}'
     exit 1 ;;
   ask)
-    # Asks to run something outside the allowlist, then finishes.
+    # A chain of reads and a test run (allowed without asking), then something outside the
+    # allowlist, then finishes.
     { echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{}}}'
+      echo '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"permission","arguments":{"tool_name":"Bash","input":{"command":"cat README.md | head -3; ls -la src 2>/dev/null && cargo test 2>&1 | tail -5"},"tool_use_id":"t5"}}}'
       echo '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"permission","arguments":{"tool_name":"Bash","input":{"command":"python3 make.py","description":"Build"},"tool_use_id":"t2"}}}'
       sleep 4
       echo '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"finish","arguments":{"status":"done","summary":"asked"}}}'
@@ -380,6 +382,9 @@ async fn claude_code_works_tickets() {
     until_status(&root, "0008", "done").await;
     let mcp = std::fs::read_to_string(bin.join("mcp.txt")).unwrap();
     assert!(mcp.contains(r#"\"behavior\":\"allow\""#), "{mcp}");
+    // The chain was answered without an approval (the only one asked was python3's).
+    let chain = mcp.lines().find(|l| l.contains(r#""id":5"#)).unwrap_or_default();
+    assert!(chain.contains(r#"\"behavior\":\"allow\""#), "{mcp}");
     ticket(&root, "0009", &project);
     spawn(&server, &orchestrator, "0009").await.unwrap();
     until_status(&root, "0009", "done").await;
