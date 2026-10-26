@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::config_sections::{
     AgentConfig, AttachmentsConfig, ClaudeCodeConfig, McpServerConfig, PipelinesConfig,
-    ProjectsConfig, ProviderConfig, RemindersConfig, ServerConfig,
+    ProjectsConfig, ProviderConfig, RemindersConfig, ServerConfig, System1Config,
 };
 use crate::error::{Result, ServerError};
 
@@ -14,6 +14,8 @@ use crate::error::{Result, ServerError};
 pub struct Config {
     #[serde(default = "section")]
     pub provider: ProviderConfig,
+    #[serde(default = "section")]
+    pub system1: System1Config,
     #[serde(default = "section")]
     pub server: ServerConfig,
     #[serde(default = "section")]

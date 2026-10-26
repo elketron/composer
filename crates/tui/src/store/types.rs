@@ -1,8 +1,8 @@
 //! Plain data held by the stores.
 
 use composer_protocol::Attachment;
-use composer_protocol::ClientCommand;
 use composer_protocol::http::{SearchHit, SiteSummary};
+use composer_protocol::{ClientCommand, ModelInfo, Seq};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
@@ -128,8 +128,18 @@ pub enum Pending {
     ListSessions,
     CreateSession,
     Attach(String),
+    /// `session.history` of this session: its last messages (`before` none, then attach) or
+    /// older ones.
+    History {
+        session: String,
+        before: Option<Seq>,
+    },
     /// `harness.list` / `harness.set`: show the result.
     Harnesses,
+    /// `model.list`: kept for `:model`'s completion (quietly: an older server doesn't know it).
+    Models,
+    /// `model.set`: say what it uses now.
+    ModelSet,
     /// `project.overview` for the project view.
     Overview,
     /// `mcp.list`: say how the servers are.
@@ -211,6 +221,9 @@ pub struct DiffLine {
 pub struct Catalog {
     pub sites: Vec<SiteSummary>,
     pub pages: Vec<SearchHit>,
+    /// The provider's models, and the one sessions use unless set.
+    pub models: Vec<ModelInfo>,
+    pub default_model: String,
 }
 
 /// A file attached to the message being written: uploaded right away, sent with the message.

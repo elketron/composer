@@ -60,9 +60,11 @@ async fn drive(server: Arc<Server>, session: Arc<Session>) {
                 message,
             });
         }
-        // A worker's approval it read and didn't answer goes to the user.
-        server.worker_approvals.turn_ended(&id);
+        // A worker's approval it read and didn't answer: a reminder, then the user.
         let cancelled = cancel.is_cancelled();
+        server
+            .worker_approvals
+            .turn_ended(&server, &session, cancelled);
         session.emit(&server.hub, |seq| ServerMessage::TurnDone {
             session: id.clone(),
             seq,
@@ -193,6 +195,7 @@ async fn run_turn(
             ModelRequest {
                 messages,
                 tools: tools.clone(),
+                model: None,
             },
             cancel,
             true,

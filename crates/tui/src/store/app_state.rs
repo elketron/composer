@@ -1,4 +1,4 @@
-use composer_protocol::{ApprovalKind, ClientCommand, CommandResult, ServerMessage};
+use composer_protocol::{ApprovalKind, ClientCommand, CommandResult, Seq, ServerMessage};
 
 use crate::action::Action;
 use crate::effect::Effect;
@@ -10,6 +10,9 @@ use crate::store::{
     ApprovalStore, AttachmentStore, ConnectionStore, PageStore, PickerStore, ProjectStore,
     ProjectViewStore, SessionStore, UiStore,
 };
+
+/// Messages a session opens with, and fetches each time you scroll up to the oldest.
+const HISTORY_MESSAGES: u32 = 50;
 
 /// All shared state. `reduce` is the only way it changes; it does no IO.
 #[derive(Debug)]
@@ -136,6 +139,24 @@ impl AppState {
                     source: FileSource::Path(path),
                 }]
             }
+            Action::LoadOlder => match self.session.current.clone() {
+                Some(session)
+                    if self.session.loaded && self.session.more && !self.session.loading_older =>
+                {
+                    self.session.loading_older = true;
+                    let before = Some(self.session.first_seq);
+                    self.fetch_history(session, before)
+                }
+                _ => vec![],
+            },
+            Action::CopyText(text) => {
+                let lines = text.lines().count();
+                self.ui.flash(
+                    format!("copied {lines} line{}", if lines == 1 { "" } else { "s" }),
+                    FlashLevel::Info,
+                );
+                vec![Effect::CopyText(text)]
+            }
             Action::AttachClipboard => {
                 if self.session.current.is_none() {
                     self.ui.flash("no session yet", FlashLevel::Warn);
@@ -178,8 +199,9 @@ impl AppState {
                 self.attachments.clear();
                 vec![]
             }
+            // Also stops a paused worker for good (a usage limit, a restart cut it off).
             Action::CancelTurn => match self.session.current.clone() {
-                Some(session) if self.session.is_busy() => {
+                Some(session) if self.session.is_busy() || self.session.is_paused_worker() => {
                     self.send(ClientCommand::TurnCancel { session }, Pending::Ignore)
                 }
                 _ => vec![],
@@ -239,6 +261,27 @@ impl AppState {
                 }
                 None => vec![],
             },
+
+            Action::SetModel(model) => match self.session.current.clone() {
+                Some(session) => self.send(
+                    ClientCommand::ModelSet { session, model },
+                    Pending::ModelSet,
+                ),
+                None => vec![],
+            },
+            Action::ShowModel => {
+                let line = match self.session.current_info().and_then(|s| s.model.clone()) {
+                    Some(model) => format!("model: {model} · :model none for the server's"),
+                    None if self.catalog.default_model.is_empty() => "model: the server's".into(),
+                    None => format!("model: {} (the server's)", self.catalog.default_model),
+                };
+                self.ui.flash(
+                    format!("{line} · Tab after :model lists them"),
+                    FlashLevel::Info,
+                );
+                // The list may have changed (another provider since).
+                self.send(ClientCommand::ModelList, Pending::Models)
+            }
 
             Action::Harness { on, entry } => {
                 let project = self
@@ -556,7 +599,7 @@ impl AppState {
                 vec![]
             }
             Action::CatalogLoaded { sites, pages } => {
-                self.catalog = Catalog { sites, pages };
+                (self.catalog.sites, self.catalog.pages) = (sites, pages);
                 vec![]
             }
             Action::AppChecked { site, url, sites } => {
@@ -616,12 +659,29 @@ impl AppState {
             );
         }
         self.session.begin_attach(id, remember);
+        self.fetch_history(id.to_string(), None)
+    }
+
+    /// `session.history`: the session's last messages (`before` none), or those before it.
+    fn fetch_history(&mut self, session: String, before: Option<Seq>) -> Vec<Effect> {
+        self.send(
+            ClientCommand::SessionHistory {
+                session: session.clone(),
+                before,
+                messages: HISTORY_MESSAGES,
+            },
+            Pending::History { session, before },
+        )
+    }
+
+    /// After its history (or an older server, without): what follows, live.
+    fn attach_since(&mut self, session: String, since: Option<Seq>) -> Vec<Effect> {
         self.send(
             ClientCommand::SessionAttach {
-                session: id.to_string(),
-                since: None,
+                session: session.clone(),
+                since,
             },
-            Pending::Attach(id.to_string()),
+            Pending::Attach(session),
         )
     }
 
@@ -641,16 +701,15 @@ impl AppState {
             Pending::Ignore,
         );
         effects.extend(self.send(ClientCommand::SessionList, Pending::ListSessions));
-        // After a reconnect, catch up on what we missed.
+        effects.extend(self.send(ClientCommand::ModelList, Pending::Models));
+        // After a reconnect, catch up on what we missed (or, its history never came, start over).
         if let Some(current) = self.session.current.clone() {
-            let since = Some(self.session.last_seq);
-            effects.extend(self.send(
-                ClientCommand::SessionAttach {
-                    session: current.clone(),
-                    since,
-                },
-                Pending::Attach(current),
-            ));
+            effects.extend(if self.session.loaded {
+                let since = Some(self.session.last_seq);
+                self.attach_since(current, since)
+            } else {
+                self.fetch_history(current, None)
+            });
         }
         effects
     }
@@ -659,11 +718,27 @@ impl AppState {
         match message {
             ServerMessage::Ok { id, result } => self.reply(id, result),
             ServerMessage::Error { id, message } => {
-                if let Some(id) = id {
-                    self.conn.take_pending(id);
+                let pending = id.map(|id| self.conn.take_pending(id));
+                match pending {
+                    Some(Pending::Models) => vec![],
+                    // An older server: the whole chat replays.
+                    Some(Pending::History {
+                        session,
+                        before: None,
+                    }) if self.session.current.as_deref() == Some(&session) => {
+                        self.session.loaded = true;
+                        self.attach_since(session, None)
+                    }
+                    Some(Pending::History { .. }) => {
+                        self.session.loading_older = false;
+                        self.session.more = false;
+                        vec![]
+                    }
+                    _ => {
+                        self.ui.flash(message, FlashLevel::Error);
+                        vec![]
+                    }
                 }
-                self.ui.flash(message, FlashLevel::Error);
-                vec![]
             }
             ServerMessage::StageEnded {
                 work,
@@ -864,7 +939,43 @@ impl AppState {
                 self.session.upsert(session);
                 self.attach(&id, true)
             }
+            (Pending::History { session, before }, CommandResult::History { events, more })
+                if self.session.current.as_deref() == Some(&session) =>
+            {
+                match before {
+                    None if !self.session.loaded => {
+                        self.session.history_loaded(&events, more);
+                        let since = Some(self.session.last_seq);
+                        self.attach_since(session, since)
+                    }
+                    Some(before) if before == self.session.first_seq => {
+                        self.session.older_loaded(&events, more);
+                        vec![]
+                    }
+                    _ => vec![],
+                }
+            }
             (Pending::Attach(_), CommandResult::Session { session }) => {
+                self.session.upsert(session);
+                vec![]
+            }
+            (
+                Pending::Models,
+                CommandResult::Models {
+                    default_model,
+                    models,
+                },
+            ) => {
+                self.catalog.models = models;
+                self.catalog.default_model = default_model;
+                vec![]
+            }
+            (Pending::ModelSet, CommandResult::Session { session }) => {
+                let line = match &session.model {
+                    Some(model) => format!("model: {model}"),
+                    None => format!("model: the server's ({})", self.catalog.default_model),
+                };
+                self.ui.flash(line, FlashLevel::Info);
                 self.session.upsert(session);
                 vec![]
             }
@@ -1101,6 +1212,7 @@ mod tests {
             state: TurnState::Idle,
             last_seq: 0,
             context_tokens: 0,
+            model: None,
             preview: None,
             updated: String::new(),
         }
@@ -1156,9 +1268,10 @@ mod tests {
         }));
         assert_eq!(
             sent(&effects)[0].1,
-            ClientCommand::SessionAttach {
+            ClientCommand::SessionHistory {
                 session: "o1".into(),
-                since: None
+                before: None,
+                messages: HISTORY_MESSAGES
             }
         );
         assert_eq!(state.session.current.as_deref(), Some("o1"));
@@ -1253,27 +1366,113 @@ mod tests {
         let effects = state.reduce(Action::PickerAccept);
         assert_eq!(
             sent(&effects)[0].1,
-            ClientCommand::SessionAttach {
+            ClientCommand::SessionHistory {
                 session: "b".into(),
-                since: None
+                before: None,
+                messages: HISTORY_MESSAGES
             }
         );
         assert!(!state.ui.picker_open);
         let effects = state.reduce(Action::JumpBack);
         assert_eq!(
             sent(&effects)[0].1,
-            ClientCommand::SessionAttach {
+            ClientCommand::SessionHistory {
                 session: "a".into(),
-                since: None
+                before: None,
+                messages: HISTORY_MESSAGES
             }
         );
     }
 
+    /// The session opened: its history asked for (then it attaches), or attached.
     fn attached(effects: &[Effect]) -> Option<String> {
         sent(effects).into_iter().find_map(|(_, c)| match c {
-            ClientCommand::SessionAttach { session, .. } => Some(session),
+            ClientCommand::SessionAttach { session, .. }
+            | ClientCommand::SessionHistory {
+                session,
+                before: None,
+                ..
+            } => Some(session),
             _ => None,
         })
+    }
+
+    #[test]
+    fn a_session_opens_on_its_last_messages_and_loads_older_ones_at_the_top() {
+        let (mut state, _) = connected();
+        state.session.upsert(info("s", None));
+        let said = |seq, text: &str| ServerMessage::MessageDone {
+            session: "s".into(),
+            seq,
+            message: assistant(text),
+        };
+        let effects = state.reduce(Action::AttachSession("s".into()));
+        let [(id, ClientCommand::SessionHistory { before: None, .. })] = &sent(&effects)[..] else {
+            panic!("{effects:?}")
+        };
+        let effects = state.reduce(Action::Server(ServerMessage::Ok {
+            id: *id,
+            result: CommandResult::History {
+                events: vec![said(5, "c")],
+                more: true,
+            },
+        }));
+        assert!(matches!(
+            &sent(&effects)[..],
+            [(_, ClientCommand::SessionAttach { since: Some(5), .. })]
+        ));
+        assert!(state.session.loaded && state.session.more);
+
+        let effects = state.reduce(Action::LoadOlder);
+        let [
+            (
+                id,
+                ClientCommand::SessionHistory {
+                    before: Some(5), ..
+                },
+            ),
+        ] = &sent(&effects)[..]
+        else {
+            panic!("{effects:?}")
+        };
+        assert!(state.reduce(Action::LoadOlder).is_empty(), "one at a time");
+        state.reduce(Action::Server(said(7, "d")));
+        state.reduce(Action::Server(ServerMessage::Ok {
+            id: *id,
+            result: CommandResult::History {
+                events: vec![said(1, "a"), said(3, "b")],
+                more: false,
+            },
+        }));
+        let texts: Vec<_> = state
+            .session
+            .items
+            .iter()
+            .filter_map(|i| match i {
+                ChatItem::Text { text } => Some(text.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(texts, ["a", "b", "c", "d"]);
+        assert_eq!((state.session.first_seq, state.session.more), (1, false));
+        assert!(state.reduce(Action::LoadOlder).is_empty(), "none left");
+    }
+
+    #[test]
+    fn an_older_server_without_history_replays_the_whole_chat() {
+        let (mut state, _) = connected();
+        state.session.upsert(info("s", None));
+        let effects = state.reduce(Action::AttachSession("s".into()));
+        let id = sent(&effects)[0].0;
+        let effects = state.reduce(Action::Server(ServerMessage::Error {
+            id: Some(id),
+            message: "unknown variant `session.history`".into(),
+        }));
+        assert!(matches!(
+            &sent(&effects)[..],
+            [(_, ClientCommand::SessionAttach { since: None, .. })]
+        ));
+        assert!(state.ui.flash.is_none());
     }
 
     /// An orchestrator `o` with workers `w1` (idle) and `w2` (running); `x` is unrelated.

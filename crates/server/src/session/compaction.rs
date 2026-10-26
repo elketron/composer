@@ -80,6 +80,7 @@ pub async fn compact(
         ModelRequest {
             messages,
             tools: vec![],
+            model: None,
         },
         cancel,
         false,
@@ -154,6 +155,7 @@ async fn save_memory(
             ModelRequest {
                 messages: messages.clone(),
                 tools: tools.clone(),
+                model: None,
             },
             cancel,
             false,

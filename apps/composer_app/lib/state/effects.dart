@@ -49,6 +49,18 @@ final class SendCommand extends AppEffect {
   final ClientCommand command;
 }
 
+/// Messages a chat opens with, and fetches each time you scroll up to the oldest.
+const historyMessages = 50;
+
+/// `session.history`: a chat's last messages before `before` (null: its end); the reply comes
+/// back as `HistoryLoaded`.
+final class FetchHistory extends AppEffect {
+  const FetchHistory(this.url, this.session, this.before);
+  final String url;
+  final String session;
+  final int? before;
+}
+
 /// A `ticket.*` command; the reply comes back as `TicketReplied`.
 final class TicketCommand extends AppEffect {
   const TicketCommand(this.url, this.ticket, this.command);

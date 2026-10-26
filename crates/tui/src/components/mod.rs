@@ -12,6 +12,7 @@ mod page_viewer;
 mod picker;
 mod project_view;
 mod root;
+mod selection;
 mod status_bar;
 mod widgets;
 
@@ -26,4 +27,5 @@ pub use page_viewer::PageViewer;
 pub use picker::Picker;
 pub use project_view::ProjectView;
 pub use root::Root;
+pub use selection::Selection;
 pub use status_bar::StatusBar;

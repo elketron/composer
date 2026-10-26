@@ -92,6 +92,24 @@ final class SessionOpened extends AppAction {
   final String session;
 }
 
+/// Scrolled up to the oldest message shown: fetch the ones before it.
+final class OlderRequested extends AppAction {
+  const OlderRequested(this.url, this.session);
+  final String url;
+  final String session;
+}
+
+/// `session.history`'s reply: the events before `before` (null: the chat's last messages, after
+/// which it attaches). `events` null: it failed (an older server), so the whole chat replays.
+final class HistoryLoaded extends AppAction {
+  const HistoryLoaded(this.url, this.session, this.before, this.events, {this.more = false});
+  final String url;
+  final String session;
+  final int? before;
+  final List<ServerMessage>? events;
+  final bool more;
+}
+
 /// Leave the chat (detach).
 final class SessionClosed extends AppAction {
   const SessionClosed(this.url);
@@ -163,6 +181,19 @@ final class UploadRemoved extends AppAction {
   const UploadRemoved(this.url, this.id);
   final String url;
   final int id;
+}
+
+/// Ask which models the provider has (for the model sheet).
+final class ModelsRequested extends AppAction {
+  const ModelsRequested(this.url);
+  final String url;
+}
+
+/// The open session's model; null: the server's again.
+final class ModelChosen extends AppAction {
+  const ModelChosen(this.url, this.model);
+  final String url;
+  final String? model;
 }
 
 /// Ask which external harnesses a project allows and has on (for the chat menu).

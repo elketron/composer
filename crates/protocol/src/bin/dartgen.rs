@@ -559,6 +559,7 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
         state: TurnState::AwaitingApproval,
         last_seq: 42,
         context_tokens: 1200,
+        model: Some("anthropic/claude-sonnet-4.5".into()),
         preview: Some("hello".into()),
         updated: "2026-10-18T12:00:00Z".into(),
     };
@@ -634,9 +635,38 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
             },
         },
         ServerMessage::Ok {
+            id: 51,
+            result: CommandResult::Models {
+                default_model: "qwen3-coder".into(),
+                models: vec![
+                    ModelInfo {
+                        id: "anthropic/claude-sonnet-4.5".into(),
+                        name: Some("Anthropic: Claude Sonnet 4.5".into()),
+                        context: Some(1_000_000),
+                    },
+                    ModelInfo {
+                        id: "qwen3-coder".into(),
+                        name: None,
+                        context: None,
+                    },
+                ],
+            },
+        },
+        ServerMessage::Ok {
             id: 52,
             result: CommandResult::Merged {
                 commit: "abc1234".into(),
+            },
+        },
+        ServerMessage::Ok {
+            id: 53,
+            result: CommandResult::History {
+                events: vec![ServerMessage::TurnDone {
+                    session: s(),
+                    seq: 7,
+                    cancelled: false,
+                }],
+                more: true,
             },
         },
         ServerMessage::Ok {
@@ -848,7 +878,17 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
             session: s(),
             since: Some(3),
         },
+        ClientCommand::SessionHistory {
+            session: s(),
+            before: Some(40),
+            messages: 50,
+        },
         ClientCommand::SessionDetach { session: s() },
+        ClientCommand::ModelList,
+        ClientCommand::ModelSet {
+            session: s(),
+            model: Some("anthropic/claude-sonnet-4.5".into()),
+        },
         ClientCommand::MessageSend {
             session: s(),
             text: "hi".into(),

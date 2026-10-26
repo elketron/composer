@@ -56,6 +56,7 @@ impl SessionManager {
             state: TurnState::Idle,
             last_seq: 0,
             context_tokens: 0,
+            model: None,
             preview: None,
             updated: chrono::Utc::now().to_rfc3339(),
         };

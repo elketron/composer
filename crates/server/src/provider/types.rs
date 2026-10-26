@@ -48,6 +48,8 @@ pub struct ToolSpec {
 pub struct ModelRequest {
     pub messages: Vec<ModelMessage>,
     pub tools: Vec<ToolSpec>,
+    /// Another model than the provider's (the session's `model.set`).
+    pub model: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

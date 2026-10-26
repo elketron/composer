@@ -23,6 +23,12 @@ pub struct SessionStore {
     pub workers: HashMap<String, WorkerState>,
     /// The project (name or folder) the session picker is narrowed to (`:scope`).
     pub scope: Option<String>,
+    /// The current session's last messages arrived (it opens on its end), and it is attached.
+    pub loaded: bool,
+    /// The oldest event shown; `more`: older ones remain, fetched as you scroll up to it.
+    pub first_seq: Seq,
+    pub more: bool,
+    pub loading_older: bool,
 }
 
 impl SessionStore {
@@ -62,6 +68,12 @@ impl SessionStore {
     pub fn is_busy(&self) -> bool {
         self.current_info()
             .is_some_and(|s| s.state != TurnState::Idle)
+    }
+
+    /// The current session is a worker that stopped before finishing, to go on later.
+    pub fn is_paused_worker(&self) -> bool {
+        self.current_info()
+            .is_some_and(|s| s.worker == Some(WorkerState::Paused))
     }
 
     /// The current session's orchestration: its orchestrator first, then the workers it
@@ -111,6 +123,41 @@ impl SessionStore {
         self.items.clear();
         self.streaming = None;
         self.last_seq = 0;
+        self.loaded = false;
+        self.first_seq = 0;
+        self.more = false;
+        self.loading_older = false;
+    }
+
+    /// The session's last messages (`session.history`): shown as if replayed; then it attaches
+    /// since the last of them.
+    pub fn history_loaded(&mut self, events: &[ServerMessage], more: bool) {
+        for event in events {
+            self.apply(event);
+        }
+        self.first_seq = events.iter().find_map(seq_of).unwrap_or(0);
+        self.more = more;
+        self.loaded = true;
+    }
+
+    /// Messages before the oldest shown, put in front.
+    pub fn older_loaded(&mut self, events: &[ServerMessage], more: bool) {
+        self.loading_older = false;
+        let Some(first) = events.iter().find_map(seq_of) else {
+            self.more = false;
+            return;
+        };
+        let mut older = SessionStore {
+            current: self.current.clone(),
+            ..SessionStore::default()
+        };
+        for event in events {
+            older.apply(event);
+        }
+        older.items.append(&mut self.items);
+        self.items = older.items;
+        self.first_seq = first;
+        self.more = more;
     }
 
     pub fn upsert(&mut self, info: SessionInfo) {
@@ -241,5 +288,22 @@ impl SessionStore {
             _ => {}
         }
         true
+    }
+}
+/// A transcript event's seq.
+fn seq_of(message: &ServerMessage) -> Option<Seq> {
+    use ServerMessage::*;
+    match message {
+        TurnStarted { seq, .. }
+        | TurnQueued { seq, .. }
+        | TurnDone { seq, .. }
+        | ThinkingDelta { seq, .. }
+        | MessageDelta { seq, .. }
+        | MessageDone { seq, .. }
+        | ToolCallStarted { seq, .. }
+        | ToolResult { seq, .. }
+        | AgentNavigated { seq, .. }
+        | SessionCompacted { seq, .. } => Some(*seq),
+        _ => None,
     }
 }

@@ -33,6 +33,16 @@ pub enum ClientCommand {
         since: Option<Seq>,
     },
 
+    /// The transcript's last `messages` messages before `before` (the end if `None`), with the
+    /// events between them; the reply is `history`. A client opens a long chat on its end this
+    /// way (then attaches `since` the last of them) and fetches older ones as you scroll up.
+    #[serde(rename = "session.history")]
+    SessionHistory {
+        session: SessionId,
+        before: Option<Seq>,
+        messages: u32,
+    },
+
     #[serde(rename = "session.detach")]
     SessionDetach { session: SessionId },
 
@@ -61,6 +71,17 @@ pub enum ClientCommand {
     ProjectSet {
         session: SessionId,
         path: Option<String>,
+    },
+
+    /// The models the provider lists; the reply is `models`.
+    #[serde(rename = "model.list")]
+    ModelList,
+
+    /// The model a session's turns use; `None`: the server's again. The reply is `session`.
+    #[serde(rename = "model.set")]
+    ModelSet {
+        session: SessionId,
+        model: Option<String>,
     },
 
     /// The external harnesses of a project (a folder, `~/x`, or a name in the projects dir).

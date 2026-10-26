@@ -29,6 +29,12 @@ class ServerConnection {
   /// Commands waiting for their `ok` / `error`.
   final Map<int, Completer<CommandResult>> _pending = {};
 
+  /// Streaming text held back to go out as one: a token at a time, each a new state and a
+  /// rebuild, keeps a phone too busy to scroll.
+  ServerMessage? _delta;
+  Timer? _deltaTimer;
+  static const _deltaEvery = Duration(milliseconds: 50);
+
   void start() => _connect();
 
   /// Retry now (a button, or the app coming back to the foreground).
@@ -57,6 +63,7 @@ class ServerConnection {
 
   void close() {
     _closed = true;
+    _flushDelta();
     _failPending('disconnected');
     _retry?.cancel();
     _subscription?.cancel();
@@ -99,6 +106,12 @@ class ServerConnection {
     final json = jsonDecode(data);
     if (json is! Map<String, Object?>) return;
     final message = ServerMessage.fromJson(json);
+    if (message is ServerMessageMessageDelta || message is ServerMessageThinkingDelta) {
+      _holdDelta(message);
+      return;
+    }
+    // Whatever follows streaming text comes after it.
+    _flushDelta();
     switch (message) {
       case ServerMessageOk(:final id, :final result):
         _pending.remove(id)?.complete(result);
@@ -109,6 +122,30 @@ class ServerConnection {
     _dispatch(ServerEvent(server.url, message));
   }
 
+  /// Joins `delta` to the one held (same session and kind), else sends that one first.
+  void _holdDelta(ServerMessage delta) {
+    final joined = switch ((_delta, delta)) {
+      (ServerMessageMessageDelta(session: final a, text: final held), ServerMessageMessageDelta(session: final b, :final seq, :final text))
+          when a == b =>
+        ServerMessageMessageDelta(session: a, seq: seq, text: held + text),
+      (ServerMessageThinkingDelta(session: final a, text: final held), ServerMessageThinkingDelta(session: final b, :final seq, :final text))
+          when a == b =>
+        ServerMessageThinkingDelta(session: a, seq: seq, text: held + text),
+      _ => null,
+    };
+    if (joined == null) _flushDelta();
+    _delta = joined ?? delta;
+    _deltaTimer ??= Timer(_deltaEvery, _flushDelta);
+  }
+
+  void _flushDelta() {
+    _deltaTimer?.cancel();
+    _deltaTimer = null;
+    final delta = _delta;
+    _delta = null;
+    if (delta != null) _dispatch(ServerEvent(server.url, delta));
+  }
+
   void _failPending(String reason) {
     for (final completer in _pending.values) {
       completer.completeError(ServerError(reason));
@@ -117,6 +154,7 @@ class ServerConnection {
   }
 
   void _lost() {
+    _flushDelta();
     _failPending('connection lost');
     _subscription?.cancel();
     _subscription = null;

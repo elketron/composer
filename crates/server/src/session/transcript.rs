@@ -74,6 +74,34 @@ impl Transcript {
         Ok(f(events, inner.next_seq - 1))
     }
 
+    /// The persisted events before `before` (all if `None`) from the `messages`-th last
+    /// `message.done` on, and whether older ones remain. Cut at a message, a tool call stays
+    /// with its result.
+    pub fn history(
+        &self,
+        before: Option<Seq>,
+        messages: usize,
+    ) -> Result<(Vec<ServerMessage>, bool)> {
+        let _inner = self.inner.lock().expect("transcript lock");
+        let mut events: Vec<ServerMessage> = read_events(&self.path)?
+            .into_iter()
+            .filter(|e| before.is_none_or(|b| seq_of(e).is_some_and(|seq| seq < b)))
+            .collect();
+        let starts: Vec<usize> = events
+            .iter()
+            .enumerate()
+            .filter(|(_, e)| matches!(e, ServerMessage::MessageDone { .. }))
+            .map(|(i, _)| i)
+            .collect();
+        let messages = messages.max(1);
+        let cut = if starts.len() > messages {
+            starts[starts.len() - messages]
+        } else {
+            0
+        };
+        Ok((events.split_off(cut), cut > 0))
+    }
+
     pub fn last_seq(&self) -> Seq {
         self.inner.lock().expect("transcript lock").next_seq - 1
     }
@@ -159,5 +187,44 @@ mod tests {
             }),
             6
         );
+    }
+
+    #[test]
+    fn history_cuts_at_messages() {
+        let dir = tempfile::tempdir().unwrap();
+        let hub = EventHub::new(16);
+        let t = Transcript::open(&dir.path().join("events.jsonl"), 0).unwrap();
+        let message = || {
+            serde_json::from_value(serde_json::json!({"role": "user", "content": "hi"})).unwrap()
+        };
+        // Three turns: started (1, 4, 7), a message (2, 5, 8), done (3, 6, 9).
+        for _ in 0..3 {
+            t.emit(&hub, |seq| ServerMessage::TurnStarted {
+                session: "s".into(),
+                seq,
+            });
+            t.emit(&hub, |seq| ServerMessage::MessageDone {
+                session: "s".into(),
+                seq,
+                message: message(),
+            });
+            t.emit(&hub, |seq| ServerMessage::TurnDone {
+                session: "s".into(),
+                seq,
+                cancelled: false,
+            });
+        }
+        let seqs = |events: &[ServerMessage]| events.iter().filter_map(seq_of).collect::<Vec<_>>();
+
+        let (events, more) = t.history(None, 2).unwrap();
+        assert_eq!(seqs(&events), [5, 6, 7, 8, 9]);
+        assert!(more);
+        let (events, more) = t.history(Some(5), 2).unwrap();
+        assert_eq!(seqs(&events), [1, 2, 3, 4]);
+        assert!(!more);
+        // As many messages as there are: all of it.
+        let (events, more) = t.history(None, 3).unwrap();
+        assert_eq!(events.len(), 9);
+        assert!(!more);
     }
 }

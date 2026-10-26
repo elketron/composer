@@ -1,13 +1,14 @@
-use crossterm::event::{KeyCode, KeyEvent};
-use ratatui::Frame;
-use ratatui::layout::{Constraint, Layout, Rect};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+use ratatui::backend::TestBackend;
+use ratatui::layout::{Constraint, Layout, Margin, Position, Rect};
 use ratatui::style::Style;
 use ratatui::widgets::Block;
+use ratatui::{Frame, Terminal};
 
 use crate::action::Action;
 use crate::components::{
     ApprovalPopup, ChangesView, ChatPane, CommandLine, Component, Help, PageViewer, Picker,
-    ProjectView, StatusBar,
+    ProjectView, Selection, StatusBar,
 };
 use crate::store::AppState;
 use crate::store::types::{FlashLevel, Mode, Pane};
@@ -15,6 +16,9 @@ use crate::theme;
 
 /// Below this width only the focused pane is shown.
 const TWO_PANE_MIN_WIDTH: u16 = 100;
+
+/// Lines a notch of the mouse wheel scrolls.
+const WHEEL_LINES: usize = 3;
 
 /// Layout: two panes over a status bar; the picker floats on top.
 pub struct Root {
@@ -27,6 +31,8 @@ pub struct Root {
     picker: Picker,
     approval: ApprovalPopup,
     help: Help,
+    /// Text selected with the mouse (shown until the next click or key).
+    pub selection: Option<Selection>,
 }
 
 impl Root {
@@ -42,7 +48,95 @@ impl Root {
             picker: Picker,
             approval: ApprovalPopup,
             help: Help::new(bindings),
+            selection: None,
         }
+    }
+
+    /// The mouse: a drag selects text in the pane it starts in and copies it on release, a click
+    /// focuses the pane, the wheel scrolls the pane under it. `screen`: the whole terminal.
+    pub fn handle_mouse(
+        &mut self,
+        event: MouseEvent,
+        screen: Rect,
+        state: &AppState,
+    ) -> Vec<Action> {
+        if state.ui.picker_open || state.ui.help_open || state.approvals.current().is_some() {
+            return vec![];
+        }
+        let at = Position::new(event.column, event.row);
+        let [panes, _] = Self::split(screen);
+        let under = pane_areas(panes, state)
+            .into_iter()
+            .find(|(_, area)| area.contains(at));
+        match event.kind {
+            MouseEventKind::Down(MouseButton::Left) => {
+                // Inside the pane's border.
+                self.selection =
+                    under.map(|(_, area)| Selection::start(area.inner(Margin::new(1, 1)), at));
+                vec![]
+            }
+            MouseEventKind::Drag(MouseButton::Left) => {
+                if let Some(selection) = &mut self.selection {
+                    selection.extend(at);
+                }
+                vec![]
+            }
+            MouseEventKind::Up(MouseButton::Left) => match self.selection {
+                Some(selection) if !selection.is_empty() => {
+                    let text = self.selected_text(selection, screen, state);
+                    if text.is_empty() {
+                        vec![]
+                    } else {
+                        vec![Action::CopyText(text)]
+                    }
+                }
+                _ => {
+                    self.selection = None;
+                    under
+                        .map(|(pane, _)| Action::FocusPane(pane))
+                        .into_iter()
+                        .collect()
+                }
+            },
+            MouseEventKind::ScrollUp | MouseEventKind::ScrollDown => match under {
+                Some((pane, _)) => self.scroll(pane, event.kind == MouseEventKind::ScrollUp, state),
+                None => vec![],
+            },
+            _ => vec![],
+        }
+    }
+
+    /// What the selection covers on screen, from a fresh render of it.
+    fn selected_text(&self, selection: Selection, screen: Rect, state: &AppState) -> String {
+        let Ok(mut terminal) = Terminal::new(TestBackend::new(screen.width, screen.height));
+        let Ok(_) = terminal.draw(|frame| self.render(frame, frame.area(), state));
+        selection.text(terminal.backend().buffer())
+    }
+
+    fn scroll(&mut self, pane: Pane, up: bool, state: &AppState) -> Vec<Action> {
+        match pane {
+            Pane::Chat => return self.chat.scroll_by(up, WHEEL_LINES, state),
+            Pane::Page if state.project_view.open || state.project.open => {
+                let key = KeyEvent::new(
+                    if up { KeyCode::Up } else { KeyCode::Down },
+                    KeyModifiers::NONE,
+                );
+                for _ in 0..WHEEL_LINES {
+                    if state.project_view.open {
+                        self.project.handle_key(key, state);
+                    } else {
+                        self.changes.handle_key(key, state);
+                    }
+                }
+            }
+            Pane::Page => self.page.scroll_by(up, WHEEL_LINES),
+        }
+        vec![]
+    }
+
+    /// The panes over the status bar.
+    fn split(area: Rect) -> [Rect; 2] {
+        Layout::vertical([Constraint::Min(3), Constraint::Length(1)]).areas(area)
     }
 
     /// The right pane: the project view or the changes view when open, else the page viewer.
@@ -110,26 +204,15 @@ impl Component for Root {
 
     fn render(&self, frame: &mut Frame, area: Rect, state: &AppState) {
         frame.render_widget(Block::new().style(Style::new().bg(theme::BG)), area);
-        let [panes, status] =
-            Layout::vertical([Constraint::Min(3), Constraint::Length(1)]).areas(area);
-
-        let single = state
-            .ui
-            .maximized
-            .or_else(|| (panes.width < TWO_PANE_MIN_WIDTH).then_some(state.ui.focus));
-        match single {
-            Some(Pane::Chat) => self.chat.render(frame, panes, state),
-            Some(Pane::Page) => self.render_right(frame, panes, state),
-            None => {
-                let [chat, _, page] = Layout::horizontal([
-                    Constraint::Percentage(54),
-                    Constraint::Length(1),
-                    Constraint::Min(30),
-                ])
-                .areas(panes);
-                self.chat.render(frame, chat, state);
-                self.render_right(frame, page, state);
+        let [panes, status] = Self::split(area);
+        for (pane, pane_area) in pane_areas(panes, state) {
+            match pane {
+                Pane::Chat => self.chat.render(frame, pane_area, state),
+                Pane::Page => self.render_right(frame, pane_area, state),
             }
+        }
+        if let Some(selection) = &self.selection {
+            selection.highlight(frame.buffer_mut());
         }
 
         if state.mode() == Mode::Command {
@@ -145,6 +228,26 @@ impl Component for Root {
         }
         if state.approvals.current().is_some() {
             self.approval.render(frame, area, state);
+        }
+    }
+}
+
+/// Where the panes go: side by side, or only one (maximized, or too narrow for two).
+fn pane_areas(panes: Rect, state: &AppState) -> Vec<(Pane, Rect)> {
+    let single = state
+        .ui
+        .maximized
+        .or_else(|| (panes.width < TWO_PANE_MIN_WIDTH).then_some(state.ui.focus));
+    match single {
+        Some(pane) => vec![(pane, panes)],
+        None => {
+            let [chat, _, page] = Layout::horizontal([
+                Constraint::Percentage(54),
+                Constraint::Length(1),
+                Constraint::Min(30),
+            ])
+            .areas(panes);
+            vec![(Pane::Chat, chat), (Pane::Page, page)]
         }
     }
 }

@@ -21,6 +21,7 @@
         "state": "awaiting_approval",
         "last_seq": 42,
         "context_tokens": 1200,
+        "model": "anthropic/claude-sonnet-4.5",
         "preview": "hello",
         "updated": "2026-10-18T12:00:00Z"
       }
@@ -42,6 +43,7 @@
           "state": "awaiting_approval",
           "last_seq": 42,
           "context_tokens": 1200,
+          "model": "anthropic/claude-sonnet-4.5",
           "preview": "hello",
           "updated": "2026-10-18T12:00:00Z"
         }
@@ -97,10 +99,44 @@
   },
   {
     "type": "ok",
+    "id": 51,
+    "result": {
+      "kind": "models",
+      "default_model": "qwen3-coder",
+      "models": [
+        {
+          "id": "anthropic/claude-sonnet-4.5",
+          "name": "Anthropic: Claude Sonnet 4.5",
+          "context": 1000000
+        },
+        {
+          "id": "qwen3-coder"
+        }
+      ]
+    }
+  },
+  {
+    "type": "ok",
     "id": 52,
     "result": {
       "kind": "merged",
       "commit": "abc1234"
+    }
+  },
+  {
+    "type": "ok",
+    "id": 53,
+    "result": {
+      "kind": "history",
+      "events": [
+        {
+          "type": "turn.done",
+          "session": "a3f1",
+          "seq": 7,
+          "cancelled": false
+        }
+      ],
+      "more": true
     }
   },
   {
@@ -330,6 +366,7 @@
       "state": "awaiting_approval",
       "last_seq": 42,
       "context_tokens": 1200,
+      "model": "anthropic/claude-sonnet-4.5",
       "preview": "hello",
       "updated": "2026-10-18T12:00:00Z"
     }

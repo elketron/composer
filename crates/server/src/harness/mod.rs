@@ -20,6 +20,8 @@ mod types;
 mod worker_sink;
 
 pub use child_process::ChildProcess;
+#[cfg(unix)]
+pub use child_process::signal_group;
 pub use claude_code_harness::ClaudeCodeHarness;
 pub use claude_code_run::ClaudeCodeRun;
 pub use harness_switches::HarnessSwitches;

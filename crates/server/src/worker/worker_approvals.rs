@@ -16,7 +16,7 @@ const BODY_CHARS: usize = 4000;
 
 /// Workers' tool, MCP and recipe approvals that their orchestrator decides instead of the user
 /// (its agent has `answer_approval`). One it doesn't decide by the end of the turn that read it
-/// goes to the user.
+/// is put to it once more; after a second such turn it goes to the user.
 #[derive(Default)]
 pub struct WorkerApprovals {
     waiting: Mutex<HashMap<String, Waiting>>,
@@ -25,9 +25,13 @@ pub struct WorkerApprovals {
 struct Waiting {
     orchestrator: String,
     ticket: String,
+    /// The worker that asks.
+    worker: String,
     /// The message that told the orchestrator, to know the turn that read it.
     message: String,
     read: bool,
+    /// It was reminded after a turn that ended without answering.
+    reminded: bool,
     reply: oneshot::Sender<Verdict>,
 }
 
@@ -35,15 +39,24 @@ impl WorkerApprovals {
     /// The orchestrator that decides `worker`'s approvals of `kind`: its parent, when its agent
     /// has `answer_approval`. Merges are always the user's.
     pub fn decider(server: &Server, worker: &Session, kind: ApprovalKind) -> Option<Arc<Session>> {
-        if !matches!(kind, ApprovalKind::Tool | ApprovalKind::Recipe | ApprovalKind::Mcp) || server.parent.is_some() {
+        if !Self::delegable(server, worker, kind) {
             return None;
         }
         let info = worker.info();
-        info.ticket.as_ref()?;
         let parent = server.sessions.get(info.parent.as_deref()?).ok()?;
         AgentDefinition::load(&server.workspace, &parent.info().agent)
             .is_ok_and(|agent| agent.allows_tool("answer_approval"))
             .then_some(parent)
+    }
+
+    /// A worker's tool, MCP or recipe approval, asked here (not in a worker process): one that
+    /// someone other than the user may decide (its orchestrator, `[system1]`).
+    pub fn delegable(server: &Server, worker: &Session, kind: ApprovalKind) -> bool {
+        matches!(
+            kind,
+            ApprovalKind::Tool | ApprovalKind::Recipe | ApprovalKind::Mcp
+        ) && server.parent.is_none()
+            && worker.info().ticket.is_some()
     }
 
     /// Tells `orchestrator` about request `id` of `worker` and waits for its verdict. `None` if
@@ -84,8 +97,10 @@ impl WorkerApprovals {
             Waiting {
                 orchestrator: orchestrator.id().to_string(),
                 ticket,
+                worker: worker.id().to_string(),
                 message: content.clone(),
                 read: false,
+                reminded: false,
                 reply,
             },
         );
@@ -159,20 +174,44 @@ impl WorkerApprovals {
         }
     }
 
-    /// `orchestrator`'s turn ended: what it read and didn't answer goes to the user.
-    pub fn turn_ended(&self, orchestrator: &str) {
-        let mut waiting = self.waiting.lock().expect("approvals lock");
-        let ids: Vec<String> = waiting
-            .iter()
-            .filter(|(_, w)| w.orchestrator == orchestrator && w.read)
-            .map(|(id, _)| id.clone())
-            .collect();
-        for id in ids {
-            if let Some(w) = waiting.remove(&id) {
-                let _ = w.reply.send(Verdict::AskUser(
-                    "it ended its turn without deciding".into(),
-                ));
+    /// `orchestrator`'s turn ended. What it read and didn't answer is put to it again (models
+    /// forget to call `answer_approval`); the second time, or after you stopped the turn, it
+    /// goes to the user.
+    pub fn turn_ended(&self, server: &Arc<Server>, orchestrator: &Arc<Session>, cancelled: bool) {
+        let mut reminders = Vec::new();
+        {
+            let mut waiting = self.waiting.lock().expect("approvals lock");
+            let ids: Vec<String> = waiting
+                .iter()
+                .filter(|(_, w)| w.orchestrator == orchestrator.id() && w.read)
+                .map(|(id, _)| id.clone())
+                .collect();
+            for id in ids {
+                let Some(w) = waiting.get_mut(&id) else {
+                    continue;
+                };
+                if cancelled || w.reminded {
+                    if let Some(w) = waiting.remove(&id) {
+                        let _ = w.reply.send(Verdict::AskUser(
+                            "it ended its turn without deciding".into(),
+                        ));
+                    }
+                    continue;
+                }
+                // The request's own first line stays first: it is what the request is.
+                w.message = format!(
+                    "{}\n\nYou ended your turn without deciding this. Call `answer_approval` now \
+                     (request: \"{id}\"); ending this turn without it asks the user.",
+                    w.message
+                );
+                w.read = false;
+                w.reminded = true;
+                reminders.push((w.worker.clone(), w.message.clone()));
             }
+        }
+        for (worker, content) in reminders {
+            let message = user_message(content, MessageSource::Worker { session: worker });
+            submit(server, orchestrator, message);
         }
     }
 }

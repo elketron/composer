@@ -20,10 +20,10 @@ use crate::hash::content_hash;
 use crate::home::Home;
 use crate::hub::EventHub;
 use crate::init::local_token;
+use crate::mcp_clients::McpServers;
 use crate::provider::{OpenAiProvider, Provider};
 use crate::session::{Session, SessionManager};
 use crate::slot_pool::SlotPool;
-use crate::mcp_clients::McpServers;
 use crate::tools::ToolRegistry;
 use crate::worker::{ParentLink, Verdict, WorkerApprovals, WorkerRegistry};
 
@@ -253,6 +253,7 @@ impl Server {
         *self.watcher.lock().expect("watcher lock") = Some(crate::watcher::watch(self)?);
         tokio::spawn(crate::reminders::run_reminders(self.clone()));
         tokio::spawn(crate::pipeline::run_gates(self.clone()));
+        self.workers.recover_orphans(self);
         self.workers.schedule_paused(self);
         let router = crate::api::router(self.clone());
         let serving = axum::serve(listener, router);
@@ -458,7 +459,7 @@ impl Server {
             args,
             ..
         } = &mut message
-            && let Some(orchestrator) = WorkerApprovals::decider(self, session, *kind)
+            && WorkerApprovals::delegable(self, session, *kind)
         {
             let what = match kind {
                 ApprovalKind::Recipe => {
@@ -468,10 +469,28 @@ impl Server {
                 }
                 _ => title.clone(),
             };
-            let verdict = self
-                .worker_approvals
-                .ask(self, &orchestrator, session, &request, &what, body, cancel)
-                .await;
+            // `[system1]` first, then the orchestrator (when its agent decides them).
+            let mut decided_by = self.config().system1.model.clone();
+            let mut verdict = tokio::select! {
+                verdict = crate::worker::system1::decide(self, session, &what, body) => verdict,
+                _ = cancel.cancelled() => {
+                    session.update_info(&self.hub, |info| info.state = after);
+                    return None;
+                }
+            };
+            if verdict.is_none()
+                && let Some(orchestrator) = WorkerApprovals::decider(self, session, *kind)
+            {
+                decided_by = "Its orchestrator".into();
+                verdict = self
+                    .worker_approvals
+                    .ask(self, &orchestrator, session, &request, &what, body, cancel)
+                    .await;
+                if verdict.is_none() {
+                    session.update_info(&self.hub, |info| info.state = after);
+                    return None;
+                }
+            }
             let decided = |decision, reason: String| {
                 session.update_info(&self.hub, |info| info.state = after);
                 Some(ApprovalAnswer {
@@ -480,14 +499,13 @@ impl Server {
                 })
             };
             match verdict {
-                None => {
-                    session.update_info(&self.hub, |info| info.state = after);
-                    return None;
+                None => {}
+                Some(Verdict::Approve(reason)) => {
+                    return decided(ApprovalDecision::Approve, reason);
                 }
-                Some(Verdict::Approve(reason)) => return decided(ApprovalDecision::Approve, reason),
                 Some(Verdict::Deny(reason)) => return decided(ApprovalDecision::Deny, reason),
                 Some(Verdict::AskUser(reason)) => {
-                    *body = format!("Its orchestrator asks you: {reason}\n\n{body}");
+                    *body = format!("{decided_by} asks you: {reason}\n\n{body}");
                 }
             }
         }

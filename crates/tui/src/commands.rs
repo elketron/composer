@@ -4,7 +4,7 @@ use crate::action::Action;
 use crate::store::types::PickerKind;
 
 /// Every command, as shown by help: (usage, what it does).
-pub const COMMANDS: [(&str, &str); 22] = [
+pub const COMMANDS: [(&str, &str); 23] = [
     (
         ":new [agent]",
         "start a new session (default agent, or e.g. orchestrator)",
@@ -21,6 +21,10 @@ pub const COMMANDS: [(&str, &str); 22] = [
     (
         ":project view [name]",
         "a project's works, sessions, branches and memory (gp; default: this session's)",
+    ),
+    (
+        ":model [id|none]",
+        "the model this session uses (Tab lists the provider's); none: the server's again",
     ),
     (
         ":scope [name|none]",
@@ -97,6 +101,11 @@ pub fn parse_command(line: &str) -> Result<Action, String> {
             _ => Ok(Action::SetProject(arg.filter(|a| a != "none"))),
         },
         "scope" => Ok(Action::Scope(arg)),
+        "model" | "m" => Ok(match arg.as_deref() {
+            None => Action::ShowModel,
+            Some("none") => Action::SetModel(None),
+            Some(model) => Action::SetModel(Some(model.to_string())),
+        }),
         "pipeline" | "pipelines" => {
             let words: Vec<&str> = arg.as_deref().unwrap_or("").split_whitespace().collect();
             match words[..] {

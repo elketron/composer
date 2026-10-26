@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../state/actions.dart';
 import '../../theme/tokens.dart' as t;
 import '../store_scope.dart';
+import 'model_sheet.dart';
 import 'project_sheet.dart';
 import 'review_page.dart';
 
@@ -38,6 +39,7 @@ class ChatMenu extends StatelessWidget {
         _ when choice.startsWith('harness:') => _toggle(store, session?.project, choice),
         'review' => openReview(context, url, session!.ticket!),
         'project' => showProjectSheet(context, url),
+        'model' => showModelSheet(context, url),
         'unset' => store.dispatch(ProjectChosen(url, null)),
         'compact' => store.dispatch(CompactRequested(url)),
         'stop' => store.dispatch(CancelRequested(url)),
@@ -47,6 +49,9 @@ class ChatMenu extends StatelessWidget {
         if (session?.ticket != null) PopupMenuItem(value: 'review', child: Text('Review changes of ticket ${session!.ticket}')),
         PopupMenuItem(value: 'project', child: Text(project == null ? 'Set project…' : 'Change project…')),
         if (project != null) PopupMenuItem(value: 'unset', child: Text('Unset $project')),
+        // A worker's model is its ticket's.
+        if (session != null && session.ticket == null)
+          PopupMenuItem(value: 'model', child: Text(session.model == null ? 'Model…' : 'Model: ${session.model}…')),
         for (final h in switches)
           PopupMenuItem(
             value: 'harness:${h.on ? 'off' : 'on'}:${h.entry}',
@@ -54,6 +59,9 @@ class ChatMenu extends StatelessWidget {
           ),
         const PopupMenuItem(value: 'compact', child: Text('Compact (save memory, summarize)')),
         if (session != null && session.state != TurnState.idle) const PopupMenuItem(value: 'stop', child: Text('Stop the turn')),
+        // Cut off by a usage limit or a restart: a message goes on, this gives up.
+        if (session != null && session.state == TurnState.idle && session.worker == WorkerState.paused)
+          const PopupMenuItem(value: 'stop', child: Text('Stop this worker')),
       ],
     );
   }

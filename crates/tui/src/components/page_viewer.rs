@@ -28,6 +28,8 @@ pub struct PageViewer {
     /// Hint labels of the links visible at the last render.
     hints: RefCell<Vec<(String, String)>>,
     height: std::cell::Cell<usize>,
+    /// How far down it could scroll at last render (the mouse wheel stops there).
+    max_scroll: std::cell::Cell<usize>,
 }
 
 impl PageViewer {
@@ -39,7 +41,18 @@ impl PageViewer {
             cache: RefCell::new(None),
             hints: RefCell::new(Vec::new()),
             height: std::cell::Cell::new(20),
+            max_scroll: std::cell::Cell::new(0),
         }
+    }
+
+    /// The mouse wheel: `lines` up or down, within the page.
+    pub fn scroll_by(&mut self, up: bool, lines: usize) {
+        let scroll = self.scroll.min(self.max_scroll.get());
+        self.scroll = if up {
+            scroll.saturating_sub(lines)
+        } else {
+            (scroll + lines).min(self.max_scroll.get())
+        };
     }
 
     /// Resets scrolling when another page is shown.
@@ -146,9 +159,9 @@ impl Component for PageViewer {
 
         let rendered = self.rendered(page, inner.width);
         let visible = inner.height as usize;
-        let scroll = self
-            .scroll
-            .min(rendered.lines.len().saturating_sub(visible));
+        self.max_scroll
+            .set(rendered.lines.len().saturating_sub(visible));
+        let scroll = self.scroll.min(self.max_scroll.get());
         let shown: Vec<Line> = rendered
             .lines
             .iter()

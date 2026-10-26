@@ -17,6 +17,19 @@ pub struct ProviderConfig {
     pub model: String,
 }
 
+/// A fast model that decides workers' approvals instead of their orchestrator.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct System1Config {
+    /// Empty: off (the orchestrator decides).
+    #[serde(default)]
+    pub model: String,
+    /// Empty: the provider's (and its key, unless `api_key` is set).
+    #[serde(default)]
+    pub base_url: String,
+    #[serde(default)]
+    pub api_key: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ServerConfig {
     /// Keep on localhost; expose to the tailnet with `tailscale serve`.

@@ -10,6 +10,16 @@ base_url = "http://127.0.0.1:8080/v1"
 api_key = ""
 # Empty: the first model listed by GET /models.
 model = ""
+# OpenRouter: base_url = "https://openrouter.ai/api/v1" and your key. Sessions can use another of
+# its models: `:model` in the TUI, Model… in the app's chat menu.
+
+[system1]
+# A fast model that decides workers' approvals (approve, deny, or ask you) in one call, instead
+# of a turn of their orchestrator. Empty: off, the orchestrator decides.
+model = ""
+# Empty: the [provider]'s (sharing its slots), and its key unless api_key is set.
+base_url = ""
+api_key = ""
 
 [server]
 # Keep it on localhost; reach it from other devices with `tailscale serve` (see `composer pair`).

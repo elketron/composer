@@ -180,8 +180,9 @@ Each site's `index.md` explains its purpose and conventions; the agent opens it 
   `answer_approval(ticket, approve|deny|ask_user, reason, request?)`: approve lets it run once (a recipe isn't
   added to `approvals.json`, a tool gets no rule; `always` stays the user's), deny tells the worker the reason,
   ask_user sends the usual approval request to the clients with "Its orchestrator asks you: <reason>" above
-  the body. A request the orchestrator read in a turn that ended without answering goes to the user the same
-  way ("it ended its turn without deciding"). Merges and amendments are always the user's. The reason reaches
+  the body. A request the orchestrator read in a turn that ended without answering is put to it once more
+  (the request again, with a line to call `answer_approval` now); after a second such turn, or a
+  turn the user stopped, it goes to the user the same way ("it ended its turn without deciding"). Merges and amendments are always the user's. The reason reaches
   a worker process in `approval.ask`'s reply (`reason`).
 - **Plans vs tickets:** plans in `site://plans` hold longer-lived intent; tickets are units of work that link back to a plan.
 - Ticket frontmatter drives lifecycle: `open → claimed → done | failed`. Worker writes its result into the ticket.

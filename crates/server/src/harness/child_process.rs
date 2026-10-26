@@ -10,7 +10,9 @@ use crate::harness::HarnessRun;
 const GRACE: Duration = Duration::from_secs(5);
 
 /// A harness run that is a child process in its own process group, so interrupting it also
-/// stops whatever it started (shells, test runs, dev servers).
+/// stops whatever it started (shells, test runs, dev servers). So does its ending by itself:
+/// what it left running in the background (Claude Code's `run_in_background`) goes with it,
+/// instead of piling up for as long as the server runs.
 pub struct ChildProcess {
     pid: Option<u32>,
     child: Mutex<Child>,
@@ -37,11 +39,31 @@ impl ChildProcess {
     #[cfg(unix)]
     fn signal_group(&self, signal: libc::c_int) {
         if let Some(pid) = self.pid {
-            // SAFETY: killpg only sends a signal; the group id is our child's own pid.
-            unsafe {
-                libc::killpg(pid as libc::pid_t, signal);
-            }
+            signal_group(pid, signal);
         }
+    }
+
+    /// What is left of its group after it exited: asked to stop, then killed.
+    #[cfg(unix)]
+    fn clear_group(&self) {
+        let Some(pid) = self.pid else {
+            return;
+        };
+        signal_group(pid, libc::SIGTERM);
+        tokio::spawn(async move {
+            tokio::time::sleep(GRACE).await;
+            signal_group(pid, libc::SIGKILL);
+        });
+    }
+}
+
+/// Signals process group `pid` (a no-op once it is empty: a group's id isn't reused while any
+/// member lives).
+#[cfg(unix)]
+pub fn signal_group(pid: u32, signal: libc::c_int) {
+    // SAFETY: killpg only sends a signal.
+    unsafe {
+        libc::killpg(pid as libc::pid_t, signal);
     }
 }
 
@@ -67,6 +89,8 @@ impl HarnessRun for ChildProcess {
                 }
             }
         };
+        #[cfg(unix)]
+        self.clear_group();
         match status {
             Ok(status) => status
                 .code()
@@ -80,3 +104,32 @@ impl HarnessRun for ChildProcess {
         self.interrupt.notify_one();
     }
 }
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    fn alive(pid: i32) -> bool {
+        // SAFETY: signal 0 only checks that the process exists.
+        unsafe { libc::kill(pid, 0) == 0 }
+    }
+
+    #[tokio::test]
+    async fn what_a_run_leaves_behind_goes_with_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("pid");
+        let mut command = Command::new("sh");
+        command.arg("-c").arg(format!("sleep 60 & echo $! > {}", file.display()));
+        let run = ChildProcess::spawn(command).unwrap();
+        assert_eq!(run.wait().await, "exit 0");
+        let pid: i32 = std::fs::read_to_string(&file).unwrap().trim().parse().unwrap();
+        for _ in 0..50 {
+            if !alive(pid) {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        panic!("the background sleep ({pid}) outlived its run");
+    }
+}
+

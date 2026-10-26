@@ -106,6 +106,7 @@ impl EffectRunner {
                 });
             }
             Effect::EditPage(_)
+            | Effect::CopyText(_)
             | Effect::ViewText { .. }
             | Effect::OpenBrowser(_)
             | Effect::OpenFile { .. }

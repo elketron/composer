@@ -18,6 +18,7 @@ import 'chat_item_view.dart';
 import 'steps_view.dart';
 import 'worker_card.dart';
 import 'message_composer.dart';
+import 'older_messages.dart';
 import 'orchestration_bar.dart';
 
 /// A session's chat: transcript (newest at the bottom, following the stream), its approvals,
@@ -57,15 +58,16 @@ class ChatView extends StatelessWidget {
         (const ValueKey('streaming'), AgentText(streaming.content, url: url, streaming: true)),
       for (final (i, row) in chatRowsList.indexed.toList().reversed)
         (
-          ValueKey('row-$i'),
+          ValueKey('row-${i - chat.rowBase}'),
           switch (row) {
             ItemRow(:final item) => ChatItemView(item, url: url),
             StepsRow() => StepsView(row: row, url: url),
             WorkerRow() => WorkerCard(row: row, url: url),
           },
         ),
+      if (chat.more) (const ValueKey('older'), OlderMessages(url: url, session: chat.session, loading: chat.loadingOlder)),
     ];
-    final keys = [for (final (key, _) in rows) key];
+    final keys = {for (final (i, (key, _)) in rows.indexed) key: i};
 
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       if (header)
@@ -87,17 +89,14 @@ class ChatView extends StatelessWidget {
       if (!compact) OrchestrationBar(url: url, status: status, session: chat.session),
       Expanded(
         child: rows.isEmpty
-            ? Center(child: Text(chat.lastSeq == 0 ? 'Say something to start.' : '', style: const TextStyle(color: t.faint)))
+            ? Center(child: Text(chat.loaded && chat.lastSeq == 0 ? 'Say something to start.' : '', style: const TextStyle(color: t.faint)))
             : SelectionArea(
                 child: ListView.builder(
                   key: PageStorageKey('chat-$url-${chat.session}${compact ? '-side' : ''}'),
                   reverse: true,
                   padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
                   itemCount: rows.length,
-                  findChildIndexCallback: (key) {
-                    final i = keys.indexOf(key);
-                    return i < 0 ? null : i;
-                  },
+                  findChildIndexCallback: (key) => keys[key],
                   itemBuilder: (_, i) => Padding(
                     key: rows[i].$1,
                     padding: const EdgeInsets.only(top: 10),

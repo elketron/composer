@@ -23,6 +23,8 @@ pub struct ChatPane {
     scroll: usize,
     /// Visible height at last render, for page-wise scrolling.
     height: Cell<usize>,
+    /// How far up it could scroll at last render (the mouse wheel stops there).
+    max_scroll: Cell<usize>,
     pending_g: bool,
 }
 
@@ -32,7 +34,30 @@ impl ChatPane {
             composer: Composer::new(),
             scroll: 0,
             height: Cell::new(20),
+            max_scroll: Cell::new(0),
             pending_g: false,
+        }
+    }
+
+    /// The mouse wheel: `lines` up or down, within the transcript; at the top, older messages.
+    pub fn scroll_by(&mut self, up: bool, lines: usize, state: &AppState) -> Vec<Action> {
+        let scroll = self.scroll.min(self.max_scroll.get());
+        self.scroll = if up {
+            (scroll + lines).min(self.max_scroll.get())
+        } else {
+            scroll.saturating_sub(lines)
+        };
+        self.older(up, state)
+    }
+
+    /// Scrolled up to the oldest message shown, while older ones remain: fetch them. The
+    /// view stays put (scrolling counts from the bottom).
+    fn older(&self, up: bool, state: &AppState) -> Vec<Action> {
+        let session = &state.session;
+        if up && self.scroll >= self.max_scroll.get() && session.more && !session.loading_older {
+            vec![Action::LoadOlder]
+        } else {
+            vec![]
         }
     }
 
@@ -106,6 +131,10 @@ impl Component for ChatPane {
         }
         let page = self.height.get().max(2) / 2;
         let g = std::mem::take(&mut self.pending_g);
+        let up = matches!(
+            (key.code, key.modifiers),
+            (KeyCode::Char('k') | KeyCode::Up, _) | (KeyCode::Char('u'), KeyModifiers::CONTROL)
+        ) || (key.code == KeyCode::Char('g') && g);
         match (key.code, key.modifiers) {
             (KeyCode::Char('k') | KeyCode::Up, _) => self.scroll += 1,
             (KeyCode::Char('j') | KeyCode::Down, _) => self.scroll = self.scroll.saturating_sub(1),
@@ -119,7 +148,7 @@ impl Component for ChatPane {
             (KeyCode::Enter, _) => return vec![Action::SetMode(Mode::Insert)],
             _ => {}
         }
-        vec![]
+        self.older(up, state)
     }
 
     fn render(&self, frame: &mut Frame, area: Rect, state: &AppState) {
@@ -138,10 +167,19 @@ impl Component for ChatPane {
             Layout::vertical([Constraint::Min(1), Constraint::Length(composer_height)])
                 .areas(inner);
 
-        let lines = chat_lines(state, messages.width);
+        let mut lines = chat_lines(state, messages.width);
+        if state.session.more {
+            let note = if state.session.loading_older {
+                " loading older messages…"
+            } else {
+                " ↑ older messages: scroll up to load them"
+            };
+            lines.insert(0, Line::from(Span::styled(note, theme::faint())));
+        }
         let visible = messages.height as usize;
         self.height.set(visible);
         let max_scroll = lines.len().saturating_sub(visible);
+        self.max_scroll.set(max_scroll);
         let scroll = self.scroll.min(max_scroll);
         let start = lines.len().saturating_sub(visible + scroll);
         let shown: Vec<Line> = lines.into_iter().skip(start).take(visible).collect();

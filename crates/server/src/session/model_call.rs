@@ -19,7 +19,7 @@ use crate::tools::ToolContext;
 pub async fn model_step(
     server: &Arc<Server>,
     session: &Arc<Session>,
-    request: ModelRequest,
+    mut request: ModelRequest,
     cancel: &CancellationToken,
     live: bool,
 ) -> Result<StepOutput, String> {
@@ -33,6 +33,7 @@ pub async fn model_step(
     session.update_info(&server.hub, |info| info.state = TurnState::Running);
 
     let id = session.id().to_string();
+    request.model = request.model.or(session.info().model);
     let mut stream = server.provider.stream(request).await?;
     let mut out = StepOutput::default();
     loop {

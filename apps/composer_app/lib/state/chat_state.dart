@@ -5,7 +5,21 @@ const _keep = Object();
 
 /// The open session of a server: its transcript so far.
 class ChatState {
-  const ChatState({required this.session, this.items = const [], this.streaming, this.lastSeq = 0, this.liveAfter = 0, this.drafting = false, this.uploads = const [], this.nextUpload = 1});
+  const ChatState({
+    required this.session,
+    this.items = const [],
+    this.streaming,
+    this.lastSeq = 0,
+    this.liveAfter = 0,
+    this.drafting = false,
+    this.uploads = const [],
+    this.nextUpload = 1,
+    this.loaded = false,
+    this.firstSeq = 0,
+    this.more = false,
+    this.loadingOlder = false,
+    this.rowBase = 0,
+  });
 
   final String session;
   final List<ChatItem> items;
@@ -26,7 +40,33 @@ class ChatState {
   /// The id the next upload gets.
   final int nextUpload;
 
-  ChatState copyWith({List<ChatItem>? items, Object? streaming = _keep, int? lastSeq, bool? drafting, List<Upload>? uploads, int? nextUpload}) => ChatState(
+  /// Its last messages arrived (it opens on its end); then it is attached.
+  final bool loaded;
+
+  /// The oldest event shown; older ones come as you scroll up.
+  final int firstSeq;
+
+  /// Older messages remain on the server.
+  final bool more;
+  final bool loadingOlder;
+
+  /// The rows that older messages added in front: rows keep their key as they do.
+  final int rowBase;
+
+  ChatState copyWith({
+    List<ChatItem>? items,
+    Object? streaming = _keep,
+    int? lastSeq,
+    bool? drafting,
+    List<Upload>? uploads,
+    int? nextUpload,
+    bool? loaded,
+    int? firstSeq,
+    bool? more,
+    bool? loadingOlder,
+    int? rowBase,
+  }) =>
+      ChatState(
         session: session,
         items: items ?? this.items,
         streaming: identical(streaming, _keep) ? this.streaming : streaming as Streaming?,
@@ -35,5 +75,10 @@ class ChatState {
         drafting: drafting ?? this.drafting,
         uploads: uploads ?? this.uploads,
         nextUpload: nextUpload ?? this.nextUpload,
+        loaded: loaded ?? this.loaded,
+        firstSeq: firstSeq ?? this.firstSeq,
+        more: more ?? this.more,
+        loadingOlder: loadingOlder ?? this.loadingOlder,
+        rowBase: rowBase ?? this.rowBase,
       );
 }

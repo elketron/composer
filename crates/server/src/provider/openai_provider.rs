@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use composer_protocol::ModelInfo;
 use futures::StreamExt;
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
@@ -36,6 +37,16 @@ impl OpenAiProvider {
     }
 
     async fn first_model(&self) -> Result<String, String> {
+        self.list_models()
+            .await?
+            .into_iter()
+            .next()
+            .map(|m| m.id)
+            .ok_or_else(|| format!("no models listed at {}/models", self.base_url))
+    }
+
+    /// `GET /models`: ids, and OpenRouter's names and context lengths.
+    async fn list_models(&self) -> Result<Vec<ModelInfo>, String> {
         let response = self
             .authorized(self.client.get(format!("{}/models", self.base_url)))
             .send()
@@ -45,10 +56,7 @@ impl OpenAiProvider {
             .json()
             .await
             .map_err(|e| format!("listing models: {e}"))?;
-        body["data"][0]["id"]
-            .as_str()
-            .map(str::to_string)
-            .ok_or_else(|| format!("no models listed at {}/models", self.base_url))
+        Ok(models_of(&body))
     }
 
     fn authorized(&self, request: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
@@ -64,6 +72,10 @@ impl OpenAiProvider {
 impl Provider for OpenAiProvider {
     fn model(&self) -> &str {
         &self.model
+    }
+
+    async fn models(&self) -> Result<Vec<ModelInfo>, String> {
+        self.list_models().await
     }
 
     async fn stream(&self, request: ModelRequest) -> Result<ModelStream, String> {
@@ -150,9 +162,24 @@ impl Provider for OpenAiProvider {
     }
 }
 
+fn models_of(body: &Value) -> Vec<ModelInfo> {
+    body["data"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|m| {
+            Some(ModelInfo {
+                id: m["id"].as_str()?.to_string(),
+                name: m["name"].as_str().map(str::to_string),
+                context: m["context_length"].as_u64().map(|c| c as u32),
+            })
+        })
+        .collect()
+}
+
 fn request_body(model: &str, request: &ModelRequest) -> Value {
     let mut body = json!({
-        "model": model,
+        "model": request.model.as_deref().unwrap_or(model),
         "stream": true,
         "stream_options": { "include_usage": true },
         "messages": request.messages.iter().map(message_json).collect::<Vec<_>>(),
@@ -214,4 +241,51 @@ fn parse_usage(chunk: &Value) -> Option<Usage> {
             .and_then(Value::as_u64)
             .unwrap_or(0) as u32,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn models_from_llama_server_and_openrouter() {
+        let llama =
+            json!({ "object": "list", "data": [{ "id": "qwen3-coder", "object": "model" }] });
+        assert_eq!(
+            models_of(&llama),
+            [ModelInfo {
+                id: "qwen3-coder".into(),
+                name: None,
+                context: None
+            }]
+        );
+        let openrouter = json!({ "data": [{
+            "id": "anthropic/claude-sonnet-4.5",
+            "name": "Anthropic: Claude Sonnet 4.5",
+            "context_length": 1000000,
+            "pricing": { "prompt": "0.000003" }
+        }, { "name": "no id" }] });
+        assert_eq!(
+            models_of(&openrouter),
+            [ModelInfo {
+                id: "anthropic/claude-sonnet-4.5".into(),
+                name: Some("Anthropic: Claude Sonnet 4.5".into()),
+                context: Some(1_000_000),
+            }]
+        );
+    }
+
+    #[test]
+    fn a_request_goes_to_its_own_model() {
+        let request = |model: Option<&str>| ModelRequest {
+            messages: vec![],
+            tools: vec![],
+            model: model.map(str::to_string),
+        };
+        assert_eq!(request_body("default", &request(None))["model"], "default");
+        assert_eq!(
+            request_body("default", &request(Some("other")))["model"],
+            "other"
+        );
+    }
 }

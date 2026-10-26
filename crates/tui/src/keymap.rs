@@ -140,7 +140,7 @@ impl Keymap {
             (
                 vec![ctrl('c')],
                 Action::CancelTurn,
-                "cancel the agent's turn",
+                "cancel the agent's turn (a paused worker: stop it for good)",
             ),
             (
                 vec![ctrl('o')],

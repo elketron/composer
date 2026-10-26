@@ -8,7 +8,7 @@ const _keep = Object();
 
 /// What the app knows about a server right now (not persisted).
 class ServerStatus {
-  const ServerStatus({this.link = LinkState.connecting, this.error, this.retryAt, this.info, this.sessions = const [], this.approvals = const [], this.chat, this.page = const PageState(), this.sites = const [], this.workers = const {}, this.agents = const [], this.projects = const [], this.unread = const {}, this.recent = const [], this.search = const PageSearch(), this.slotsUsed = 0, this.harnesses = const {}, this.reviews = const {}, this.side, this.sideTicket, this.sideChat, this.opened = false, this.projectSearch = const ProjectSearch(), this.overviews = const {}, this.scope, this.sideProject, this.pipelines, this.newWork = const NewWork()});
+  const ServerStatus({this.link = LinkState.connecting, this.error, this.retryAt, this.info, this.sessions = const [], this.approvals = const [], this.chat, this.page = const PageState(), this.sites = const [], this.workers = const {}, this.agents = const [], this.projects = const [], this.unread = const {}, this.recent = const [], this.search = const PageSearch(), this.slotsUsed = 0, this.harnesses = const {}, this.reviews = const {}, this.side, this.sideTicket, this.sideChat, this.opened = false, this.projectSearch = const ProjectSearch(), this.overviews = const {}, this.scope, this.sideProject, this.pipelines, this.newWork = const NewWork(), this.models});
 
   static const initial = ServerStatus();
 
@@ -58,6 +58,9 @@ class ServerStatus {
 
   /// External harnesses (Claude Code) per project folder, as last asked (`harness.list`).
   final Map<String, List<HarnessSwitch>> harnesses;
+
+  /// The provider's models and the server's own, as last asked (`model.list`); null: not yet.
+  final CommandResultModels? models;
 
   /// Tickets on the review screen, by id.
   final Map<String, TicketReviewState> reviews;
@@ -151,6 +154,7 @@ class ServerStatus {
     Object? sideProject = _keep,
     Pipelines? pipelines,
     NewWork? newWork,
+    CommandResultModels? models,
   }) =>
       ServerStatus(
         link: link ?? this.link,
@@ -180,6 +184,7 @@ class ServerStatus {
         scope: identical(scope, _keep) ? this.scope : scope as String?,
         sideProject: identical(sideProject, _keep) ? this.sideProject : sideProject as String?,
         pipelines: pipelines ?? this.pipelines,
+        models: models ?? this.models,
         newWork: newWork ?? this.newWork,
       );
 }

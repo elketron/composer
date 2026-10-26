@@ -17,11 +17,28 @@
   },
   {
     "id": 4,
+    "type": "session.history",
+    "session": "a3f1",
+    "before": 40,
+    "messages": 50
+  },
+  {
+    "id": 5,
     "type": "session.detach",
     "session": "a3f1"
   },
   {
-    "id": 5,
+    "id": 6,
+    "type": "model.list"
+  },
+  {
+    "id": 7,
+    "type": "model.set",
+    "session": "a3f1",
+    "model": "anthropic/claude-sonnet-4.5"
+  },
+  {
+    "id": 8,
     "type": "message.send",
     "session": "a3f1",
     "text": "hi",
@@ -32,55 +49,55 @@
     "attachments": []
   },
   {
-    "id": 6,
+    "id": 9,
     "type": "session.compact",
     "session": "a3f1"
   },
   {
-    "id": 7,
+    "id": 10,
     "type": "turn.cancel",
     "session": "a3f1"
   },
   {
-    "id": 8,
+    "id": 11,
     "type": "project.set",
     "session": "a3f1",
     "path": "/p"
   },
   {
-    "id": 9,
+    "id": 12,
     "type": "approval.respond",
     "request": "r1",
     "decision": "approve"
   },
   {
-    "id": 10,
+    "id": 13,
     "type": "approval.respond",
     "request": "r2",
     "decision": "always"
   },
   {
-    "id": 11,
+    "id": 14,
     "type": "ticket.changes",
     "ticket": "0007"
   },
   {
-    "id": 12,
+    "id": 15,
     "type": "project.overview",
     "project": "game"
   },
   {
-    "id": 13,
+    "id": 16,
     "type": "pipeline.list"
   },
   {
-    "id": 14,
+    "id": 17,
     "type": "pipeline.new",
     "kind": "video",
     "name": "shorts"
   },
   {
-    "id": 15,
+    "id": 18,
     "type": "work.new",
     "pipeline": "coding",
     "name": "save-system",
@@ -88,35 +105,35 @@
     "brief": "Three save slots."
   },
   {
-    "id": 16,
+    "id": 19,
     "type": "work.run",
     "work": "coding/save-system",
     "stage": "02_plan"
   },
   {
-    "id": 17,
+    "id": 20,
     "type": "ticket.merge",
     "ticket": "0007"
   },
   {
-    "id": 18,
+    "id": 21,
     "type": "ticket.discard",
     "ticket": "0007"
   },
   {
-    "id": 19,
+    "id": 22,
     "type": "subscribe",
     "urls": [
       "*"
     ]
   },
   {
-    "id": 20,
+    "id": 23,
     "type": "worker.hello",
     "session": "a3f1"
   },
   {
-    "id": 21,
+    "id": 24,
     "type": "worker.event",
     "event": {
       "type": "turn.started",
@@ -125,16 +142,16 @@
     }
   },
   {
-    "id": 22,
+    "id": 25,
     "type": "slot.acquire"
   },
   {
-    "id": 23,
+    "id": 26,
     "type": "slot.release",
     "grant": 7
   },
   {
-    "id": 24,
+    "id": 27,
     "type": "approval.ask",
     "site": "t",
     "recipe": "r",
@@ -143,30 +160,30 @@
     "hash": "h"
   },
   {
-    "id": 25,
+    "id": 28,
     "type": "worker.finish",
     "state": "failed",
     "summary": "why"
   },
   {
-    "id": 26,
+    "id": 29,
     "type": "tool.list",
     "session": "a3f1"
   },
   {
-    "id": 27,
+    "id": 30,
     "type": "harness.list",
     "project": "composer"
   },
   {
-    "id": 28,
+    "id": 31,
     "type": "harness.set",
     "project": "composer",
     "entry": "claude-code",
     "on": false
   },
   {
-    "id": 29,
+    "id": 32,
     "type": "tool.call",
     "session": "a3f1",
     "name": "open",

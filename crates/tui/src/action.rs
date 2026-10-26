@@ -24,6 +24,8 @@ pub enum Action {
     AttachPath(String),
     /// Attach the image on the clipboard (`space a`).
     AttachClipboard,
+    /// Text selected with the mouse, to the clipboard.
+    CopyText(String),
     /// The clipboard image, read off the UI thread: (name, PNG bytes).
     ClipboardRead(Result<(String, Vec<u8>), String>),
     FileUploaded {
@@ -41,11 +43,17 @@ pub enum Action {
         agent: Option<String>,
     },
     AttachSession(String),
+    /// Scrolled up to the oldest message shown: fetch the ones before it.
+    LoadOlder,
     /// Back to the previous session (worker → orchestrator).
     JumpBack,
     /// The next (1) or previous (-1) session of this orchestration: orchestrator, workers.
     CycleOrchestration(i32),
     SetProject(Option<String>),
+    /// `:model <id>`: the model the session's turns use; `None`: the server's.
+    SetModel(Option<String>),
+    /// `:model`: say which model the session uses.
+    ShowModel,
     /// Start a chat in this project (a folder).
     NewSessionIn(String),
     /// Show a project's overview (a name or folder; `None`: the current session's project).

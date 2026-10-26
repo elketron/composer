@@ -415,6 +415,93 @@ impl WorkerRegistry {
         }
     }
 
+    /// At startup: workers the last server didn't see end (it was killed, or a run outlived the
+    /// shutdown wait) still say `starting` or `running`. One that can resume pauses, to go on
+    /// with a message, as after a clean shutdown; the rest fail. Their orchestrators aren't told.
+    pub fn recover_orphans(&self, server: &Arc<Server>) {
+        let orphans = server.sessions.list().into_iter().filter(|info| {
+            matches!(
+                info.worker,
+                Some(WorkerState::Starting | WorkerState::Running)
+            ) && self.get(&info.id).is_none()
+        });
+        for info in orphans {
+            let Some(ticket) = info.ticket.as_deref() else {
+                continue;
+            };
+            let page = ticket_page(server, ticket).ok();
+            let resumable = page.as_ref().is_some_and(|page| {
+                page.frontmatter
+                    .get_str("harness_session")
+                    .is_some_and(|s| !s.is_empty())
+            });
+            let state = if resumable {
+                WorkerState::Paused
+            } else {
+                WorkerState::Failed
+            };
+            tracing::info!(
+                "worker #{} on ticket {ticket} was cut off by a restart: {state:?}",
+                info.id
+            );
+            if let Some(page) = page
+                && page.frontmatter.get_str("status").as_deref() == Some("claimed")
+            {
+                let raw = if resumable {
+                    set_field(
+                        &set_status(&page.raw, "paused"),
+                        "paused_reason",
+                        "shutdown",
+                    )
+                } else {
+                    set_status(&page.raw, "failed")
+                };
+                if let Err(e) = server.write_page(&page.url, &raw, ChangedBy::Agent) {
+                    tracing::error!("updating ticket {ticket}: {e}");
+                }
+            }
+            if let Ok(session) = server.sessions.get(&info.id) {
+                session.update_info(&server.hub, |info| {
+                    info.state = TurnState::Idle;
+                    info.worker = Some(state);
+                });
+            }
+        }
+    }
+
+    /// Stop on a paused worker: it won't go on. Its ticket and session fail. False if `worker`
+    /// isn't a paused worker.
+    pub fn stop_paused(&self, server: &Arc<Server>, worker: &str) -> bool {
+        let Ok(session) = server.sessions.get(worker) else {
+            return false;
+        };
+        let info = session.info();
+        let Some(ticket) = info.ticket.as_deref() else {
+            return false;
+        };
+        if info.worker != Some(WorkerState::Paused) || self.get(worker).is_some() {
+            return false;
+        }
+        if let Ok(page) = ticket_page(server, ticket)
+            && page.frontmatter.get_str("status").as_deref() == Some("paused")
+            && let Err(e) = server.write_page(
+                &page.url,
+                &set_status(&page.raw, "failed"),
+                ChangedBy::Agent,
+            )
+        {
+            tracing::error!("updating ticket {ticket}: {e}");
+        }
+        session.update_info(&server.hub, |info| info.worker = Some(WorkerState::Failed));
+        server.hub.send(ServerMessage::WorkerStatus {
+            worker: worker.to_string(),
+            ticket: ticket.to_string(),
+            parent: info.parent.clone().unwrap_or_default(),
+            state: WorkerState::Failed,
+        });
+        true
+    }
+
     /// At startup: workers paused by a usage limit go on once it has reset.
     pub fn schedule_paused(&self, server: &Arc<Server>) {
         for (session, page) in paused_workers(server, "limit") {

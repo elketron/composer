@@ -58,6 +58,7 @@ async fn orchestrators_see_the_worker_agents() {
         state: TurnState::Idle,
         last_seq: 0,
         context_tokens: 0,
+        model: None,
         preview: None,
         updated: String::new(),
     };

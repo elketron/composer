@@ -246,11 +246,14 @@ sealed class ClientCommand {
         'session.create' => ClientCommandSessionCreate.fromJson(json),
         'session.list' => ClientCommandSessionList.fromJson(json),
         'session.attach' => ClientCommandSessionAttach.fromJson(json),
+        'session.history' => ClientCommandSessionHistory.fromJson(json),
         'session.detach' => ClientCommandSessionDetach.fromJson(json),
         'message.send' => ClientCommandMessageSend.fromJson(json),
         'session.compact' => ClientCommandSessionCompact.fromJson(json),
         'turn.cancel' => ClientCommandTurnCancel.fromJson(json),
         'project.set' => ClientCommandProjectSet.fromJson(json),
+        'model.list' => ClientCommandModelList.fromJson(json),
+        'model.set' => ClientCommandModelSet.fromJson(json),
         'harness.list' => ClientCommandHarnessList.fromJson(json),
         'harness.set' => ClientCommandHarnessSet.fromJson(json),
         'project.overview' => ClientCommandProjectOverview.fromJson(json),
@@ -333,6 +336,36 @@ final class ClientCommandSessionAttach extends ClientCommand {
         'type': 'session.attach',
         'session': session,
         if (since != null) 'since': since,
+      };
+}
+
+/// The transcript's last `messages` messages before `before` (the end if `None`), with the
+/// events between them; the reply is `history`. A client opens a long chat on its end this
+/// way (then attaches `since` the last of them) and fetches older ones as you scroll up.
+final class ClientCommandSessionHistory extends ClientCommand {
+  const ClientCommandSessionHistory({
+    required this.session,
+    this.before,
+    required this.messages,
+  });
+
+  final String session;
+
+  final int? before;
+
+  final int messages;
+
+  factory ClientCommandSessionHistory.fromJson(Map<String, Object?> json) => ClientCommandSessionHistory(
+        session: json['session'] as String,
+        before: json['before'] == null ? null : (json['before'] as num).toInt(),
+        messages: (json['messages'] as num).toInt(),
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'session.history',
+        'session': session,
+        if (before != null) 'before': before,
+        'messages': messages,
       };
 }
 
@@ -446,6 +479,41 @@ final class ClientCommandProjectSet extends ClientCommand {
         'type': 'project.set',
         'session': session,
         if (path != null) 'path': path,
+      };
+}
+
+/// The models the provider lists; the reply is `models`.
+final class ClientCommandModelList extends ClientCommand {
+  const ClientCommandModelList();
+
+  factory ClientCommandModelList.fromJson(Map<String, Object?> json) => ClientCommandModelList(
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'model.list',
+      };
+}
+
+/// The model a session's turns use; `None`: the server's again. The reply is `session`.
+final class ClientCommandModelSet extends ClientCommand {
+  const ClientCommandModelSet({
+    required this.session,
+    this.model,
+  });
+
+  final String session;
+
+  final String? model;
+
+  factory ClientCommandModelSet.fromJson(Map<String, Object?> json) => ClientCommandModelSet(
+        session: json['session'] as String,
+        model: json['model'] == null ? null : json['model'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'model.set',
+        'session': session,
+        if (model != null) 'model': model,
       };
 }
 
@@ -974,8 +1042,10 @@ sealed class CommandResult {
         'tools' => CommandResultTools.fromJson(json),
         'tool_output' => CommandResultToolOutput.fromJson(json),
         'harnesses' => CommandResultHarnesses.fromJson(json),
+        'models' => CommandResultModels.fromJson(json),
         'changes' => CommandResultChanges.fromJson(json),
         'merged' => CommandResultMerged.fromJson(json),
+        'history' => CommandResultHistory.fromJson(json),
         'project' => CommandResultProject.fromJson(json),
         'mcp_servers' => CommandResultMcpServers.fromJson(json),
         'config_reloaded' => CommandResultConfigReloaded.fromJson(json),
@@ -1158,6 +1228,29 @@ final class CommandResultHarnesses extends CommandResult {
       };
 }
 
+/// `model.list`: what the provider lists, and the model sessions use unless set.
+final class CommandResultModels extends CommandResult {
+  const CommandResultModels({
+    required this.defaultModel,
+    required this.models,
+  });
+
+  final String defaultModel;
+
+  final List<ModelInfo> models;
+
+  factory CommandResultModels.fromJson(Map<String, Object?> json) => CommandResultModels(
+        defaultModel: json['default_model'] as String,
+        models: (json['models'] as List).map((e) => ModelInfo.fromJson(e as Map<String, Object?>)).toList(),
+      );
+
+  Map<String, Object?> toJson() => {
+        'kind': 'models',
+        'default_model': defaultModel,
+        'models': models.map((e) => e.toJson()).toList(),
+      };
+}
+
 final class CommandResultChanges extends CommandResult {
   const CommandResultChanges({
     required this.changes,
@@ -1189,6 +1282,29 @@ final class CommandResultMerged extends CommandResult {
   Map<String, Object?> toJson() => {
         'kind': 'merged',
         'commit': commit,
+      };
+}
+
+/// `session.history`'s events, oldest first; `more`: older ones remain.
+final class CommandResultHistory extends CommandResult {
+  const CommandResultHistory({
+    required this.events,
+    required this.more,
+  });
+
+  final List<ServerMessage> events;
+
+  final bool more;
+
+  factory CommandResultHistory.fromJson(Map<String, Object?> json) => CommandResultHistory(
+        events: (json['events'] as List).map((e) => ServerMessage.fromJson(e as Map<String, Object?>)).toList(),
+        more: json['more'] as bool,
+      );
+
+  Map<String, Object?> toJson() => {
+        'kind': 'history',
+        'events': events.map((e) => e.toJson()).toList(),
+        'more': more,
       };
 }
 
@@ -1320,8 +1436,6 @@ final class CommandResultUnknown extends CommandResult {
   Map<String, Object?> toJson() => raw;
 }
 
-/// An external harness (or one of its models) for a project: allowed by config.toml, and
-/// turned on or off at runtime.
 class HarnessSwitch {
   const HarnessSwitch({
     required this.entry,
@@ -1493,6 +1607,37 @@ final class MessageSourceUnknown extends MessageSource {
   final Map<String, Object?> raw;
 
   Map<String, Object?> toJson() => raw;
+}
+
+/// An external harness (or one of its models) for a project: allowed by config.toml, and
+/// turned on or off at runtime.
+/// A model the provider lists (`GET /models`).
+class ModelInfo {
+  const ModelInfo({
+    required this.id,
+    this.name,
+    this.context,
+  });
+
+  final String id;
+
+  /// Its display name, when the provider gives one (OpenRouter does).
+  final String? name;
+
+  /// Context window in tokens, when listed.
+  final int? context;
+
+  factory ModelInfo.fromJson(Map<String, Object?> json) => ModelInfo(
+        id: json['id'] as String,
+        name: json['name'] == null ? null : json['name'] as String,
+        context: json['context'] == null ? null : (json['context'] as num).toInt(),
+      );
+
+  Map<String, Object?> toJson() => {
+        'id': id,
+        if (name != null) 'name': name,
+        if (context != null) 'context': context,
+      };
 }
 
 enum PageChangeKind {
@@ -2632,6 +2777,7 @@ class SessionInfo {
     required this.state,
     required this.lastSeq,
     this.contextTokens = 0,
+    this.model,
     this.preview,
     required this.updated,
   });
@@ -2662,6 +2808,9 @@ class SessionInfo {
   /// Prompt tokens of the last model call: the context in use.
   final int contextTokens;
 
+  /// The model its turns use (`model.set`); None: the server's.
+  final String? model;
+
   /// Start of the last message, for session lists.
   final String? preview;
 
@@ -2678,6 +2827,7 @@ class SessionInfo {
         state: TurnState.fromJson(json['state']),
         lastSeq: (json['last_seq'] as num).toInt(),
         contextTokens: json['context_tokens'] == null ? 0 : (json['context_tokens'] as num).toInt(),
+        model: json['model'] == null ? null : json['model'] as String,
         preview: json['preview'] == null ? null : json['preview'] as String,
         updated: json['updated'] as String,
       );
@@ -2692,6 +2842,7 @@ class SessionInfo {
         'state': state.toJson(),
         'last_seq': lastSeq,
         'context_tokens': contextTokens,
+        if (model != null) 'model': model,
         if (preview != null) 'preview': preview,
         'updated': updated,
       };

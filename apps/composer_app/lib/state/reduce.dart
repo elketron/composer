@@ -5,6 +5,7 @@ import 'approval_text.dart';
 import 'app_state.dart';
 import 'chat_events.dart';
 import 'chat_items.dart';
+import 'chat_rows.dart';
 import 'chat_state.dart';
 import 'effects.dart';
 import 'page_state.dart';
@@ -45,6 +46,9 @@ import 'types.dart';
       InfoReceived(:final url, :final info) => _info(s, url, info),
       ServerEvent(:final url, :final message) => _serverEvent(s, url, message),
       SessionOpened(:final url, :final session) => _open(s, url, session),
+      OlderRequested(:final url, :final session) => _older(s, url, session),
+      HistoryLoaded(:final url, :final session, :final before, :final events, :final more) =>
+        _historyLoaded(s, url, session, before, events, more),
       SessionClosed(:final url) => _close(s, url),
       NewSessionRequested(:final url, :final agent, :final project, :final text) =>
         (s, [CreateSession(url, agent, project: project, text: text)]),
@@ -76,6 +80,8 @@ import 'types.dart';
         ),
       ProjectChosen(:final url, :final project) =>
         _toChat(s, url, (session) => ClientCommandProjectSet(session: session, path: project)),
+      ModelsRequested(:final url) => (s, [SendCommand(url, const ClientCommandModelList())]),
+      ModelChosen(:final url, :final model) => _toChat(s, url, (session) => ClientCommandModelSet(session: session, model: model)),
       HarnessesRequested(:final url, :final project) =>
         (s, [SendCommand(url, ClientCommandHarnessList(project: project))]),
       HarnessToggled(:final url, :final project, :final entry, :final on) =>
@@ -251,11 +257,63 @@ import 'types.dart';
       FetchCatalog(url),
       // Works waiting at a gate (Needs you).
       SendCommand(url, const ClientCommandPipelineList()),
-      if (chat != null) SendCommand(url, ClientCommandSessionAttach(session: chat.session, since: chat.lastSeq)),
-      if (side != null && side.session != chat?.session)
-        SendCommand(url, ClientCommandSessionAttach(session: side.session, since: side.lastSeq)),
+      if (chat != null) _reattach(url, chat),
+      if (side != null && side.session != chat?.session) _reattach(url, side),
     ],
   );
+}
+
+/// After a reconnect: what came since, or (its history never arrived) its last messages again.
+AppEffect _reattach(String url, ChatState chat) => chat.loaded
+    ? SendCommand(url, ClientCommandSessionAttach(session: chat.session, since: chat.lastSeq))
+    : FetchHistory(url, chat.session, null);
+
+/// The messages before the oldest shown, once at a time.
+(AppState, List<AppEffect>) _older(AppState s, String url, String session) {
+  final status = s.status[url];
+  final chat = [status?.chat, status?.sideChat].firstWhere((c) => c?.session == session, orElse: () => null);
+  if (chat == null || !chat.loaded || !chat.more || chat.loadingOlder) return (s, const []);
+  ChatState mark(ChatState c) => c.session == session ? c.copyWith(loadingOlder: true) : c;
+  return (
+    _updateStatus(s, url, (x) => x.copyWith(chat: x.chat == null ? null : mark(x.chat!), sideChat: x.sideChat == null ? null : mark(x.sideChat!))),
+    [FetchHistory(url, session, chat.firstSeq)],
+  );
+}
+
+/// A chat's last messages (then it attaches for what follows), or older ones put in front.
+(AppState, List<AppEffect>) _historyLoaded(AppState s, String url, String session, int? before, List<ServerMessage>? events, bool more) {
+  var attach = false;
+  int? firstOf(List<ServerMessage> events) => events.map(sessionEvent).firstWhere((e) => e != null, orElse: () => null)?.$2;
+  ChatState apply(ChatState c) {
+    if (c.session != session) return c;
+    if (before == null) {
+      if (c.loaded) return c;
+      attach = true;
+      if (events == null) return c.copyWith(loaded: true);
+      final loaded = events.fold(c, applyChatEvent);
+      return loaded.copyWith(loaded: true, more: more, firstSeq: firstOf(events) ?? 0);
+    }
+    if (!c.loadingOlder || before != c.firstSeq) return c;
+    if (events == null || events.isEmpty) return c.copyWith(loadingOlder: false, more: false);
+    final older = events.fold(ChatState(session: session), applyChatEvent).items;
+    final items = [...older, ...c.items];
+    return c.copyWith(
+      items: items,
+      loadingOlder: false,
+      more: more,
+      firstSeq: firstOf(events) ?? c.firstSeq,
+      rowBase: c.rowBase + chatRows(items).length - chatRows(c.items).length,
+    );
+  }
+
+  final next = _updateStatus(
+    s,
+    url,
+    (x) => x.copyWith(chat: x.chat == null ? null : apply(x.chat!), sideChat: x.sideChat == null ? null : apply(x.sideChat!)),
+  );
+  final since = [next.status[url]?.chat, next.status[url]?.sideChat].firstWhere((c) => c?.session == session, orElse: () => null)?.lastSeq;
+  // Since the last of them: nothing in between is lost (`events` null: all of it).
+  return (next, [if (attach) SendCommand(url, ClientCommandSessionAttach(session: session, since: events == null ? null : since))]);
 }
 
 (AppState, List<AppEffect>) _open(AppState s, String url, String session) {
@@ -274,7 +332,7 @@ import 'types.dart';
     [
       if (current != null && current.session != s.status[url]?.sideChat?.session)
         SendCommand(url, ClientCommandSessionDetach(session: current.session)),
-      SendCommand(url, ClientCommandSessionAttach(session: session)),
+      FetchHistory(url, session, null),
     ],
   );
 }
@@ -291,13 +349,13 @@ AppState _side(AppState s, String url, SideTab? tab) => _updateStatus(s, url, (x
   final status = next.status[url];
   final old = status?.sideChat?.session;
   if (tab != SideTab.worker || session == null || status == null || old == session) return (next, const []);
-  // Attached as well (a full replay; the open chat skips what it has seen), and the one it
-  // replaces let go unless the open chat still shows it.
+  // Attached as well (its last messages first; the open chat skips what it has seen), and the
+  // one it replaces let go unless the open chat still shows it.
   return (
     _updateStatus(next, url, (x) => x.copyWith(sideChat: ChatState(session: session, liveAfter: x.session(session)?.lastSeq ?? 0))),
     [
       if (old != null && old != status.chat?.session) SendCommand(url, ClientCommandSessionDetach(session: old)),
-      SendCommand(url, ClientCommandSessionAttach(session: session)),
+      FetchHistory(url, session, null),
     ],
   );
 }
@@ -488,8 +546,12 @@ bool stopped(WorkerState state) => state == WorkerState.done || state == WorkerS
           ),
         ],
       );
+    // Not a turn that answered a worker's approval: the orchestrator decided it, nothing for you.
     case ServerMessageSessionUpdated(:final session)
-        when session.state == TurnState.idle && session.ticket == null && !viewing(session.id):
+        when session.state == TurnState.idle &&
+            session.ticket == null &&
+            !viewing(session.id) &&
+            !_workerApprovalAsk.hasMatch(session.preview ?? ''):
       final previous = status.session(session.id);
       if (previous == null || previous.state == TurnState.idle) return (s, const []);
       return (
@@ -539,6 +601,9 @@ bool stopped(WorkerState state) => state == WorkerState.done || state == WorkerS
     const [],
   );
 }
+
+/// The start of the message that asks an orchestrator to decide a worker's approval.
+final _workerApprovalAsk = RegExp(r'^\[worker #\S+ on ticket \S+ asks to approve:');
 
 Notify _approvalNote(String url, String server, ServerMessageApprovalRequest a) => Notify(
       key: 'approval:${a.request}',
@@ -599,6 +664,7 @@ AppState _event(AppState s, String url, ServerMessage message) => switch (messag
         _updateStatus(s, url, (x) => x.copyWith(overviews: {...x.overviews, overview.folder: overview})),
       ServerMessageOk(result: CommandResultPipelines(:final pipelines, :final templates, :final works)) =>
         _updateStatus(s, url, (x) => x.copyWith(pipelines: Pipelines(pipelines: pipelines, templates: templates, works: works))),
+      ServerMessageOk(result: final CommandResultModels models) => _updateStatus(s, url, (x) => x.copyWith(models: models)),
       ServerMessageOk(result: CommandResultHarnesses(:final project, :final harnesses)) =>
         _updateStatus(s, url, (x) => x.copyWith(harnesses: {...x.harnesses, project: harnesses})),
       ServerMessageSlots(:final used) => _updateStatus(s, url, (x) => x.copyWith(slotsUsed: used)),
@@ -617,8 +683,9 @@ AppState _event(AppState s, String url, ServerMessage message) => switch (messag
         }),
       _ when sessionEvent(message) != null => _updateStatus(s, url, (x) {
           final chat = x.chat, side = x.sideChat;
-          final nextChat = chat == null ? null : applyChatEvent(chat, message);
-          final nextSide = side == null ? null : applyChatEvent(side, message);
+          // Not before its history: the attach after it replays what came meanwhile.
+          final nextChat = chat == null || !chat.loaded ? chat : applyChatEvent(chat, message);
+          final nextSide = side == null || !side.loaded ? side : applyChatEvent(side, message);
           if (identical(nextChat, chat) && identical(nextSide, side)) return x;
           return x.copyWith(chat: nextChat, sideChat: nextSide);
         }),

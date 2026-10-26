@@ -50,6 +50,7 @@ pub fn complete(line: &str, state: &AppState) -> Completions {
         "new" => agents(arg, state),
         "open" | "o" => pages(arg, state),
         "app" => app_sites(arg, state),
+        "model" | "m" => models(arg, state),
         "work" => subcommands(
             arg,
             &[
@@ -142,8 +143,14 @@ fn subcommands(arg: &str, choices: &[(&str, &str)]) -> Vec<Candidate> {
 }
 
 /// By id; when no id starts with it, by words in the agent or the last message. Newest first.
+/// Top-level sessions: a session's workers are a `Space o` away once you are in it.
 fn sessions(arg: &str, state: &AppState) -> Vec<Candidate> {
-    let all = &state.session.sessions;
+    let all: Vec<_> = state
+        .session
+        .sessions
+        .iter()
+        .filter(|s| s.parent.is_none())
+        .collect();
     let needle = arg.to_lowercase();
     let by_id: Vec<_> = all.iter().filter(|s| starts_with(&s.id, arg)).collect();
     let matches = if by_id.is_empty() {
@@ -160,13 +167,48 @@ fn sessions(arg: &str, state: &AppState) -> Vec<Candidate> {
         .into_iter()
         .map(|s| Candidate {
             text: s.id.clone(),
-            detail: format!(
-                "{}{}  {}",
-                s.agent,
-                if s.ticket.is_some() { " (worker)" } else { "" },
-                s.preview.as_deref().unwrap_or("")
-            ),
+            detail: format!("{}  {}", s.agent, s.preview.as_deref().unwrap_or("")),
         })
+        .collect()
+}
+
+/// The provider's models by id or name; `none` when the session has its own.
+fn models(arg: &str, state: &AppState) -> Vec<Candidate> {
+    let needle = arg.to_lowercase();
+    let unset = state
+        .session
+        .current_info()
+        .and_then(|s| s.model.as_deref())
+        .filter(|_| starts_with("none", arg))
+        .map(|model| Candidate {
+            text: "none".into(),
+            detail: format!(
+                "back to the server's {} (not {model})",
+                state.catalog.default_model
+            ),
+        });
+    let listed = state.catalog.models.iter().filter(|m| {
+        m.id.to_lowercase().contains(&needle)
+            || m.name
+                .as_deref()
+                .is_some_and(|n| n.to_lowercase().contains(&needle))
+    });
+    unset
+        .into_iter()
+        .chain(listed.map(|m| {
+            Candidate {
+                text: m.id.clone(),
+                detail: [
+                    m.name.clone(),
+                    m.context.map(|c| format!("{}k context", c / 1000)),
+                    (m.id == state.catalog.default_model).then(|| "the server's".into()),
+                ]
+                .into_iter()
+                .flatten()
+                .collect::<Vec<_>>()
+                .join(" · "),
+            }
+        }))
         .collect()
 }
 
@@ -319,7 +361,7 @@ fn directories(arg: &str) -> Vec<Candidate> {
 #[cfg(test)]
 mod tests {
     use composer_protocol::http::{SearchHit, SiteSummary};
-    use composer_protocol::{SessionInfo, TurnState};
+    use composer_protocol::{ModelInfo, SessionInfo, TurnState};
 
     use super::*;
     use crate::store::types::{Catalog, Startup};
@@ -336,12 +378,18 @@ mod tests {
             state: TurnState::Idle,
             last_seq: 0,
             context_tokens: 0,
+            model: None,
             preview: Some(preview.into()),
             updated: String::new(),
         };
         state.session.sessions = vec![
             session("a3f1", "default", "fix the login bug"),
             session("b2c3", "orchestrator", "plan the release"),
+            SessionInfo {
+                ticket: Some("0001".into()),
+                parent: Some("b2c3".into()),
+                ..session("c4d5", "default", "ticket 0001: release notes")
+            },
         ];
         let site = |name: &str, title: &str, has_ui: bool| SiteSummary {
             name: name.into(),
@@ -376,6 +424,19 @@ mod tests {
                 page("site://agents/default.md", "Default agent"),
                 page("site://agents/orchestrator.md", "Orchestrator"),
             ],
+            models: vec![
+                ModelInfo {
+                    id: "qwen3-coder".into(),
+                    name: None,
+                    context: None,
+                },
+                ModelInfo {
+                    id: "anthropic/claude-sonnet-4.5".into(),
+                    name: Some("Anthropic: Claude Sonnet 4.5".into()),
+                    context: Some(1_000_000),
+                },
+            ],
+            default_model: "qwen3-coder".into(),
         };
         state
     }
@@ -420,6 +481,24 @@ mod tests {
         assert_eq!(texts("attach "), ["a3f1", "b2c3"]);
         // By words of the last message too.
         assert_eq!(texts("attach release"), ["b2c3"]);
+        // Not its workers: those are in Space o.
+        assert!(texts("attach c4").is_empty());
+    }
+
+    #[test]
+    fn models_by_id_or_name() {
+        assert_eq!(
+            texts("model "),
+            ["qwen3-coder", "anthropic/claude-sonnet-4.5"]
+        );
+        assert_eq!(texts("model sonnet"), ["anthropic/claude-sonnet-4.5"]);
+        assert_eq!(texts("model Anthropic:"), ["anthropic/claude-sonnet-4.5"]);
+        let items = complete("model ", &state()).items;
+        assert_eq!(items[0].detail, "the server's");
+        assert_eq!(
+            items[1].detail,
+            "Anthropic: Claude Sonnet 4.5 · 1000k context"
+        );
     }
 
     #[test]

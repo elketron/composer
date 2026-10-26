@@ -230,6 +230,18 @@ impl Connection {
                 });
                 None
             }
+            // Asks the provider: answered from a task.
+            ClientCommand::ModelList => {
+                let (connection, server) = (self.clone(), server.clone());
+                tokio::spawn(async move {
+                    let result = server.provider.models().await.map(|models| CommandResult::Models {
+                        default_model: server.provider.model().to_string(),
+                        models,
+                    });
+                    connection.reply(id, result);
+                });
+                None
+            }
             // MCP servers may need connecting first: answered from a task.
             ClientCommand::ToolList { session } => {
                 let (connection, server) = (self.clone(), server.clone());
@@ -452,6 +464,18 @@ impl Connection {
                 }
                 Ok(CommandResult::Session { session: s.info() })
             }
+            ClientCommand::SessionHistory {
+                session,
+                before,
+                messages,
+            } => {
+                let s = server.sessions.get(&session).map_err(|e| e.to_string())?;
+                let (events, more) = s
+                    .transcript()
+                    .history(before, messages as usize)
+                    .map_err(|e| e.to_string())?;
+                Ok(CommandResult::History { events, more })
+            }
             ClientCommand::SessionDetach { session } => {
                 self.attached
                     .lock()
@@ -492,10 +516,19 @@ impl Connection {
             }
             ClientCommand::TurnCancel { session } => {
                 let s = server.sessions.get(&session).map_err(|e| e.to_string())?;
-                if !server.workers.interrupt(&session) {
+                // A paused worker (a limit, a restart) is stopped for good.
+                if !server.workers.interrupt(&session)
+                    && !server.workers.stop_paused(server, &session)
+                {
                     s.cancel();
                 }
                 Ok(CommandResult::Done)
+            }
+            ClientCommand::ModelSet { session, model } => {
+                let s = server.sessions.get(&session).map_err(|e| e.to_string())?;
+                let model = model.map(|m| m.trim().to_string()).filter(|m| !m.is_empty());
+                s.update_info(&server.hub, |info| info.model = model);
+                Ok(CommandResult::Session { session: s.info() })
             }
             ClientCommand::ProjectSet { session, path } => {
                 let s = server.sessions.get(&session).map_err(|e| e.to_string())?;
@@ -605,6 +638,7 @@ impl Connection {
             | ClientCommand::TicketChanges { .. }
             | ClientCommand::TicketMerge { .. }
             | ClientCommand::TicketDiscard { .. }
+            | ClientCommand::ModelList
             | ClientCommand::WorkRun { .. }
             | ClientCommand::ToolCall { .. }
             | ClientCommand::ToolList { .. }

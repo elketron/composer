@@ -30,6 +30,9 @@ pub struct SessionInfo {
     /// Prompt tokens of the last model call: the context in use.
     #[serde(default)]
     pub context_tokens: u32,
+    /// The model its turns use (`model.set`); None: the server's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
     /// Start of the last message, for session lists.
     pub preview: Option<String>,
     /// RFC 3339.
@@ -131,6 +134,20 @@ pub struct Attachment {
 
 /// An external harness (or one of its models) for a project: allowed by config.toml, and
 /// turned on or off at runtime.
+/// A model the provider lists (`GET /models`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct ModelInfo {
+    pub id: String,
+    /// Its display name, when the provider gives one (OpenRouter does).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// Context window in tokens, when listed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context: Option<u32>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]

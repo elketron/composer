@@ -95,6 +95,17 @@ class EffectRunner {
             onError: (Object e) => dispatch(SearchLoaded(url, query, const [], error: describeError(e))),
           );
         }
+      case FetchHistory(:final url, :final session, :final before):
+        final connection = _connections[url];
+        final request = connection == null
+            ? Future<CommandResult>.error('not connected')
+            : connection.request(ClientCommandSessionHistory(session: session, before: before, messages: historyMessages));
+        request.then(
+          (result) => dispatch(result is CommandResultHistory
+              ? HistoryLoaded(url, session, before, result.events, more: result.more)
+              : HistoryLoaded(url, session, before, null)),
+          onError: (Object _) => dispatch(HistoryLoaded(url, session, before, null)),
+        );
       case TicketCommand(:final url, :final ticket, :final command):
         final connection = _connections[url];
         if (connection == null) {

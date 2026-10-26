@@ -43,5 +43,7 @@ pub enum Effect {
     },
     /// Read an image from the clipboard (answered by `ClipboardRead`).
     ReadClipboard,
+    /// Put text on the clipboard (the app loop: it writes to the terminal too).
+    CopyText(String),
     Quit,
 }

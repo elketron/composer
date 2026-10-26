@@ -404,3 +404,114 @@ async fn http_pages_auth_and_conflicts() {
             .any(|s| s["name"] == "orchestration" && s["has_justfile"] == true)
     );
 }
+
+#[tokio::test]
+async fn a_session_model_and_its_history() {
+    let reply = |text: &str| vec![ModelEvent::Content(text.into()), finished(vec![])];
+    let (_dir, server, provider, addr) = start(vec![reply("one"), reply("two")]).await;
+    let mut socket = connect(addr, &server.token).await;
+    let session = create_session(&mut socket).await;
+    attach(&mut socket, &session).await;
+
+    // The mock lists no models: only its own.
+    send(&mut socket, 3, ClientCommand::ModelList).await;
+    let listed = until(&mut socket, |e| {
+        matches!(e, ServerMessage::Ok { id: 3, .. })
+    })
+    .await;
+    assert!(matches!(
+        listed.last(),
+        Some(ServerMessage::Ok { result: CommandResult::Models { default_model, models }, .. })
+            if default_model == "mock" && models.is_empty()
+    ));
+
+    let set = |model: Option<&str>| ClientCommand::ModelSet {
+        session: session.clone(),
+        model: model.map(str::to_string),
+    };
+    send(&mut socket, 4, set(Some("openai/gpt-oss-120b"))).await;
+    until(&mut socket, |e| {
+        matches!(e, ServerMessage::Ok { id: 4, .. })
+    })
+    .await;
+    assert_eq!(
+        server
+            .sessions
+            .get(&session)
+            .unwrap()
+            .info()
+            .model
+            .as_deref(),
+        Some("openai/gpt-oss-120b")
+    );
+    for (id, text) in [(5, "first"), (7, "second")] {
+        if id == 7 {
+            // Back to the server's.
+            send(&mut socket, 6, set(Some(" "))).await;
+            until(&mut socket, |e| {
+                matches!(e, ServerMessage::Ok { id: 6, .. })
+            })
+            .await;
+        }
+        send(
+            &mut socket,
+            id,
+            ClientCommand::MessageSend {
+                session: session.clone(),
+                text: text.into(),
+                pages: vec![],
+                images: vec![],
+                attachments: vec![],
+            },
+        )
+        .await;
+        until(&mut socket, |e| matches!(e, ServerMessage::TurnDone { .. })).await;
+    }
+    let models: Vec<_> = provider.requests().into_iter().map(|r| r.model).collect();
+    assert_eq!(models, [Some("openai/gpt-oss-120b".to_string()), None]);
+
+    // The last message and what follows; then the ones before it.
+    let history = |before| ClientCommand::SessionHistory {
+        session: session.clone(),
+        before,
+        messages: 1,
+    };
+    send(&mut socket, 8, history(None)).await;
+    let reply = until(&mut socket, |e| {
+        matches!(e, ServerMessage::Ok { id: 8, .. })
+    })
+    .await;
+    let Some(ServerMessage::Ok {
+        result: CommandResult::History { events, more: true },
+        ..
+    }) = reply.last()
+    else {
+        panic!("{reply:?}")
+    };
+    let said = |events: &[ServerMessage]| {
+        events
+            .iter()
+            .filter_map(|e| match e {
+                ServerMessage::MessageDone { message, .. } => Some(message.content.clone()),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(said(events), ["two"]);
+    let ServerMessage::MessageDone { seq, .. } = &events[0] else {
+        panic!("starts at a message: {events:?}")
+    };
+    send(&mut socket, 9, history(Some(*seq))).await;
+    let reply = until(&mut socket, |e| {
+        matches!(e, ServerMessage::Ok { id: 9, .. })
+    })
+    .await;
+    let Some(ServerMessage::Ok {
+        result: CommandResult::History { events, .. },
+        ..
+    }) = reply.last()
+    else {
+        panic!("{reply:?}")
+    };
+    assert_eq!(said(events), ["second"]);
+}

@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::common::{
-    ApprovalKind, ChangedBy, ChatMessage, HarnessSwitch, MessageSource, PageChangeKind, Seq,
-    SessionId, SessionInfo, ToolInfo, Url, WorkerState,
+    ApprovalKind, ChangedBy, ChatMessage, HarnessSwitch, MessageSource, ModelInfo, PageChangeKind,
+    Seq, SessionId, SessionInfo, ToolInfo, Url, WorkerState,
 };
 
 /// Everything the server sends over `/ws`.
@@ -230,11 +230,21 @@ pub enum CommandResult {
         project: String,
         harnesses: Vec<HarnessSwitch>,
     },
+    /// `model.list`: what the provider lists, and the model sessions use unless set.
+    Models {
+        default_model: String,
+        models: Vec<ModelInfo>,
+    },
     Changes {
         changes: crate::http::ProjectDiff,
     },
     Merged {
         commit: String,
+    },
+    /// `session.history`'s events, oldest first; `more`: older ones remain.
+    History {
+        events: Vec<ServerMessage>,
+        more: bool,
     },
     Project {
         overview: crate::http::ProjectOverview,

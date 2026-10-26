@@ -64,7 +64,7 @@ class SessionCard extends StatelessWidget {
                 margin: const EdgeInsets.only(top: 8, left: 3),
                 padding: const EdgeInsets.only(left: 12),
                 decoration: const BoxDecoration(border: Border(left: BorderSide(color: t.borderStrong))),
-                child: Column(children: [
+                child: _workerList([
                   for (final w in workers)
                     InkWell(
                       key: Key('worker-line-${w.id}'),
@@ -97,6 +97,21 @@ class SessionCard extends StatelessWidget {
             ],
           ]),
         ),
+      ),
+    );
+  }
+
+  /// Workers shown before the list scrolls.
+  static const _maxWorkers = 5;
+  static const _workerHeight = 22.0;
+
+  /// The worker lines; past [_maxWorkers] they scroll inside the card.
+  static Widget _workerList(List<Widget> lines) {
+    if (lines.length <= _maxWorkers) return Column(children: lines);
+    return SizedBox(
+      height: _maxWorkers * _workerHeight,
+      child: Scrollbar(
+        child: ListView(padding: EdgeInsets.zero, itemExtent: _workerHeight, children: lines),
       ),
     );
   }

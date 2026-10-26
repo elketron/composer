@@ -101,27 +101,73 @@ void main() {
     expect(reduce(state, const ServerSelected('https://nope')).$1.active, home.url);
   });
 
+  /// Opens `session`'s chat and gives it its (empty) history, as the server would.
+  AppState withChat(AppState s, String session) {
+    s = reduce(s, SessionOpened(s.servers.first.url, session)).$1;
+    return reduce(s, HistoryLoaded(s.servers.first.url, session, null, const [])).$1;
+  }
+
   group('chat', () {
     ServerMessageApprovalRequest approval(String id) => ServerMessageApprovalRequest(
           request: id, session: 'a', site: 's', recipe: 'r', args: const [], body: 'b', hash: 'h');
 
-    test('opening a session attaches it, switching detaches the old one, closing detaches', () {
+    test('opening a session fetches its last messages, then attaches; switching detaches the old one, closing detaches', () {
       var (state, effects) = reduce(loaded([home]), SessionOpened(home.url, 'a'));
       expect(state.statusOf(home.url).chat!.session, 'a');
-      expect(effects.cast<SendCommand>().map((e) => e.command.runtimeType), [ClientCommandSessionAttach]);
+      expect((effects.single as FetchHistory).before, isNull);
+      (state, effects) = reduce(state, HistoryLoaded(home.url, 'a', null, const [
+        ServerMessageMessageDone(session: 'a', seq: 4, message: ChatMessage(role: Role.user, content: 'hi')),
+        ServerMessageTurnDone(session: 'a', seq: 6, cancelled: false),
+      ], more: true));
+      final chat = state.statusOf(home.url).chat!;
+      expect((chat.loaded, chat.firstSeq, chat.more, chat.items.length), (true, 4, true, 1));
+      expect(((effects.single as SendCommand).command as ClientCommandSessionAttach).since, 6, reason: 'what came after them');
 
       (state, effects) = reduce(state, SessionOpened(home.url, 'b'));
-      final commands = effects.cast<SendCommand>().map((e) => e.command).toList();
-      expect((commands[0] as ClientCommandSessionDetach).session, 'a');
-      expect((commands[1] as ClientCommandSessionAttach).session, 'b');
+      expect(((effects[0] as SendCommand).command as ClientCommandSessionDetach).session, 'a');
+      expect((effects[1] as FetchHistory).session, 'b');
 
       (state, effects) = reduce(state, SessionClosed(home.url));
       expect(state.statusOf(home.url).chat, isNull);
       expect((effects.single as SendCommand).command, isA<ClientCommandSessionDetach>());
     });
 
-    test('events fill the open chat; reconnecting re-attaches from the last seq', () {
+    test('scrolled up to the oldest: the messages before it go in front, rows keep their keys', () {
+      ServerMessage said(int seq, String text) =>
+          ServerMessageMessageDone(session: 'a', seq: seq, message: ChatMessage(role: Role.user, content: text));
       var state = reduce(loaded([home]), SessionOpened(home.url, 'a')).$1;
+      state = reduce(state, HistoryLoaded(home.url, 'a', null, [said(5, 'c')], more: true)).$1;
+      var (next, effects) = reduce(state, const OlderRequested('https://home.ts.net', 'a'));
+      expect((effects.single as FetchHistory).before, 5);
+      expect(reduce(next, const OlderRequested('https://home.ts.net', 'a')).$2, isEmpty, reason: 'one at a time');
+      // An event meanwhile, then the older ones.
+      next = reduce(next, ServerEvent(home.url, said(9, 'd'))).$1;
+      next = reduce(next, HistoryLoaded(home.url, 'a', 5, [said(1, 'a'), said(3, 'b')])).$1;
+      final chat = next.statusOf(home.url).chat!;
+      expect(chat.items.map((i) => (i as UserItem).text), ['a', 'b', 'c', 'd']);
+      expect((chat.firstSeq, chat.more, chat.loadingOlder, chat.rowBase), (1, false, false, 2));
+      expect(reduce(next, const OlderRequested('https://home.ts.net', 'a')).$2, isEmpty, reason: 'none left');
+    });
+
+    test("a session's model: the list as asked, the choice for the open chat", () {
+      var state = withChat(loaded([home]), 'a');
+      expect((reduce(state, const ModelsRequested('https://home.ts.net')).$2.single as SendCommand).command, isA<ClientCommandModelList>());
+      const listed = CommandResultModels(defaultModel: 'qwen', models: [ModelInfo(id: 'openai/gpt-oss-120b')]);
+      state = reduce(state, ServerEvent(home.url, const ServerMessageOk(id: 3, result: listed))).$1;
+      expect(state.statusOf(home.url).models?.defaultModel, 'qwen');
+      final set = (reduce(state, const ModelChosen('https://home.ts.net', 'openai/gpt-oss-120b')).$2.single as SendCommand).command;
+      expect(set, isA<ClientCommandModelSet>().having((c) => (c.session, c.model), 'session, model', ('a', 'openai/gpt-oss-120b')));
+    });
+
+    test('a server without session.history: the whole chat replays', () {
+      var state = reduce(loaded([home]), SessionOpened(home.url, 'a')).$1;
+      final (next, effects) = reduce(state, const HistoryLoaded('https://home.ts.net', 'a', null, null));
+      expect(((effects.single as SendCommand).command as ClientCommandSessionAttach).since, isNull);
+      expect(next.statusOf(home.url).chat!.loaded, isTrue);
+    });
+
+    test('events fill the open chat; reconnecting re-attaches from the last seq', () {
+      var state = withChat(loaded([home]), 'a');
       state = reduce(
         state,
         ServerEvent(home.url, ServerMessageMessageDone(session: 'a', seq: 7, message: const ChatMessage(role: Role.user, content: 'hi'))),
@@ -135,13 +181,13 @@ void main() {
 
     test('unsetting the project goes to the open session', () {
       expect(reduce(loaded([home]), ProjectChosen(home.url, null)).$2, isEmpty);
-      final state = reduce(loaded([home]), SessionOpened(home.url, 'a')).$1;
+      final state = withChat(loaded([home]), 'a');
       final command = (reduce(state, ProjectChosen(home.url, null)).$2.single as SendCommand).command as ClientCommandProjectSet;
       expect((command.session, command.path), ('a', null));
     });
 
     test('attachments: upload as picked, send when ready, retry and remove', () {
-      var state = reduce(loaded([home]), SessionOpened(home.url, 'a')).$1;
+      var state = withChat(loaded([home]), 'a');
       final (picked, uploads) = reduce(state, FilesPicked(home.url, const [PickedFile('a.png', path: '/tmp/a.png'), PickedFile('b.md', bytes: [35])]));
       expect([for (final e in uploads) (e as UploadAttachment).id], [1, 2]);
       expect((uploads.first as UploadAttachment).session, 'a');
@@ -210,7 +256,7 @@ void main() {
 
     test('messages and cancel go to the open session only', () {
       expect(reduce(loaded([home]), MessageSubmitted(home.url, 'x')).$2, isEmpty);
-      final state = reduce(loaded([home]), SessionOpened(home.url, 'a')).$1;
+      final state = withChat(loaded([home]), 'a');
       final send = (reduce(state, MessageSubmitted(home.url, 'x')).$2.single as SendCommand).command as ClientCommandMessageSend;
       expect((send.session, send.text), ('a', 'x'));
       expect((reduce(state, CancelRequested(home.url)).$2.single as SendCommand).command, isA<ClientCommandTurnCancel>());
@@ -296,7 +342,7 @@ void main() {
         ServerMessageOk(id: 1, result: CommandResultSessions(sessions: [SessionInfo(id: 'a', agent: 'default', state: TurnState.idle, lastSeq: 5, updated: '')])),
       );
       var state = reduce(loaded([home]), sessions).$1;
-      state = reduce(state, SessionOpened(home.url, 'a')).$1;
+      state = withChat(state, 'a');
       ServerEvent nav(int seq, String session) =>
           ServerEvent(home.url, ServerMessageAgentNavigated(session: session, seq: seq, url: 'site://plans/x'));
 
@@ -319,7 +365,7 @@ void main() {
         ),
       );
       var state = reduce(loaded([home]), sessions).$1;
-      state = reduce(state, SessionOpened(home.url, 'w')).$1;
+      state = withChat(state, 'w');
       state = reduce(state, const ReviewRequested('https://home.ts.net', '0007')).$1;
       state = reduce(state, const TicketReplied('https://home.ts.net', '0007', result: CommandResultChanges(changes: ProjectDiff(path: '/', files: [], diff: '')))).$1;
       ServerEvent event(ServerMessage m) => ServerEvent(home.url, m);
@@ -343,11 +389,12 @@ void main() {
         ])),
       );
       var state = reduce(loaded([home]), sessions).$1;
-      state = reduce(state, SessionOpened(home.url, 'o')).$1;
+      state = withChat(state, 'o');
       expect(state.statusOf(home.url).opened, isTrue);
 
-      final (beside, attach) = reduce(state, SideTabSelected(home.url, SideTab.worker, session: 'w'));
-      expect((attach.single as SendCommand).command, isA<ClientCommandSessionAttach>());
+      var (beside, attach) = reduce(state, SideTabSelected(home.url, SideTab.worker, session: 'w'));
+      expect((attach.single as FetchHistory).session, 'w');
+      beside = reduce(beside, const HistoryLoaded('https://home.ts.net', 'w', null, [])).$1;
       expect((beside.statusOf(home.url).side, beside.statusOf(home.url).sideChat?.session), (SideTab.worker, 'w'));
       state = beside;
 
@@ -358,7 +405,8 @@ void main() {
 
       // Opening the worker as the chat keeps it attached (the side pane still shows it).
       final (swapped, effects) = reduce(state, SessionOpened(home.url, 'w'));
-      expect(effects.whereType<SendCommand>().map((e) => e.command.runtimeType), [ClientCommandSessionDetach, ClientCommandSessionAttach]);
+      expect(effects.whereType<SendCommand>().map((e) => e.command.runtimeType), [ClientCommandSessionDetach]);
+      expect(effects.whereType<FetchHistory>().single.session, 'w');
       expect((effects.first as SendCommand).command, isA<ClientCommandSessionDetach>().having((c) => c.session, 'session', 'o'));
       final closing = reduce(swapped, SessionClosed(home.url)).$2;
       expect(closing, isEmpty, reason: 'the side pane still shows w');
@@ -539,7 +587,7 @@ void main() {
       final (_, effects) = reduce(state, done);
       expect(effects.whereType<Notify>().single.session, 'a');
 
-      final watching = reduce(state, SessionOpened(home.url, 'a')).$1;
+      final watching = withChat(state, 'a');
       expect(reduce(watching, done).$2.whereType<Notify>(), isEmpty);
       expect(reduce(background(watching), done).$2.whereType<Notify>(), hasLength(1));
 
@@ -552,6 +600,13 @@ void main() {
         reduce(state, ServerEvent(home.url, ServerMessageSessionUpdated(session: info('w', TurnState.idle, ticket: '0001')))).$2,
         isEmpty,
       );
+
+      // An orchestrator's turn that decided a worker's approval: nothing (asking you is an approval).
+      state = withSessions(loaded([home]), [info('o', TurnState.running)]);
+      const decided = SessionInfo(
+          id: 'o', agent: 'orchestrator', state: TurnState.idle, lastSeq: 2, updated: '',
+          preview: '[worker #w on ticket 0001 asks to approve: Bash: ls] (request ab12)');
+      expect(reduce(state, ServerEvent(home.url, ServerMessageSessionUpdated(session: decided))).$2.whereType<Notify>(), isEmpty);
     });
 
     test('a finished worker leads to its orchestrator', () {
@@ -588,7 +643,7 @@ void main() {
 
       (next, effects) = reduce(next, finished('w1', WorkerState.done));
       expect(next.statusOf(home.url).chat!.session, 'o');
-      expect((effects.whereType<SendCommand>().last.command as ClientCommandSessionAttach).session, 'o');
+      expect(effects.whereType<FetchHistory>().single.session, 'o');
       expect(next.notice!.text, contains('back to the orchestrator'));
       expect(effects.whereType<Notify>(), isEmpty, reason: 'you are looking at the orchestrator now');
 
@@ -599,11 +654,11 @@ void main() {
     test('the phone home: unread work, recent pages, search, new chats with a project', () {
       SessionInfo s(String id, TurnState state) => SessionInfo(id: id, agent: 'default', state: state, lastSeq: 0, updated: '');
       var state = withSessions(loaded([home]), [s('a', TurnState.running), s('b', TurnState.running)]);
-      state = reduce(state, SessionOpened(home.url, 'b')).$1;
+      state = withChat(state, 'b');
       ServerEvent idle(String id) => ServerEvent(home.url, ServerMessageSessionUpdated(session: s(id, TurnState.idle)));
       state = reduce(reduce(state, idle('a')).$1, idle('b')).$1;
       expect(state.statusOf(home.url).unread, {'a'}, reason: 'b was on screen');
-      state = reduce(state, SessionOpened(home.url, 'a')).$1;
+      state = withChat(state, 'a');
       expect(state.statusOf(home.url).unread, isEmpty, reason: 'opening it reads it');
 
       ServerEvent changed(String url, ChangedBy by) =>

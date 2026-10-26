@@ -1,8 +1,9 @@
 use std::time::Duration;
 
-use crossterm::event::{Event, EventStream, KeyEvent, KeyEventKind};
+use crossterm::event::{Event, EventStream, KeyEvent, KeyEventKind, MouseEventKind};
 use futures::StreamExt;
 use ratatui::backend::Backend;
+use ratatui::layout::Rect;
 use ratatui::{DefaultTerminal, Terminal};
 use tokio::sync::mpsc;
 
@@ -17,6 +18,9 @@ use crate::options::TuiOptions;
 use crate::store::AppState;
 use crate::store::types::{FlashLevel, Mode};
 
+/// The shortest time between two draws (60 a second).
+const FRAME: Duration = Duration::from_millis(16);
+
 /// The application: stores, components, keymap and the effect runner.
 pub struct App {
     pub state: AppState,
@@ -25,6 +29,8 @@ pub struct App {
     dispatcher: Dispatcher,
     actions: mpsc::UnboundedReceiver<Action>,
     runner: EffectRunner,
+    /// The system clipboard, once something was copied (it serves the text while it lives).
+    clipboard: Option<arboard::Clipboard>,
 }
 
 impl App {
@@ -42,6 +48,7 @@ impl App {
             runner: EffectRunner::new(&options.server_url, &options.token, dispatcher.clone()),
             dispatcher,
             actions,
+            clipboard: None,
         }
     }
 
@@ -70,6 +77,36 @@ impl App {
         }
     }
 
+    /// A terminal event; whether it needs a repaint.
+    fn handle_event(&mut self, event: Event, screen: Rect) -> bool {
+        match event {
+            Event::Key(key) if key.kind == KeyEventKind::Press => {
+                self.root.selection = None;
+                self.handle_key(key);
+                // Keys can change local view state without an action (typing in the
+                // composer, scrolling), so every key repaints.
+                true
+            }
+            Event::Paste(text) => {
+                self.handle_paste(&text);
+                true
+            }
+            // The mouse moving without a button: nothing to show.
+            Event::Mouse(mouse) if mouse.kind == MouseEventKind::Moved => false,
+            Event::Mouse(mouse) => {
+                for action in self.root.handle_mouse(mouse, screen, &self.state) {
+                    self.dispatcher.dispatch(action);
+                }
+                true
+            }
+            Event::Resize(..) => {
+                self.root.selection = None;
+                true
+            }
+            _ => false,
+        }
+    }
+
     /// Pasted text (bracketed paste).
     pub fn handle_paste(&mut self, text: &str) {
         for action in self.root.handle_paste(text, &self.state) {
@@ -89,6 +126,7 @@ impl App {
             match effect {
                 Effect::EditPage(_)
                 | Effect::ViewText { .. }
+                | Effect::CopyText(_)
                 | Effect::OpenBrowser(_)
                 | Effect::OpenFile { .. }
                 | Effect::Quit => deferred.push(effect),
@@ -151,25 +189,23 @@ impl App {
         let mut tick = tokio::time::interval(Duration::from_secs(1));
         let mut ticks = 0u64;
         let mut dirty = true;
+        // At most a draw per frame: a mouse drag sends an event per cell, and each draw renders
+        // the whole chat; those in one frame share a draw.
+        let mut drawn = tokio::time::Instant::now() - FRAME;
         loop {
-            if dirty {
+            if dirty && drawn.elapsed() >= FRAME {
                 self.draw(&mut terminal)?;
+                drawn = tokio::time::Instant::now();
                 dirty = false;
             }
             tokio::select! {
+                _ = tokio::time::sleep_until(drawn + FRAME), if dirty => {}
                 event = events.next() => match event {
-                    Some(Ok(Event::Key(key))) if key.kind == KeyEventKind::Press => {
-                        self.handle_key(key);
-                        // Keys can change local view state without an action (typing in the
-                        // composer, scrolling), so every key repaints.
-                        dirty = true;
+                    Some(Ok(event)) => {
+                        let size = terminal.size()?;
+                        let screen = Rect::new(0, 0, size.width, size.height);
+                        dirty |= self.handle_event(event, screen);
                     }
-                    Some(Ok(Event::Paste(text))) => {
-                        self.handle_paste(&text);
-                        dirty = true;
-                    }
-                    Some(Ok(Event::Resize(..))) => dirty = true,
-                    Some(Ok(_)) => {}
                     Some(Err(e)) => return Err(e.into()),
                     None => return Ok(()),
                 },
@@ -178,6 +214,7 @@ impl App {
                         match effect {
                             Effect::Quit => return Ok(()),
                             Effect::OpenBrowser(url) => self.dispatcher.dispatch(editor::open_browser(&url)),
+                            Effect::CopyText(text) => crate::terminal::copy(&text, &mut self.clipboard),
                             Effect::OpenFile { path, line } => {
                                 drop(events);
                                 crate::terminal::restore();
@@ -213,7 +250,7 @@ impl App {
                 }
                 _ = tick.tick() => {
                     ticks += 1;
-                    dirty = self.state.ui.flash.is_some();
+                    dirty |= self.state.ui.flash.is_some();
                     // The project changes outside our view too (you, in nvim): keep the changes view live.
                     if self.state.project.open && ticks.is_multiple_of(2) {
                         self.dispatcher.dispatch(Action::RefreshChanges);

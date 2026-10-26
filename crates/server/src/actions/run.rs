@@ -40,9 +40,21 @@ pub async fn run_recipe(
         .stdout(writer.try_clone().map_err(|e| e.to_string())?)
         .stderr(writer)
         .kill_on_drop(true);
+    // Its own group: stopping it stops what it started too (a timed-out build, a test loop).
+    #[cfg(unix)]
+    command.process_group(0);
     let mut child = command
         .spawn()
         .map_err(|e| format!("could not run `just`: {e}"))?;
+    let group = child.id();
+    #[cfg(unix)]
+    let kill_group = || {
+        if let Some(pid) = group {
+            crate::harness::signal_group(pid, libc::SIGKILL);
+        }
+    };
+    #[cfg(not(unix))]
+    let kill_group = || {};
     // Drop our copies of the write end, or reading never sees end-of-file.
     drop(command);
     let read = tokio::task::spawn_blocking(move || {
@@ -62,9 +74,13 @@ pub async fn run_recipe(
             Ok(RunOutput { exit_code: status.ok().and_then(|s| s.code()), output: trim_output(&text), timed_out: false })
         }
         _ = tokio::time::sleep(timeout) => {
+            kill_group();
             Ok(RunOutput { exit_code: None, output: format!("killed after {}s", timeout.as_secs()), timed_out: true })
         }
-        _ = cancel.cancelled() => Err("cancelled by the user".into()),
+        _ = cancel.cancelled() => {
+            kill_group();
+            Err("cancelled by the user".into())
+        }
     }
 }
 
