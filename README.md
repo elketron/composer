@@ -33,3 +33,8 @@ and pair them with `composer pair --name <device>`.
 - [docs/wsl.md](docs/wsl.md) — running the server in WSL on Windows
 - [docs/releasing.md](docs/releasing.md) — releases and Android signing
 - [CLAUDE.md](CLAUDE.md) — conventions, and how to test the TUI and the app headlessly
+
+## License
+
+Apache License 2.0: see [LICENSE](LICENSE). The vendored `apps/vendor/flutter_inappwebview_linux`
+and the bundled fonts keep their own licenses.
