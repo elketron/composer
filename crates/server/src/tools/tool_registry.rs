@@ -8,6 +8,7 @@ use crate::mcp_clients::McpServers;
 use crate::server::Server;
 use crate::provider::{ModelToolCall, ToolSpec};
 use crate::tools::actions_tool::ActionsTool;
+use crate::tools::answer_approval_tool::AnswerApprovalTool;
 use crate::tools::edit_tool::EditTool;
 use crate::tools::finish_tool::FinishTool;
 use crate::tools::list_sites_tool::ListSitesTool;
@@ -55,6 +56,7 @@ impl ToolRegistry {
                 Arc::new(MergeTicketTool),
                 Arc::new(ContinueWorkerTool),
                 Arc::new(StopWorkerTool),
+                Arc::new(AnswerApprovalTool),
                 Arc::new(FinishTool),
             ],
         }

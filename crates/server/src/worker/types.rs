@@ -42,3 +42,12 @@ pub enum StopReason {
     /// The server is shutting down.
     Shutdown,
 }
+
+/// An orchestrator's answer to its worker's approval request (`answer_approval`), with why.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Verdict {
+    Approve(String),
+    Deny(String),
+    /// Not its call: the user is asked, told this.
+    AskUser(String),
+}

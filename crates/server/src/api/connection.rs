@@ -329,9 +329,9 @@ impl Connection {
                         .ask_approval(&server, &site, &recipe, &args, body, &hash)
                         .await
                     {
-                        Ok(approved) => ServerMessage::Ok {
+                        Ok((approved, reason)) => ServerMessage::Ok {
                             id,
-                            result: CommandResult::Approval { approved },
+                            result: CommandResult::Approval { approved, reason },
                         },
                         Err(message) => ServerMessage::Error {
                             id: Some(id),
@@ -362,7 +362,8 @@ impl Connection {
         }
     }
 
-    /// A worker's recipe approval: already approved here, or asked of this server's clients.
+    /// A worker's recipe approval: already approved here, or asked of this server's clients (or
+    /// decided by its orchestrator: for this run only, with its reason).
     async fn ask_approval(
         &self,
         server: &Arc<Server>,
@@ -371,9 +372,9 @@ impl Connection {
         args: &[String],
         body: String,
         hash: &str,
-    ) -> Result<bool, String> {
+    ) -> Result<(bool, Option<String>), String> {
         if server.approvals.is_approved(site, recipe, hash) {
-            return Ok(true);
+            return Ok((true, None));
         }
         let id = self
             .worker_session
@@ -393,20 +394,21 @@ impl Connection {
                 &CancellationToken::new(),
             )
             .await;
-        let approved = matches!(
-            decision,
-            Some(
+        let approved = decision.as_ref().is_some_and(|answer| {
+            matches!(
+                answer.decision,
                 composer_protocol::ApprovalDecision::Approve
                     | composer_protocol::ApprovalDecision::Always
             )
-        );
-        if approved {
+        });
+        let reason = decision.and_then(|answer| answer.reason);
+        if approved && reason.is_none() {
             server
                 .approvals
                 .approve(site, recipe, hash)
                 .map_err(|e| e.to_string())?;
         }
-        Ok(approved)
+        Ok((approved, reason))
     }
 
     fn run(&self, server: &Arc<Server>, command: ClientCommand) -> Result<CommandResult, String> {

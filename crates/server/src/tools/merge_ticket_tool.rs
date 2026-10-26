@@ -84,7 +84,7 @@ impl Tool for MergeTicketTool {
                 &context.cancel,
             )
             .await;
-        match decision {
+        match decision.map(|answer| answer.decision) {
             Some(ApprovalDecision::Approve | ApprovalDecision::Always) => {}
             Some(ApprovalDecision::Deny) => {
                 return Err(format!("the user did not merge ticket {ticket}"));

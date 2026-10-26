@@ -1053,17 +1053,23 @@ final class CommandResultSlotGranted extends CommandResult {
 final class CommandResultApproval extends CommandResult {
   const CommandResultApproval({
     required this.approved,
+    this.reason,
   });
 
   final bool approved;
 
+  /// The orchestrator decided, not the user: why (a worker's approval). It isn't remembered.
+  final String? reason;
+
   factory CommandResultApproval.fromJson(Map<String, Object?> json) => CommandResultApproval(
         approved: json['approved'] as bool,
+        reason: json['reason'] == null ? null : json['reason'] as String,
       );
 
   Map<String, Object?> toJson() => {
         'kind': 'approval',
         'approved': approved,
+        if (reason != null) 'reason': reason,
       };
 }
 

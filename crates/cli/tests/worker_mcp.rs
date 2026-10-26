@@ -1,11 +1,13 @@
 //! A worker process uses an MCP server's tool: the parent lists the tool for it and runs the
-//! call, so the approval reaches the parent's clients (and there is one MCP server process).
+//! call (one MCP server process), and its orchestrator decides the approval: it denies the first
+//! call with a reason the worker gets, and approves the second. A recipe it denies tells the
+//! worker process why too.
 
 mod support;
 
 use std::collections::VecDeque;
 
-use composer_protocol::{ApprovalDecision, ClientCommand, CommandResult, ServerMessage};
+use composer_protocol::{ClientCommand, CommandResult, ServerMessage};
 use composer_server::{Home, Server, init_home};
 use serde_json::json;
 use support::{Reply, Scripts, fake_model_logged, send, until};
@@ -31,11 +33,12 @@ for line in sys.stdin:
 
 #[tokio::test]
 async fn a_worker_process_calls_an_mcp_tool_through_the_parent() {
-    if std::process::Command::new("python3")
-        .arg("--version")
-        .output()
-        .is_err()
-    {
+    if ["python3", "just"].iter().any(|tool| {
+        std::process::Command::new(tool)
+            .arg("--version")
+            .output()
+            .is_err()
+    }) {
         return;
     }
     let (base_url, requests) = fake_model_logged(Scripts {
@@ -45,9 +48,26 @@ async fn a_worker_process_calls_an_mcp_tool_through_the_parent() {
                 json!({ "ticket": "0001", "agent": "mcpworker" }),
             ),
             Reply::Text("worker started"),
+            Reply::Call(
+                "answer_approval",
+                json!({ "ticket": "0001", "decision": "deny", "reason": "not this recipe" }),
+            ),
+            Reply::Text("recipe denied"),
+            Reply::Call(
+                "answer_approval",
+                json!({ "ticket": "0001", "decision": "deny", "reason": "check the task first" }),
+            ),
+            Reply::Text("denied"),
+            Reply::Call(
+                "answer_approval",
+                json!({ "ticket": "1", "decision": "approve", "reason": "adding is the task" }),
+            ),
+            Reply::Text("approved"),
             Reply::Text("ticket 0001 is done"),
         ]),
         worker: VecDeque::from([
+            Reply::Call("run", json!({ "site": "notes", "recipe": "hello" })),
+            Reply::Call("fake__add_numbers", json!({ "a": 2, "b": 3 })),
             Reply::Call("fake__add_numbers", json!({ "a": 2, "b": 3 })),
             Reply::Call("finish", json!({ "status": "done", "summary": "added" })),
             Reply::Text("finished"),
@@ -73,6 +93,8 @@ async fn a_worker_process_calls_an_mcp_tool_through_the_parent() {
             .replace("run, finish]", "run, finish, fake__*]"),
     )
     .unwrap();
+    std::fs::create_dir_all(dir.path().join("sites/notes")).unwrap();
+    std::fs::write(dir.path().join("sites/notes/justfile"), "hello:\n    echo hello\n").unwrap();
     std::fs::create_dir_all(dir.path().join("sites/orchestration/tickets")).unwrap();
     std::fs::write(
         dir.path().join("sites/orchestration/tickets/0001.md"),
@@ -142,48 +164,34 @@ async fn a_worker_process_calls_an_mcp_tool_through_the_parent() {
     )
     .await;
 
-    // The worker's call is asked here, in the worker's session.
-    let events = until(&mut socket, 60, |e| {
-        matches!(e, ServerMessage::ApprovalRequest { .. })
-    })
-    .await;
-    let Some(ServerMessage::ApprovalRequest {
-        request,
-        session,
-        title,
-        ..
-    }) = events.last()
-    else {
-        panic!()
-    };
-    assert_eq!(title, "MCP fake: add.numbers");
-    assert_ne!(*session, orchestrator);
-    let worker = session.clone();
-    send(
-        &mut socket,
-        4,
-        ClientCommand::SessionAttach {
-            session: worker.clone(),
-            since: None,
-        },
-    )
-    .await;
-    send(
-        &mut socket,
-        5,
-        ClientCommand::ApprovalRespond {
-            request: request.clone(),
-            decision: ApprovalDecision::Approve,
-        },
-    )
-    .await;
     let events = until(&mut socket, 60, |e| {
         matches!(e, ServerMessage::MessageDone { session, message, .. }
             if *session == orchestrator && message.content == "ticket 0001 is done")
     })
     .await;
-    assert!(events.iter().any(|e| matches!(e, ServerMessage::ToolResult { session, result, is_error: false, .. }
-        if *session == worker && result == "sum: 5")));
+    assert!(
+        !events
+            .iter()
+            .any(|e| matches!(e, ServerMessage::ApprovalRequest { .. })),
+        "the user wasn't asked"
+    );
+    let asked = events
+        .iter()
+        .filter(|e| matches!(e, ServerMessage::MessageDone { session, message, .. }
+            if *session == orchestrator && message.content.contains("asks to approve: MCP fake: add.numbers")))
+        .count();
+    assert_eq!(asked, 2, "the orchestrator was asked twice");
+    // The worker's model got the denial's reason, then the sum.
+    let worker_saw = |needle: &str| {
+        requests.lock().unwrap().iter().any(|r| {
+            r["messages"].as_array().unwrap().iter().any(|m| {
+                m["role"] == "tool" && m["content"].as_str().is_some_and(|c| c.contains(needle))
+            })
+        })
+    };
+    assert!(worker_saw("Your orchestrator denied `fake__add_numbers`: check the task first"));
+    assert!(worker_saw("sum: 5"));
+    assert!(worker_saw("your orchestrator denied running `hello`: not this recipe"));
     let ticket =
         std::fs::read_to_string(dir.path().join("sites/orchestration/tickets/0001.md")).unwrap();
     assert!(ticket.contains("status: done"), "{ticket}");

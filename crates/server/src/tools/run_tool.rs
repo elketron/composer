@@ -70,12 +70,20 @@ impl Tool for RunTool {
                     &context.cancel,
                 )
                 .await;
-            match decision {
-                Some(ApprovalDecision::Approve | ApprovalDecision::Always) => server
+            match decision.map(|answer| (answer.decision, answer.reason)) {
+                // The orchestrator's approval holds for this run (the worker's approvals are
+                // kept in memory), the user's for good.
+                Some((ApprovalDecision::Approve | ApprovalDecision::Always, _)) => server
                     .approvals
                     .approve(&site, &recipe.name, &hash)
                     .map_err(|e| e.to_string())?,
-                Some(ApprovalDecision::Deny) => {
+                Some((ApprovalDecision::Deny, Some(reason))) => {
+                    return Err(format!(
+                        "your orchestrator denied running `{}`: {reason}",
+                        recipe.name
+                    ));
+                }
+                Some((ApprovalDecision::Deny, None)) => {
                     return Err(format!(
                         "the user denied running `{}`; ask them why before trying again",
                         recipe.name

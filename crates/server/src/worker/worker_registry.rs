@@ -1105,7 +1105,7 @@ fn log_path(server: &Server, session: &str) -> Result<std::path::PathBuf, String
     Ok(logs.join(format!("{session}.log")))
 }
 
-fn user_message(content: String, source: MessageSource) -> ChatMessage {
+pub(super) fn user_message(content: String, source: MessageSource) -> ChatMessage {
     ChatMessage {
         role: Role::User,
         content,

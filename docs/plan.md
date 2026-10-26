@@ -174,6 +174,15 @@ Each site's `index.md` explains its purpose and conventions; the agent opens it 
   `:compact` (its memory pass and summary, by its own model), then go on; Claude Code compacts its own; `stop_worker(ticket, reason)` fails it. The orchestrator is told to continue one that makes
   progress, with what it sees blocking it, and to ask the user when it goes in circles. Only when the parent's
   agent has `continue_worker`, and not for pipeline stages; otherwise it fails as before.
+- **Approvals by the orchestrator:** when the parent's agent has `answer_approval`, a worker's tool, MCP and
+  recipe approvals go to it instead of the clients (`WorkerApprovals`): a message with what the worker wants
+  (the request's title and body, at most 4000 chars) starts its turn, and the worker waits.
+  `answer_approval(ticket, approve|deny|ask_user, reason, request?)`: approve lets it run once (a recipe isn't
+  added to `approvals.json`, a tool gets no rule; `always` stays the user's), deny tells the worker the reason,
+  ask_user sends the usual approval request to the clients with "Its orchestrator asks you: <reason>" above
+  the body. A request the orchestrator read in a turn that ended without answering goes to the user the same
+  way ("it ended its turn without deciding"). Merges and amendments are always the user's. The reason reaches
+  a worker process in `approval.ask`'s reply (`reason`).
 - **Plans vs tickets:** plans in `site://plans` hold longer-lived intent; tickets are units of work that link back to a plan.
 - Ticket frontmatter drives lifecycle: `open → claimed → done | failed`. Worker writes its result into the ticket.
 - On completion the orchestrator gets a push message.
@@ -1050,6 +1059,8 @@ a server per session or per project.
 28. ✅ **Fewer approvals** — chained commands checked part by part, read-only commands inside the worker's
     folders and builds/tests in its folder run without asking; `read_dirs`; stuck workers wait for their
     orchestrator instead of failing at the turn limit, now a token budget (`agent.turn_tokens`, 200k).
+29. ✅ **Approvals by the orchestrator** — `answer_approval`: workers' tool, MCP and recipe approvals go to
+    their orchestrator, which approves once, denies with a reason, or asks the user.
 
 ## Open questions
 

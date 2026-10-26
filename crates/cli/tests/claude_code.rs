@@ -347,7 +347,8 @@ async fn claude_code_works_tickets() {
         Some(WorkerState::Done)
     );
 
-    // Outside the allowlist: asked in the worker's session; `always` remembers it for the
+    // Outside the allowlist: its orchestrator is asked first; it ends its turn without
+    // deciding, so the user is asked in the worker's session. `always` remembers it for the
     // project, so the next run has it in --allowedTools and isn't asked.
     std::fs::write(bin.join("mode"), "ask").unwrap();
     ticket(&root, "0008", &project);
@@ -366,7 +367,10 @@ async fn claude_code_works_tickets() {
             assert_eq!(session, worker);
             assert_eq!(kind, composer_protocol::ApprovalKind::Tool);
             assert_eq!(title, "Claude Code: Bash: python3 make.py");
-            assert_eq!(body, "python3 make.py\n\n# Build");
+            assert_eq!(
+                body,
+                "Its orchestrator asks you: it ended its turn without deciding\n\npython3 make.py\n\n# Build"
+            );
             assert_eq!(rule.as_deref(), Some("Bash(python3:*)"));
             break request;
         }

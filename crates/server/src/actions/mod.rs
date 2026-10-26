@@ -10,4 +10,4 @@ pub use approvals::Approvals;
 pub use justfile::Justfile;
 pub use pending_approvals::PendingApprovals;
 pub use run::{RecipeEnv, run_recipe};
-pub use types::{Approval, Recipe, RunOutput};
+pub use types::{Approval, ApprovalAnswer, Recipe, RunOutput};

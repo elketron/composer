@@ -139,7 +139,7 @@ impl ParentLink {
         args: &[String],
         body: String,
         hash: &str,
-    ) -> Result<bool, String> {
+    ) -> Result<(bool, Option<String>), String> {
         let command = ClientCommand::ApprovalAsk {
             site: site.into(),
             recipe: recipe.into(),
@@ -148,7 +148,7 @@ impl ParentLink {
             hash: hash.into(),
         };
         match self.request(command).await? {
-            CommandResult::Approval { approved } => Ok(approved),
+            CommandResult::Approval { approved, reason } => Ok((approved, reason)),
             other => Err(format!("unexpected reply to approval.ask: {other:?}")),
         }
     }

@@ -28,3 +28,11 @@ pub struct RunOutput {
     pub output: String,
     pub timed_out: bool,
 }
+
+/// How an approval was answered. `reason`: its orchestrator decided a worker's approval instead
+/// of the user, and why; such an answer holds for this one request and is never remembered.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ApprovalAnswer {
+    pub decision: composer_protocol::ApprovalDecision,
+    pub reason: Option<String>,
+}

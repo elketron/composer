@@ -201,15 +201,19 @@ impl McpServers {
                 &context.cancel,
             )
             .await;
-        match decision {
-            Some(ApprovalDecision::Approve) => Ok(()),
-            Some(ApprovalDecision::Always) => {
+        match decision.map(|answer| (answer.decision, answer.reason)) {
+            Some((ApprovalDecision::Approve, _)) => Ok(()),
+            Some((ApprovalDecision::Always, _)) => {
                 if let Err(e) = server_ref.tool_rules.add(&rules_key, name) {
                     tracing::warn!("saving the rule for {name}: {e}");
                 }
                 Ok(())
             }
-            Some(ApprovalDecision::Deny) => Err(format!(
+            Some((ApprovalDecision::Deny, Some(reason))) => Err(format!(
+                "Your orchestrator denied `{name}`: {reason}. Don't try to get around it: do \
+                 without, or say what you needed it for."
+            )),
+            Some((ApprovalDecision::Deny, None)) => Err(format!(
                 "The user denied `{name}`. Don't try to get around it: do without, or say what \
                  you needed it for."
             )),

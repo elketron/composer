@@ -607,7 +607,10 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
         },
         ServerMessage::Ok {
             id: 5,
-            result: CommandResult::Approval { approved: true },
+            result: CommandResult::Approval {
+                approved: true,
+                reason: None,
+            },
         },
         ServerMessage::Ok {
             id: 50,

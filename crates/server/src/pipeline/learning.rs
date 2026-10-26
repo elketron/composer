@@ -280,7 +280,7 @@ async fn ask(server: &Arc<Server>, url: SiteUrl, work: Option<&Work>) -> Result<
             &CancellationToken::new(),
         )
         .await;
-    let status = match decision {
+    let status = match decision.map(|answer| answer.decision) {
         Some(ApprovalDecision::Approve | ApprovalDecision::Always) => {
             let target_url = SiteUrl::new(&site, &target).map_err(|e| e.to_string())?;
             server

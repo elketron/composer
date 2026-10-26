@@ -41,6 +41,7 @@ async fn drive(server: Arc<Server>, session: Arc<Session>) {
         }
         let id = session.id().to_string();
         for message in messages {
+            server.worker_approvals.read(&id, &message.content);
             accept_user_message(&server, &session, message);
         }
 
@@ -59,6 +60,8 @@ async fn drive(server: Arc<Server>, session: Arc<Session>) {
                 message,
             });
         }
+        // A worker's approval it read and didn't answer goes to the user.
+        server.worker_approvals.turn_ended(&id);
         let cancelled = cancel.is_cancelled();
         session.emit(&server.hub, |seq| ServerMessage::TurnDone {
             session: id.clone(),

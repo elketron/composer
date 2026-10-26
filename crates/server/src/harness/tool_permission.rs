@@ -96,9 +96,9 @@ pub async fn answer_permission(server: &Arc<Server>, session: &str, args: Value)
         )
         .await;
     watch.abort();
-    match decision {
-        Some(ApprovalDecision::Approve) => allow(),
-        Some(ApprovalDecision::Always) => {
+    match decision.map(|answer| (answer.decision, answer.reason)) {
+        Some((ApprovalDecision::Approve, _)) => allow(),
+        Some((ApprovalDecision::Always, _)) => {
             if let Some(project) = &project {
                 for rule in rule.iter().flat_map(|_| &rules) {
                     if let Err(e) = server.tool_rules.add(project, rule) {
@@ -108,7 +108,11 @@ pub async fn answer_permission(server: &Arc<Server>, session: &str, args: Value)
             }
             allow()
         }
-        Some(ApprovalDecision::Deny) => deny(
+        Some((ApprovalDecision::Deny, Some(reason))) => deny(&format!(
+            "Your orchestrator denied this: {reason}. Don't try to get around it; do without, or \
+             say in the ticket's Result what you needed and why."
+        )),
+        Some((ApprovalDecision::Deny, None)) => deny(
             "The user denied this. Don't try to get around it; do without, or say in the ticket's \
              Result what you needed and why.",
         ),

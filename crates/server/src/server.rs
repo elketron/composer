@@ -11,7 +11,7 @@ use composer_protocol::{
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
-use crate::actions::{Approvals, PendingApprovals};
+use crate::actions::{ApprovalAnswer, Approvals, PendingApprovals};
 use crate::config::Config;
 use crate::devices::Devices;
 use crate::error::{Result, ServerError};
@@ -25,7 +25,7 @@ use crate::session::{Session, SessionManager};
 use crate::slot_pool::SlotPool;
 use crate::mcp_clients::McpServers;
 use crate::tools::ToolRegistry;
-use crate::worker::{ParentLink, WorkerRegistry};
+use crate::worker::{ParentLink, Verdict, WorkerApprovals, WorkerRegistry};
 
 /// The running harness. Shared as `Arc<Server>` by the API, turns and tools.
 pub struct Server {
@@ -43,6 +43,8 @@ pub struct Server {
     mcp: RwLock<Arc<McpServers>>,
     pub approvals: Approvals,
     pub pending_approvals: PendingApprovals,
+    /// Workers' approvals their orchestrator decides.
+    pub worker_approvals: WorkerApprovals,
     /// Required on every request (header or `?token=`).
     pub token: String,
     /// Paired devices (remote access), each with its own token.
@@ -131,6 +133,7 @@ impl Server {
             mcp: RwLock::new(Arc::new(McpServers::new(&config.mcp))),
             approvals,
             pending_approvals: PendingApprovals::default(),
+            worker_approvals: WorkerApprovals::default(),
             workers: WorkerRegistry::default(),
             switches: HarnessSwitches::load(home.state().join("projects.json")),
             tool_rules: ToolRules::load(home.state().join("tool_rules.json")),
@@ -352,7 +355,7 @@ impl Server {
     /// The session shows `needs approval` meanwhile. `None` if the turn was cancelled.
     #[allow(clippy::too_many_arguments)]
     pub async fn request_approval(
-        &self,
+        self: &Arc<Self>,
         session: &Session,
         site: &str,
         recipe: &str,
@@ -360,8 +363,8 @@ impl Server {
         body: String,
         hash: &str,
         cancel: &CancellationToken,
-    ) -> Option<ApprovalDecision> {
-        // In a worker process the parent asks its clients.
+    ) -> Option<ApprovalAnswer> {
+        // In a worker process the parent asks its clients (or this worker's orchestrator).
         if let Some(link) = &self.parent {
             session.update_info(&self.hub, |info| info.state = TurnState::AwaitingApproval);
             let answer = tokio::select! {
@@ -369,12 +372,13 @@ impl Server {
                 _ = cancel.cancelled() => None,
             };
             session.update_info(&self.hub, |info| info.state = TurnState::Running);
-            return answer.map(|approved| {
-                if approved {
+            return answer.map(|(approved, reason)| ApprovalAnswer {
+                decision: if approved {
                     ApprovalDecision::Approve
                 } else {
                     ApprovalDecision::Deny
-                }
+                },
+                reason,
             });
         }
         self.ask_clients(
@@ -399,14 +403,14 @@ impl Server {
     /// Asks this server's clients to approve something other than a recipe (a ticket merge, an
     /// external harness's tool) and waits. `None` if `cancel` fired first.
     pub async fn ask_approval(
-        &self,
+        self: &Arc<Self>,
         session: &Session,
         kind: ApprovalKind,
         title: String,
         body: String,
         rule: Option<String>,
         cancel: &CancellationToken,
-    ) -> Option<ApprovalDecision> {
+    ) -> Option<ApprovalAnswer> {
         self.ask_clients(
             session,
             |request| ServerMessage::ApprovalRequest {
@@ -427,18 +431,67 @@ impl Server {
     }
 
     /// Sends the approval request `message` (given its id) to every client and waits for an
-    /// answer; the session shows `needs approval` meanwhile.
+    /// answer; the session shows `needs approval` meanwhile. A worker's tool or recipe goes to
+    /// its orchestrator first, when it decides them ([`WorkerApprovals`]).
     async fn ask_clients(
-        &self,
+        self: &Arc<Self>,
         session: &Session,
         message: impl FnOnce(String) -> ServerMessage,
         cancel: &CancellationToken,
-    ) -> Option<ApprovalDecision> {
+    ) -> Option<ApprovalAnswer> {
         let request = format!("{:08x}", rand::random::<u32>());
-        let message = message(request.clone());
-        let answer = self.pending_approvals.add(&request, message.clone());
+        let mut message = message(request.clone());
         let before = session.info().state;
         session.update_info(&self.hub, |info| info.state = TurnState::AwaitingApproval);
+        // Back to what it was doing (an idle orchestrator stays idle).
+        let after = if before == TurnState::AwaitingApproval {
+            TurnState::Running
+        } else {
+            before
+        };
+        if let ServerMessage::ApprovalRequest {
+            kind,
+            title,
+            body,
+            site,
+            recipe,
+            args,
+            ..
+        } = &mut message
+            && let Some(orchestrator) = WorkerApprovals::decider(self, session, *kind)
+        {
+            let what = match kind {
+                ApprovalKind::Recipe => {
+                    format!("run recipe `{recipe}` of site://{site} {}", args.join(" "))
+                        .trim_end()
+                        .to_string()
+                }
+                _ => title.clone(),
+            };
+            let verdict = self
+                .worker_approvals
+                .ask(self, &orchestrator, session, &request, &what, body, cancel)
+                .await;
+            let decided = |decision, reason: String| {
+                session.update_info(&self.hub, |info| info.state = after);
+                Some(ApprovalAnswer {
+                    decision,
+                    reason: Some(reason),
+                })
+            };
+            match verdict {
+                None => {
+                    session.update_info(&self.hub, |info| info.state = after);
+                    return None;
+                }
+                Some(Verdict::Approve(reason)) => return decided(ApprovalDecision::Approve, reason),
+                Some(Verdict::Deny(reason)) => return decided(ApprovalDecision::Deny, reason),
+                Some(Verdict::AskUser(reason)) => {
+                    *body = format!("Its orchestrator asks you: {reason}\n\n{body}");
+                }
+            }
+        }
+        let answer = self.pending_approvals.add(&request, message.clone());
         self.hub.send(message);
         let decision = tokio::select! {
             decision = answer => decision.ok(),
@@ -453,14 +506,11 @@ impl Server {
                 Some(ApprovalDecision::Approve | ApprovalDecision::Always)
             ),
         });
-        // Back to what it was doing (an idle orchestrator stays idle).
-        let after = if before == TurnState::AwaitingApproval {
-            TurnState::Running
-        } else {
-            before
-        };
         session.update_info(&self.hub, |info| info.state = after);
-        decision
+        decision.map(|decision| ApprovalAnswer {
+            decision,
+            reason: None,
+        })
     }
 
     /// Hash of a page as last seen by the server, reading it if unknown.

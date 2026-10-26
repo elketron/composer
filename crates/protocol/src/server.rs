@@ -208,6 +208,9 @@ pub enum CommandResult {
     },
     Approval {
         approved: bool,
+        /// The orchestrator decided, not the user: why (a worker's approval). It isn't remembered.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reason: Option<String>,
     },
     /// Go on after the turn limit, with the orchestrator's `message`; `compact`: compact the
     /// session first.

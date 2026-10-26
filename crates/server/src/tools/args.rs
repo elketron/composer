@@ -84,6 +84,16 @@ pub struct MergeTicketArgs {
     pub ticket: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct AnswerApprovalArgs {
+    pub ticket: String,
+    /// `approve`, `deny` or `ask_user`.
+    pub decision: String,
+    pub reason: String,
+    #[serde(default)]
+    pub request: Option<String>,
+}
+
 /// `continue_worker` and `stop_worker`.
 #[derive(Debug, Deserialize)]
 pub struct SteerWorkerArgs {
