@@ -145,6 +145,10 @@ pub struct AgentConfig {
     /// Worker processes running at once (each needs a model slot to make progress).
     #[serde(default = "default_max_workers")]
     pub max_workers: u32,
+    /// Memory a worker run (and all it starts) may use, in systemd's syntax: `50%` of RAM,
+    /// `12G`; empty: no cap. Needs systemd (each run gets its own scope).
+    #[serde(default = "default_worker_memory_max")]
+    pub worker_memory_max: String,
 }
 
 /// An MCP server whose tools composer's agents may use, `[mcp.<name>]`: a `command` (stdio) or
@@ -270,6 +274,10 @@ fn default_recipe_timeout() -> u64 {
 
 fn default_max_workers() -> u32 {
     1
+}
+
+fn default_worker_memory_max() -> String {
+    "50%".into()
 }
 
 fn default_learn_after() -> u32 {

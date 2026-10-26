@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use tokio::process::{Child, ChildStdout, Command};
 use tokio::sync::{Mutex, Notify};
 
-use crate::harness::HarnessRun;
+use crate::harness::{HarnessRun, WorkerScope};
 
 /// How long an interrupted process gets to exit before it is killed.
 const GRACE: Duration = Duration::from_secs(5);
@@ -17,10 +17,18 @@ pub struct ChildProcess {
     pid: Option<u32>,
     child: Mutex<Child>,
     interrupt: Notify,
+    /// Its systemd scope, when it runs in one: stopped when it ends, which ends what left the
+    /// process group too.
+    scope: Option<WorkerScope>,
 }
 
 impl ChildProcess {
-    pub fn spawn(mut command: Command) -> std::io::Result<Self> {
+    pub fn spawn(command: Command) -> std::io::Result<Self> {
+        Self::spawn_in(command, None)
+    }
+
+    /// `command` from [`WorkerScope::command`], with its scope.
+    pub fn spawn_in(mut command: Command, scope: Option<WorkerScope>) -> std::io::Result<Self> {
         #[cfg(unix)]
         command.process_group(0);
         let child = command.spawn()?;
@@ -28,6 +36,7 @@ impl ChildProcess {
             pid: child.id(),
             child: Mutex::new(child),
             interrupt: Notify::new(),
+            scope,
         })
     }
 
@@ -91,6 +100,9 @@ impl HarnessRun for ChildProcess {
         };
         #[cfg(unix)]
         self.clear_group();
+        if let Some(scope) = &self.scope {
+            scope.stop();
+        }
         match status {
             Ok(status) => status
                 .code()
@@ -119,10 +131,16 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join("pid");
         let mut command = Command::new("sh");
-        command.arg("-c").arg(format!("sleep 60 & echo $! > {}", file.display()));
+        command
+            .arg("-c")
+            .arg(format!("sleep 60 & echo $! > {}", file.display()));
         let run = ChildProcess::spawn(command).unwrap();
         assert_eq!(run.wait().await, "exit 0");
-        let pid: i32 = std::fs::read_to_string(&file).unwrap().trim().parse().unwrap();
+        let pid: i32 = std::fs::read_to_string(&file)
+            .unwrap()
+            .trim()
+            .parse()
+            .unwrap();
         for _ in 0..50 {
             if !alive(pid) {
                 return;
@@ -131,5 +149,42 @@ mod tests {
         }
         panic!("the background sleep ({pid}) outlived its run");
     }
-}
 
+    /// Needs a systemd user manager; passes without one (nothing to test there).
+    #[tokio::test]
+    async fn a_scope_ends_what_left_the_group_and_caps_memory() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("pid");
+        let (mut command, scope) = WorkerScope::command(std::ffi::OsStr::new("sh"), "test", "64M");
+        if scope.is_none() {
+            return;
+        }
+        // A daemon in a session of its own: the process group doesn't reach it.
+        command
+            .arg("-c")
+            .arg(format!("setsid sleep 60 & echo $! > {}", file.display()));
+        let run = ChildProcess::spawn_in(command, scope).unwrap();
+        assert_eq!(run.wait().await, "exit 0");
+        let pid: i32 = std::fs::read_to_string(&file)
+            .unwrap()
+            .trim()
+            .parse()
+            .unwrap();
+        let mut gone = false;
+        for _ in 0..50 {
+            if !alive(pid) {
+                gone = true;
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        assert!(gone, "the daemon ({pid}) outlived its run's scope");
+
+        // 300 MB under a 64 MB cap: killed in its scope (and only there).
+        let (mut command, scope) =
+            WorkerScope::command(std::ffi::OsStr::new("python3"), "test", "64M");
+        command.args(["-c", "b = b\"x\" * (300 * 1024 * 1024); print(len(b))"]);
+        let run = ChildProcess::spawn_in(command, scope).unwrap();
+        assert_eq!(run.wait().await, "killed");
+    }
+}

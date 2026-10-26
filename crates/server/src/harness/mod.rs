@@ -17,6 +17,7 @@ mod stream_json;
 mod tool_permission;
 mod tool_rules;
 mod types;
+mod worker_scope;
 mod worker_sink;
 
 pub use child_process::ChildProcess;
@@ -30,4 +31,5 @@ pub use project_policy::{check_harness_allowed, pick_model, project_settings};
 pub use tool_permission::{PERMISSION_TOOL, answer_permission, permission_tool_info};
 pub use tool_rules::ToolRules;
 pub use types::{Harness, HarnessRun, Pause, Resume, StartRequest};
+pub use worker_scope::WorkerScope;
 pub use worker_sink::WorkerSink;

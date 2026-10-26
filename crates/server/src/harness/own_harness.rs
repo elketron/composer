@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use crate::harness::{ChildProcess, Harness, HarnessRun, StartRequest};
+use crate::harness::{ChildProcess, Harness, HarnessRun, StartRequest, WorkerScope};
 use crate::server::Server;
 
 /// Composer's own agent loop: a `composer worker` process that talks to this server over
@@ -41,7 +41,11 @@ impl Harness for OwnHarness {
             return Err("composer workers can't be resumed yet; open a new ticket".into());
         }
         let log = std::fs::File::create(&request.log).map_err(|e| e.to_string())?;
-        let mut command = tokio::process::Command::new(&server.worker_exe);
+        let (mut command, scope) = WorkerScope::command(
+            server.worker_exe.as_os_str(),
+            &request.session,
+            &server.config().agent.worker_memory_max,
+        );
         command
             .args([
                 "worker",
@@ -65,7 +69,7 @@ impl Harness for OwnHarness {
                 .arg("--attachment")
                 .arg(format!("{}/{}", file.session, file.attachment.file));
         }
-        let process = ChildProcess::spawn(command)
+        let process = ChildProcess::spawn_in(command, scope)
             .map_err(|e| format!("starting {}: {e}", server.worker_exe.display()))?;
         Ok(Arc::new(process))
     }

@@ -5,7 +5,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use serde_json::json;
 
-use crate::harness::{ChildProcess, ClaudeCodeRun, Harness, HarnessRun, StartRequest};
+use crate::harness::{ChildProcess, ClaudeCodeRun, Harness, HarnessRun, StartRequest, WorkerScope};
 use crate::server::Server;
 use crate::worker::ticket::set_ticket_fields;
 
@@ -137,7 +137,11 @@ impl Harness for ClaudeCodeHarness {
             )
         };
         // The prompt goes first: the list options after it take every following word.
-        let mut command = tokio::process::Command::new(&config.command);
+        let (mut command, scope) = WorkerScope::command(
+            config.command.as_ref(),
+            &request.session,
+            &server.config().agent.worker_memory_max,
+        );
         command
             .arg("-p")
             .arg(&prompt)
@@ -195,6 +199,9 @@ impl Harness for ClaudeCodeHarness {
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(log.try_clone().map_err(|e| e.to_string())?);
+        if scope.is_some() {
+            WorkerScope::keep_env(&mut command);
+        }
         if config.ask {
             // Its MCP calls (a question to the user) may wait as long as the run may.
             command.env(
@@ -208,7 +215,7 @@ impl Harness for ClaudeCodeHarness {
             &request.ticket,
             &[("harness_session", &harness_session)],
         )?;
-        let process = ChildProcess::spawn(command)
+        let process = ChildProcess::spawn_in(command, scope)
             .map_err(|e| format!("starting Claude Code (`{}`): {e}", config.command))?;
         ClaudeCodeRun::start(server, request, process, log).map(|run| run as Arc<dyn HarnessRun>)
     }
@@ -328,6 +335,9 @@ mod tests {
             format!("{absolute}/missing"),
             "relative/dir".into(),
         ]);
-        assert_eq!(found, vec![(dir.path().to_path_buf(), format!("/{absolute}/**"))]);
+        assert_eq!(
+            found,
+            vec![(dir.path().to_path_buf(), format!("/{absolute}/**"))]
+        );
     }
 }

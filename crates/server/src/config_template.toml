@@ -42,6 +42,10 @@ compaction_threshold = 160000
 recipe_timeout_secs = 300
 # Worker processes running at once.
 max_workers = 1
+# Memory a worker run and everything it starts may use ("50%" of RAM, "12G"; "": no cap). Each run
+# gets its own systemd scope: past this it is killed there, not the server or your terminal, and
+# what it leaves running (daemons too) is stopped when it ends. Without systemd: no cap.
+worker_memory_max = "50%"
 
 [projects]
 # Where your projects live. new_project creates folders here, and a project given by name
