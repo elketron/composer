@@ -24,6 +24,17 @@ void main() {
     expect((rows[3] as StepsRow).summary, 'hm', reason: 'only thoughts: the thought itself');
   });
 
+  test('the row a streaming reply will land in', () {
+    // Nothing of its own folded in front: it is the row appended at the end.
+    expect(pendingRowIndex([const UserItem('hi')], thinking: false), 1);
+    // A thinking block of its own folds a row before it.
+    expect(pendingRowIndex([const UserItem('hi')], thinking: true), 2);
+    // A tool call that already arrived folds together with its thinking, not in front of it.
+    expect(pendingRowIndex([const UserItem('hi'), tool('open', 'a')], thinking: true), 2);
+    // Rows older messages prepended are counted in (the caller takes rowBase off).
+    expect(pendingRowIndex([const UserItem('old'), const TextItem('answer'), tool('open', 'a')], thinking: false), 3);
+  });
+
   test('summaries count repeats', () {
     expect(stepsSummary([tool('open', 'a'), tool('open', 'b'), tool('edit', 'x/a.md'), tool('edit', 'x/b.md')]), 'read 2 pages, edited 2 pages');
   });

@@ -110,6 +110,14 @@ final class HistoryLoaded extends AppAction {
   final bool more;
 }
 
+/// The chat list stopped at the newest line (true) or the user scrolled up off it (false).
+final class ViewScrolled extends AppAction {
+  const ViewScrolled(this.url, this.session, {required this.atBottom});
+  final String url;
+  final String session;
+  final bool atBottom;
+}
+
 /// Leave the chat (detach).
 final class SessionClosed extends AppAction {
   const SessionClosed(this.url);

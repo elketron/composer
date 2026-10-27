@@ -19,6 +19,8 @@ class ChatState {
     this.more = false,
     this.loadingOlder = false,
     this.rowBase = 0,
+    this.atBottom = true,
+    this.newSince = 0,
   });
 
   final String session;
@@ -53,6 +55,12 @@ class ChatState {
   /// The rows that older messages added in front: rows keep their key as they do.
   final int rowBase;
 
+  /// The view is stuck to the newest line: it follows the stream. Scrolled up, it holds its place.
+  final bool atBottom;
+
+  /// Rows that landed while the view was scrolled up; what the "new" pill counts.
+  final int newSince;
+
   ChatState copyWith({
     List<ChatItem>? items,
     Object? streaming = _keep,
@@ -65,6 +73,8 @@ class ChatState {
     bool? more,
     bool? loadingOlder,
     int? rowBase,
+    bool? atBottom,
+    int? newSince,
   }) =>
       ChatState(
         session: session,
@@ -80,5 +90,7 @@ class ChatState {
         more: more ?? this.more,
         loadingOlder: loadingOlder ?? this.loadingOlder,
         rowBase: rowBase ?? this.rowBase,
+        atBottom: atBottom ?? this.atBottom,
+        newSince: newSince ?? this.newSince,
       );
 }
