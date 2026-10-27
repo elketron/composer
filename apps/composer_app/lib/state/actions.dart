@@ -110,12 +110,15 @@ final class HistoryLoaded extends AppAction {
   final bool more;
 }
 
-/// The chat list stopped at the newest line (true) or the user scrolled up off it (false).
+/// The chat list stopped at the newest line (true) or the user scrolled up off it (false). The
+/// view that scrolled is the one holding its place: `pane` says which, since a session can be
+/// shown in both panes at once.
 final class ViewScrolled extends AppAction {
-  const ViewScrolled(this.url, this.session, {required this.atBottom});
+  const ViewScrolled(this.url, this.session, {required this.atBottom, this.pane = ChatPane.main});
   final String url;
   final String session;
   final bool atBottom;
+  final ChatPane pane;
 }
 
 /// Leave the chat (detach).

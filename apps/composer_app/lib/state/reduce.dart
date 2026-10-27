@@ -50,7 +50,7 @@ import 'types.dart';
       HistoryLoaded(:final url, :final session, :final before, :final events, :final more) =>
         _historyLoaded(s, url, session, before, events, more),
       SessionClosed(:final url) => _close(s, url),
-      ViewScrolled(:final url, :final session, :final atBottom) => (_scrolled(s, url, session, atBottom), const []),
+      ViewScrolled(:final url, :final session, :final atBottom, :final pane) => (_scrolled(s, url, session, atBottom, pane), const []),
       NewSessionRequested(:final url, :final agent, :final project, :final text) =>
         (s, [CreateSession(url, agent, project: project, text: text)]),
       MessageSubmitted(:final url, :final text) => _submit(s, url, text),
@@ -282,7 +282,7 @@ AppEffect _reattach(String url, ChatState chat) => chat.loaded
 }
 
 /// The view came back to the newest line, or scrolled up off it: back down, what piled up is seen.
-AppState _scrolled(AppState s, String url, String session, bool atBottom) {
+AppState _scrolled(AppState s, String url, String session, bool atBottom, ChatPane pane) {
   ChatState? mark(ChatState? c) => c == null || c.session != session ? c : c.copyWith(atBottom: atBottom, newSince: atBottom ? 0 : null);
   return _updateStatus(s, url, (x) => x.copyWith(chat: mark(x.chat), sideChat: mark(x.sideChat)));
 }

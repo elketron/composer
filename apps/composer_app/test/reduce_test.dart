@@ -708,4 +708,63 @@ void main() {
     expect(s.status[home.url]!.chat!.atBottom, true);
     expect(s.status[home.url]!.chat!.newSince, 0);
   });
+
+  test('the pill counts rows: an event that adds no row does not bump it', () {
+    ServerMessage said(int seq, String text) =>
+        ServerMessageMessageDone(session: 'a', seq: seq, message: ChatMessage(role: Role.user, content: text));
+    var (s, _) = reduce(AppState.initial, const ServersLoaded([home], StorageKind.file));
+    (s, _) = reduce(s, SessionOpened(home.url, 'a'));
+    (s, _) = reduce(s, HistoryLoaded(home.url, 'a', null, [said(1, 'one')]));
+    (s, _) = reduce(s, ViewScrolled(home.url, 'a', atBottom: false));
+    expect(s.status[home.url]!.chat!.newSince, 0);
+
+    // A tool call makes a row of its own: that is what the pill counts.
+    (s, _) = reduce(s, ServerEvent(home.url, const ServerMessageToolCall(session: 'a', seq: 2, callId: 'c1', name: 'open')));
+    expect(s.status[home.url]!.chat!.newSince, 1);
+
+    // Its answer fills that row in; a queued turn adds nothing to read. Neither is another one.
+    (s, _) = reduce(s, ServerEvent(home.url, const ServerMessageToolResult(session: 'a', seq: 3, callId: 'c1', result: 'the page', isError: false)));
+    expect(s.status[home.url]!.chat!.newSince, 1, reason: 'the row was counted when it arrived');
+    (s, _) = reduce(s, ServerEvent(home.url, const ServerMessageTurnQueued(session: 'a', seq: 4, source: MessageSourceApp(site: 'home'))));
+    expect(s.status[home.url]!.chat!.newSince, 1, reason: 'it added no row');
+
+    // A message that lands is a new row again.
+    (s, _) = reduce(s, ServerEvent(home.url, said(5, 'two')));
+    expect(s.status[home.url]!.chat!.newSince, 2);
+
+    // Back down at the newest line, and it is seen.
+    (s, _) = reduce(s, ViewScrolled(home.url, 'a', atBottom: true));
+    expect(s.status[home.url]!.chat!.newSince, 0);
+  });
+
+  test('each view of a session holds its own place; the other keeps following', () {
+    ServerMessage said(int seq, String text) =>
+        ServerMessageMessageDone(session: 'a', seq: seq, message: ChatMessage(role: Role.user, content: text));
+    var (s, _) = reduce(AppState.initial, const ServersLoaded([home], StorageKind.file));
+    (s, _) = reduce(s, SessionOpened(home.url, 'a'));
+    (s, _) = reduce(s, SideTabSelected(home.url, SideTab.worker, session: 'a'));
+    (s, _) = reduce(s, HistoryLoaded(home.url, 'a', null, [said(1, 'one')]));
+
+    // Scrolled up in the open chat; the side pane beside it is still at the newest line.
+    (s, _) = reduce(s, ViewScrolled(home.url, 'a', atBottom: false));
+    expect(s.status[home.url]!.chat!.atBottom, false);
+    expect(s.status[home.url]!.sideChat!.atBottom, true, reason: 'the other view is still following');
+
+    // What lands is counted for the view that scrolled up, and only for it.
+    (s, _) = reduce(s, ServerEvent(home.url, said(2, 'two')));
+    expect(s.status[home.url]!.chat!.newSince, 1);
+    expect(s.status[home.url]!.sideChat!.newSince, 0, reason: 'the other one shows it already');
+
+    // Back down in the open chat: its own count clears, the side pane's stays.
+    (s, _) = reduce(s, ViewScrolled(home.url, 'a', atBottom: true));
+    expect(s.status[home.url]!.chat!.newSince, 0);
+
+    // The same the other way round.
+    (s, _) = reduce(s, ViewScrolled(home.url, 'a', atBottom: false, pane: ChatPane.side));
+    expect(s.status[home.url]!.sideChat!.atBottom, false);
+    expect(s.status[home.url]!.chat!.atBottom, true, reason: 'the open chat was never unpinned');
+    (s, _) = reduce(s, ServerEvent(home.url, said(3, 'three')));
+    expect(s.status[home.url]!.sideChat!.newSince, 1);
+    expect(s.status[home.url]!.chat!.newSince, 0);
+  });
 }
