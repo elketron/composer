@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../state/actions.dart';
 import '../../state/chat_state.dart';
 import '../../state/server_status.dart';
+import '../../state/types.dart';
 import '../../theme/composer_theme.dart';
 import '../../theme/tokens.dart' as t;
 import '../chat/chat_view.dart';
@@ -52,7 +53,7 @@ class WorkerPane extends StatelessWidget {
           ),
         ]),
       ),
-      Expanded(child: ChatView(url: url, status: status, chat: chat, header: false, compact: true)),
+      Expanded(child: ChatView(url: url, status: status, chat: chat, header: false, compact: true, pane: ChatPane.side)),
     ]);
   }
 }

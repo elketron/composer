@@ -728,9 +728,11 @@ void main() {
     (s, _) = reduce(s, ServerEvent(home.url, const ServerMessageTurnQueued(session: 'a', seq: 4, source: MessageSourceApp(site: 'home'))));
     expect(s.status[home.url]!.chat!.newSince, 1, reason: 'it added no row');
 
-    // A message that lands is a new row again.
+    // What does add rows counts as the rows it added: a message, then one with its thinking.
     (s, _) = reduce(s, ServerEvent(home.url, said(5, 'two')));
     expect(s.status[home.url]!.chat!.newSince, 2);
+    (s, _) = reduce(s, ServerEvent(home.url, const ServerMessageMessageDone(session: 'a', seq: 6, message: ChatMessage(role: Role.assistant, content: 'the answer', thinking: 'a thought'))));
+    expect(s.status[home.url]!.chat!.newSince, 4, reason: 'the thinking folds a row and the reply is another');
 
     // Back down at the newest line, and it is seen.
     (s, _) = reduce(s, ViewScrolled(home.url, 'a', atBottom: true));

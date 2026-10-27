@@ -5,6 +5,7 @@ import 'package:flutter/rendering.dart';
 import '../../state/actions.dart';
 import '../../state/chat_state.dart';
 import '../../state/server_status.dart';
+import '../../state/types.dart';
 import '../../theme/tokens.dart' as t;
 import '../pages/page_navigation.dart';
 import '../../state/chat_items.dart';
@@ -28,7 +29,7 @@ import 'orchestration_bar.dart';
 /// A session's chat: transcript (newest at the bottom, following the stream), its approvals,
 /// and the composer.
 class ChatView extends StatefulWidget {
-  const ChatView({super.key, required this.url, required this.status, required this.chat, this.onClose, this.header = true, this.compact = false});
+  const ChatView({super.key, required this.url, required this.status, required this.chat, this.onClose, this.header = true, this.compact = false, this.pane = ChatPane.main});
 
   final String url;
   final ServerStatus status;
@@ -41,6 +42,9 @@ class ChatView extends StatefulWidget {
   /// Beside another chat (the side pane's Worker tab): no orchestration strip and no composer,
   /// which writes to the open chat.
   final bool compact;
+
+  /// Which view this is: a session shown in both keeps a scroll position per one.
+  final ChatPane pane;
 
   @override
   State<ChatView> createState() => _ChatViewState();
@@ -91,16 +95,21 @@ class _ChatViewState extends State<ChatView> {
     final pixels = _controller.hasClients ? _controller.position.pixels : 0.0;
     final atBottom = _atBottom(n.metrics);
     if (atBottom != widget.chat.atBottom) {
-      StoreScope.read(context).dispatch(ViewScrolled(widget.url, widget.chat.session, atBottom: atBottom));
+      StoreScope.read(context).dispatch(ViewScrolled(widget.url, widget.chat.session, atBottom: atBottom, pane: widget.pane));
     }
-    if (!widget.chat.atBottom) WidgetsBinding.instance.addPostFrameCallback((_) => _hold(_rows(), pixels));
+    if (!widget.chat.atBottom) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _hold(_rows(), pixels);
+      });
+    }
     return false;
   }
 
   void _backToLatest() {
     final pos = _controller.hasClients ? _controller.position : null;
     if (pos != null) pos.jumpTo(pos.minScrollExtent);
-    StoreScope.read(context).dispatch(ViewScrolled(widget.url, widget.chat.session, atBottom: true));
+    StoreScope.read(context).dispatch(ViewScrolled(widget.url, widget.chat.session, atBottom: true, pane: widget.pane));
   }
 
   @override

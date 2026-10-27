@@ -282,9 +282,13 @@ AppEffect _reattach(String url, ChatState chat) => chat.loaded
 }
 
 /// The view came back to the newest line, or scrolled up off it: back down, what piled up is seen.
+/// Only that view: the wide layout can show one session twice, and where each has scrolled to is
+/// its own business (`drafting` is shared input and mirrors; pin state does not).
 AppState _scrolled(AppState s, String url, String session, bool atBottom, ChatPane pane) {
   ChatState? mark(ChatState? c) => c == null || c.session != session ? c : c.copyWith(atBottom: atBottom, newSince: atBottom ? 0 : null);
-  return _updateStatus(s, url, (x) => x.copyWith(chat: mark(x.chat), sideChat: mark(x.sideChat)));
+  return _updateStatus(s, url, (x) => pane == ChatPane.main
+      ? x.copyWith(chat: mark(x.chat), sideChat: x.sideChat)
+      : x.copyWith(chat: x.chat, sideChat: mark(x.sideChat)));
 }
 
 /// A chat's last messages (then it attaches for what follows), or older ones put in front.
