@@ -112,13 +112,27 @@ pub async fn tool_step(
     (result, is_error)
 }
 
-/// Drops thinking from earlier turns (only the current turn keeps it) and
+/// The steps of the current turn whose thinking the model sees again.
+const THINKING_STEPS: usize = 2;
+
+/// Drops thinking from earlier turns and from all but the current turn's last steps, and
 /// replaces image site URLs with data URLs.
 pub fn prepare_history(server: &Server, mut history: Vec<ModelMessage>) -> Vec<ModelMessage> {
+    // A worker's whole ticket is one turn: resending every step's reasoning filled its
+    // context with old plans.
+    let recent = history
+        .iter()
+        .enumerate()
+        .filter(|(_, m)| matches!(m, ModelMessage::Assistant { .. }))
+        .map(|(i, _)| i)
+        .rev()
+        .nth(THINKING_STEPS - 1)
+        .unwrap_or(0);
     let current_turn = history
         .iter()
         .rposition(|m| matches!(m, ModelMessage::User { .. }))
-        .unwrap_or(0);
+        .unwrap_or(0)
+        .max(recent);
     for (i, message) in history.iter_mut().enumerate() {
         match message {
             ModelMessage::Assistant { thinking, .. } if i < current_turn => *thinking = None,

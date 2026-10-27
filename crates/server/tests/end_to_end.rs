@@ -515,3 +515,54 @@ async fn a_session_model_and_its_history() {
     };
     assert_eq!(said(events), ["second"]);
 }
+
+#[tokio::test]
+async fn a_long_turn_resends_only_its_last_steps_thinking() {
+    // Four steps of one turn, each thinking before an `open`; then the answer.
+    let step = |n: u32| {
+        vec![
+            ModelEvent::Thinking(format!("plan {n}")),
+            finished(vec![tool_call(
+                &format!("c{n}"),
+                "open",
+                json!({ "url": "site://memory/user" }),
+            )]),
+        ]
+    };
+    let (_dir, server, provider, addr) = start(vec![
+        step(1),
+        step(2),
+        step(3),
+        step(4),
+        vec![ModelEvent::Content("done".into()), finished(vec![])],
+    ])
+    .await;
+    let mut socket = connect(addr, &server.token).await;
+    let session = create_session(&mut socket).await;
+    attach(&mut socket, &session).await;
+    send(
+        &mut socket,
+        3,
+        ClientCommand::MessageSend {
+            session: session.clone(),
+            text: "go".into(),
+            pages: vec![],
+            images: vec![],
+            attachments: vec![],
+        },
+    )
+    .await;
+    until(&mut socket, |e| matches!(e, ServerMessage::TurnDone { .. })).await;
+    let last = &provider.requests()[4];
+    let thoughts: Vec<_> = last
+        .messages
+        .iter()
+        .filter_map(|m| match m {
+            ModelMessage::Assistant {
+                thinking: Some(t), ..
+            } => Some(t.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(thoughts, ["plan 3", "plan 4"]);
+}

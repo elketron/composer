@@ -41,10 +41,7 @@ pub async fn compact(
 ) -> Result<usize, String> {
     let history = session.history();
     let cut = if in_turn {
-        history
-            .iter()
-            .rposition(|m| matches!(m, ModelMessage::User { .. }))
-            .unwrap_or(0)
+        turn_cut(&history, server.config().agent.compaction_threshold / 4)
     } else {
         history.len()
     };
@@ -91,19 +88,20 @@ pub async fn compact(
     }
     let summary = summary.content.trim().to_string();
 
-    let mut compacted = vec![
-        ModelMessage::User {
-            content: format!(
-                "[composer] Summary of the conversation so far (older messages were compacted):\n\n{summary}"
-            ),
-            images: vec![],
-        },
-        ModelMessage::Assistant {
+    let mut compacted = vec![ModelMessage::User {
+        content: format!(
+            "[composer] Summary of the conversation so far (older messages were compacted):\n\n{summary}"
+        ),
+        images: vec![],
+    }];
+    // Cut inside a turn, what's kept starts with the agent's next step: no second reply.
+    if !matches!(history.get(cut), Some(ModelMessage::Assistant { .. })) {
+        compacted.push(ModelMessage::Assistant {
             content: "Understood, continuing from the summary.".into(),
             thinking: None,
             tool_calls: vec![],
-        },
-    ];
+        });
+    }
     compacted.extend(history[cut..].iter().cloned());
     session
         .replace_history(compacted.clone())
@@ -120,6 +118,38 @@ pub async fn compact(
     let estimate = estimate_tokens(&compacted) + estimate_tokens(std::slice::from_ref(&system));
     session.update_info(&server.hub, |info| info.context_tokens = estimate);
     Ok(cut)
+}
+
+/// Where to compact mid-turn: before the turn's message, or, when the turn alone is more than
+/// `keep` tokens (a worker does its whole ticket in one), before the oldest of its steps that
+/// still fits in `keep`, so a long turn can shrink too. Cut before a step, a tool call stays
+/// with its result.
+fn turn_cut(history: &[ModelMessage], keep: u32) -> usize {
+    let turn = history
+        .iter()
+        .rposition(|m| matches!(m, ModelMessage::User { .. }))
+        .unwrap_or(0);
+    if estimate_tokens(&history[turn..]) <= keep {
+        return turn;
+    }
+    let steps =
+        (turn + 1..history.len()).filter(|&i| matches!(history[i], ModelMessage::Assistant { .. }));
+    let mut cut = history.len();
+    for i in steps.rev() {
+        if estimate_tokens(&history[i..]) > keep {
+            break;
+        }
+        cut = i;
+    }
+    // Even the last step is bigger: keep that one, compact the rest.
+    if cut == history.len() {
+        cut = history
+            .iter()
+            .rposition(|m| matches!(m, ModelMessage::Assistant { .. }))
+            .filter(|&i| i > turn)
+            .unwrap_or(turn);
+    }
+    cut
 }
 
 /// The memory pass: a short tool loop with only the page tools, not added to history.
@@ -178,4 +208,52 @@ async fn save_memory(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::provider::ModelToolCall;
+
+    fn user(text: &str) -> ModelMessage {
+        ModelMessage::User {
+            content: text.into(),
+            images: vec![],
+        }
+    }
+
+    /// A step: a call (`size` characters of arguments) and its result.
+    fn step(id: &str, size: usize) -> [ModelMessage; 2] {
+        [
+            ModelMessage::Assistant {
+                content: String::new(),
+                thinking: None,
+                tool_calls: vec![ModelToolCall {
+                    id: id.into(),
+                    name: "run".into(),
+                    arguments: "x".repeat(size),
+                }],
+            },
+            ModelMessage::Tool {
+                call_id: id.into(),
+                content: "ok".into(),
+            },
+        ]
+    }
+
+    #[test]
+    fn a_long_turn_is_cut_between_its_steps() {
+        let mut history = vec![user("earlier"), user("do the ticket")];
+        for i in 0..10 {
+            history.extend(step(&format!("c{i}"), 4000));
+        }
+        // A short turn: before its message, as always.
+        assert_eq!(turn_cut(&history[..4], 10_000), 1);
+        // About 1000 tokens a step: the last three fit in 3200.
+        let cut = turn_cut(&history, 3200);
+        assert_eq!(cut, history.len() - 6);
+        assert!(matches!(history[cut], ModelMessage::Assistant { .. }));
+        // Not even the last step fits: that one stays.
+        assert_eq!(turn_cut(&history, 100), history.len() - 2);
+    }
 }

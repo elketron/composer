@@ -690,12 +690,15 @@ impl WorkerRegistry {
             .lock()
             .expect("workers lock")
             .insert(sid.clone(), handle.clone());
+        // Clients hear it started; its session says running from here (it said `starting` for
+        // as long as it ran).
         server.hub.send(ServerMessage::WorkerStatus {
             worker: sid.clone(),
             ticket,
             parent,
             state: WorkerState::Starting,
         });
+        session.update_info(&server.hub, |info| info.worker = Some(WorkerState::Running));
 
         let watch_server = server.clone();
         tokio::spawn(async move {
