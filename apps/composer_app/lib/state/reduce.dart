@@ -50,6 +50,7 @@ import 'types.dart';
       HistoryLoaded(:final url, :final session, :final before, :final events, :final more) =>
         _historyLoaded(s, url, session, before, events, more),
       SessionClosed(:final url) => _close(s, url),
+      ViewScrolled(:final url, :final session, :final atBottom) => (_scrolled(s, url, session, atBottom), const []),
       NewSessionRequested(:final url, :final agent, :final project, :final text) =>
         (s, [CreateSession(url, agent, project: project, text: text)]),
       MessageSubmitted(:final url, :final text) => _submit(s, url, text),
@@ -278,6 +279,12 @@ AppEffect _reattach(String url, ChatState chat) => chat.loaded
     _updateStatus(s, url, (x) => x.copyWith(chat: x.chat == null ? null : mark(x.chat!), sideChat: x.sideChat == null ? null : mark(x.sideChat!))),
     [FetchHistory(url, session, chat.firstSeq)],
   );
+}
+
+/// The view came back to the newest line, or scrolled up off it: back down, what piled up is seen.
+AppState _scrolled(AppState s, String url, String session, bool atBottom) {
+  ChatState? mark(ChatState? c) => c == null || c.session != session ? c : c.copyWith(atBottom: atBottom, newSince: atBottom ? 0 : null);
+  return _updateStatus(s, url, (x) => x.copyWith(chat: mark(x.chat), sideChat: mark(x.sideChat)));
 }
 
 /// A chat's last messages (then it attaches for what follows), or older ones put in front.

@@ -25,6 +25,13 @@ import 'tool_text.dart';
 
 /// Applies an event of this chat's session; already-seen seqs (replays) are skipped.
 ChatState applyChatEvent(ChatState chat, ServerMessage message) {
+  final next = _apply(chat, message);
+  // What lands while you are scrolled up waits behind the pill; at the bottom it just follows.
+  if (!identical(next, chat) && !chat.atBottom) return next.copyWith(newSince: next.newSince + 1);
+  return next;
+}
+
+ChatState _apply(ChatState chat, ServerMessage message) {
   final event = sessionEvent(message);
   if (event == null || event.$1 != chat.session || event.$2 <= chat.lastSeq) return chat;
   final next = chat.copyWith(lastSeq: event.$2);
