@@ -24,6 +24,12 @@ List<ChatRow> chatRows(List<ChatItem> items) {
   return rows;
 }
 
+/// The row a still-streaming reply lands in when it finishes, so its row keeps its key across
+/// `message_done`: a thinking block it brings folds a row in front of itself, a tool call that
+/// already arrived folds together with it.
+int pendingRowIndex(List<ChatItem> items, {required bool thinking}) =>
+    chatRows([...items, if (thinking) const ThinkingItem(''), const TextItem('')]).length - 1;
+
 /// `read 2 pages, wrote 0001.md, started a worker`: what the steps did, in the order first done.
 String stepsSummary(List<ChatItem> steps) {
   final tools = steps.whereType<ToolItem>().toList();
