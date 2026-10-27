@@ -718,21 +718,19 @@ void main() {
     (s, _) = reduce(s, ViewScrolled(home.url, 'a', atBottom: false));
     expect(s.status[home.url]!.chat!.newSince, 0);
 
-    // A tool call makes a row of its own: that is what the pill counts.
-    (s, _) = reduce(s, ServerEvent(home.url, const ServerMessageToolCall(session: 'a', seq: 2, callId: 'c1', name: 'open')));
-    expect(s.status[home.url]!.chat!.newSince, 1);
+    // A reply that brings a thinking block folds two rows: the pill counts both.
+    (s, _) = reduce(s, ServerEvent(home.url, const ServerMessageMessageDone(session: 'a', seq: 2, message: ChatMessage(role: Role.assistant, content: 'the answer', thinking: 'a thought'))));
+    expect(s.status[home.url]!.chat!.newSince, 2, reason: 'its thinking row and its reply row');
 
-    // Its answer fills that row in; a queued turn adds nothing to read. Neither is another one.
-    (s, _) = reduce(s, ServerEvent(home.url, const ServerMessageToolResult(session: 'a', seq: 3, callId: 'c1', result: 'the page', isError: false)));
-    expect(s.status[home.url]!.chat!.newSince, 1, reason: 'the row was counted when it arrived');
-    (s, _) = reduce(s, ServerEvent(home.url, const ServerMessageTurnQueued(session: 'a', seq: 4, source: MessageSourceApp(site: 'home'))));
-    expect(s.status[home.url]!.chat!.newSince, 1, reason: 'it added no row');
+    // A tool call makes a row of its own; its answer only fills that row in.
+    (s, _) = reduce(s, ServerEvent(home.url, const ServerMessageToolCall(session: 'a', seq: 3, callId: 'c1', name: 'open')));
+    expect(s.status[home.url]!.chat!.newSince, 3);
+    (s, _) = reduce(s, ServerEvent(home.url, const ServerMessageToolResult(session: 'a', seq: 4, callId: 'c1', result: 'the page', isError: false)));
+    expect(s.status[home.url]!.chat!.newSince, 3, reason: 'the row was counted when it arrived');
 
-    // What does add rows counts as the rows it added: a message, then one with its thinking.
-    (s, _) = reduce(s, ServerEvent(home.url, said(5, 'two')));
-    expect(s.status[home.url]!.chat!.newSince, 2);
-    (s, _) = reduce(s, ServerEvent(home.url, const ServerMessageMessageDone(session: 'a', seq: 6, message: ChatMessage(role: Role.assistant, content: 'the answer', thinking: 'a thought'))));
-    expect(s.status[home.url]!.chat!.newSince, 4, reason: 'the thinking folds a row and the reply is another');
+    // And an event that adds no row at all is nothing new to read.
+    (s, _) = reduce(s, ServerEvent(home.url, const ServerMessageTurnQueued(session: 'a', seq: 5, source: MessageSourceApp(site: 'home'))));
+    expect(s.status[home.url]!.chat!.newSince, 3, reason: 'it added no row');
 
     // Back down at the newest line, and it is seen.
     (s, _) = reduce(s, ViewScrolled(home.url, 'a', atBottom: true));
