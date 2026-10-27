@@ -694,13 +694,13 @@ void main() {
     expect(s.status[home.url]!.chat!.atBottom, true);
 
     // At the bottom, new lines are simply followed.
-    (s, _) = reduce(s, ServerEvent(home.url, const ServerMessageMessageDelta(session: 'a', seq: 2, text: 'hm')));
+    (s, _) = reduce(s, ServerEvent(home.url, said(2, 'two')));
     expect(s.status[home.url]!.chat!.newSince, 0);
 
     // Scrolled up: what lands is counted for the pill instead of pulling the view down.
     (s, _) = reduce(s, ViewScrolled(home.url, 'a', atBottom: false));
-    (s, _) = reduce(s, ServerEvent(home.url, const ServerMessageMessageDelta(session: 'a', seq: 3, text: 'more')));
-    (s, _) = reduce(s, ServerEvent(home.url, const ServerMessageMessageDelta(session: 'a', seq: 4, text: ' still')));
+    (s, _) = reduce(s, ServerEvent(home.url, said(3, 'three')));
+    (s, _) = reduce(s, ServerEvent(home.url, said(4, 'four')));
     expect(s.status[home.url]!.chat!.newSince, 2);
 
     // Back down at the newest line, and it is seen.

@@ -208,6 +208,14 @@ void main() {
 
     store.dispatch(ServerEvent(home.url, delta(15, stream2)));
     await frame(tester);
+    expect(
+      find.byKey(const Key('new-content')),
+      findsNothing,
+      reason: 'the chunk grew a row that was already there: nothing new to offer',
+    );
+
+    store.dispatch(ServerEvent(home.url, replied(16, reply)));
+    await frame(tester);
     expect(find.byKey(const Key('new-content')), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('new-content')));

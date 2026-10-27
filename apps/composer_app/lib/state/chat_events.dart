@@ -4,6 +4,7 @@
 import 'package:composer_protocol/composer_protocol.dart';
 
 import 'chat_items.dart';
+import 'chat_rows.dart';
 import 'chat_state.dart';
 import 'tool_text.dart';
 
@@ -27,7 +28,9 @@ import 'tool_text.dart';
 ChatState applyChatEvent(ChatState chat, ServerMessage message) {
   final next = _apply(chat, message);
   // What lands while you are scrolled up waits behind the pill; at the bottom it just follows.
-  if (!identical(next, chat) && !chat.atBottom) return next.copyWith(newSince: next.newSince + 1);
+  // It counts rows: an event that fills in a row already on the list, or adds none, is nothing new to read.
+  final rows = chatRows(next.items).length - chatRows(chat.items).length;
+  if (rows > 0 && !chat.atBottom) return next.copyWith(newSince: next.newSince + rows);
   return next;
 }
 
