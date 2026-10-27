@@ -27,7 +27,7 @@ use crate::tools::search_tool::SearchTool;
 use crate::tools::set_project_tool::SetProjectTool;
 use crate::tools::spawn_worker_tool::SpawnWorkerTool;
 use crate::tools::write_tool::WriteTool;
-use crate::tools::{Tool, ToolContext};
+use crate::tools::{CallResult, Tool, ToolContext, text_result};
 
 /// All tools the server provides. An agent gets the ones its `tools:` lists.
 pub struct ToolRegistry {
@@ -119,20 +119,15 @@ impl ToolRegistry {
     }
 
     /// Runs a model's call. Returns the result text and whether it failed.
-    pub async fn call(&self, context: &ToolContext, call: &ModelToolCall) -> (String, bool) {
+    pub async fn call(&self, context: &ToolContext, call: &ModelToolCall) -> CallResult {
         match serde_json::from_str(&call.arguments) {
             Ok(args) => self.call_value(context, &call.name, args).await,
-            Err(e) => (format!("arguments are not valid JSON: {e}"), true),
+            Err(e) => text_result(format!("arguments are not valid JSON: {e}"), true),
         }
     }
 
     /// Runs a call with parsed arguments (models, and harnesses through `tool.call`).
-    pub async fn call_value(
-        &self,
-        context: &ToolContext,
-        name: &str,
-        args: Value,
-    ) -> (String, bool) {
+    pub async fn call_value(&self, context: &ToolContext, name: &str, args: Value) -> CallResult {
         let Some(tool) = self
             .tools
             .iter()
@@ -145,16 +140,13 @@ impl ToolRegistry {
                 return parent
                     .call_tool(context.session.id(), name, args)
                     .await
-                    .unwrap_or_else(|e| (e, true));
+                    .unwrap_or_else(|e| text_result(e, true));
             }
             if let Some(result) = context.server.mcp().call(context, name, args).await {
                 return result;
             }
-            return (format!("unknown tool `{name}`"), true);
+            return text_result(format!("unknown tool `{name}`"), true);
         };
-        match tool.call(context, args).await {
-            Ok(result) => (result, false),
-            Err(error) => (error, true),
-        }
+        tool.call_result(context, args).await
     }
 }

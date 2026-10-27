@@ -10,7 +10,9 @@ use crate::agent::{AgentDefinition, system_prompt};
 use crate::provider::{ModelMessage, ModelRequest};
 use crate::server::Server;
 use crate::session::Session;
-use crate::session::model_call::{estimate_tokens, model_step, prepare_history, tool_step};
+use crate::session::model_call::{
+    estimate_tokens, model_step, prepare_history, thinking_budget, tool_step,
+};
 use crate::tools::ToolContext;
 
 /// Tools the agent may use while saving memory.
@@ -48,7 +50,7 @@ pub async fn compact(
     if cut < 2 {
         return Ok(0);
     }
-    let older = prepare_history(server, history[..cut].to_vec());
+    let older = prepare_history(server, history[..cut].to_vec(), thinking_budget(server));
     let agent = AgentDefinition::load(&server.workspace, &session.info().agent)
         .map_err(|e| e.to_string())?;
     let system = ModelMessage::System {
@@ -200,10 +202,11 @@ async fn save_memory(
             tool_calls: step.tool_calls.clone(),
         });
         for call in &step.tool_calls {
-            let (result, _) = tool_step(server, &context, call).await;
+            let result = tool_step(server, &context, call).await;
             messages.push(ModelMessage::Tool {
                 call_id: call.id.clone(),
-                content: result,
+                content: result.text,
+                images: vec![],
             });
         }
     }
@@ -237,6 +240,7 @@ mod tests {
             ModelMessage::Tool {
                 call_id: id.into(),
                 content: "ok".into(),
+                images: vec![],
             },
         ]
     }

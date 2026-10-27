@@ -8,6 +8,7 @@ use futures::{SinkExt, StreamExt};
 use tokio::sync::{Notify, mpsc, oneshot};
 use tokio_tungstenite::tungstenite::Message;
 
+use crate::tools::CallResult;
 use crate::worker::types::Outbound;
 
 /// A worker process's connection to the server that spawned it. Through it the worker
@@ -182,20 +183,28 @@ impl ParentLink {
         }
     }
 
-    /// Runs a tool in the running worker `session`. Returns the output and whether it failed.
+    /// Runs a tool in the running worker `session`: its output, whether it failed, its images.
     pub async fn call_tool(
         &self,
         session: &str,
         name: &str,
         args: serde_json::Value,
-    ) -> Result<(String, bool), String> {
+    ) -> Result<CallResult, String> {
         let command = ClientCommand::ToolCall {
             session: session.into(),
             name: name.into(),
             args,
         };
         match self.request(command).await? {
-            CommandResult::ToolOutput { output, is_error } => Ok((output, is_error)),
+            CommandResult::ToolOutput {
+                output,
+                is_error,
+                images,
+            } => Ok(CallResult {
+                text: output,
+                is_error,
+                images,
+            }),
             other => Err(format!("unexpected reply to tool.call: {other:?}")),
         }
     }

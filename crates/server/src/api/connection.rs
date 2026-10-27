@@ -290,17 +290,21 @@ impl Connection {
                             Ok(CommandResult::ToolOutput {
                                 output,
                                 is_error: false,
+                                images: vec![],
                             }),
                         );
                         return;
                     }
                     let reply = match server.workers.tool_context(&server, &session) {
                         Ok(context) => {
-                            let (output, is_error) =
-                                server.tools.call_value(&context, &name, args).await;
+                            let result = server.tools.call_value(&context, &name, args).await;
                             ServerMessage::Ok {
                                 id,
-                                result: CommandResult::ToolOutput { output, is_error },
+                                result: CommandResult::ToolOutput {
+                                    output: result.text,
+                                    is_error: result.is_error,
+                                    images: result.images,
+                                },
                             }
                         }
                         Err(message) => ServerMessage::Error {

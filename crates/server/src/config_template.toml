@@ -10,6 +10,9 @@ base_url = "http://127.0.0.1:8080/v1"
 api_key = ""
 # Empty: the first model listed by GET /models.
 model = ""
+# Images in tool results (an MCP server's screenshot) go to the model as images. false for a
+# server that rejects images outside user messages.
+tool_images = true
 # OpenRouter: base_url = "https://openrouter.ai/api/v1" and your key. Sessions can use another of
 # its models: `:model` in the TUI, Model… in the app's chat menu.
 

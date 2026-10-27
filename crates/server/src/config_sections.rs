@@ -15,6 +15,10 @@ pub struct ProviderConfig {
     /// Empty: use the first model from `GET /models`.
     #[serde(default)]
     pub model: String,
+    /// Images in tool results (an MCP screenshot) go to the model as image parts of the tool
+    /// message. Off for a server that takes images only from the user: the text names them.
+    #[serde(default = "default_true")]
+    pub tool_images: bool,
 }
 
 /// A fast model that decides workers' approvals instead of their orchestrator.

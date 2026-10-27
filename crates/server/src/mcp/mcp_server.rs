@@ -3,6 +3,7 @@ use std::sync::Arc;
 use serde_json::{Value, json};
 
 use crate::mcp::ToolSource;
+use crate::tools::text_result;
 
 /// Used when the client doesn't say which protocol version it speaks.
 const PROTOCOL_VERSION: &str = "2025-06-18";
@@ -58,15 +59,18 @@ impl McpServer {
                     args => args.clone(),
                 };
                 // A call that couldn't run is still a tool result, so the model can recover.
-                let (output, is_error) = self
+                let result = self
                     .tools
                     .call(name, args)
                     .await
-                    .unwrap_or_else(|e| (e, true));
-                json!({
-                    "content": [{ "type": "text", "text": output }],
-                    "isError": is_error,
-                })
+                    .unwrap_or_else(|e| text_result(e, true));
+                let mut content = vec![json!({ "type": "text", "text": result.text })];
+                // Data URLs back to MCP's images (a screenshot reaches Claude Code as one).
+                content.extend(result.images.iter().filter_map(|url| {
+                    let (mime, data) = url.strip_prefix("data:")?.split_once(";base64,")?;
+                    Some(json!({ "type": "image", "data": data, "mimeType": mime }))
+                }));
+                json!({ "content": content, "isError": result.is_error })
             }
             other => return Some(error(id, -32601, &format!("unknown method `{other}`"))),
         };
@@ -84,6 +88,7 @@ mod tests {
     use composer_protocol::ToolInfo;
 
     use super::*;
+    use crate::tools::CallResult;
 
     struct Fake;
 
@@ -97,9 +102,9 @@ mod tests {
             }])
         }
 
-        async fn call(&self, name: &str, args: Value) -> Result<(String, bool), String> {
+        async fn call(&self, name: &str, args: Value) -> Result<CallResult, String> {
             match name {
-                "open" => Ok((format!("opened {}", args["url"]), false)),
+                "open" => Ok(text_result(format!("opened {}", args["url"]), false)),
                 _ => Err(format!("unknown tool `{name}`")),
             }
         }

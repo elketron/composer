@@ -52,6 +52,7 @@ pub async fn decide(
             config.provider.api_key.clone()
         },
         model: system1.model.clone(),
+        tool_images: false,
     })
     .await
     .ok()?;

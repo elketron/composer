@@ -12,7 +12,7 @@ use crate::attachments::{ATTACHMENT_SCHEME, attachment_data_url};
 use crate::provider::{ModelEvent, ModelMessage, ModelRequest, ModelToolCall};
 use crate::server::Server;
 use crate::session::{Session, StepOutput};
-use crate::tools::ToolContext;
+use crate::tools::{CallResult, ToolContext, text_result};
 
 /// Streams one completion. Holds a model slot only for the call itself.
 /// With `live`, thinking and text are streamed to clients as deltas.
@@ -81,16 +81,16 @@ pub async fn model_step(
     Ok(out)
 }
 
-/// Runs a tool call, showing it in the chat. Returns the result and whether it failed.
+/// Runs a tool call, showing it in the chat. Returns its result.
 pub async fn tool_step(
     server: &Arc<Server>,
     context: &ToolContext,
     call: &ModelToolCall,
-) -> (String, bool) {
+) -> CallResult {
     let session = &context.session;
     let id = session.id().to_string();
-    let (result, is_error) = if context.cancel.is_cancelled() {
-        ("cancelled by the user".to_string(), true)
+    let result = if context.cancel.is_cancelled() {
+        text_result("cancelled by the user".to_string(), true)
     } else {
         session.emit(&server.hub, |seq| ServerMessage::ToolCallStarted {
             session: id.clone(),
@@ -106,37 +106,72 @@ pub async fn tool_step(
         session: id.clone(),
         seq,
         call_id: call.id.clone(),
-        result: result.clone(),
-        is_error,
+        result: result.text.clone(),
+        is_error: result.is_error,
     });
-    (result, is_error)
+    result
 }
 
-/// The steps of the current turn whose thinking the model sees again.
-const THINKING_STEPS: usize = 2;
-
-/// Drops thinking from earlier turns and from all but the current turn's last steps, and
-/// replaces image site URLs with data URLs.
-pub fn prepare_history(server: &Server, mut history: Vec<ModelMessage>) -> Vec<ModelMessage> {
-    // A worker's whole ticket is one turn: resending every step's reasoning filled its
-    // context with old plans.
-    let recent = history
+/// A tool's images (data URLs), stored with the session's attachments like an upload (shrunk,
+/// EXIF dropped): history keeps their references, not the bytes. One that can't be stored is
+/// left out.
+pub fn store_images(
+    server: &Server,
+    session: &Session,
+    tool: &str,
+    images: &[String],
+) -> Vec<String> {
+    let config = server.config();
+    images
         .iter()
         .enumerate()
-        .filter(|(_, m)| matches!(m, ModelMessage::Assistant { .. }))
-        .map(|(i, _)| i)
-        .rev()
-        .nth(THINKING_STEPS - 1)
-        .unwrap_or(0);
-    let current_turn = history
+        .filter_map(|(i, url)| {
+            let (mime, data) = url.strip_prefix("data:")?.split_once(";base64,")?;
+            let bytes = base64::engine::general_purpose::STANDARD
+                .decode(data)
+                .ok()?;
+            let ext = mime.strip_prefix("image/").unwrap_or("png");
+            let name = format!("{}-{}.{ext}", tool.replace("__", "-"), i + 1);
+            match crate::attachments::save(
+                &server.home,
+                &config.attachments,
+                session.id(),
+                &name,
+                &bytes,
+            ) {
+                Ok(saved) => Some(format!(
+                    "{ATTACHMENT_SCHEME}{}/{}",
+                    session.id(),
+                    saved.file
+                )),
+                Err(e) => {
+                    tracing::warn!("an image from {tool}: {e}");
+                    None
+                }
+            }
+        })
+        .collect()
+}
+
+/// Drops thinking from earlier turns and from the current turn's older segments, and replaces
+/// image site URLs with data URLs. `thinking_budget`: the thinking tokens a segment holds.
+pub fn prepare_history(
+    server: &Server,
+    mut history: Vec<ModelMessage>,
+    thinking_budget: u32,
+) -> Vec<ModelMessage> {
+    let turn = history
         .iter()
         .rposition(|m| matches!(m, ModelMessage::User { .. }))
-        .unwrap_or(0)
-        .max(recent);
+        .unwrap_or(0);
+    let current_turn = thinking_kept_from(&history, turn, thinking_budget);
+    let tool_images = server.config().provider.tool_images;
     for (i, message) in history.iter_mut().enumerate() {
         match message {
             ModelMessage::Assistant { thinking, .. } if i < current_turn => *thinking = None,
-            ModelMessage::User { images, .. } => {
+            // A server that takes no images in tool results: the text names them.
+            ModelMessage::Tool { images, .. } if !tool_images => images.clear(),
+            ModelMessage::User { images, .. } | ModelMessage::Tool { images, .. } => {
                 *images = images
                     .iter()
                     .filter_map(|url| data_url(server, url))
@@ -146,6 +181,39 @@ pub fn prepare_history(server: &Server, mut history: Vec<ModelMessage>) -> Vec<M
         }
     }
     history
+}
+
+/// A segment's thinking: an eighth of the context at which a session is compacted.
+pub fn thinking_budget(server: &Server) -> u32 {
+    server.config().agent.compaction_threshold / 8
+}
+
+/// Where the current turn's thinking starts being sent: a worker does its whole ticket in one
+/// turn, and resending every step's reasoning filled its context with old plans. Dropping it
+/// step by step rewrote the prompt a few steps back on every call, so a server's prompt cache
+/// (which resumes only an exact prefix) read it all again each time. So the turn's steps go in
+/// segments of about `budget` thinking tokens, cut from the turn's start: adding steps never
+/// moves a cut, the prompt only grows, and it changes before its end once a segment fills.
+/// Thinking before the last cut is dropped.
+fn thinking_kept_from(history: &[ModelMessage], turn: usize, budget: u32) -> usize {
+    let mut cut = turn;
+    let mut held = 0u32;
+    for (i, message) in history.iter().enumerate().skip(turn) {
+        if let ModelMessage::Assistant {
+            thinking: Some(thinking),
+            ..
+        } = message
+        {
+            // The step that fills a segment starts the next one: the latest keeps its thinking.
+            let tokens = (thinking.len() / 4) as u32;
+            if held > 0 && held + tokens > budget {
+                cut = i;
+                held = 0;
+            }
+            held += tokens;
+        }
+    }
+    cut
 }
 
 pub fn parse_args(arguments: &str) -> serde_json::Value {

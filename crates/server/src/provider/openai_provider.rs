@@ -222,8 +222,26 @@ fn message_json(message: &ModelMessage) -> Value {
             }
             m
         }
-        ModelMessage::Tool { call_id, content } => {
+        ModelMessage::Tool {
+            call_id,
+            content,
+            images,
+        } if images.is_empty() => {
             json!({ "role": "tool", "tool_call_id": call_id, "content": content })
+        }
+        // A screenshot from an MCP tool: image parts in the tool message (`tool_images`).
+        ModelMessage::Tool {
+            call_id,
+            content,
+            images,
+        } => {
+            let mut parts = vec![json!({ "type": "text", "text": content })];
+            parts.extend(
+                images
+                    .iter()
+                    .map(|url| json!({ "type": "image_url", "image_url": { "url": url } })),
+            );
+            json!({ "role": "tool", "tool_call_id": call_id, "content": parts })
         }
     }
 }
@@ -272,6 +290,28 @@ mod tests {
                 name: Some("Anthropic: Claude Sonnet 4.5".into()),
                 context: Some(1_000_000),
             }]
+        );
+    }
+
+    #[test]
+    fn a_tool_result_with_images_has_image_parts() {
+        let plain = ModelMessage::Tool {
+            call_id: "c".into(),
+            content: "ok".into(),
+            images: vec![],
+        };
+        assert_eq!(message_json(&plain)["content"], "ok");
+        let shot = ModelMessage::Tool {
+            call_id: "c".into(),
+            content: "the screen".into(),
+            images: vec!["data:image/png;base64,AAAA".into()],
+        };
+        assert_eq!(
+            message_json(&shot),
+            json!({ "role": "tool", "tool_call_id": "c", "content": [
+                { "type": "text", "text": "the screen" },
+                { "type": "image_url", "image_url": { "url": "data:image/png;base64,AAAA" } },
+            ] })
         );
     }
 

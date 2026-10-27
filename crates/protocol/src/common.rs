@@ -132,8 +132,6 @@ pub struct Attachment {
     pub size: u64,
 }
 
-/// An external harness (or one of its models) for a project: allowed by config.toml, and
-/// turned on or off at runtime.
 /// A model the provider lists (`GET /models`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
@@ -148,6 +146,8 @@ pub struct ModelInfo {
     pub context: Option<u32>,
 }
 
+/// An external harness (or one of its models) for a project: allowed by config.toml, and
+/// turned on or off at runtime.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]

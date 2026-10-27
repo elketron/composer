@@ -12,7 +12,9 @@ use crate::server::Server;
 use crate::session::turn_budget::TurnBudget;
 use crate::session::Session;
 use crate::session::compaction::compact;
-use crate::session::model_call::{model_step, parse_args, prepare_history, tool_step};
+use crate::session::model_call::{
+    model_step, parse_args, prepare_history, store_images, thinking_budget, tool_step,
+};
 use crate::tools::ToolContext;
 
 /// Delivers a user-side message. Starts a turn, or queues it behind the running one.
@@ -188,7 +190,11 @@ async fn run_turn(
                 &session.info(),
             ),
         }];
-        messages.extend(prepare_history(server, session.history()));
+        messages.extend(prepare_history(
+            server,
+            session.history(),
+            thinking_budget(server),
+        ));
         let step = model_step(
             server,
             session,
@@ -224,12 +230,14 @@ async fn run_turn(
             return Ok(());
         }
         for call in &step.tool_calls {
-            let (result, _) = tool_step(server, &context, call).await;
-            budget.tool_results(&result);
+            let result = tool_step(server, &context, call).await;
+            budget.tool_results(&result.text);
+            let images = store_images(server, session, &call.name, &result.images);
             session
                 .push_history(ModelMessage::Tool {
                     call_id: call.id.clone(),
-                    content: result,
+                    content: result.text,
+                    images,
                 })
                 .map_err(|e| e.to_string())?;
         }

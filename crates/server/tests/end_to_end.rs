@@ -517,11 +517,12 @@ async fn a_session_model_and_its_history() {
 }
 
 #[tokio::test]
-async fn a_long_turn_resends_only_its_last_steps_thinking() {
-    // Four steps of one turn, each thinking before an `open`; then the answer.
+async fn a_long_turn_keeps_a_prompt_that_only_grows() {
+    // Six steps of one turn, each thinking about 6K tokens before an `open`; then the answer.
+    // With the default threshold a segment holds 20K tokens of thinking: three steps.
     let step = |n: u32| {
         vec![
-            ModelEvent::Thinking(format!("plan {n}")),
+            ModelEvent::Thinking(format!("plan {n} {}", "x".repeat(24_000))),
             finished(vec![tool_call(
                 &format!("c{n}"),
                 "open",
@@ -529,14 +530,9 @@ async fn a_long_turn_resends_only_its_last_steps_thinking() {
             )]),
         ]
     };
-    let (_dir, server, provider, addr) = start(vec![
-        step(1),
-        step(2),
-        step(3),
-        step(4),
-        vec![ModelEvent::Content("done".into()), finished(vec![])],
-    ])
-    .await;
+    let mut scripts: Vec<_> = (1..=6).map(step).collect();
+    scripts.push(vec![ModelEvent::Content("done".into()), finished(vec![])]);
+    let (_dir, server, provider, addr) = start(scripts).await;
     let mut socket = connect(addr, &server.token).await;
     let session = create_session(&mut socket).await;
     attach(&mut socket, &session).await;
@@ -553,16 +549,127 @@ async fn a_long_turn_resends_only_its_last_steps_thinking() {
     )
     .await;
     until(&mut socket, |e| matches!(e, ServerMessage::TurnDone { .. })).await;
-    let last = &provider.requests()[4];
-    let thoughts: Vec<_> = last
+    let requests = provider.requests();
+    let thoughts = |n: usize| -> Vec<String> {
+        requests[n]
+            .messages
+            .iter()
+            .filter_map(|m| match m {
+                ModelMessage::Assistant {
+                    thinking: Some(t), ..
+                } => Some(t.split(' ').take(2).collect::<Vec<_>>().join(" ")),
+                _ => None,
+            })
+            .collect()
+    };
+    // A prompt cache resumes an exact prefix: each request starts with the one before it,
+    // except where a segment filled (plan 4 starts the second; the first goes).
+    let prefix = |a: usize, b: usize| requests[b].messages.starts_with(&requests[a].messages);
+    assert!(prefix(1, 2) && prefix(2, 3) && prefix(4, 5) && prefix(5, 6));
+    assert!(!prefix(3, 4));
+    assert_eq!(thoughts(3), ["plan 1", "plan 2", "plan 3"]);
+    assert_eq!(thoughts(6), ["plan 4", "plan 5", "plan 6"]);
+}
+
+/// A 2x2 red PNG.
+const PNG: &[u8] = &[
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+    0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x02, 0x08, 0x02, 0x00, 0x00, 0x00, 0xfd, 0xd4, 0x9a,
+    0x73, 0x00, 0x00, 0x00, 0x13, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0xf8, 0xcf, 0xc0, 0xf0,
+    0x9f, 0x01, 0x8c, 0xff, 0x33, 0x30, 0x00, 0x00, 0x1f, 0xee, 0x03, 0xfd, 0x35, 0x1b, 0x00, 0x33,
+    0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+];
+
+#[tokio::test]
+async fn open_shows_an_image_to_the_model() {
+    let project = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(project.path().join("build")).unwrap();
+    std::fs::write(project.path().join("build/shot.png"), PNG).unwrap();
+    let outside = tempfile::tempdir().unwrap();
+    std::fs::write(outside.path().join("other.png"), PNG).unwrap();
+    let calls = [
+        json!({ "url": "build/shot.png" }),
+        json!({ "url": "site://memory/pic.png" }),
+        json!({ "url": outside.path().join("other.png") }),
+        json!({ "url": "site://memory/user" }),
+    ];
+    let mut scripts: Vec<_> = calls
+        .iter()
+        .enumerate()
+        .map(|(i, args)| {
+            vec![finished(vec![tool_call(
+                &format!("c{i}"),
+                "open",
+                args.clone(),
+            )])]
+        })
+        .collect();
+    scripts.push(vec![ModelEvent::Content("seen".into()), finished(vec![])]);
+    let (dir, server, provider, addr) = start(scripts).await;
+    std::fs::write(dir.path().join("sites/memory/pic.png"), PNG).unwrap();
+    let mut socket = connect(addr, &server.token).await;
+    send(
+        &mut socket,
+        1,
+        ClientCommand::SessionCreate {
+            agent: "default".into(),
+            project: Some(project.path().display().to_string()),
+        },
+    )
+    .await;
+    let reply = until(&mut socket, |e| {
+        matches!(e, ServerMessage::Ok { id: 1, .. })
+    })
+    .await;
+    let Some(ServerMessage::Ok {
+        result: CommandResult::Session { session },
+        ..
+    }) = reply.last()
+    else {
+        panic!("{reply:?}")
+    };
+    let session = session.id.clone();
+    attach(&mut socket, &session).await;
+    send(
+        &mut socket,
+        3,
+        ClientCommand::MessageSend {
+            session: session.clone(),
+            text: "look".into(),
+            pages: vec![],
+            images: vec![],
+            attachments: vec![],
+        },
+    )
+    .await;
+    until(&mut socket, |e| matches!(e, ServerMessage::TurnDone { .. })).await;
+    let last = provider.requests().pop().unwrap();
+    let tools: Vec<(&str, usize)> = last
         .messages
         .iter()
         .filter_map(|m| match m {
-            ModelMessage::Assistant {
-                thinking: Some(t), ..
-            } => Some(t.as_str()),
+            ModelMessage::Tool {
+                content, images, ..
+            } => Some((content.as_str(), images.len())),
             _ => None,
         })
         .collect();
-    assert_eq!(thoughts, ["plan 3", "plan 4"]);
+    assert_eq!(tools.len(), 4, "{tools:?}");
+    assert!(
+        tools[0].0.starts_with("build/shot.png: image (image/png"),
+        "{tools:?}"
+    );
+    assert_eq!(tools[0].1, 1);
+    assert!(
+        tools[1].0.starts_with("site://memory/pic.png: image"),
+        "{tools:?}"
+    );
+    assert_eq!(tools[1].1, 1);
+    assert!(tools[2].0.contains("outside your project"), "{tools:?}");
+    assert_eq!(tools[2].1, 0);
+    assert!(
+        tools[3].0.starts_with("url: site://memory/user"),
+        "{tools:?}"
+    );
+    assert_eq!(tools[3].1, 0);
 }

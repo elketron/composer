@@ -225,6 +225,9 @@ pub enum CommandResult {
     ToolOutput {
         output: String,
         is_error: bool,
+        /// Images in the result (an MCP screenshot), as data URLs.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        images: Vec<String>,
     },
     Harnesses {
         project: String,

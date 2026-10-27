@@ -12,6 +12,7 @@ use crate::mcp_clients::McpClient;
 use crate::mcp_clients::types::{Slot, glob_matches, tool_name, transport_kind};
 use crate::provider::ToolSpec;
 use crate::tools::ToolContext;
+use crate::tools::{CallResult, text_result};
 
 /// After a failed connect, turns don't try again for this long (a call does).
 const RETRY_AFTER: Duration = Duration::from_secs(30);
@@ -133,23 +134,18 @@ impl McpServers {
     }
 
     /// Runs `name` (`github__get_issue`) if it is an MCP tool: `None` when it isn't one.
-    pub async fn call(
-        &self,
-        context: &ToolContext,
-        name: &str,
-        args: Value,
-    ) -> Option<(String, bool)> {
+    pub async fn call(&self, context: &ToolContext, name: &str, args: Value) -> Option<CallResult> {
         let (server, _) = name.split_once("__")?;
         if !self.configs.contains_key(server) {
             return None;
         }
         if !context.agent.allows_mcp_tool(name) {
-            return Some((format!("unknown tool `{name}`"), true));
+            return Some(text_result(format!("unknown tool `{name}`"), true));
         }
         Some(
             self.call_tool(context, server, name, args)
                 .await
-                .unwrap_or_else(|e| (e, true)),
+                .unwrap_or_else(|e| text_result(e, true)),
         )
     }
 
@@ -159,7 +155,7 @@ impl McpServers {
         server: &str,
         name: &str,
         args: Value,
-    ) -> Result<(String, bool), String> {
+    ) -> Result<CallResult, String> {
         let client = self.client(server, true).await?;
         let tool = client
             .tools()

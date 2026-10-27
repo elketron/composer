@@ -723,6 +723,7 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
             result: CommandResult::ToolOutput {
                 output: "# Home".into(),
                 is_error: false,
+                images: vec!["data:image/png;base64,iVBORw0KGgo=".into()],
             },
         },
         ServerMessage::Error {

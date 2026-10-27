@@ -1188,21 +1188,27 @@ final class CommandResultToolOutput extends CommandResult {
   const CommandResultToolOutput({
     required this.output,
     required this.isError,
+    this.images = const [],
   });
 
   final String output;
 
   final bool isError;
 
+  /// Images in the result (an MCP screenshot), as data URLs.
+  final List<String> images;
+
   factory CommandResultToolOutput.fromJson(Map<String, Object?> json) => CommandResultToolOutput(
         output: json['output'] as String,
         isError: json['is_error'] as bool,
+        images: json['images'] == null ? const [] : (json['images'] as List).map((e) => e as String).toList(),
       );
 
   Map<String, Object?> toJson() => {
         'kind': 'tool_output',
         'output': output,
         'is_error': isError,
+        if (images.isNotEmpty) 'images': images,
       };
 }
 
@@ -1436,6 +1442,8 @@ final class CommandResultUnknown extends CommandResult {
   Map<String, Object?> toJson() => raw;
 }
 
+/// An external harness (or one of its models) for a project: allowed by config.toml, and
+/// turned on or off at runtime.
 class HarnessSwitch {
   const HarnessSwitch({
     required this.entry,
@@ -1609,8 +1617,6 @@ final class MessageSourceUnknown extends MessageSource {
   Map<String, Object?> toJson() => raw;
 }
 
-/// An external harness (or one of its models) for a project: allowed by config.toml, and
-/// turned on or off at runtime.
 /// A model the provider lists (`GET /models`).
 class ModelInfo {
   const ModelInfo({

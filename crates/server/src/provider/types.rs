@@ -25,6 +25,10 @@ pub enum ModelMessage {
     Tool {
         call_id: String,
         content: String,
+        /// Images the tool gave back (`attachment://` references in history; data URLs when
+        /// sent).
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        images: Vec<String>,
     },
 }
 

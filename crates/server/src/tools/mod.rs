@@ -35,6 +35,24 @@ pub(crate) use set_project_tool::{expand_home, resolve_project, tilde};
 pub use tool_context::ToolContext;
 pub use tool_registry::ToolRegistry;
 
+/// What a tool call gave back: its text, whether it failed, and the images in it (data URLs:
+/// an MCP server's screenshot).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct CallResult {
+    pub text: String,
+    pub is_error: bool,
+    pub images: Vec<String>,
+}
+
+/// A result that is only text.
+pub fn text_result(text: String, is_error: bool) -> CallResult {
+    CallResult {
+        text,
+        is_error,
+        images: vec![],
+    }
+}
+
 #[async_trait]
 pub trait Tool: Send + Sync {
     fn name(&self) -> &'static str;
@@ -44,4 +62,12 @@ pub trait Tool: Send + Sync {
     fn parameters(&self) -> Value;
     /// `Err` is reported to the model as a failed call, so it can recover.
     async fn call(&self, context: &ToolContext, args: Value) -> Result<String, String>;
+
+    /// The whole result; a tool that gives back images (`open` on a picture) has its own.
+    async fn call_result(&self, context: &ToolContext, args: Value) -> CallResult {
+        match self.call(context, args).await {
+            Ok(text) => text_result(text, false),
+            Err(error) => text_result(error, true),
+        }
+    }
 }

@@ -203,7 +203,10 @@
     "result": {
       "kind": "tool_output",
       "output": "# Home",
-      "is_error": false
+      "is_error": false,
+      "images": [
+        "data:image/png;base64,iVBORw0KGgo="
+      ]
     }
   },
   {

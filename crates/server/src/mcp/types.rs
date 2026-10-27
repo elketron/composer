@@ -2,6 +2,8 @@ use async_trait::async_trait;
 use composer_protocol::ToolInfo;
 use serde_json::Value;
 
+use crate::tools::CallResult;
+
 /// What the parent passes on the command line.
 #[derive(Debug, Clone)]
 pub struct McpOptions {
@@ -15,6 +17,6 @@ pub struct McpOptions {
 pub trait ToolSource: Send + Sync {
     async fn tools(&self) -> Result<Vec<ToolInfo>, String>;
 
-    /// The output and whether the call failed; `Err` when it could not run at all.
-    async fn call(&self, name: &str, args: Value) -> Result<(String, bool), String>;
+    /// The output, whether the call failed and its images; `Err` when it could not run at all.
+    async fn call(&self, name: &str, args: Value) -> Result<CallResult, String>;
 }

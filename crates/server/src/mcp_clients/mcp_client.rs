@@ -6,6 +6,7 @@ use crate::McpServerConfig;
 use crate::mcp_clients::http_transport::HttpTransport;
 use crate::mcp_clients::stdio_transport::StdioTransport;
 use crate::mcp_clients::types::{RemoteTool, Transport};
+use crate::tools::CallResult;
 
 const PROTOCOL_VERSION: &str = "2025-06-18";
 /// A tool call may take a while (a build, a search); the handshake may not.
@@ -124,27 +125,48 @@ impl McpClient {
         Ok(())
     }
 
-    /// Calls a tool: its output as text, and whether it failed.
-    pub async fn call(&self, tool: &str, args: Value) -> Result<(String, bool), String> {
+    /// Calls a tool: its output as text, whether it failed, and its images.
+    pub async fn call(&self, tool: &str, args: Value) -> Result<CallResult, String> {
         let result = self
             .transport
             .request("tools/call", json!({ "name": tool, "arguments": args }))
             .await?;
-        let is_error = result["isError"].as_bool().unwrap_or(false);
-        Ok((output_text(&result), is_error))
+        Ok(CallResult {
+            text: output_text(&result),
+            is_error: result["isError"].as_bool().unwrap_or(false),
+            images: output_images(&result),
+        })
     }
 }
 
-/// The result's content as text: text items joined; images and resources named, not inlined;
-/// `structuredContent` when there is nothing else.
+/// The result's images as data URLs (they go to the model beside its text).
+pub fn output_images(result: &Value) -> Vec<String> {
+    result["content"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|item| item["type"] == "image")
+        .filter_map(|item| {
+            let mime = item["mimeType"].as_str().unwrap_or("image/png");
+            Some(format!("data:{mime};base64,{}", item["data"].as_str()?))
+        })
+        .collect()
+}
+
+/// The result's content as text: text items joined; images named (they go along as images,
+/// [`output_images`]), audio and resources named, not inlined; `structuredContent` when there
+/// is nothing else.
 pub fn output_text(result: &Value) -> String {
     let mut parts: Vec<String> = Vec::new();
     for item in result["content"].as_array().into_iter().flatten() {
         let part = match item["type"].as_str().unwrap_or_default() {
             "text" => item["text"].as_str().unwrap_or_default().to_string(),
-            "image" | "audio" => format!(
-                "[{} ({}) not shown]",
-                item["type"].as_str().unwrap_or_default(),
+            "image" => format!(
+                "[image ({})]",
+                item["mimeType"].as_str().unwrap_or("unknown type")
+            ),
+            "audio" => format!(
+                "[audio ({}) not shown]",
                 item["mimeType"].as_str().unwrap_or("unknown type")
             ),
             "resource" => match item["resource"]["text"].as_str() {
@@ -221,10 +243,11 @@ mod tests {
     fn outputs() {
         let r = json!({ "content": [
             { "type": "text", "text": "one" },
-            { "type": "image", "data": "…", "mimeType": "image/png" },
+            { "type": "image", "data": "AAAA", "mimeType": "image/png" },
             { "type": "resource", "resource": { "uri": "file:///a", "text": "two" } },
         ] });
-        assert_eq!(output_text(&r), "one\n[image (image/png) not shown]\ntwo");
+        assert_eq!(output_text(&r), "one\n[image (image/png)]\ntwo");
+        assert_eq!(output_images(&r), ["data:image/png;base64,AAAA"]);
         let r = json!({ "content": [], "structuredContent": { "n": 1 } });
         assert_eq!(output_text(&r), "{\n  \"n\": 1\n}");
         assert_eq!(output_text(&json!({})), "(no output)");

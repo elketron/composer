@@ -305,6 +305,9 @@ async fn stdio_servers() {
     assert_eq!(mcp, ["fake__echo"]);
 }
 
+/// A 2x2 red PNG.
+const PNG: &str = "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAE0lEQVR4nGP4z8DwnwGM/zMwAAAf7gP9NRsAMwAAAABJRU5ErkJggg==";
+
 /// A streamable-HTTP server: a session id from `initialize`, required afterwards; `tools/list`
 /// answered as an event stream, calls as JSON.
 async fn fake_http(headers: HeaderMap, body: String) -> Response {
@@ -342,6 +345,15 @@ async fn fake_http(headers: HeaderMap, body: String) -> Response {
             );
             ([("content-type", "text/event-stream")], stream).into_response()
         }
+        // `q: screen`: a screenshot beside the text, as a UI-driving server sends one.
+        "tools/call" if m["params"]["arguments"]["q"] == "screen" => (
+            [("content-type", "application/json")],
+            reply(
+                json!({ "content": [{ "type": "text", "text": "the screen" },
+                { "type": "image", "mimeType": "image/png", "data": PNG }] }),
+            ),
+        )
+            .into_response(),
         "tools/call" => (
             [("content-type", "application/json")],
             reply(json!({ "content": [{ "type": "text",
@@ -384,8 +396,9 @@ async fn http_servers() {
             ..Default::default()
         },
     );
-    let (_dir, server, provider, addr) =
-        start_with(config, turn("web__lookup", json!({ "q": "rust" }))).await;
+    let mut scripts = turn("web__lookup", json!({ "q": "rust" }));
+    scripts.extend(turn("web__lookup", json!({ "q": "screen" })));
+    let (_dir, server, provider, addr) = start_with(config, scripts).await;
     write_agent(&server, "searcher", "[web__*]");
     let mut socket = connect(addr, &server.token).await;
 
@@ -401,4 +414,32 @@ async fn http_servers() {
         .map(|t| t.name.clone())
         .collect();
     assert_eq!(offered, ["web__lookup"]);
+
+    // A screenshot goes to the model as an image in the tool message (history keeps a stored
+    // attachment; the request a data URL).
+    say(&mut socket, &id, 3).await;
+    let events = until(&mut socket, |e| matches!(e, ServerMessage::TurnDone { .. })).await;
+    assert_eq!(
+        results(&events),
+        [("the screen\n[image (image/png)]".to_string(), false)]
+    );
+    let after = &provider.requests()[3];
+    let images: Vec<&String> = after
+        .messages
+        .iter()
+        .filter_map(|m| match m {
+            composer_server::provider::ModelMessage::Tool { images, .. } => Some(images),
+            _ => None,
+        })
+        .flatten()
+        .collect();
+    assert_eq!(images.len(), 1, "{:?}", after.messages);
+    assert!(images[0].starts_with("data:image/png;base64,"));
+    let stored = std::fs::read_to_string(
+        _dir.path()
+            .join(format!("state/sessions/{id}/history.jsonl")),
+    )
+    .unwrap();
+    assert!(stored.contains("attachment://"), "{stored}");
+    assert!(!stored.contains(PNG));
 }
