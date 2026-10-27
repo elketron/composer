@@ -286,9 +286,10 @@ AppEffect _reattach(String url, ChatState chat) => chat.loaded
 /// its own business (`drafting` is shared input and mirrors; pin state does not).
 AppState _scrolled(AppState s, String url, String session, bool atBottom, ChatPane pane) {
   ChatState? mark(ChatState? c) => c == null || c.session != session ? c : c.copyWith(atBottom: atBottom, newSince: atBottom ? 0 : null);
-  return _updateStatus(s, url, (x) => pane == ChatPane.main
-      ? x.copyWith(chat: mark(x.chat), sideChat: x.sideChat)
-      : x.copyWith(chat: x.chat, sideChat: mark(x.sideChat)));
+  return _updateStatus(s, url, (x) => x.copyWith(
+      chat: pane == ChatPane.main ? mark(x.chat) : x.chat,
+      sideChat: pane == ChatPane.side ? mark(x.sideChat) : x.sideChat,
+    ));
 }
 
 /// A chat's last messages (then it attaches for what follows), or older ones put in front.
