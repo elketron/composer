@@ -14,6 +14,6 @@ mod types;
 pub use history::History;
 pub use session::Session;
 pub use session_manager::SessionManager;
-pub use transcript::{Transcript, is_ephemeral};
+pub use transcript::{FULL_PARSES, Transcript, is_ephemeral};
 pub use turn::{TURN_LIMIT, compact_and_wait, compact_now, submit};
 pub use types::{StepOutput, TranscriptInner};

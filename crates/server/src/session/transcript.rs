@@ -24,11 +24,8 @@ impl Transcript {
     /// Opens (or creates) the log. Seqs continue after `min_last` and after
     /// anything already in the file.
     pub fn open(path: &Path, min_last: Seq) -> Result<Self> {
-        let last_in_file = read_events(path)?
-            .iter()
-            .filter_map(seq_of)
-            .max()
-            .unwrap_or(0);
+        let events = read_events(path)?;
+        let last_in_file = events.iter().filter_map(seq_of).max().unwrap_or(0);
         let file = OpenOptions::new()
             .create(true)
             .append(true)
@@ -39,6 +36,7 @@ impl Transcript {
             inner: Mutex::new(TranscriptInner {
                 next_seq: last_in_file.max(min_last) + 1,
                 file,
+                events,
             }),
         })
     }
@@ -51,8 +49,9 @@ impl Transcript {
         let message = make(seq);
         if !is_ephemeral(&message) {
             let line = serde_json::to_string(&message).expect("events serialize");
-            if let Err(e) = writeln!(inner.file, "{line}") {
-                tracing::error!("writing {}: {e}", self.path.display());
+            match writeln!(inner.file, "{line}") {
+                Ok(()) => inner.events.push(message.clone()),
+                Err(e) => tracing::error!("writing {}: {e}", self.path.display()),
             }
         }
         hub.send(message);
@@ -67,9 +66,11 @@ impl Transcript {
         f: impl FnOnce(Vec<ServerMessage>, Seq) -> T,
     ) -> Result<T> {
         let inner = self.inner.lock().expect("transcript lock");
-        let events = read_events(&self.path)?
-            .into_iter()
+        let events = inner
+            .events
+            .iter()
             .filter(|e| since.is_none_or(|s| seq_of(e).is_some_and(|seq| seq > s)))
+            .cloned()
             .collect();
         Ok(f(events, inner.next_seq - 1))
     }
@@ -82,9 +83,11 @@ impl Transcript {
         before: Option<Seq>,
         messages: usize,
     ) -> Result<(Vec<ServerMessage>, bool)> {
-        let _inner = self.inner.lock().expect("transcript lock");
-        let mut events: Vec<ServerMessage> = read_events(&self.path)?
-            .into_iter()
+        // Serve from the parsed events kept since open; only the page is cloned.
+        let inner = self.inner.lock().expect("transcript lock");
+        let events: Vec<&ServerMessage> = inner
+            .events
+            .iter()
             .filter(|e| before.is_none_or(|b| seq_of(e).is_some_and(|seq| seq < b)))
             .collect();
         let starts: Vec<usize> = events
@@ -99,7 +102,10 @@ impl Transcript {
         } else {
             0
         };
-        Ok((events.split_off(cut), cut > 0))
+        Ok((
+            events[cut..].iter().map(|e| (*e).clone()).collect(),
+            cut > 0,
+        ))
     }
 
     pub fn last_seq(&self) -> Seq {
@@ -115,7 +121,12 @@ pub fn is_ephemeral(message: &ServerMessage) -> bool {
     )
 }
 
+/// Full-file parses done by the process: reads serve from the events kept since open, so
+/// this only moves at open. A test guards that `history`/`replay` never add to it.
+pub static FULL_PARSES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
 fn read_events(path: &Path) -> Result<Vec<ServerMessage>> {
+    FULL_PARSES.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
     let file = match File::open(path) {
         Ok(file) => file,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
