@@ -680,7 +680,8 @@ impl WorkerRegistry {
             parent: parent.clone(),
             harness: harness.name(),
             run: run.clone(),
-            resumable: harness.external(),
+            resumable: harness.resumable(),
+            external: harness.external(),
             project,
             folder,
             model,
@@ -819,7 +820,24 @@ impl WorkerRegistry {
             let first = if compact { "compacts its session, then " } else { "" };
             return Ok(format!("worker #{worker} {first}goes on with ticket {ticket}"));
         }
-        let session = stuck_session(server, ticket)?;
+        let session = match stuck_session(server, ticket) {
+            Ok(session) => session,
+            // Not stuck: a worker that finished (or stopped) goes back to its ticket with what
+            // it knows, review findings for one: cheaper than a new worker reading it all again.
+            Err(not_stuck) => {
+                let session = finished_session(server, ticket).ok_or(not_stuck)?;
+                let message = message.replacen(
+                    "From your orchestrator, after your turn limit: ",
+                    "From your orchestrator, about your ticket: ",
+                    1,
+                );
+                self.resume(server, &session, message, vec![]).await?;
+                return Ok(format!(
+                    "worker #{} goes back to ticket {ticket}",
+                    session.id()
+                ));
+            }
+        };
         if compact {
             return Err(
                 "a Claude Code worker compacts its own context; continue it without `compact`".into(),
@@ -1084,6 +1102,23 @@ fn set_running(server: &Arc<Server>, worker: &str, ticket: &str) {
 }
 
 /// The session of an external run that ended stuck on `ticket`.
+/// The latest worker of `ticket` that finished, failed or paused (none stuck, none running).
+fn finished_session(server: &Server, ticket: &str) -> Option<Arc<Session>> {
+    let info = server
+        .sessions
+        .list()
+        .into_iter()
+        .filter(|s| s.ticket.as_deref() == Some(ticket))
+        .filter(|s| {
+            matches!(
+                s.worker,
+                Some(WorkerState::Done | WorkerState::Failed | WorkerState::Paused)
+            )
+        })
+        .max_by(|a, b| a.updated.cmp(&b.updated))?;
+    server.sessions.get(&info.id).ok()
+}
+
 fn stuck_session(server: &Server, ticket: &str) -> Result<Arc<Session>, String> {
     let info = server
         .sessions

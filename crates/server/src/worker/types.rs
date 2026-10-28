@@ -20,8 +20,11 @@ pub struct WorkerHandle {
     /// The harness working the ticket (`composer`, …).
     pub harness: &'static str,
     pub run: Arc<dyn HarnessRun>,
-    /// Whether the harness can resume a run later (external CLIs, by their session id).
+    /// Whether the harness can resume a run later (by the session in the ticket's
+    /// `harness_session`).
     pub resumable: bool,
+    /// An external CLI (Claude Code): it asks the user through composer's permission tool.
+    pub external: bool,
     /// The ticket's project (not its worktree), for the per-project switches.
     pub project: Option<String>,
     /// Where it works: the ticket's worktree, else the project folder.

@@ -332,6 +332,7 @@ async fn complete(server: &Arc<Server>, prompt: String) -> Result<String, String
             }],
             tools: vec![],
             model: None,
+            reasoning_effort: None,
         })
         .await?;
     let mut content = String::new();

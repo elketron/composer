@@ -32,6 +32,13 @@ pub struct System1Config {
     pub base_url: String,
     #[serde(default)]
     pub api_key: String,
+    /// Its `reasoning_effort`: a decision needs little thought. Empty: not sent.
+    #[serde(default = "default_low")]
+    pub reasoning_effort: String,
+}
+
+fn default_low() -> String {
+    "low".into()
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -153,6 +160,10 @@ pub struct AgentConfig {
     /// `12G`; empty: no cap. Needs systemd (each run gets its own scope).
     #[serde(default = "default_worker_memory_max")]
     pub worker_memory_max: String,
+    /// How much models think (none, low, medium, high), sent as `reasoning_effort`; an agent's
+    /// `reasoning:` overrides it. Empty: not sent, the provider decides.
+    #[serde(default)]
+    pub reasoning_effort: String,
 }
 
 /// An MCP server whose tools composer's agents may use, `[mcp.<name>]`: a `command` (stdio) or

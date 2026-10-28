@@ -251,7 +251,7 @@ impl Connection {
                             let mut tools =
                                 server.tools.infos_for(&server.mcp(), &context.agent).await;
                             // External harnesses ask the user through it.
-                            if server.workers.get(&session).is_some_and(|h| h.resumable) {
+                            if server.workers.get(&session).is_some_and(|h| h.external) {
                                 tools.push(permission_tool_info());
                             }
                             Ok(CommandResult::Tools { tools })
@@ -282,7 +282,7 @@ impl Connection {
                 let (connection, server) = (self.clone(), server.clone());
                 tokio::spawn(async move {
                     if name == PERMISSION_TOOL
-                        && server.workers.get(&session).is_some_and(|h| h.resumable)
+                        && server.workers.get(&session).is_some_and(|h| h.external)
                     {
                         let output = answer_permission(&server, &session, args).await;
                         connection.reply(

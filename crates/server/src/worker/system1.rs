@@ -68,6 +68,8 @@ pub async fn decide(
         ],
         tools: vec![],
         model: None,
+        reasoning_effort: Some(system1.reasoning_effort.trim().to_string())
+            .filter(|e| !e.is_empty()),
     };
     let _slot = if own_endpoint {
         None

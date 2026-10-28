@@ -202,6 +202,7 @@ async fn run_turn(
                 messages,
                 tools: tools.clone(),
                 model: None,
+                reasoning_effort: None,
             },
             cancel,
             true,

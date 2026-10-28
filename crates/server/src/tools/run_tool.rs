@@ -35,6 +35,7 @@ impl Tool for RunTool {
     }
 
     async fn call(&self, context: &ToolContext, args: Value) -> Result<String, String> {
+        let args = forgiving(context, args).await?;
         let args: RunArgs = serde_json::from_value(args).map_err(|e| e.to_string())?;
         let site = args
             .site
@@ -131,4 +132,62 @@ impl Tool for RunTool {
             Err(text)
         }
     }
+}
+
+/// The call as models write it, made what `RunArgs` reads: `action` for `recipe`, `args` as a
+/// JSON-encoded list (or one string) instead of a list, numbers among the args, and no `site`
+/// when only one site has the recipe (`sh` is `coding`'s). Each of these failed a step before.
+async fn forgiving(context: &ToolContext, mut args: Value) -> Result<Value, String> {
+    let Some(call) = args.as_object_mut() else {
+        return Ok(args);
+    };
+    if !call.contains_key("recipe")
+        && let Some(action) = call.remove("action")
+    {
+        call.insert("recipe".into(), action);
+    }
+    if let Some(Value::String(text)) = call.get("args") {
+        let list = match serde_json::from_str::<Value>(text) {
+            Ok(Value::Array(items)) => Value::Array(items),
+            _ => json!([text]),
+        };
+        call.insert("args".into(), list);
+    }
+    if let Some(Value::Array(items)) = call.get_mut("args") {
+        for item in items.iter_mut().filter(|i| !i.is_string()) {
+            *item = Value::String(item.to_string());
+        }
+    }
+    if !call.contains_key("site")
+        && let Some(recipe) = call.get("recipe").and_then(Value::as_str)
+    {
+        let mut having = Vec::new();
+        for site in context
+            .server
+            .workspace
+            .sites()
+            .map_err(|e| e.to_string())?
+        {
+            let dir = context.server.workspace.root().join(&site.name);
+            if site.has_justfile
+                && let Ok(justfile) = Justfile::load(&dir).await
+                && justfile.recipe(recipe).is_some()
+            {
+                having.push(site.name);
+            }
+        }
+        match having.as_slice() {
+            [site] => {
+                call.insert("site".into(), json!(site));
+            }
+            [] => return Err(format!("no site has a recipe `{recipe}`; see `actions`")),
+            sites => {
+                return Err(format!(
+                    "`site` is missing, and `{recipe}` is in {}: say which",
+                    sites.join(", ")
+                ));
+            }
+        }
+    }
+    Ok(args)
 }

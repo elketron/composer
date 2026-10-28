@@ -116,6 +116,9 @@ enum Command {
         /// `<session>/<file>`: a ticket attachment for the first message (repeatable).
         #[arg(long = "attachment")]
         attachments: Vec<String>,
+        /// Go on with the session's history (after a pause or a restart), told this.
+        #[arg(long)]
+        resume: Option<String>,
     },
     /// Serve a running worker's tools over MCP on stdin/stdout (started for external harnesses).
     #[command(hide = true)]
@@ -247,6 +250,7 @@ async fn main() -> anyhow::Result<()> {
             ticket,
             parent,
             attachments,
+            resume,
         }) => {
             // `--agent` and `--project` are the global flags.
             let options = WorkerOptions {
@@ -256,6 +260,7 @@ async fn main() -> anyhow::Result<()> {
                 project: cli.project,
                 parent_url: parent,
                 attachments,
+                resume,
             };
             run_worker(home, options).await?;
         }

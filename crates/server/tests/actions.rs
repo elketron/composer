@@ -86,6 +86,29 @@ async fn ask(socket: &mut Socket, session: &str, id: u64) {
 }
 
 #[tokio::test]
+async fn a_run_written_loosely_still_runs() {
+    if !has_just() {
+        return;
+    }
+    // No site (only orchestration has the recipe), `action` for `recipe`, the args a JSON string.
+    let call = json!({ "action": "new-ticket", "args": "[\"Device pairing\"]" });
+    let (dir, server, _p, addr) = start(vec![
+        vec![finished(vec![tool_call("r", "run", call)])],
+        vec![ModelEvent::Content("done".into()), finished(vec![])],
+    ])
+    .await;
+    let mut socket = connect(addr, &server.token).await;
+    let id = session(&mut socket).await;
+    ask(&mut socket, &id, 3).await;
+    let events = until(&mut socket, |e| matches!(e, ServerMessage::TurnDone { .. })).await;
+    let (result, is_error) = tool_result(&events);
+    assert!(!is_error, "{result}");
+    let ticket =
+        std::fs::read_to_string(dir.path().join("sites/orchestration/tickets/0001.md")).unwrap();
+    assert!(ticket.contains("title: Device pairing"), "{ticket}");
+}
+
+#[tokio::test]
 async fn seed_recipes_are_preapproved_and_run_in_their_site() {
     if !has_just() {
         return;

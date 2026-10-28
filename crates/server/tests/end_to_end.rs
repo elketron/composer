@@ -673,3 +673,59 @@ async fn open_shows_an_image_to_the_model() {
     );
     assert_eq!(tools[3].1, 0);
 }
+
+#[tokio::test]
+async fn an_agents_reasoning_goes_with_its_requests() {
+    let answer = || vec![ModelEvent::Content("ok".into()), finished(vec![])];
+    let (_dir, server, provider, addr) = start(vec![answer(), answer()]).await;
+    let page = "---\ntitle: Thinker\ntype: agent\nreasoning: Medium\n---\nYou think a little.\n";
+    let url = composer_core::SiteUrl::new("agents", "thinker.md").unwrap();
+    server
+        .write_page(&url, page, composer_protocol::ChangedBy::App)
+        .unwrap();
+    let mut socket = connect(addr, &server.token).await;
+    for (id, agent) in [(1, "thinker"), (10, "default")] {
+        send(
+            &mut socket,
+            id,
+            ClientCommand::SessionCreate {
+                agent: agent.into(),
+                project: None,
+            },
+        )
+        .await;
+        let reply = until(
+            &mut socket,
+            |e| matches!(e, ServerMessage::Ok { id: i, .. } if *i == id),
+        )
+        .await;
+        let Some(ServerMessage::Ok {
+            result: CommandResult::Session { session },
+            ..
+        }) = reply.last()
+        else {
+            panic!("{reply:?}")
+        };
+        attach(&mut socket, &session.id).await;
+        send(
+            &mut socket,
+            id + 1,
+            ClientCommand::MessageSend {
+                session: session.id.clone(),
+                text: "hi".into(),
+                pages: vec![],
+                images: vec![],
+                attachments: vec![],
+            },
+        )
+        .await;
+        until(&mut socket, |e| matches!(e, ServerMessage::TurnDone { .. })).await;
+    }
+    let efforts: Vec<_> = provider
+        .requests()
+        .into_iter()
+        .map(|r| r.reasoning_effort)
+        .collect();
+    // The agent's `reasoning:`; the default agent, without one and no config: not sent.
+    assert_eq!(efforts, [Some("medium".to_string()), None]);
+}

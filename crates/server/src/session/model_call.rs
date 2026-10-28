@@ -8,6 +8,7 @@ use composer_core::SiteUrl;
 use composer_protocol::{ServerMessage, TurnState};
 use tokio_util::sync::CancellationToken;
 
+use crate::agent::AgentDefinition;
 use crate::attachments::{ATTACHMENT_SCHEME, attachment_data_url};
 use crate::provider::{ModelEvent, ModelMessage, ModelRequest, ModelToolCall};
 use crate::server::Server;
@@ -34,6 +35,9 @@ pub async fn model_step(
 
     let id = session.id().to_string();
     request.model = request.model.or(session.info().model);
+    request.reasoning_effort = request
+        .reasoning_effort
+        .or_else(|| reasoning_effort(server, session));
     let mut stream = server.provider.stream(request).await?;
     let mut out = StepOutput::default();
     loop {
@@ -110,6 +114,16 @@ pub async fn tool_step(
         is_error: result.is_error,
     });
     result
+}
+
+/// How much the session's agent thinks: its `reasoning:`, else `[agent] reasoning_effort`;
+/// `None` (not sent) when neither says.
+fn reasoning_effort(server: &Server, session: &Session) -> Option<String> {
+    let agent = AgentDefinition::load(&server.workspace, &session.info().agent).ok();
+    agent
+        .and_then(|a| a.reasoning)
+        .or_else(|| Some(server.config().agent.reasoning_effort.trim().to_string()))
+        .filter(|e| !e.is_empty())
 }
 
 /// A tool's images (data URLs), stored with the session's attachments like an upload (shrunk,

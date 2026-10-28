@@ -58,6 +58,11 @@ pub trait Harness: Send + Sync {
         true
     }
 
+    /// A stopped run can go on later (`StartRequest::resume`): a pause, a server restart.
+    fn resumable(&self) -> bool {
+        true
+    }
+
     /// The model it runs unless a project's `models` say otherwise (`None`: its own default).
     fn default_model(&self, server: &Server) -> Option<String>;
 

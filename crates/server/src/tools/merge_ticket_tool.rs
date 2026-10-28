@@ -1,7 +1,14 @@
-use async_trait::async_trait;
-use composer_protocol::{ApprovalDecision, ApprovalKind};
-use serde_json::{Value, json};
+use std::sync::Arc;
 
+use async_trait::async_trait;
+use composer_protocol::{
+    ApprovalDecision, ApprovalKind, ChatMessage, MessageSource, Role, TurnState,
+};
+use serde_json::{Value, json};
+use tokio_util::sync::CancellationToken;
+
+use crate::server::Server;
+use crate::session::{Session, submit};
 use crate::tools::args::MergeTicketArgs;
 use crate::tools::{Tool, ToolContext};
 use crate::worker::ticket::normalize_id;
@@ -18,8 +25,10 @@ impl Tool for MergeTicketTool {
     fn description(&self) -> &'static str {
         "Merge a finished ticket's branch (`ticket/<id>`, from its own worktree) into the \
          project's checked-out branch, then remove the worktree and the branch. The user is \
-         asked first and sees the changes; returns the merge commit, or why it didn't merge \
-         (denied, conflicts, the worker still running). Read the ticket's Result before you ask."
+         asked and sees the changes; that can take hours, so this returns right away and a \
+         message tells you later: merged (with the commit), or declined, or why it failed. \
+         Meanwhile go on with tickets that don't need this one merged. Read the ticket's \
+         Result before you ask."
     }
 
     fn parameters(&self) -> Value {
@@ -74,29 +83,77 @@ impl Tool for MergeTicketTool {
         if review.uncommitted {
             body.push_str("\n\nThe worker left changes uncommitted; they are committed first.");
         }
-        let decision = server
-            .ask_approval(
-                &context.session,
-                ApprovalKind::Merge,
-                format!("Merge ticket {ticket} into {target}"),
-                body,
-                None,
-                &context.cancel,
-            )
-            .await;
-        match decision.map(|answer| answer.decision) {
-            Some(ApprovalDecision::Approve | ApprovalDecision::Always) => {}
-            Some(ApprovalDecision::Deny) => {
-                return Err(format!("the user did not merge ticket {ticket}"));
-            }
-            None => return Err("cancelled".into()),
-        }
-        let server = server.clone();
-        let commit = tokio::task::spawn_blocking(move || merge_ticket(&server, &ticket))
-            .await
-            .map_err(|e| e.to_string())??;
+        // The user may answer in hours: asked in the background, the outcome comes back as a
+        // message, and the orchestrator goes on meanwhile.
+        let title = format!("Merge ticket {ticket} into {target}");
+        tokio::spawn(ask_and_merge(
+            server.clone(),
+            context.session.clone(),
+            ticket.clone(),
+            target.clone(),
+            title,
+            body,
+        ));
         Ok(format!(
-            "merged into {target} as {commit}; the worktree and branch are removed"
+            "asked the user to merge ticket {ticket} into {target}; a message tells you when \
+             they decide. Go on with work that doesn't need it merged."
         ))
     }
+}
+
+/// Asks the user to merge `ticket`, merges it if they approve, and tells `orchestrator`.
+async fn ask_and_merge(
+    server: Arc<Server>,
+    orchestrator: Arc<Session>,
+    ticket: String,
+    target: String,
+    title: String,
+    body: String,
+) {
+    let decision = server
+        .ask_approval(
+            &orchestrator,
+            ApprovalKind::Merge,
+            title,
+            body,
+            None,
+            &CancellationToken::new(),
+        )
+        .await;
+    // Asked while a turn ran, which has likely ended since.
+    let state = if orchestrator.is_running() {
+        TurnState::Running
+    } else {
+        TurnState::Idle
+    };
+    orchestrator.update_info(&server.hub, |info| info.state = state);
+    let outcome = match decision.map(|answer| answer.decision) {
+        Some(ApprovalDecision::Approve | ApprovalDecision::Always) => {
+            let merging = server.clone();
+            let id = ticket.clone();
+            match tokio::task::spawn_blocking(move || merge_ticket(&merging, &id)).await {
+                Ok(Ok(commit)) => {
+                    format!("merged into {target} as {commit}; the worktree and branch are removed")
+                }
+                Ok(Err(e)) => format!("not merged: {e}"),
+                Err(e) => format!("not merged: {e}"),
+            }
+        }
+        Some(ApprovalDecision::Deny) => "the user declined; it is not merged".into(),
+        None => return,
+    };
+    submit(
+        &server,
+        &orchestrator,
+        ChatMessage {
+            role: Role::User,
+            content: format!("[merge of ticket {ticket}: {outcome}]"),
+            thinking: None,
+            tool_calls: vec![],
+            pages: vec![],
+            images: vec![],
+            attachments: vec![],
+            source: Some(MessageSource::Server),
+        },
+    );
 }

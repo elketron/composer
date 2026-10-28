@@ -54,6 +54,8 @@ pub struct ModelRequest {
     pub tools: Vec<ToolSpec>,
     /// Another model than the provider's (the session's `model.set`).
     pub model: Option<String>,
+    /// `reasoning_effort` to send (the agent's `reasoning:`, `[agent] reasoning_effort`).
+    pub reasoning_effort: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

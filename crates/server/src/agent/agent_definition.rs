@@ -18,6 +18,9 @@ pub struct AgentDefinition {
     /// `description:`, one line for lists (else the title).
     pub description: String,
     pub prompt: String,
+    /// `reasoning:` (none, low, medium, high): how much the model thinks, sent as
+    /// `reasoning_effort`; else `[agent] reasoning_effort`, else the provider's own.
+    pub reasoning: Option<String>,
 }
 
 impl AgentDefinition {
@@ -62,6 +65,11 @@ impl AgentDefinition {
                 .filter(|d| !d.is_empty())
                 .unwrap_or_else(|| page.title().to_string()),
             prompt: page.body().trim().to_string(),
+            reasoning: page
+                .frontmatter
+                .get_str("reasoning")
+                .map(|r| r.trim().to_lowercase())
+                .filter(|r| !r.is_empty()),
         })
     }
 

@@ -187,6 +187,9 @@ fn request_body(model: &str, request: &ModelRequest) -> Value {
     if !request.tools.is_empty() {
         body["tools"] = request.tools.iter().map(tool_json).collect();
     }
+    if let Some(effort) = &request.reasoning_effort {
+        body["reasoning_effort"] = json!(effort);
+    }
     body
 }
 
@@ -294,6 +297,17 @@ mod tests {
     }
 
     #[test]
+    fn reasoning_effort_is_sent_when_set() {
+        let request = ModelRequest {
+            messages: vec![],
+            tools: vec![],
+            model: None,
+            reasoning_effort: Some("medium".into()),
+        };
+        assert_eq!(request_body("m", &request)["reasoning_effort"], "medium");
+    }
+
+    #[test]
     fn a_tool_result_with_images_has_image_parts() {
         let plain = ModelMessage::Tool {
             call_id: "c".into(),
@@ -321,8 +335,14 @@ mod tests {
             messages: vec![],
             tools: vec![],
             model: model.map(str::to_string),
+            reasoning_effort: None,
         };
         assert_eq!(request_body("default", &request(None))["model"], "default");
+        assert!(
+            request_body("default", &request(None))
+                .get("reasoning_effort")
+                .is_none()
+        );
         assert_eq!(
             request_body("default", &request(Some("other")))["model"],
             "other"

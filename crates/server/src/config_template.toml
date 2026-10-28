@@ -23,6 +23,8 @@ model = ""
 # Empty: the [provider]'s (sharing its slots), and its key unless api_key is set.
 base_url = ""
 api_key = ""
+# How much it thinks before deciding (none, low, medium, high). Empty: not sent.
+reasoning_effort = "low"
 
 [server]
 # Keep it on localhost; reach it from other devices with `tailscale serve` (see `composer pair`).
@@ -49,6 +51,10 @@ max_workers = 1
 # gets its own systemd scope: past this it is killed there, not the server or your terminal, and
 # what it leaves running (daemons too) is stopped when it ends. Without systemd: no cap.
 worker_memory_max = "50%"
+# How much models think: none, low, medium or high, sent as `reasoning_effort` (Strata, vLLM,
+# llama.cpp's convention, OpenAI's reasoning models). An agent's `reasoning:` overrides it.
+# Empty: not sent, the provider decides.
+reasoning_effort = ""
 
 [projects]
 # Where your projects live. new_project creates folders here, and a project given by name

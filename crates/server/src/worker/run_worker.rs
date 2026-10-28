@@ -33,6 +33,9 @@ pub struct WorkerOptions {
     pub parent_url: String,
     /// The ticket's attachments, `<session>/<file>` (checked by the parent).
     pub attachments: Vec<String>,
+    /// Going on from the session's history (a pause, a restart), with this message instead of
+    /// the ticket's.
+    pub resume: Option<String>,
 }
 
 /// Works the ticket until the agent calls `finish` (or gives up), then returns.
@@ -80,10 +83,15 @@ pub async fn run_worker(home: Home, options: WorkerOptions) -> Result<()> {
     });
 
     let ticket_url = format!("site://orchestration/tickets/{}.md", options.ticket);
-    submit(
-        &server,
-        &session,
-        with_attachments(
+    // Resumed with its history (kept in this process's state): it goes on where it was.
+    let first = match &options.resume {
+        Some(message) if !session.history().is_empty() => with_attachments(
+            &server.home,
+            server.config().attachments.inline_max_kb * 1024,
+            user(message.clone()),
+            &options.attachments,
+        ),
+        _ => with_attachments(
             &server.home,
             server.config().attachments.inline_max_kb * 1024,
             user(format!(
@@ -92,7 +100,8 @@ pub async fn run_worker(home: Home, options: WorkerOptions) -> Result<()> {
             )),
             &options.attachments,
         ),
-    );
+    };
+    submit(&server, &session, first);
 
     let mut nudged = false;
     let mut at_limit = false;

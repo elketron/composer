@@ -73,11 +73,15 @@ async fn review_merge_and_discard() {
             json!({ "ticket": "1" }),
         )])]
     };
+    let say = |text: &str| vec![ModelEvent::Content(text.into()), finished(vec![])];
+    // Each: the call (it returns at once), the turn's end, then a turn for the outcome.
     let (dir, server, _provider, addr) = start(vec![
         merge("m1"),
-        vec![ModelEvent::Content("Not merged.".into()), finished(vec![])],
+        say("Asked."),
+        say("Not merged."),
         merge("m2"),
-        vec![ModelEvent::Content("Merged.".into()), finished(vec![])],
+        say("Asked."),
+        say("Merged."),
     ])
     .await;
     let home = dir.path();
@@ -169,10 +173,31 @@ async fn review_merge_and_discard() {
             },
         )
         .await;
-        let events = until(&mut socket, |e| {
-            matches!(e, ServerMessage::ApprovalRequest { .. })
-        })
-        .await;
+        // The call returns at once and the turn ends; the user is asked meanwhile.
+        let mut events = until(&mut socket, |e| matches!(e, ServerMessage::TurnDone { .. })).await;
+        let asked = events.iter().find_map(|e| match e {
+            ServerMessage::ToolResult { result, .. } => Some(result.clone()),
+            _ => None,
+        });
+        assert!(
+            asked
+                .as_deref()
+                .is_some_and(|r| r.starts_with("asked the user to merge ticket 0001 into main")),
+            "{asked:?}"
+        );
+        if !events
+            .iter()
+            .any(|e| matches!(e, ServerMessage::ApprovalRequest { .. }))
+        {
+            events = until(&mut socket, |e| {
+                matches!(e, ServerMessage::ApprovalRequest { .. })
+            })
+            .await;
+        }
+        let events: Vec<_> = events
+            .into_iter()
+            .filter(|e| matches!(e, ServerMessage::ApprovalRequest { .. }))
+            .collect();
         let Some(ServerMessage::ApprovalRequest {
             request,
             kind,
@@ -199,23 +224,29 @@ async fn review_merge_and_discard() {
             },
         )
         .await;
+        // The outcome comes back as a message, which starts a turn.
         let events = until(&mut socket, |e| matches!(e, ServerMessage::TurnDone { .. })).await;
-        let result = events
+        let told = events
             .iter()
             .find_map(|e| match e {
-                ServerMessage::ToolResult {
-                    result, is_error, ..
-                } => Some((result.clone(), *is_error)),
+                ServerMessage::MessageDone { message, .. }
+                    if message.content.starts_with("[merge of ticket 0001") =>
+                {
+                    Some(message.content.clone())
+                }
                 _ => None,
             })
             .unwrap();
         if decision == ApprovalDecision::Deny {
-            assert_eq!(result, ("the user did not merge ticket 0001".into(), true));
+            assert_eq!(
+                told,
+                "[merge of ticket 0001: the user declined; it is not merged]"
+            );
             assert!(!project.join("0001.txt").exists());
         } else {
             assert!(
-                !result.1 && result.0.starts_with("merged into main as "),
-                "{result:?}"
+                told.starts_with("[merge of ticket 0001: merged into main as "),
+                "{told}"
             );
         }
     }
