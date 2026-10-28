@@ -122,6 +122,20 @@ void main() {
     expect(h.detached, isEmpty);
   });
 
+  testWidgets('backing out of a chat the normal way still closes it', (tester) async {
+    final h = Harness();
+    await h.boot(tester);
+    await tester.tap(find.byKey(const Key('session-a')));
+    await settle(tester);
+    expect(find.textContaining('the a transcript'), findsOneWidget);
+
+    await tester.pageBack();
+    await settle(tester);
+
+    expect(h.open, '(none)');
+    expect(h.detached, contains('a'));
+  });
+
   testWidgets('Approve on a notification still answers it', (tester) async {
     final h = Harness();
     await h.boot(tester);
