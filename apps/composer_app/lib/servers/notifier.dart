@@ -12,7 +12,10 @@ import '../state/types.dart';
 /// Approve / Deny buttons come back on [taps].
 class Notifier {
   final _plugin = FlutterLocalNotificationsPlugin();
-  final _taps = StreamController<NotificationTap>.broadcast();
+  late final _taps = StreamController<NotificationTap>.broadcast(onListen: _flushPending);
+
+  /// Taps that arrived before anything was listening (a tap that started the app), kept for it.
+  final _pending = <NotificationTap>[];
   late final Future<bool> _ready = _init();
 
   Stream<NotificationTap> get taps => _taps.stream;
@@ -71,14 +74,27 @@ class Notifier {
     if (payload == null) return;
     final json = jsonDecode(payload) as Map<String, Object?>;
     final action = response.actionId;
-    _taps.add(NotificationTap(
+    final tap = NotificationTap(
       url: json['url'] as String,
       session: json['session'] as String?,
       approval: json['approval'] as String?,
       page: json['page'] as String?,
       app: json['app'] as String?,
       action: action == null || action.isEmpty ? null : action,
-    ));
+    );
+    // A tap that started the app can arrive before the app listens: hold it for the listener.
+    if (_taps.hasListener) {
+      _taps.add(tap);
+    } else {
+      _pending.add(tap);
+    }
+  }
+
+  void _flushPending() {
+    for (final tap in [..._pending]) {
+      _pending.remove(tap);
+      _taps.add(tap);
+    }
   }
 
   /// A stable id for a key, so a notification can be replaced or withdrawn.
