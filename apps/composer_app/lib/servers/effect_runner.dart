@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart'; // MEASURE(0053) throwaway
 
 import 'package:composer_protocol/composer_protocol.dart';
 
@@ -97,14 +99,22 @@ class EffectRunner {
         }
       case FetchHistory(:final url, :final session, :final before):
         final connection = _connections[url];
+        final watch = Stopwatch()..start(); // MEASURE(0053) throwaway
+        debugPrint('MEASURE dispatch-FetchHistory $session before=$before connected=${connection != null}');
         final request = connection == null
             ? Future<CommandResult>.error('not connected')
             : connection.request(ClientCommandSessionHistory(session: session, before: before, messages: historyMessages));
         request.then(
-          (result) => dispatch(result is CommandResultHistory
-              ? HistoryLoaded(url, session, before, result.events, more: result.more)
-              : HistoryLoaded(url, session, before, null)),
-          onError: (Object _) => dispatch(HistoryLoaded(url, session, before, null)),
+          (result) {
+            final requestUs = watch.elapsedMicroseconds; // MEASURE(0053) throwaway
+            dispatch(result is CommandResultHistory
+                ? HistoryLoaded(url, session, before, result.events, more: result.more)
+                : HistoryLoaded(url, session, before, null));
+            SchedulerBinding.instance.addPostFrameCallback((_) { // MEASURE(0053) throwaway
+              debugPrint('MEASURE open $session before=$before request=${requestUs / 1000}ms render=${watch.elapsedMicroseconds / 1000 - requestUs / 1000}ms');
+            });
+          },
+          onError: (Object e) { debugPrint('MEASURE history-error $session: $e'); dispatch(HistoryLoaded(url, session, before, null)); },
         );
       case TicketCommand(:final url, :final ticket, :final command):
         final connection = _connections[url];
