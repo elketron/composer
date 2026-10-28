@@ -14,6 +14,8 @@ use crate::session::TranscriptInner;
 /// Assigning a seq, persisting and broadcasting happen under one lock, so a
 /// client attaching concurrently sees every event exactly once: either in the
 /// replay or live. Streaming deltas get a seq but are not persisted.
+/// Reads serve the events parsed at open, so only this process may append to the
+/// file: an append by anything else stays invisible until the next open.
 #[derive(Debug)]
 pub struct Transcript {
     path: PathBuf,
