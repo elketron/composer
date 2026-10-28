@@ -30,7 +30,12 @@ SessionInfo session(String id) =>
     SessionInfo(id: id, agent: 'default', state: TurnState.idle, lastSeq: 1, updated: '2026-10-27');
 
 class Harness {
-  /// false: boot before the store knows its servers -- the order a real cold start gets.
+  final bool loadFirst;
+  late final AppStore store;
+  final notifier = Notifier();
+  final sent = <AppEffect>[];
+
+  /// `loadFirst: false` boots before the store knows its servers -- the order a real cold start gets.
   Harness({this.loadFirst = true}) {
     store = Store(AppState.initial, reduce, (effect, dispatch) {
       sent.add(effect);
@@ -47,13 +52,8 @@ class Harness {
     if (loadFirst) load();
   }
 
-  final bool loadFirst;
-  late final AppStore store;
-  final notifier = Notifier();
-  final sent = <AppEffect>[];
-
-  /// What the real effect runner dispatches once the keyring read finishes (the harness answers
-  /// FetchHistory itself, but the store has to learn its servers and sessions first).
+  /// What the real effect runner dispatches once the keyring read finishes; the harness answers
+  /// FetchHistory itself, but the store has to learn its servers and sessions first.
   void load() {
     store.dispatch(const ServersLoaded([home], StorageKind.file));
     store.dispatch(ServerEvent(home.url, ServerMessageOk(id: 1, result: CommandResultSessions(sessions: [session('a'), session('b')]))));
