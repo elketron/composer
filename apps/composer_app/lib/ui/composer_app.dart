@@ -7,7 +7,7 @@ import '../servers/notifier.dart';
 import '../state/actions.dart';
 import '../state/types.dart';
 import '../theme/composer_theme.dart';
-import 'chat/chat_page.dart';
+import 'chat/chat_page_route.dart';
 import 'chat/navigation.dart';
 import 'pages/page_navigation.dart';
 import 'shell.dart';
@@ -76,10 +76,14 @@ class _ComposerAppState extends State<ComposerApp> {
     store.dispatch(SessionOpened(tap.url, session));
     final context = _navigator.currentContext;
     if (context != null && !isWide(context)) {
-      final navigator = _navigator.currentState!..popUntil((route) => route.isFirst);
-      navigator
-          .push(MaterialPageRoute<void>(builder: (_) => ChatPage(url: tap.url)))
-          .then((_) => store.dispatch(SessionClosed(tap.url)));
+      // Unwinding the page it stands on is not the user closing that chat: the store already
+      // let it go with SessionOpened, and the page being pushed owns the chat from now on.
+      final navigator = _navigator.currentState!;
+      navigator.popUntil((route) {
+        if (route is ChatPageRoute) route.closeOnPop = false;
+        return route.isFirst;
+      });
+      pushChatPage(navigator, store, tap.url);
     }
   }
 
