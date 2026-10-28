@@ -238,4 +238,47 @@ mod tests {
         assert_eq!(events.len(), 9);
         assert!(!more);
     }
+
+    #[test]
+    fn a_reopen_reads_back_what_the_previous_process_wrote() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("events.jsonl");
+        let hub = EventHub::new(16);
+        let message = || {
+            serde_json::from_value(
+                serde_json::json!({"role": "assistant", "content": "written before the restart"}),
+            )
+            .unwrap()
+        };
+        {
+            let t = Transcript::open(&path, 0).unwrap();
+            t.emit(&hub, |seq| ServerMessage::TurnStarted {
+                session: "s".into(),
+                seq,
+            });
+            t.emit(&hub, |seq| ServerMessage::MessageDone {
+                session: "s".into(),
+                seq,
+                message: message(),
+            });
+        }
+
+        // Reads serve the cache, so a reopen must rebuild it from the file, not only the seqs.
+        let reopened = Transcript::open(&path, 0).unwrap();
+        let (events, last) = reopened.replay(None, |e, last| (e, last)).unwrap();
+        assert_eq!(last, 2);
+        assert_eq!(
+            events.iter().filter_map(seq_of).collect::<Vec<_>>(),
+            [1, 2],
+            "a reopen replays what the earlier process wrote"
+        );
+        let ServerMessage::MessageDone { message, .. } = &events[1] else {
+            panic!("the message.done the earlier process wrote is missing");
+        };
+        assert_eq!(message.content, "written before the restart");
+
+        let (page, more) = reopened.history(None, 1).unwrap();
+        assert_eq!(page.iter().filter_map(seq_of).collect::<Vec<_>>(), [1, 2]);
+        assert!(!more);
+    }
 }
