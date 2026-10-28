@@ -55,7 +55,7 @@ void main() {
         if (content.evaluate().isNotEmpty) { drawn = true; break; }
       }
       await tester.pump(const Duration(milliseconds: 200));
-      print('MEASURE test $id tap->content ${watch.elapsedMilliseconds}ms (drawn=$drawn)');
+      debugPrint('MEASURE test $id tap->content ${watch.elapsedMilliseconds}ms (drawn=$drawn)');
       await tester.pageBack();
       await tester.pump(const Duration(seconds: 1));
     }

@@ -77,7 +77,7 @@ void main() {
     final frame = Stopwatch()..start();
     await tester.pump();
     frame.stop(); // first frame after the state was set
-    print('render ${messages}msgs: state ${watch.elapsedMilliseconds}ms frame ${frame.elapsedMilliseconds}ms (wall)');
+    debugPrint('render ${messages}msgs: state ${watch.elapsedMilliseconds}ms frame ${frame.elapsedMilliseconds}ms (wall)');
     return frame.elapsedMicroseconds / 1000.0;
   }
 
