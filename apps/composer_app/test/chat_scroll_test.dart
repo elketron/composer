@@ -9,6 +9,7 @@ import 'package:composer_app/state/server_entry.dart';
 import 'package:composer_app/state/types.dart';
 import 'package:composer_app/ui/chat/chat_view.dart';
 import 'package:composer_app/ui/store_scope.dart';
+import 'package:composer_app/ui/wide/worker_pane.dart';
 import 'package:composer_protocol/composer_protocol.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -208,6 +209,14 @@ void main() {
 
     store.dispatch(ServerEvent(home.url, delta(15, stream2)));
     await frame(tester);
+    expect(
+      find.byKey(const Key('new-content')),
+      findsNothing,
+      reason: 'the chunk grew a row that was already there: nothing new to offer',
+    );
+
+    store.dispatch(ServerEvent(home.url, replied(16, reply)));
+    await frame(tester);
     expect(find.byKey(const Key('new-content')), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('new-content')));
@@ -219,6 +228,82 @@ void main() {
       reason: 'the tap takes you back to the newest line',
     );
     expect(find.byKey(const Key('new-content')), findsNothing);
+  });
+
+  testWidgets('shown twice, each view of the session holds its own place', (
+    tester,
+  ) async {
+    // The wide layout's trap: the open chat and the side pane showing one session.
+    await tester.binding.setSurfaceSize(const Size(800, 800));
+    store = Store(AppState.initial, reduce, (effect, dispatch) {});
+    store.dispatch(const ServersLoaded([home], StorageKind.file));
+    store.dispatch(SessionOpened(home.url, 'a'));
+    store.dispatch(SideTabSelected(home.url, SideTab.worker, session: 'a'));
+    await tester.pumpWidget(
+      StoreScope(
+        store: store,
+        child: MaterialApp(
+          home: Scaffold(
+            body: Row(children: [
+              Expanded(
+                child: Builder(
+                  builder: (context) {
+                    final status = StoreScope.of(context).state.statusOf(home.url);
+                    return ChatView(url: home.url, status: status, chat: status.chat!);
+                  },
+                ),
+              ),
+              Expanded(
+                child: Builder(
+                  builder: (context) {
+                    final status = StoreScope.of(context).state.statusOf(home.url);
+                    return WorkerPane(url: home.url, status: status, chat: status.sideChat!);
+                  },
+                ),
+              ),
+            ]),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    store.dispatch(
+      HistoryLoaded(home.url, 'a', null, [
+        for (var i = 1; i <= 12; i++)
+          said(
+            i,
+            'older message number one two three four five six, a few lines to make the transcript tall',
+          ),
+      ]),
+    );
+    await tester.pump();
+    store.dispatch(ServerEvent(home.url, turn('running', 13)));
+    store.dispatch(ServerEvent(home.url, delta(14, stream1)));
+    await frame(tester);
+
+    await tester.drag(find.byType(ListView).last, const Offset(0, 300));
+    await frame(tester);
+    store.dispatch(ServerEvent(home.url, replied(15, reply)));
+    await frame(tester);
+
+    expect(
+      find.byKey(const Key('new-content')),
+      findsOneWidget,
+      reason: 'only the view that scrolled up has anything to offer back',
+    );
+    expect(
+      tester.getCenter(find.byKey(const Key('new-content'))).dx,
+      greaterThan(400),
+      reason: 'and it is the side pane\'s pill',
+    );
+
+    await tester.tap(find.byKey(const Key('new-content')));
+    await frame(tester);
+    expect(
+      find.byKey(const Key('new-content')),
+      findsNothing,
+      reason: 'the tap clears the count of the view that made it, and only that one',
+    );
   });
 
   testWidgets(

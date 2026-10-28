@@ -9,6 +9,10 @@ enum PhoneTab { chats, projects, pages, server }
 /// the reader screen shows.
 enum SideTab { page, app, changes, worker, project, server }
 
+/// Which view of a session this is: the wide layout can show one session in both, and where each
+/// has scrolled to is its own business.
+enum ChatPane { main, side }
+
 /// How the wide layout was left: kept between runs.
 class LayoutPrefs {
   const LayoutPrefs({this.sessionsCollapsed = false, this.sideWidth = 460});
