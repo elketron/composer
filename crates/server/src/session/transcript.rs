@@ -14,6 +14,8 @@ use crate::session::TranscriptInner;
 /// Assigning a seq, persisting and broadcasting happen under one lock, so a
 /// client attaching concurrently sees every event exactly once: either in the
 /// replay or live. Streaming deltas get a seq but are not persisted.
+/// Reads serve the events parsed at open, so only this process may append to the
+/// file: an append by anything else stays invisible until the next open.
 #[derive(Debug)]
 pub struct Transcript {
     path: PathBuf,
@@ -236,6 +238,49 @@ mod tests {
         // As many messages as there are: all of it.
         let (events, more) = t.history(None, 3).unwrap();
         assert_eq!(events.len(), 9);
+        assert!(!more);
+    }
+
+    #[test]
+    fn a_reopen_reads_back_what_the_previous_process_wrote() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("events.jsonl");
+        let hub = EventHub::new(16);
+        let message = || {
+            serde_json::from_value(
+                serde_json::json!({"role": "assistant", "content": "written before the restart"}),
+            )
+            .unwrap()
+        };
+        {
+            let t = Transcript::open(&path, 0).unwrap();
+            t.emit(&hub, |seq| ServerMessage::TurnStarted {
+                session: "s".into(),
+                seq,
+            });
+            t.emit(&hub, |seq| ServerMessage::MessageDone {
+                session: "s".into(),
+                seq,
+                message: message(),
+            });
+        }
+
+        // Reads serve the cache, so a reopen must rebuild it from the file, not only the seqs.
+        let reopened = Transcript::open(&path, 0).unwrap();
+        let (events, last) = reopened.replay(None, |e, last| (e, last)).unwrap();
+        assert_eq!(last, 2);
+        assert_eq!(
+            events.iter().filter_map(seq_of).collect::<Vec<_>>(),
+            [1, 2],
+            "a reopen replays what the earlier process wrote"
+        );
+        let ServerMessage::MessageDone { message, .. } = &events[1] else {
+            panic!("the message.done the earlier process wrote is missing");
+        };
+        assert_eq!(message.content, "written before the restart");
+
+        let (page, more) = reopened.history(None, 1).unwrap();
+        assert_eq!(page.iter().filter_map(seq_of).collect::<Vec<_>>(), [1, 2]);
         assert!(!more);
     }
 }
