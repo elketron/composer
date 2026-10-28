@@ -40,7 +40,7 @@ class Notifier {
           ),
           macOS: DarwinInitializationSettings(),
         ),
-        onDidReceiveNotificationResponse: _onResponse,
+        onDidReceiveNotificationResponse: handleResponse,
       );
       if (Platform.isAndroid) {
         final android = _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
@@ -62,11 +62,11 @@ class Notifier {
     try {
       final launch = await _plugin.getNotificationAppLaunchDetails();
       final response = launch?.notificationResponse;
-      if ((launch?.didNotificationLaunchApp ?? false) && response != null) _onResponse(response);
+      if ((launch?.didNotificationLaunchApp ?? false) && response != null) handleResponse(response);
     } catch (_) {}
   }
 
-  void _onResponse(NotificationResponse response) {
+  void handleResponse(NotificationResponse response) {
     final payload = response.payload;
     if (payload == null) return;
     final json = jsonDecode(payload) as Map<String, Object?>;
