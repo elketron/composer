@@ -4,7 +4,7 @@ notification as JSON lines and, like a user, clicks "approve" on notifications t
     dbus-run-session -- bash -c 'python3 scripts/fake-notifyd.py /tmp/notes.jsonl & sleep 1; <run the test>'
 
 Unset WAYLAND_DISPLAY / DISPLAY for the private bus, or the portals it starts attach to your desktop."""
-import json, sys
+import json, os, sys
 from gi.repository import Gio, GLib
 
 LOG = sys.argv[1]
@@ -39,11 +39,13 @@ def call(conn, sender, path, iface, method, params, inv):
         log({"id": nid, "summary": summary, "body": body, "actions": actions})
         inv.return_value(GLib.Variant("(u)", (nid,)))
         keys = actions[0::2]
-        if "approve" in keys:
-            def click():
-                log({"clicked": "approve", "id": nid})
+        # FAKE_CLICK is the action to press on a notification that has no buttons (a body tap).
+        wanted = set(keys) & {"approve"} | ({os.environ["FAKE_CLICK"]} if os.environ.get("FAKE_CLICK") and not keys else set())
+        for key in wanted:
+            def click(key=key):
+                log({"clicked": key, "id": nid})
                 conn.emit_signal(sender, "/org/freedesktop/Notifications", "org.freedesktop.Notifications",
-                                 "ActionInvoked", GLib.Variant("(us)", (nid, "approve")))
+                                 "ActionInvoked", GLib.Variant("(us)", (nid, key)))
                 return False
             GLib.timeout_add(2000, click)
 
