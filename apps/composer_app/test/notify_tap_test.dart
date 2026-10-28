@@ -3,7 +3,9 @@
 // faked: it records commands and answers FetchHistory. Phone-sized, so chats open as pages.
 //
 // What is red before the fix: a tap while another chat is open (the pop the tap itself does
-// counts as closing a chat) and a tap that started the app (nothing was listening yet).
+// counts as closing a chat) and a tap that started the app (nothing was listening yet). Added
+// by 0062, red before its fix: the real cold-start order -- the launch tap lands after the
+// first frame while the store is still loading its servers, so the tap waits for the store.
 
 import 'dart:convert';
 
@@ -28,11 +30,13 @@ SessionInfo session(String id) =>
     SessionInfo(id: id, agent: 'default', state: TurnState.idle, lastSeq: 1, updated: '2026-10-27');
 
 class Harness {
+  final bool loadFirst;
   late final AppStore store;
   final notifier = Notifier();
   final sent = <AppEffect>[];
 
-  Harness() {
+  /// `loadFirst: false` boots before the store knows its servers -- the order a real cold start gets.
+  Harness({this.loadFirst = true}) {
     store = Store(AppState.initial, reduce, (effect, dispatch) {
       sent.add(effect);
       if (effect is FetchHistory) {
@@ -45,6 +49,12 @@ class Harness {
         ]));
       }
     });
+    if (loadFirst) load();
+  }
+
+  /// What the real effect runner dispatches once the keyring read finishes; the harness answers
+  /// FetchHistory itself, but the store has to learn its servers and sessions first.
+  void load() {
     store.dispatch(const ServersLoaded([home], StorageKind.file));
     store.dispatch(ServerEvent(home.url, ServerMessageOk(id: 1, result: CommandResultSessions(sessions: [session('a'), session('b')]))));
   }
@@ -115,6 +125,26 @@ void main() {
     final h = Harness();
     h.tap(session: 'b');
     await h.boot(tester);
+
+    expect(h.open, 'b');
+    expect(find.textContaining('the b transcript'), findsOneWidget);
+    expect(h.attached, contains('b'));
+    expect(h.detached, isEmpty);
+  });
+
+  testWidgets('a cold-start tap that arrives before the store knows its server lands on its chat', (tester) async {
+    // The real cold-start order: the first frame ran (so the app is listening and the pre-listener
+    // buffer never runs) while the store's keyring read has not finished. The tap must wait for
+    // the store to learn its server and be re-driven when it does.
+    final h = Harness(loadFirst: false);
+    await h.boot(tester);
+
+    h.tap(session: 'b');
+    await settle(tester);
+    expect(h.open, '(none)', reason: 'the store does not know its servers yet, so the tap cannot land');
+
+    h.load();
+    await settle(tester);
 
     expect(h.open, 'b');
     expect(find.textContaining('the b transcript'), findsOneWidget);

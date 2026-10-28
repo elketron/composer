@@ -29,6 +29,8 @@ class _ComposerAppState extends State<ComposerApp> {
   final _navigator = GlobalKey<NavigatorState>();
   StreamSubscription<NotificationTap>? _taps;
   Notice? _shown;
+  /// Taps that arrived before the store knew their server (a cold start); re-driven by `_replayHeld`.
+  final _heldTaps = <NotificationTap>[];
 
   @override
   void initState() {
@@ -45,15 +47,32 @@ class _ComposerAppState extends State<ComposerApp> {
   }
 
   void _onState() {
+    _replayHeld();
     final notice = widget.store.state.notice;
     if (notice == null || identical(notice, _shown)) return;
     _shown = notice;
     _messenger.currentState?.showSnackBar(SnackBar(content: Text(notice.text)));
   }
 
+  /// A tap whose server the store has not loaded yet cannot land: the reducer ignores an unknown
+  /// server (selecting it, opening a chat on it), so the tap waits here until the store knows it.
+  void _replayHeld() {
+    for (final tap in [..._heldTaps]) {
+      if (!_knowsServer(tap.url)) continue;
+      _heldTaps.remove(tap);
+      _onTap(tap);
+    }
+  }
+
+  bool _knowsServer(String url) => widget.store.state.servers.any((s) => s.url == url);
+
   /// Approve / Deny answer right away; the notification itself opens its session.
   void _onTap(NotificationTap tap) {
     final store = widget.store;
+    if (!_knowsServer(tap.url)) {
+      _heldTaps.add(tap);
+      return;
+    }
     final approval = tap.approval;
     if (approval != null && (tap.action == 'approve' || tap.action == 'deny')) {
       store.dispatch(ApprovalAnswered(tap.url, approval, tap.action == 'approve' ? ApprovalDecision.approve : ApprovalDecision.deny));
