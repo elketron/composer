@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import '../../state/actions.dart';
 import '../shell.dart';
 import '../store_scope.dart';
-import 'chat_page.dart';
+import 'chat_page_route.dart';
 
 bool isWide(BuildContext context) => MediaQuery.sizeOf(context).width >= Shell.wide;
 
@@ -22,9 +22,15 @@ void newSession(BuildContext context, String url) {
 /// Show the server's chat as its own page (phones); it fills in once the session is open.
 void pushChat(BuildContext context, String url) => _push(context, url);
 
-void _push(BuildContext context, String url) {
-  final store = StoreScope.read(context);
-  Navigator.of(context)
-      .push(MaterialPageRoute<void>(builder: (_) => ChatPage(url: url)))
-      .then((_) => store.dispatch(SessionClosed(url)));
+void _push(BuildContext context, String url) => _pushRoute(Navigator.of(context), StoreScope.read(context), url);
+
+/// As [pushChat], for the app itself: it holds the navigator's key, so it has no context under it.
+void pushChatPage(NavigatorState navigator, AppStore store, String url) => _pushRoute(navigator, store, url);
+
+void _pushRoute(NavigatorState navigator, AppStore store, String url) {
+  final route = ChatPageRoute(url: url);
+  // Leaving the page closes the chat, unless the app unwound the page itself.
+  navigator.push(route).then((_) {
+    if (route.closeOnPop) store.dispatch(SessionClosed(url));
+  });
 }
