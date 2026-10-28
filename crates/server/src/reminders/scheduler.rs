@@ -6,6 +6,7 @@ use std::time::Duration;
 use chrono::{NaiveDateTime, NaiveTime};
 use composer_protocol::{ChangedBy, ChatMessage, MessageSource, Role, ServerMessage};
 
+use crate::agent::AgentDefinition;
 use crate::reminders::due::parse_time;
 use crate::reminders::{DueReminder, due_reminders, mark_notified};
 use crate::server::Server;
@@ -73,32 +74,48 @@ fn deliver(server: &Arc<Server>, reminder: &DueReminder, now: NaiveDateTime) -> 
 }
 
 /// Posts the reminder into its session; without one (or if it's gone), into a new session
-/// for its agent. Returns the session id.
+/// for its agent (`agent:`, default `default`). An agent name that doesn't resolve falls
+/// back to `default`, and the message says so. Returns the session id.
 fn post_to_session(server: &Arc<Server>, reminder: &DueReminder, due: &str) -> Option<String> {
     let existing = reminder
         .session
         .as_deref()
         .and_then(|id| server.sessions.get(id).ok());
+    let mut note = None;
     let session = match existing {
         Some(session) => session,
-        None => match server.sessions.create(&reminder.agent, None) {
-            Ok(session) => {
-                server.hub.send(ServerMessage::SessionUpdated {
-                    session: session.info(),
-                });
-                session
+        None => {
+            let agent = match resolve_agent(server, &reminder.agent) {
+                Some(name) => name,
+                None => {
+                    note = Some(format!(
+                        " (note: agent {} was not found, so this ran as default)",
+                        reminder.agent
+                    ));
+                    "default".into()
+                }
+            };
+            match server.sessions.create(&agent, None) {
+                Ok(session) => {
+                    server.hub.send(ServerMessage::SessionUpdated {
+                        session: session.info(),
+                    });
+                    session
+                }
+                Err(e) => {
+                    tracing::warn!("reminder {}: no session for the agent: {e}", reminder.url);
+                    return None;
+                }
             }
-            Err(e) => {
-                tracing::warn!("reminder {}: no session for the agent: {e}", reminder.url);
-                return None;
-            }
-        },
+        }
     };
     let message = ChatMessage {
         role: Role::User,
         content: format!(
-            "{} (due {due}). Open {} for what to do; when it's handled, set its status to done.",
-            reminder.title, reminder.url
+            "{} (due {due}). Open {} for what to do; when it's handled, set its status to done.{}",
+            reminder.title,
+            reminder.url,
+            note.unwrap_or_default()
         ),
         thinking: None,
         tool_calls: vec![],
@@ -111,4 +128,15 @@ fn post_to_session(server: &Arc<Server>, reminder: &DueReminder, due: &str) -> O
     };
     submit(server, &session, message);
     Some(session.id().to_string())
+}
+
+/// The agent a new delivery session runs as: `wanted` if it names a real agent page, else
+/// `None` (the caller falls back to `default`). `default` itself is taken on faith, as always.
+fn resolve_agent(server: &Arc<Server>, wanted: &str) -> Option<String> {
+    if wanted == "default" {
+        return Some(wanted.to_string());
+    }
+    AgentDefinition::load(&server.workspace, wanted)
+        .ok()
+        .map(|def| def.name)
 }

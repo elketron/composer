@@ -216,3 +216,125 @@ async fn a_reminder_comes_back_to_the_session_that_wrote_it() {
     assert!(events.iter().any(|e| matches!(e, ServerMessage::MessageDone { message, .. }
         if matches!(message.source, Some(MessageSource::Reminder { .. })) && message.content.starts_with("Start ticket 0002"))));
 }
+
+#[tokio::test]
+async fn a_reminder_can_name_the_agent_for_its_session() {
+    let (_dir, server, _p, addr) = start(vec![vec![
+        ModelEvent::Content("Spawning them now.".into()),
+        finished(vec![]),
+    ]])
+    .await;
+    let url = SiteUrl::new("plans", "reminders/spawn.md").unwrap();
+    server
+        .write_page(
+            &url,
+            "---\ntitle: Spawn the tickets\ntype: reminder\ndue: 2099-10-19 08:00\nagent: orchestrator\n---\n",
+            ChangedBy::Agent,
+        )
+        .unwrap();
+    let mut socket = connect(addr, &server.token).await;
+
+    check_reminders(&server, at("2099-10-19 09:00"));
+    let events = until(&mut socket, |e| {
+        matches!(e, ServerMessage::ReminderDue { .. })
+    })
+    .await;
+    let ServerMessage::ReminderDue {
+        session: Some(session),
+        ..
+    } = events.last().unwrap()
+    else {
+        panic!("{events:?}")
+    };
+    // The new session runs as the named agent, not default.
+    assert!(events.iter().any(
+        |e| matches!(e, ServerMessage::SessionUpdated { session: s } if &s.id == session && s.agent == "orchestrator")
+    ),"{events:?}");
+    assert_eq!(
+        server.sessions.get(session).unwrap().info().agent,
+        "orchestrator"
+    );
+}
+
+#[tokio::test]
+async fn an_unknown_agent_falls_back_to_default_with_a_note() {
+    let (_dir, server, _p, addr) = start(vec![vec![
+        ModelEvent::Content("I cannot spawn, but noted.".into()),
+        finished(vec![]),
+    ]])
+    .await;
+    let url = SiteUrl::new("plans", "reminders/water-ideas.md").unwrap();
+    server
+        .write_page(
+            &url,
+            "---\ntitle: Water the ideas\ntype: reminder\ndue: 2099-10-19 08:00\nagent: gardener\n---\n",
+            ChangedBy::Agent,
+        )
+        .unwrap();
+    let mut socket = connect(addr, &server.token).await;
+
+    check_reminders(&server, at("2099-10-19 09:00"));
+    let events = until(&mut socket, |e| {
+        matches!(e, ServerMessage::ReminderDue { .. })
+    })
+    .await;
+    let ServerMessage::ReminderDue {
+        session: Some(session),
+        ..
+    } = events.last().unwrap()
+    else {
+        panic!("{events:?}")
+    };
+    // Not found: delivered anyway, in a default session.
+    assert!(events.iter().any(
+        |e| matches!(e, ServerMessage::SessionUpdated { session: s } if &s.id == session && s.agent == "default")
+    ),"{events:?}");
+    assert!(
+        server
+            .sessions
+            .get(session)
+            .unwrap()
+            .info()
+            .agent
+            .starts_with("default"),
+        "delivered, but to the wrong seat"
+    );
+
+    send(
+        &mut socket,
+        1,
+        ClientCommand::SessionAttach {
+            session: session.clone(),
+            since: None,
+        },
+    )
+    .await;
+    let events = until(&mut socket, |e| matches!(e, ServerMessage::TurnDone { .. })).await;
+    let message = events
+        .iter()
+        .find_map(|e| match e {
+            ServerMessage::MessageDone { message, .. } if message.source.is_some() => Some(message),
+            _ => None,
+        })
+        .unwrap();
+    assert_eq!(
+        message.source,
+        Some(MessageSource::Reminder {
+            url: "site://plans/reminders/water-ideas.md".into()
+        })
+    );
+    assert!(
+        message
+            .content
+            .starts_with("Water the ideas (due 2099-10-19 08:00)"),
+        "{}",
+        message.content
+    );
+    assert!(
+        message
+            .content
+            .contains("note: agent gardener was not found"),
+        "the delivered message must carry the note: {}",
+        message.content
+    );
+}
