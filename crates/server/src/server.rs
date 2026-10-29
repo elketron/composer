@@ -311,7 +311,14 @@ impl Server {
 
     /// Syncs one path after a filesystem event. Ignores changes we made ourselves.
     pub fn sync_path(&self, path: &Path) {
-        if !is_watched(self.workspace.root(), path) || path.is_dir() {
+        if !is_watched(self.workspace.root(), path) {
+            return;
+        }
+        if path.is_dir() {
+            // A folder created since the watch started: the event arrives on the parent's
+            // watch, but files written into the new folder before the watcher attaches to it
+            // generate none — rescan it so they still reach the index (ticket 0071).
+            self.rescan_dir(path);
             return;
         }
         let Some(url) = self.workspace.url_for_path(path) else {
@@ -531,6 +538,14 @@ impl Server {
         })
     }
 
+    /// Indexes every file in a freshly created folder, as a filesystem event for the folder
+    /// itself (each file inside it may have been written before the watcher attached).
+    fn rescan_dir(&self, dir: &Path) {
+        for entry in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+            self.sync_path(&entry.path());
+        }
+    }
+
     /// Hash of a page as last seen by the server, reading it if unknown.
     pub fn page_hash(&self, path: &Path) -> Option<String> {
         let bytes = std::fs::read(path).ok()?;
@@ -551,7 +566,7 @@ fn is_watched(root: &Path, path: &Path) -> bool {
         return false;
     };
     let parts: Vec<_> = rel.iter().filter_map(|p| p.to_str()).collect();
-    parts.len() >= 2
+    (parts.len() >= 2 || (parts.len() == 1 && path.is_dir()))
         && !parts
             .iter()
             .any(|p| p.starts_with('.') || *p == "node_modules")
