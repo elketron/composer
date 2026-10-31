@@ -322,9 +322,14 @@ async fn claude_code_works_tickets() {
     );
     // The cache: a working folder it may read but not edit.
     let rule = format!("/{}/**", deps.display());
-    assert!(args.contains(&format!("--add-dir\n{}\n", deps.display())), "{args}");
     assert!(
-        args.contains(&format!("--disallowedTools\nEdit({rule})\nWrite({rule})\n--allowedTools\n")),
+        args.contains(&format!("--add-dir\n{}\n", deps.display())),
+        "{args}"
+    );
+    assert!(
+        args.contains(&format!(
+            "--disallowedTools\nEdit({rule})\nWrite({rule})\n--allowedTools\n"
+        )),
         "{args}"
     );
     assert!(args.contains(&format!("Read({rule})")), "{args}");
@@ -389,7 +394,10 @@ async fn claude_code_works_tickets() {
     let mcp = std::fs::read_to_string(bin.join("mcp.txt")).unwrap();
     assert!(mcp.contains(r#"\"behavior\":\"allow\""#), "{mcp}");
     // The chain was answered without an approval (the only one asked was python3's).
-    let chain = mcp.lines().find(|l| l.contains(r#""id":5"#)).unwrap_or_default();
+    let chain = mcp
+        .lines()
+        .find(|l| l.contains(r#""id":5"#))
+        .unwrap_or_default();
     assert!(chain.contains(r#"\"behavior\":\"allow\""#), "{mcp}");
     ticket(&root, "0009", &project);
     spawn(&server, &orchestrator, "0009").await.unwrap();
@@ -415,7 +423,12 @@ async fn claude_code_works_tickets() {
     std::fs::write(bin.join("mode"), "finish").unwrap();
     server
         .workers
-        .go_on(&server, "0010", "the parser is in src/parse.rs".into(), false)
+        .go_on(
+            &server,
+            "0010",
+            "the parser is in src/parse.rs".into(),
+            false,
+        )
         .await
         .unwrap();
     until_status(&root, "0010", "done").await;

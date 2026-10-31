@@ -22,10 +22,7 @@ type Fake = (Arc<Mutex<String>>, Arc<Mutex<Vec<Value>>>);
 
 /// An OpenAI-compatible endpoint that streams `answer` and keeps what it was asked.
 async fn fake_system1(answer: Arc<Mutex<String>>, asked: Arc<Mutex<Vec<Value>>>) -> String {
-    async fn complete(
-        State((answer, asked)): State<Fake>,
-        body: axum::Json<Value>,
-    ) -> String {
+    async fn complete(State((answer, asked)): State<Fake>, body: axum::Json<Value>) -> String {
         asked.lock().unwrap().push(body.0);
         let chunk = json!({ "choices": [{ "delta": { "content": *answer.lock().unwrap() }, "finish_reason": "stop" }] });
         format!("data: {chunk}\n\ndata: [DONE]\n\n")

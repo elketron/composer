@@ -75,16 +75,24 @@ impl HttpTransport {
         }
         let response = request.send().await.map_err(|e| {
             if e.is_timeout() {
-                format!("`{}` timed out after {}s", self.name, self.timeout.as_secs())
+                format!(
+                    "`{}` timed out after {}s",
+                    self.name,
+                    self.timeout.as_secs()
+                )
             } else {
                 format!("reaching `{}`: {e}", self.name)
             }
         })?;
         let status = response.status();
-        if status == reqwest::StatusCode::NOT_FOUND && self.session.lock().expect("lock").is_some() {
+        if status == reqwest::StatusCode::NOT_FOUND && self.session.lock().expect("lock").is_some()
+        {
             // The server forgot the session: connect again from scratch.
             self.alive.store(false, Ordering::SeqCst);
-            return Err(format!("`{}` ended the session; it reconnects on the next use", self.name));
+            return Err(format!(
+                "`{}` ended the session; it reconnects on the next use",
+                self.name
+            ));
         }
         if !status.is_success() {
             let body = response.text().await.unwrap_or_default();
@@ -102,7 +110,11 @@ impl HttpTransport {
     }
 
     /// The reply to request `id` from an event stream; notifications on the way are noted.
-    async fn reply_from_stream(&self, response: reqwest::Response, id: u64) -> Result<Value, String> {
+    async fn reply_from_stream(
+        &self,
+        response: reqwest::Response,
+        id: u64,
+    ) -> Result<Value, String> {
         let mut stream = response.bytes_stream();
         let mut buffer = String::new();
         while let Some(chunk) = stream.next().await {
@@ -126,7 +138,10 @@ impl HttpTransport {
                 }
             }
         }
-        Err(format!("`{}` closed the stream without answering", self.name))
+        Err(format!(
+            "`{}` closed the stream without answering",
+            self.name
+        ))
     }
 
     fn reply_to(&self, message: &Value, id: u64) -> Option<Result<Value, String>> {
@@ -134,7 +149,8 @@ impl HttpTransport {
         {
             self.tools_changed.store(true, Ordering::SeqCst);
         }
-        if message.get("id").and_then(Value::as_u64) != Some(id) || message.get("method").is_some() {
+        if message.get("id").and_then(Value::as_u64) != Some(id) || message.get("method").is_some()
+        {
             return None;
         }
         Some(match message.get("error") {

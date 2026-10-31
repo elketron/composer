@@ -234,10 +234,15 @@ impl Connection {
             ClientCommand::ModelList => {
                 let (connection, server) = (self.clone(), server.clone());
                 tokio::spawn(async move {
-                    let result = server.provider.models().await.map(|models| CommandResult::Models {
-                        default_model: server.provider.model().to_string(),
-                        models,
-                    });
+                    let result =
+                        server
+                            .provider
+                            .models()
+                            .await
+                            .map(|models| CommandResult::Models {
+                                default_model: server.provider.model().to_string(),
+                                models,
+                            });
                     connection.reply(id, result);
                 });
                 None
@@ -319,13 +324,15 @@ impl Connection {
             ClientCommand::WorkerStuck { summary } => {
                 let (connection, server) = (self.clone(), server.clone());
                 tokio::spawn(async move {
-                    let worker = connection.worker_session.lock().expect("worker lock").clone();
+                    let worker = connection
+                        .worker_session
+                        .lock()
+                        .expect("worker lock")
+                        .clone();
                     let result = match worker {
-                        Some(worker) => server
-                            .workers
-                            .stuck(&server, &worker, summary)
-                            .await
-                            .map(|(message, compact)| CommandResult::WorkerGoOn { message, compact }),
+                        Some(worker) => server.workers.stuck(&server, &worker, summary).await.map(
+                            |(message, compact)| CommandResult::WorkerGoOn { message, compact },
+                        ),
                         None => Err("not a worker connection".into()),
                     };
                     connection.reply(id, result);
@@ -530,7 +537,9 @@ impl Connection {
             }
             ClientCommand::ModelSet { session, model } => {
                 let s = server.sessions.get(&session).map_err(|e| e.to_string())?;
-                let model = model.map(|m| m.trim().to_string()).filter(|m| !m.is_empty());
+                let model = model
+                    .map(|m| m.trim().to_string())
+                    .filter(|m| !m.is_empty());
                 s.update_info(&server.hub, |info| info.model = model);
                 Ok(CommandResult::Session { session: s.info() })
             }

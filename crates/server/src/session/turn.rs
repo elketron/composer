@@ -9,12 +9,12 @@ use crate::agent::{AgentDefinition, system_prompt};
 use crate::attachments::{ForModel, for_model};
 use crate::provider::{ModelMessage, ModelRequest, ModelToolCall};
 use crate::server::Server;
-use crate::session::turn_budget::TurnBudget;
 use crate::session::Session;
 use crate::session::compaction::compact;
 use crate::session::model_call::{
     model_step, parse_args, prepare_history, store_images, thinking_budget, tool_step,
 };
+use crate::session::turn_budget::TurnBudget;
 use crate::tools::ToolContext;
 
 /// Delivers a user-side message. Starts a turn, or queues it behind the running one.
@@ -175,7 +175,9 @@ async fn run_turn(
             ));
         }
         if max_steps > 0 && steps >= max_steps {
-            return Err(format!("{TURN_LIMIT} ({max_steps} model calls in one turn)"));
+            return Err(format!(
+                "{TURN_LIMIT} ({max_steps} model calls in one turn)"
+            ));
         }
         steps += 1;
         if session.info().context_tokens >= server.config().agent.compaction_threshold {

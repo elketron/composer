@@ -7,8 +7,8 @@
 
 mod child_process;
 mod claude_code_harness;
-mod command_policy;
 mod claude_code_run;
+mod command_policy;
 mod harness_switches;
 mod own_harness;
 mod project_policy;

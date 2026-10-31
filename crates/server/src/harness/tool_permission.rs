@@ -57,7 +57,11 @@ pub async fn answer_permission(server: &Arc<Server>, session: &str, args: Value)
         return allow();
     }
     // A shell command: each part on its own, and what `always` would add for the parts that ask.
-    let mut rules = project.as_ref().and_then(|_| rule_for(&tool, &input)).into_iter().collect();
+    let mut rules = project
+        .as_ref()
+        .and_then(|_| rule_for(&tool, &input))
+        .into_iter()
+        .collect();
     if tool == "Bash"
         && let (Some(folder), Some(command)) = (&handle.folder, input["command"].as_str())
     {
@@ -126,7 +130,11 @@ fn bash_verdict(server: &Server, folder: &str, project: Option<&str>, command: &
     let folder = crate::tools::expand_home(folder);
     let mut read_roots = vec![folder.clone(), std::path::PathBuf::from("/tmp")];
     read_roots.extend(project.map(crate::tools::expand_home));
-    read_roots.extend(read_dirs(&config.claude_code.read_dirs).into_iter().map(|(dir, _)| dir));
+    read_roots.extend(
+        read_dirs(&config.claude_code.read_dirs)
+            .into_iter()
+            .map(|(dir, _)| dir),
+    );
     let mut rules = config.claude_code.allowed_tools.clone();
     if let Some(project) = project {
         rules.extend(project_settings(&config, project).allowed_tools);

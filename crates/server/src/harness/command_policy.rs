@@ -24,7 +24,9 @@ pub enum Verdict {
     Allowed,
     /// Ask the user. `rules`: what `always` would add (a rule per part that wasn't allowed);
     /// empty when some part has no safe rule.
-    Ask { rules: Vec<String> },
+    Ask {
+        rules: Vec<String>,
+    },
 }
 
 /// A word after quote removal; `tilde`: it started with an unquoted `~`.
@@ -45,9 +47,9 @@ struct Segment {
 /// Read-only programs whose every argument is checked as a path (patterns and counts resolve
 /// inside the current folder, which is fine; one that looks like an outside path asks).
 const READ_ONLY: &[&str] = &[
-    "cat", "ls", "head", "tail", "wc", "grep", "egrep", "fgrep", "rg", "tree", "file", "du",
-    "df", "stat", "which", "pwd", "cut", "tr", "diff", "cmp", "jq", "realpath", "dirname",
-    "basename", "readlink", "nl", "column", "true", "false", "sort", "uniq", "find", "sed",
+    "cat", "ls", "head", "tail", "wc", "grep", "egrep", "fgrep", "rg", "tree", "file", "du", "df",
+    "stat", "which", "pwd", "cut", "tr", "diff", "cmp", "jq", "realpath", "dirname", "basename",
+    "readlink", "nl", "column", "true", "false", "sort", "uniq", "find", "sed",
 ];
 
 /// Programs whose arguments are text, not paths.
@@ -55,8 +57,17 @@ const TEXT_ONLY: &[&str] = &["echo", "printf"];
 
 /// git subcommands that only read.
 const GIT_READ: &[&str] = &[
-    "status", "log", "diff", "show", "blame", "rev-parse", "ls-files", "grep", "describe",
-    "shortlog", "branch",
+    "status",
+    "log",
+    "diff",
+    "show",
+    "blame",
+    "rev-parse",
+    "ls-files",
+    "grep",
+    "describe",
+    "shortlog",
+    "branch",
 ];
 
 /// `find` predicates that run, delete or write.
@@ -241,8 +252,11 @@ fn read_only(words: &[Word], cwd: &Path, roots: &[PathBuf]) -> bool {
         })
     };
     let flag = |names: &[&str]| {
-        args.iter()
-            .any(|a| names.iter().any(|n| a.text == *n || a.text.starts_with(&format!("{n}="))))
+        args.iter().any(|a| {
+            names
+                .iter()
+                .any(|n| a.text == *n || a.text.starts_with(&format!("{n}=")))
+        })
     };
     match program {
         "git" => {
@@ -266,7 +280,9 @@ fn read_only(words: &[Word], cwd: &Path, roots: &[PathBuf]) -> bool {
                 return false;
             }
             if sub.text == "branch"
-                && flag(&["-d", "-D", "-m", "-M", "-c", "-C", "--delete", "--move", "--copy"])
+                && flag(&[
+                    "-d", "-D", "-m", "-M", "-c", "-C", "--delete", "--move", "--copy",
+                ])
             {
                 return false;
             }
@@ -277,27 +293,33 @@ fn read_only(words: &[Word], cwd: &Path, roots: &[PathBuf]) -> bool {
         "rg" => !flag(&["--pre"]) && paths_inside(args),
         "sort" => !flag(&["-o", "--output"]) && paths_inside(args),
         // `uniq in out` writes `out`.
-        "uniq" => args.iter().filter(|a| !a.text.starts_with('-')).count() <= 1 && paths_inside(args),
-        "sed" => sed_reads_only(args) && {
-            // The script isn't a path.
-            let script_given = args.iter().any(|a| a.text == "-e" || a.text == "--expression");
-            let mut skipped = script_given;
-            let files: Vec<Word> = args
-                .iter()
-                .filter(|a| {
-                    if a.text.starts_with('-') {
-                        return false;
-                    }
-                    if !skipped {
-                        skipped = true;
-                        return false;
-                    }
-                    true
-                })
-                .cloned()
-                .collect();
-            paths_inside(&files)
-        },
+        "uniq" => {
+            args.iter().filter(|a| !a.text.starts_with('-')).count() <= 1 && paths_inside(args)
+        }
+        "sed" => {
+            sed_reads_only(args) && {
+                // The script isn't a path.
+                let script_given = args
+                    .iter()
+                    .any(|a| a.text == "-e" || a.text == "--expression");
+                let mut skipped = script_given;
+                let files: Vec<Word> = args
+                    .iter()
+                    .filter(|a| {
+                        if a.text.starts_with('-') {
+                            return false;
+                        }
+                        if !skipped {
+                            skipped = true;
+                            return false;
+                        }
+                        true
+                    })
+                    .cloned()
+                    .collect();
+                paths_inside(&files)
+            }
+        }
         _ => paths_inside(args),
     }
 }
@@ -401,7 +423,9 @@ fn sed_script_prints(script: &str) -> bool {
                 if !skip_regex(&mut i, delim) || !skip_regex(&mut i, delim) {
                     return false;
                 }
-                while chars.get(i).is_some_and(|c| matches!(c, 'g' | 'p' | 'i' | 'I' | 'm' | 'M') || c.is_ascii_digit()) {
+                while chars.get(i).is_some_and(|c| {
+                    matches!(c, 'g' | 'p' | 'i' | 'I' | 'm' | 'M') || c.is_ascii_digit()
+                }) {
                     i += 1;
                 }
             }
@@ -494,10 +518,10 @@ fn split(command: &str) -> Option<Vec<Segment>> {
     let mut chars = command.chars().peekable();
 
     let end_word = |segments: &mut Vec<Segment>,
-                        word: &mut String,
-                        started: &mut bool,
-                        tilde: &mut bool,
-                        redirect: &mut Option<bool>|
+                    word: &mut String,
+                    started: &mut bool,
+                    tilde: &mut bool,
+                    redirect: &mut Option<bool>|
      -> Option<()> {
         if !*started {
             return Some(());
@@ -562,12 +586,22 @@ fn split(command: &str) -> Option<Vec<Segment>> {
                         break;
                     }
                 }
-                end_word(&mut segments, &mut word, &mut started, &mut tilde, &mut redirect)?;
+                end_word(
+                    &mut segments,
+                    &mut word,
+                    &mut started,
+                    &mut tilde,
+                    &mut redirect,
+                )?;
                 segments.push(Segment::default());
             }
-            ' ' | '\t' => {
-                end_word(&mut segments, &mut word, &mut started, &mut tilde, &mut redirect)?
-            }
+            ' ' | '\t' => end_word(
+                &mut segments,
+                &mut word,
+                &mut started,
+                &mut tilde,
+                &mut redirect,
+            )?,
             ';' | '\n' | '|' | '&' => {
                 if c == '&' && chars.peek() == Some(&'>') {
                     // `&>file`: both streams to a file.
@@ -575,11 +609,23 @@ fn split(command: &str) -> Option<Vec<Segment>> {
                     if chars.peek() == Some(&'>') {
                         chars.next();
                     }
-                    end_word(&mut segments, &mut word, &mut started, &mut tilde, &mut redirect)?;
+                    end_word(
+                        &mut segments,
+                        &mut word,
+                        &mut started,
+                        &mut tilde,
+                        &mut redirect,
+                    )?;
                     redirect = Some(false);
                     continue;
                 }
-                end_word(&mut segments, &mut word, &mut started, &mut tilde, &mut redirect)?;
+                end_word(
+                    &mut segments,
+                    &mut word,
+                    &mut started,
+                    &mut tilde,
+                    &mut redirect,
+                )?;
                 if redirect.is_some() {
                     return None;
                 }
@@ -602,7 +648,13 @@ fn split(command: &str) -> Option<Vec<Segment>> {
                     word.clear();
                     started = false;
                 } else {
-                    end_word(&mut segments, &mut word, &mut started, &mut tilde, &mut redirect)?;
+                    end_word(
+                        &mut segments,
+                        &mut word,
+                        &mut started,
+                        &mut tilde,
+                        &mut redirect,
+                    )?;
                 }
                 if c == '>' && chars.peek() == Some(&'>') {
                     chars.next();
@@ -628,7 +680,13 @@ fn split(command: &str) -> Option<Vec<Segment>> {
             }
         }
     }
-    end_word(&mut segments, &mut word, &mut started, &mut tilde, &mut redirect)?;
+    end_word(
+        &mut segments,
+        &mut word,
+        &mut started,
+        &mut tilde,
+        &mut redirect,
+    )?;
     if redirect.is_some() {
         return None;
     }
@@ -697,7 +755,10 @@ mod tests {
             assert_eq!(check(command, &[]), Verdict::Allowed, "{command}");
         }
         // Not in the folder: the project's code isn't what runs.
-        assert_eq!(check("cd /elsewhere && cargo test", &[]), ask(&["Bash(cargo test:*)"]));
+        assert_eq!(
+            check("cd /elsewhere && cargo test", &[]),
+            ask(&["Bash(cargo test:*)"])
+        );
         assert_eq!(check("cargo publish", &[]), ask(&["Bash(cargo publish:*)"]));
     }
 
@@ -726,15 +787,25 @@ mod tests {
 
     #[test]
     fn always_covers_each_part_that_asked() {
-        let command = "cd /work/brain; python3 -c 'import onnx' 2>&1; hf download x config.json | head";
+        let command =
+            "cd /work/brain; python3 -c 'import onnx' 2>&1; hf download x config.json | head";
         assert_eq!(check(command, &[]), ask(&["Bash(python3:*)", "Bash(hf:*)"]));
         assert_eq!(
             check(command, &["Bash(python3:*)", "Bash(hf download:*)"]),
             Verdict::Allowed
         );
         // The allowlist's own forms.
-        assert_eq!(check("npm install", &["Bash(npm install *)"]), Verdict::Allowed);
-        assert_eq!(check("make deploy", &["Bash(make deploy)"]), Verdict::Allowed);
-        assert_eq!(check("pip show onnx", &["Bash(pip show:*)"]), Verdict::Allowed);
+        assert_eq!(
+            check("npm install", &["Bash(npm install *)"]),
+            Verdict::Allowed
+        );
+        assert_eq!(
+            check("make deploy", &["Bash(make deploy)"]),
+            Verdict::Allowed
+        );
+        assert_eq!(
+            check("pip show onnx", &["Bash(pip show:*)"]),
+            Verdict::Allowed
+        );
     }
 }

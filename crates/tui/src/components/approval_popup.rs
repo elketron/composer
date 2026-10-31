@@ -135,7 +135,9 @@ impl Component for ApprovalPopup {
                 None => "outside its allowlist".to_string(),
             },
             ApprovalKind::Mcp => match &approval.rule {
-                Some(rule) => format!("a always: allow {rule} from now on, for any agent that lists it"),
+                Some(rule) => {
+                    format!("a always: allow {rule} from now on, for any agent that lists it")
+                }
                 None => "an MCP server's tool".to_string(),
             },
         };

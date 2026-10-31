@@ -38,7 +38,10 @@ async fn claude_code_allowed(socket: &mut Socket, id: u64, project: &str) -> boo
 
 /// The next `config.reloaded` broadcast: its `restart_needed` and `error`.
 async fn reloaded(socket: &mut Socket) -> (Vec<String>, Option<String>) {
-    let events = until(socket, |e| matches!(e, ServerMessage::ConfigReloaded { .. })).await;
+    let events = until(socket, |e| {
+        matches!(e, ServerMessage::ConfigReloaded { .. })
+    })
+    .await;
     match events.last() {
         Some(ServerMessage::ConfigReloaded {
             restart_needed,
@@ -90,18 +93,23 @@ async fn a_changed_config_applies_without_a_restart() {
     )
     .unwrap();
     assert_eq!(reloaded(&mut socket).await, (vec!["provider".into()], None));
-    let CommandResult::McpServers { servers } = command(&mut socket, 5, ClientCommand::McpList).await
+    let CommandResult::McpServers { servers } =
+        command(&mut socket, 5, ClientCommand::McpList).await
     else {
         panic!()
     };
     assert_eq!(servers.len(), 1);
-    assert_eq!((servers[0].name.as_str(), servers[0].state.as_str()), ("docs", "off"));
+    assert_eq!(
+        (servers[0].name.as_str(), servers[0].state.as_str()),
+        ("docs", "off")
+    );
 
     // Removed again, from `config.reload` (the watcher's broadcast may come first or not at all
     // when it already reloaded: either way the server runs without it).
     std::fs::write(&config_file, &allowed).unwrap();
     let _ = command(&mut socket, 6, ClientCommand::ConfigReload).await;
-    let CommandResult::McpServers { servers } = command(&mut socket, 7, ClientCommand::McpList).await
+    let CommandResult::McpServers { servers } =
+        command(&mut socket, 7, ClientCommand::McpList).await
     else {
         panic!()
     };

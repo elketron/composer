@@ -118,8 +118,16 @@ impl HarnessRun for ClaudeCodeRun {
         let seen = self.seen.lock().expect("seen lock");
         (seen.max_turns && !seen.timed_out).then(|| {
             let max_turns = self.server.config().claude_code.max_turns;
-            match seen.result.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
-                Some(said) => format!("used its {max_turns} turns; it last said: {}", cut(said, 600)),
+            match seen
+                .result
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+            {
+                Some(said) => format!(
+                    "used its {max_turns} turns; it last said: {}",
+                    cut(said, 600)
+                ),
                 None => format!("used its {max_turns} turns"),
             }
         })

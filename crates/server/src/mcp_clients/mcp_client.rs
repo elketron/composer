@@ -42,7 +42,12 @@ impl McpClient {
                 .iter()
                 .map(|(k, v)| Ok((k.clone(), expand(v)?)))
                 .collect::<Result<_, String>>()?;
-            Box::new(HttpTransport::new(name, &config.url, &headers, CALL_TIMEOUT)?)
+            Box::new(HttpTransport::new(
+                name,
+                &config.url,
+                &headers,
+                CALL_TIMEOUT,
+            )?)
         } else {
             return Err("needs a `command` (stdio) or a `url` (HTTP)".into());
         };
@@ -59,7 +64,11 @@ impl McpClient {
         )
         .await
         .map_err(|_| "no answer to `initialize` within 30s".to_string())??;
-        if init.get("capabilities").and_then(|c| c.get("tools")).is_none() {
+        if init
+            .get("capabilities")
+            .and_then(|c| c.get("tools"))
+            .is_none()
+        {
             tracing::info!("mcp {name}: the server offers no tools");
         }
         transport
@@ -234,7 +243,10 @@ mod tests {
     fn expands_variables() {
         // SAFETY: the test sets a variable no other test reads.
         unsafe { std::env::set_var("COMPOSER_MCP_TEST_TOKEN", "abc") };
-        assert_eq!(expand("Bearer ${COMPOSER_MCP_TEST_TOKEN}").unwrap(), "Bearer abc");
+        assert_eq!(
+            expand("Bearer ${COMPOSER_MCP_TEST_TOKEN}").unwrap(),
+            "Bearer abc"
+        );
         assert_eq!(expand("plain").unwrap(), "plain");
         assert!(expand("${COMPOSER_MCP_SURELY_UNSET}").is_err());
     }

@@ -817,8 +817,14 @@ impl WorkerRegistry {
             count_continue(server, ticket);
             set_running(server, &worker, ticket);
             let _ = reply.send(Ok((message, compact)));
-            let first = if compact { "compacts its session, then " } else { "" };
-            return Ok(format!("worker #{worker} {first}goes on with ticket {ticket}"));
+            let first = if compact {
+                "compacts its session, then "
+            } else {
+                ""
+            };
+            return Ok(format!(
+                "worker #{worker} {first}goes on with ticket {ticket}"
+            ));
         }
         let session = match stuck_session(server, ticket) {
             Ok(session) => session,
@@ -840,16 +846,25 @@ impl WorkerRegistry {
         };
         if compact {
             return Err(
-                "a Claude Code worker compacts its own context; continue it without `compact`".into(),
+                "a Claude Code worker compacts its own context; continue it without `compact`"
+                    .into(),
             );
         }
         count_continue(server, ticket);
         self.resume(server, &session, message, vec![]).await?;
-        Ok(format!("worker #{} goes on with ticket {ticket}", session.id()))
+        Ok(format!(
+            "worker #{} goes on with ticket {ticket}",
+            session.id()
+        ))
     }
 
     /// `stop_worker`: the stuck worker on `ticket` fails it, with `reason`.
-    pub fn stop_stuck(&self, server: &Arc<Server>, ticket: &str, reason: &str) -> Result<String, String> {
+    pub fn stop_stuck(
+        &self,
+        server: &Arc<Server>,
+        ticket: &str,
+        reason: &str,
+    ) -> Result<String, String> {
         let reason = format!("stopped by its orchestrator at the turn limit: {reason}");
         if let Some((worker, reply)) = self.take_waiting(ticket) {
             // It fails the ticket itself (`finish`), as any worker ends.
@@ -875,10 +890,7 @@ impl WorkerRegistry {
     }
 
     /// The own worker waiting on `ticket`, and its reply.
-    fn take_waiting(
-        &self,
-        ticket: &str,
-    ) -> Option<(String, GoOnReply)> {
+    fn take_waiting(&self, ticket: &str) -> Option<(String, GoOnReply)> {
         let worker = self
             .running()
             .into_iter()
@@ -1006,7 +1018,8 @@ fn decided_by_parent(server: &Server, handle: &WorkerHandle) -> bool {
 /// An own worker at its turn limit: the ticket and session say so, the orchestrator is told.
 fn mark_stuck(server: &Arc<Server>, worker: &str, ticket: &str, parent: &str, summary: &str) {
     if let Ok(page) = ticket_page(server, ticket)
-        && let Err(e) = server.write_page(&page.url, &set_status(&page.raw, "stuck"), ChangedBy::Agent)
+        && let Err(e) =
+            server.write_page(&page.url, &set_status(&page.raw, "stuck"), ChangedBy::Agent)
     {
         tracing::error!("updating ticket {ticket}: {e}");
     }
@@ -1085,7 +1098,11 @@ fn count_continue(server: &Server, ticket: &str) {
 /// A waiting own worker goes on: claimed again, running.
 fn set_running(server: &Arc<Server>, worker: &str, ticket: &str) {
     if let Ok(page) = ticket_page(server, ticket)
-        && let Err(e) = server.write_page(&page.url, &set_status(&page.raw, "claimed"), ChangedBy::Agent)
+        && let Err(e) = server.write_page(
+            &page.url,
+            &set_status(&page.raw, "claimed"),
+            ChangedBy::Agent,
+        )
     {
         tracing::error!("updating ticket {ticket}: {e}");
     }

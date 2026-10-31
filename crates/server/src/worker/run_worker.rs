@@ -16,7 +16,7 @@ use crate::home::Home;
 use crate::init::local_token;
 use crate::provider::{ModelMessage, OpenAiProvider};
 use crate::server::Server;
-use crate::session::{TURN_LIMIT, Session, compact_and_wait, submit};
+use crate::session::{Session, TURN_LIMIT, compact_and_wait, submit};
 use crate::worker::ParentLink;
 
 const NUDGE: &str = "You ended your turn without calling `finish`. If the ticket is done, make sure its \

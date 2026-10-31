@@ -199,20 +199,30 @@ async fn stdio_servers() {
     let mut socket = connect(addr, &server.token).await;
 
     // The servers and their state; listing connects the ones that are on.
-    let CommandResult::McpServers { servers } = command(&mut socket, 20, ClientCommand::McpList).await
+    let CommandResult::McpServers { servers } =
+        command(&mut socket, 20, ClientCommand::McpList).await
     else {
         panic!()
     };
     let by_name = |name: &str| servers.iter().find(|s| s.name == name).unwrap().clone();
     let fake = by_name("fake");
-    assert_eq!((fake.state.as_str(), fake.transport.as_str()), ("ready", "stdio"));
-    assert_eq!(fake.tools, ["fake__echo", "fake__add_numbers", "fake__boom"]);
+    assert_eq!(
+        (fake.state.as_str(), fake.transport.as_str()),
+        ("ready", "stdio")
+    );
+    assert_eq!(
+        fake.tools,
+        ["fake__echo", "fake__add_numbers", "fake__boom"]
+    );
     assert_eq!(fake.agents, ["mcpuser", "picky"]);
     let broken = by_name("broken");
     assert_eq!(broken.state, "failed");
     assert!(broken.error.unwrap().contains("/nonexistent/mcp-server"));
     let dormant = by_name("dormant");
-    assert_eq!((dormant.state.as_str(), dormant.transport.as_str()), ("off", "http"));
+    assert_eq!(
+        (dormant.state.as_str(), dormant.transport.as_str()),
+        ("off", "http")
+    );
 
     // `allow`ed: runs without asking. The model saw the server's tools, named for it.
     let id = session(&mut socket, "mcpuser").await;
@@ -242,7 +252,10 @@ async fn stdio_servers() {
     })
     .await;
     let Some(ServerMessage::ApprovalRequest {
-        request, title, body, ..
+        request,
+        title,
+        body,
+        ..
     }) = events.last()
     else {
         panic!()
@@ -259,13 +272,19 @@ async fn stdio_servers() {
     )
     .await;
     let events = until(&mut socket, |e| matches!(e, ServerMessage::TurnDone { .. })).await;
-    assert_eq!(results(&events), [("{\n  \"sum\": 5\n}".to_string(), false)]);
+    assert_eq!(
+        results(&events),
+        [("{\n  \"sum\": 5\n}".to_string(), false)]
+    );
     say(&mut socket, &id, 6).await;
     let events = until(&mut socket, |e| matches!(e, ServerMessage::TurnDone { .. })).await;
     assert!(!asked(&events));
     assert_eq!(results(&events)[0].0, "{\n  \"sum\": 2\n}");
     let rules = std::fs::read_to_string(dir.path().join("state/tool_rules.json")).unwrap();
-    assert!(rules.contains("\"mcp:fake\"") && rules.contains("fake__add_numbers"), "{rules}");
+    assert!(
+        rules.contains("\"mcp:fake\"") && rules.contains("fake__add_numbers"),
+        "{rules}"
+    );
 
     // A failed call is a result the model sees; the server said its tools changed after the
     // first echo, so the next turn offers `late` too.
@@ -296,7 +315,10 @@ async fn stdio_servers() {
     say(&mut socket, &picky, 9).await;
     let events = until(&mut socket, |e| matches!(e, ServerMessage::TurnDone { .. })).await;
     assert_eq!(results(&events), [("x".to_string(), false)]);
-    let mcp: Vec<String> = provider.requests().last().unwrap()
+    let mcp: Vec<String> = provider
+        .requests()
+        .last()
+        .unwrap()
         .tools
         .iter()
         .filter(|t| t.name.contains("__"))
@@ -316,7 +338,9 @@ async fn fake_http(headers: HeaderMap, body: String) -> Response {
     let id = m.get("id").cloned();
     if method != "initialize" {
         let session = headers.get("mcp-session-id").and_then(|v| v.to_str().ok());
-        let version = headers.get("mcp-protocol-version").and_then(|v| v.to_str().ok());
+        let version = headers
+            .get("mcp-protocol-version")
+            .and_then(|v| v.to_str().ok());
         if session != Some("s-1") || version != Some("2025-06-18") {
             return (StatusCode::BAD_REQUEST, "no session").into_response();
         }
@@ -330,9 +354,14 @@ async fn fake_http(headers: HeaderMap, body: String) -> Response {
     let reply = |result: Value| json!({ "jsonrpc": "2.0", "id": id, "result": result }).to_string();
     match method {
         "initialize" => (
-            [("mcp-session-id", "s-1"), ("content-type", "application/json")],
-            reply(json!({ "protocolVersion": "2025-06-18", "capabilities": { "tools": {} },
-                "serverInfo": { "name": "web", "version": "1" } })),
+            [
+                ("mcp-session-id", "s-1"),
+                ("content-type", "application/json"),
+            ],
+            reply(
+                json!({ "protocolVersion": "2025-06-18", "capabilities": { "tools": {} },
+                "serverInfo": { "name": "web", "version": "1" } }),
+            ),
         )
             .into_response(),
         "tools/list" => {
@@ -340,8 +369,10 @@ async fn fake_http(headers: HeaderMap, body: String) -> Response {
                 "params": { "level": "info", "data": "listing" } });
             let stream = format!(
                 "event: message\ndata: {note}\n\nevent: message\ndata: {}\n\n",
-                reply(json!({ "tools": [{ "name": "lookup", "description": "Looks up",
-                    "inputSchema": { "type": "object" } }] }))
+                reply(
+                    json!({ "tools": [{ "name": "lookup", "description": "Looks up",
+                    "inputSchema": { "type": "object" } }] })
+                )
             );
             ([("content-type", "text/event-stream")], stream).into_response()
         }

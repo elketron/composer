@@ -5,16 +5,15 @@ use serde_json::Value;
 
 use crate::agent::AgentDefinition;
 use crate::mcp_clients::McpServers;
-use crate::server::Server;
 use crate::provider::{ModelToolCall, ToolSpec};
+use crate::server::Server;
 use crate::tools::actions_tool::ActionsTool;
 use crate::tools::answer_approval_tool::AnswerApprovalTool;
+use crate::tools::continue_worker_tool::ContinueWorkerTool;
 use crate::tools::edit_tool::EditTool;
 use crate::tools::finish_tool::FinishTool;
 use crate::tools::list_sites_tool::ListSitesTool;
-use crate::tools::continue_worker_tool::ContinueWorkerTool;
 use crate::tools::merge_ticket_tool::MergeTicketTool;
-use crate::tools::stop_worker_tool::StopWorkerTool;
 use crate::tools::new_app_tool::NewAppTool;
 use crate::tools::new_pipeline_tool::NewPipelineTool;
 use crate::tools::new_project_tool::NewProjectTool;
@@ -26,6 +25,7 @@ use crate::tools::run_tool::RunTool;
 use crate::tools::search_tool::SearchTool;
 use crate::tools::set_project_tool::SetProjectTool;
 use crate::tools::spawn_worker_tool::SpawnWorkerTool;
+use crate::tools::stop_worker_tool::StopWorkerTool;
 use crate::tools::write_tool::WriteTool;
 use crate::tools::{CallResult, Tool, ToolContext, text_result};
 
@@ -86,16 +86,13 @@ impl ToolRegistry {
         let mut specs = self.specs_for(agent);
         match &server.parent {
             Some(parent) if !agent.mcp_servers().is_empty() => match parent.tools(session).await {
-                Ok(tools) => specs.extend(
-                    tools
-                        .into_iter()
-                        .filter(|t| t.name.contains("__"))
-                        .map(|t| ToolSpec {
-                            name: t.name,
-                            description: t.description,
-                            parameters: t.parameters,
-                        }),
-                ),
+                Ok(tools) => specs.extend(tools.into_iter().filter(|t| t.name.contains("__")).map(
+                    |t| ToolSpec {
+                        name: t.name,
+                        description: t.description,
+                        parameters: t.parameters,
+                    },
+                )),
                 Err(e) => tracing::warn!("MCP tools from the parent: {e}"),
             },
             Some(_) => {}

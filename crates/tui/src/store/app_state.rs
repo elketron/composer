@@ -358,7 +358,8 @@ impl AppState {
                 )
             }
             Action::McpServers => {
-                self.ui.flash("connecting the MCP servers…", FlashLevel::Info);
+                self.ui
+                    .flash("connecting the MCP servers…", FlashLevel::Info);
                 self.send(ClientCommand::McpList, Pending::McpServers)
             }
             Action::ReloadConfig => self.send(ClientCommand::ConfigReload, Pending::ReloadConfig),

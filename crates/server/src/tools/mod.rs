@@ -1,8 +1,8 @@
 //! The agent's tools: browsing and editing the web of pages.
 
 mod actions_tool;
-mod args;
 mod answer_approval_tool;
+mod args;
 mod continue_worker_tool;
 mod edit_tool;
 mod finish_tool;

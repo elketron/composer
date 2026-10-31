@@ -45,7 +45,12 @@ impl Tool for ContinueWorkerTool {
         }
         server
             .workers
-            .go_on(server, &normalize_id(&args.ticket), args.message, args.compact)
+            .go_on(
+                server,
+                &normalize_id(&args.ticket),
+                args.message,
+                args.compact,
+            )
             .await
     }
 }

@@ -50,7 +50,13 @@ pub fn glob_matches(pattern: &str, name: &str) -> bool {
 pub fn tool_name(server: &str, tool: &str) -> String {
     let clean: String = tool
         .chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect();
     format!("{server}__{clean}")
 }

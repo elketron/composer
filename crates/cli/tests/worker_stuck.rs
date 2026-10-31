@@ -145,7 +145,9 @@ async fn the_orchestrator_continues_a_worker_at_its_turn_limit() {
         .find(|r| {
             r["messages"].as_array().unwrap().iter().any(|m| {
                 m["content"].as_str().is_some_and(|c| {
-                    c.contains("From your orchestrator, after your turn limit: you have read enough")
+                    c.contains(
+                        "From your orchestrator, after your turn limit: you have read enough",
+                    )
                 })
             })
         })

@@ -94,7 +94,11 @@ async fn a_worker_process_calls_an_mcp_tool_through_the_parent() {
     )
     .unwrap();
     std::fs::create_dir_all(dir.path().join("sites/notes")).unwrap();
-    std::fs::write(dir.path().join("sites/notes/justfile"), "hello:\n    echo hello\n").unwrap();
+    std::fs::write(
+        dir.path().join("sites/notes/justfile"),
+        "hello:\n    echo hello\n",
+    )
+    .unwrap();
     std::fs::create_dir_all(dir.path().join("sites/orchestration/tickets")).unwrap();
     std::fs::write(
         dir.path().join("sites/orchestration/tickets/0001.md"),
@@ -189,9 +193,13 @@ async fn a_worker_process_calls_an_mcp_tool_through_the_parent() {
             })
         })
     };
-    assert!(worker_saw("Your orchestrator denied `fake__add_numbers`: check the task first"));
+    assert!(worker_saw(
+        "Your orchestrator denied `fake__add_numbers`: check the task first"
+    ));
     assert!(worker_saw("sum: 5"));
-    assert!(worker_saw("your orchestrator denied running `hello`: not this recipe"));
+    assert!(worker_saw(
+        "your orchestrator denied running `hello`: not this recipe"
+    ));
     let ticket =
         std::fs::read_to_string(dir.path().join("sites/orchestration/tickets/0001.md")).unwrap();
     assert!(ticket.contains("status: done"), "{ticket}");
