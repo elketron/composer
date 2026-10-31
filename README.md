@@ -10,6 +10,14 @@ your approval) and an optional micro app (Svelte). Agents run on your own model 
   servers at once, the micro apps in an embedded browser, and notifications.
 - **`site://chat`** — a small web chat for phones, no install.
 
+## Requirements
+
+- Rust (stable, edition 2024) to build it; Linux is the main platform, Windows via [WSL](docs/wsl.md).
+- A model server with an OpenAI-compatible API: llama.cpp's `llama-server`, vLLM, Ollama, or a hosted provider
+  such as OpenRouter (`[provider]` in `config.toml`).
+- [`just`](https://github.com/casey/just) for site actions, and [`bun`](https://bun.sh) to build micro apps.
+- Optional: the Claude Code CLI, logged in, to run tickets with it; Flutter to build the app.
+
 ## Start
 
 ```sh
@@ -33,6 +41,7 @@ and pair them with `composer pair --name <device>`.
 - [docs/wsl.md](docs/wsl.md) — running the server in WSL on Windows
 - [docs/releasing.md](docs/releasing.md) — releases and Android signing
 - [CLAUDE.md](CLAUDE.md) — conventions, and how to test the TUI and the app headlessly
+- [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md) — before exposing a server beyond your machine
 
 ## License
 

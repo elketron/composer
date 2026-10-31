@@ -76,7 +76,9 @@ fn cost_of_a_page() {
     let real = dir.path().join("real.jsonl");
     build(&small, 8, &hub);
     build(&big, 2000, &hub);
-    let src = std::path::Path::new("/home/me/.composer/state/sessions/5464/events.jsonl");
+    // A real transcript to measure too: COMPOSER_MEASURE_EVENTS=<home>/state/sessions/<id>/events.jsonl
+    let src =
+        std::path::PathBuf::from(std::env::var("COMPOSER_MEASURE_EVENTS").unwrap_or_default());
     if src.exists() {
         std::fs::copy(src, &real).unwrap();
     }

@@ -4,6 +4,7 @@ description = "The composer terminal UI: Flux state, Ratatui components"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 
 [dependencies]
 composer-core.workspace = true
