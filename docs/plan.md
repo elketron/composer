@@ -772,7 +772,7 @@ it when the project allows it (click: on / off); a worker's header has none (its
 
 ## Phase 5: pipelines (staged, scoped, gated work)
 
-From [Interpretable Context Methodology](2603.16021v2.pdf) (Van Clief & McDermott, 2026): for sequential
+From [Interpretable Context Methodology](https://arxiv.org/abs/2603.16021) (Van Clief & McDermott, 2026): for sequential
 work that a human reviews step by step, numbered folders of markdown are the orchestration. Each stage has a
 contract (what it reads, does, writes), loads only what its contract names, and writes plain files the human
 can edit before the next stage. Composer already has most of this (sites are markdown, tickets are contracts,
@@ -1062,6 +1062,76 @@ a server per session or per project.
     orchestrator instead of failing at the turn limit, now a token budget (`agent.turn_tokens`, 200k).
 29. ✅ **Approvals by the orchestrator** — `answer_approval`: workers' tool, MCP and recipe approvals go to
     their orchestrator, which approves once, denies with a reason, or asks the user.
+
+## Phase 7: entering sites, apps in the chat
+
+Two ways the chat gets closer to the sites. The default agent can **enter** a site and work as that site's
+agent until it leaves, and any agent can **show an app** in the chat, which every client can open in one step.
+The orchestrator doesn't change: it stays a generic agent that hands tickets to workers.
+
+### Entering a site (the default agent)
+
+From [Interpretable Context Methodology](https://arxiv.org/abs/2603.16021): a folder is a context boundary. Today a site is a
+place the agent may `open`; "open its `index.md` when entering" is a convention, and nothing changes when it
+does. Entering makes the site part of the session, like the active project.
+
+- **The harness stays fixed, the site brings the rest.** The agent page (the harness: how to work, how to use
+  composer) is the same in every site. The site's `index.md` says what this site is, how work is done here and
+  which of its pages and actions to use: its personality and its tool catalog. What the agent learns goes into
+  the site's pages (and justfile), so the site is where it improves; the harness only changes by hand.
+- **`enter_site(site)` / `leave_site()`** (default agent), `:site [name]` in the TUI (no name: leave), a site
+  chip beside the project chip in the app's chat header (tap: the site list, or leave). A session has at most
+  one site; entering another replaces it. Stored in the session's `meta.toml` and shown in the session list.
+- **Same conversation:** entering changes the system prompt from the next turn on, nothing else; the history
+  stays. No handoff, no sub-session: it is your chat, and what was said before is context, not leakage.
+- **System prompt while in a site:** the agent page, then the site's `index.md` and its actions (`actions(site)`)
+  in place of `site://home`, then the project and the memory list as today. A line names the site and how to
+  leave. Home stays reachable with `open`.
+- **Scope:** writes go to the site and the session's project only; other sites are read-only (`write`/`edit`
+  refused with the reason), through the existing site access rules. `run` takes the site's recipes without
+  naming it.
+- **One prompt builder:** the stage worker's scoped prompt (pipeline, work, contract) is the same idea one level
+  down; both use it. Later a ticket's `site:` can start a worker inside a site.
+
+### Showing an app in the chat
+
+- **`show_app(site, path?, note?)`** (any agent with it in `tools:`; Claude Code workers through `composer mcp`).
+  Refused when the site has no `ui/dist` ("run `ui-build` first"). Writes an `app.shown {site, path, title,
+  note}` event into the session: in the transcript, replayed on attach, seen by every client. `path` is added to
+  the app's URL (`?work=game-save-system`, `#/stage/02`), so an agent can point at one thing in an app. `title`
+  is the site's.
+- **The URL** is the one `:app` builds: `http://<bind>/<site>/<path>?token=…&session=<id>`, the address being the
+  server's as the client knows it (also for a TUI on another machine).
+
+| client | in the chat | opening |
+|---|---|---|
+| phone | an app card: site title, note, the site's path | tap: the app full screen in `AppView` |
+| desktop | the same card | in the side pane's App tab by itself while follow-agent is on; click: open it again |
+| TUI | a row `▸ app  board · game-save-system` | `Enter` on the row (or `ga`: the last one shown) opens the browser (`$BROWSER`, else `xdg-open`); never by itself |
+
+- Follow-agent off, or a replayed event: only the card; nothing opens by itself.
+- Not a file attachment: nothing is stored, the card is the event.
+
+### Ideas (not planned)
+
+- **A sandbox around spawns:** Claude Code runs and recipes in a `bwrap` namespace built from what composer
+  already knows (the worktree or project read-write; `read_dirs`, toolchains and `/usr` read-only; a tmpfs
+  `$HOME` plus the CLI's config; no `state/`, no other projects). The filesystem becomes the boundary instead of
+  the command list, so `allowed_tools` could loosen. Threat model: mistakes, not malice (no network namespace,
+  no uid per agent). `[sandbox]`, off by default.
+- **Overlay tickets for plain folders:** a ticket on a project that isn't a git checkout gets worktree
+  behaviour from overlayfs (bwrap's `--overlay-src`/`--overlay`): the project as the lower layer, writes in
+  `state/overlays/<ticket>/upper`. Changes lists `upper`; merge copies it down (whiteouts delete); discard
+  removes it. Same `ticket.merge` / `ticket.discard`; a site's app shows what a binary diff can't. Needs the
+  sandbox above.
+- **Extra read grants:** a work's `reads:` (other projects, read-only), for a video that uses a game's assets.
+
+### Milestones
+
+30. **entering sites** — `enter_site` / `leave_site`, the site in the session and its prompt, write scope,
+    `:site`, the header chip.
+31. **apps in the chat** — `show_app`, `app.shown`, the card on phones and desktop (the side pane with
+    follow-agent), the TUI row and `ga`.
 
 ## Open questions
 
