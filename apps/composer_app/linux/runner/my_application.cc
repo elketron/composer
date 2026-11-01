@@ -52,6 +52,8 @@ static void my_application_activate(GApplication* application) {
     gtk_window_set_title(window, "composer");
   }
 
+  // The theme's composer-app icon (installed by the tarball's install.sh), for docks and alt-tab.
+  gtk_window_set_icon_name(window, "composer-app");
   gtk_window_set_default_size(window, 1280, 720);
 
   g_autoptr(FlDartProject) project = fl_dart_project_new();

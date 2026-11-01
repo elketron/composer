@@ -16,6 +16,6 @@ cp -r build/linux/x64/release/bundle/. "$out/"
 # system's library (required anyway, see README.txt).
 rm -f "$out"/lib/libWPEWebKit-2.0.so* "$out"/lib/libwpe-1.0.so*
 cp linux/packaging/composer-app.desktop linux/packaging/README.txt linux/packaging/install.sh "$out/"
-cp android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png "$out/composer-app.png"
+cp linux/packaging/composer-app.png "$out/"
 tar -C "$root/dist" -czf "$out.tar.gz" "$name"
 echo "$out.tar.gz"

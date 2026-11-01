@@ -1,0 +1,8 @@
+<!-- composer's app icon: a c with a block cursor. scripts/app-icons.sh renders every platform's icons from it. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="40" fill="#121317"/>
+  <g id="mark">
+    <path d="M300 178 A96 96 0 1 0 300 334" fill="none" stroke="#d5d8de" stroke-width="44"/>
+    <rect x="330" y="300" width="64" height="40" fill="#8fb3e8"/>
+  </g>
+</svg>

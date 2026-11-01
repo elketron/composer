@@ -1,0 +1,7 @@
+<!-- The mark alone, for Android's adaptive icon (108dp, the background is #121317): scaled into the 66dp safe zone. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <g transform="translate(256 256) scale(0.78) translate(-260 -256)">
+    <path d="M300 178 A96 96 0 1 0 300 334" fill="none" stroke="#d5d8de" stroke-width="44"/>
+    <rect x="330" y="300" width="64" height="40" fill="#8fb3e8"/>
+  </g>
+</svg>

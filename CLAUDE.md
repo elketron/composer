@@ -60,6 +60,7 @@ Snapshots always force a draw, so they can't catch a missing repaint: for that, 
   (`weston --backend=headless --renderer=gl --debug`, `WAYLAND_DISPLAY`, `GDK_BACKEND=wayland`).
 - `COMPOSER_APP_DATA=<dir>` keeps the server list in that directory (tests, a second instance).
 - The Linux binary is `composer-app` (not `composer`, the CLI); on Windows it is `composer.exe`.
+- Icons: edit `assets/icon/*.svg`, then `scripts/app-icons.sh` renders the Android, Windows and Linux ones.
 - `flutter test integration_test` leaves the *test* in `build/linux/.../bundle`; run `flutter build linux`
   before launching the bundle yourself, or it waits for a test runner and never shows a window.
 - Screenshots: launch the bundle in headless Weston (`--debug`) and capture with `weston-screenshooter`
