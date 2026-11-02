@@ -326,6 +326,11 @@ async fn merging_into_another_branch() {
         call("4", json!(null)),
         say("Asked."),
         say("Merged."),
+        call("5", json!("dev")),
+        say("Asked."),
+        say("Merged."),
+        call("6", json!(null)),
+        say("Nope."),
     ])
     .await;
     let home = dir.path();
@@ -351,6 +356,8 @@ async fn merging_into_another_branch() {
     ticket_with_work(&server, home, &project, "0002", "\nmerge_into: staging");
     ticket_with_work(&server, home, &project, "0003", "");
     ticket_with_work(&server, home, &project, "0004", "");
+    ticket_with_work(&server, home, &project, "0005", "\nmerge_into: staging");
+    ticket_with_work(&server, home, &project, "0006", "");
 
     let mut socket = connect(addr, &server.token).await;
     send(
@@ -484,6 +491,11 @@ async fn merging_into_another_branch() {
     assert!(!git(&project, &["branch", "--list", "ticket/0001"]).contains("ticket/0001"));
     assert!(!home.join("state/worktrees/0001").exists());
     assert!(ticket_page(home, "0001").contains(&format!("merged: {dev_tip}")));
+    assert!(
+        !git(&project, &["worktree", "list"]).contains("composer-merge"),
+        "the scratch worktree is gone after the merge"
+    );
+
     assert_eq!(
         git(&project, &["log", "-1", "--format=%s"]),
         "init",
@@ -539,6 +551,42 @@ async fn merging_into_another_branch() {
         "Merge ticket 0004: Ticket 0004"
     );
     assert!(project.join("0004.txt").is_file() && project.join("0004-notes.txt").is_file());
+
+    // 5) the arg wins over the ticket frontmatter: lands on dev, not staging.
+    let dev_before = git(&project, &["rev-parse", "--short", "refs/heads/dev"]);
+    let (n, id) = ask("0005");
+    let told = approve(&mut socket, n, &session, &id, "Merge ticket 0005 into dev").await;
+    assert!(
+        told.starts_with("[merge of ticket 0005: merged into dev as "),
+        "{told}"
+    );
+    assert_ne!(
+        git(&project, &["rev-parse", "--short", "refs/heads/dev"]),
+        dev_before,
+        "dev advanced"
+    );
+    assert_eq!(
+        git(&project, &["rev-parse", "--short", "refs/heads/staging"]),
+        staging_tip,
+        "staging untouched: the arg beat the frontmatter"
+    );
+    assert!(!home.join("state/worktrees/0005").exists());
+    assert!(!git(&project, &["branch", "--list", "ticket/0005"]).contains("ticket/0005"));
+    assert!(
+        !git(&project, &["worktree", "list"]).contains("composer-merge"),
+        "no scratch worktree left behind"
+    );
+
+    // 6) detached HEAD, no arg and no frontmatter: the tool message, pinned.
+    git(&project, &["checkout", "--detach", "--quiet"]);
+    let (n, id) = ask("0006");
+    let told = approve(&mut socket, n, &session, &id, "unused").await;
+    assert_eq!(
+        told,
+        "no target branch: pass into, add merge_into to the ticket, or check a branch out"
+    );
+    assert!(home.join("state/worktrees/0006").exists(), "nothing merged");
+    assert!(git(&project, &["branch", "--list", "ticket/0006"]).contains("ticket/0006"));
 
     // The main checkout stayed where it was, dirty file and all.
     assert_eq!(

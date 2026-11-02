@@ -30,6 +30,7 @@ plan: site://plans/server-api
 project: ~/Projects/composer
 attachments: []       # files from the chat, by the refs your message lists: ["<session>/<file>"]
 created: 2026-10-18
+merge_into: dev       # optional: where merge_ticket lands this ticket's branch
 ---
 # Implement HTTP page endpoints
 
@@ -52,7 +53,7 @@ Filled in by the worker: what was done, where, anything left over.
 2. **Server** sets `status: claimed` when the worker starts. In a git project the worker gets its own worktree on branch `ticket/<id>` (the ticket's `branch:`), made from the project's last commit; its changes stay on that branch until merged.
 3. **Worker** does the work, writes **Result**, then calls `finish(done | failed, summary)`.
 4. **Orchestrator** gets a message when the worker finishes (the server sets `status: done` or `failed`), reads the Result, updates the plan. A worker that dies without `finish` counts as failed.
-5. **Merge:** `merge_ticket(id)` merges the branch into the project's checked-out branch once the user approves (they see the changes), then removes the worktree and branch; the ticket gets `merged:`. The user can also merge or discard it themselves. Conflicts: send the worker a message to merge the project's branch into its own and resolve them.
+5. **Merge:** `merge_ticket(id)` merges the branch into the target branch — the `into` argument, the ticket's `merge_into:` frontmatter, or the project's checked-out branch, in that order (a target that isn't checked out is merged in a temporary worktree) — once the user approves (they see the changes), then removes the worktree and branch; the ticket gets `merged:`. The user can also merge or discard it themselves. Conflicts: send the worker a message to merge the project's branch into its own and resolve them.
 
 ## Rules
 
