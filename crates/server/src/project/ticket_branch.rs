@@ -81,6 +81,21 @@ impl TicketBranch {
         }
     }
 
+    /// Where `branch` is checked out (the main checkout included); `None` when nowhere.
+    fn checkout_of(&self, branch: &str) -> Result<Option<PathBuf>, String> {
+        let list = git(&self.main, &["worktree", "list", "--porcelain"])?;
+        let wanted = format!("refs/heads/{branch}");
+        let mut path = None;
+        for line in list.lines() {
+            if let Some(p) = line.strip_prefix("worktree ") {
+                path = Some(PathBuf::from(p));
+            } else if line.strip_prefix("branch ") == Some(wanted.as_str()) {
+                return Ok(path);
+            }
+        }
+        Ok(None)
+    }
+
     /// The tip of `branch`, which must exist.
     fn target_ref(&self, branch: &str) -> Result<String, String> {
         git(
@@ -136,8 +151,9 @@ impl TicketBranch {
     }
 
     /// Merges the branch into `into` (default: the main checkout's checked-out branch),
-    /// with `--no-ff`, then removes the worktree and the branch. A target that isn't checked
-    /// out anywhere is merged in a temporary worktree, leaving the main checkout as it is.
+    /// with `--no-ff`, then removes the worktree and the branch. A target checked out in a
+    /// worktree (the main checkout or a linked one) is merged right there; one that isn't
+    /// checked out anywhere is merged in a temporary worktree, leaving the main checkout as it is.
     /// Uncommitted changes in the worktree are committed first. Returns the merge commit.
     pub fn merge(&self, message: &str, into: Option<&str>) -> Result<String, String> {
         let Some(target) = self.merge_target(into)? else {
@@ -146,18 +162,14 @@ impl TicketBranch {
                 self.main.display()
             ));
         };
-        // git can only merge into what the main checkout has in front of it.
-        let elsewhere = Some(&target) != self.target().as_ref();
-        if !elsewhere
-            && git(
-                &self.main,
-                &["rev-parse", "--quiet", "--verify", "MERGE_HEAD"],
-            )
-            .is_ok()
+        // git can only merge into what some worktree has in front of it.
+        let checkout = self.checkout_of(&target)?;
+        if let Some(dir) = &checkout
+            && git(dir, &["rev-parse", "--quiet", "--verify", "MERGE_HEAD"]).is_ok()
         {
             return Err(format!(
                 "{} is in the middle of a merge; finish or abort it first",
-                self.main.display()
+                dir.display()
             ));
         }
         let head = match into {
@@ -198,7 +210,9 @@ impl TicketBranch {
             .map_err(|e| format!("committing what the worker left uncommitted: {e}"))?;
         }
         // A target that isn't checked out gets a scratch worktree to merge in.
-        let (repo, scratch) = if elsewhere {
+        let (repo, scratch) = if let Some(dir) = checkout.clone() {
+            (dir, None)
+        } else {
             let dir = std::env::temp_dir().join(format!(
                 "composer-merge-{}-{}",
                 self.ticket,
@@ -208,8 +222,6 @@ impl TicketBranch {
             git(&self.main, &["worktree", "add", &path, &target])
                 .map_err(|e| format!("checking {target} out to merge into it: {e}"))?;
             (dir, Some(path))
-        } else {
-            (self.main.clone(), None)
         };
         let merged = git(
             &repo,
@@ -231,7 +243,7 @@ impl TicketBranch {
                 .map_err(|e| format!("removing the scratch worktree {path}: {e}"))?;
         }
         // `git branch -d` measures against the checked-out HEAD, which isn't the target here.
-        self.remove(elsewhere)?;
+        self.remove(checkout.as_deref() != Some(self.main.as_path()))?;
         Ok(commit)
     }
 
@@ -481,6 +493,68 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn merges_into_a_branch_checked_out_in_another_worktree() {
+        let (tmp, project, branch) = setup("0007");
+        let other = tmp.path().join("other");
+        git(
+            &project,
+            &["worktree", "add", "-b", "dev", other.to_str().unwrap()],
+        )
+        .unwrap();
+        commit(&branch.worktree, "b.txt", "new\n");
+
+        let commit = branch.merge("m", Some("dev")).unwrap();
+        assert_eq!(
+            git(&other, &["log", "-1", "--format=%h %s"]).unwrap(),
+            format!("{commit} m")
+        );
+        assert!(
+            other.join("b.txt").is_file(),
+            "the checkout reflects the merge"
+        );
+        assert!(git(&other, &["status", "--porcelain"]).unwrap().is_empty());
+        assert!(!project.join("b.txt").exists());
+        assert!(!branch.worktree.exists());
+        assert!(
+            !git(&project, &["worktree", "list"])
+                .unwrap()
+                .contains("composer-merge")
+        );
+    }
+
+    #[test]
+    fn a_merge_in_progress_in_the_target_worktree_stops_the_merge() {
+        let (tmp, project, branch) = setup("0008");
+        let other = tmp.path().join("other");
+        git(
+            &project,
+            &["worktree", "add", "-b", "dev", other.to_str().unwrap()],
+        )
+        .unwrap();
+        commit(&branch.worktree, "b.txt", "new\n");
+        let git_dir = git(
+            &other,
+            &["rev-parse", "--path-format=absolute", "--git-dir"],
+        )
+        .unwrap();
+        let head = git(&other, &["rev-parse", "HEAD"]).unwrap();
+        std::fs::write(Path::new(&git_dir).join("MERGE_HEAD"), format!("{head}\n")).unwrap();
+
+        let error = branch.merge("m", Some("dev")).unwrap_err();
+        assert!(error.contains("in the middle of a merge"), "{error}");
+        assert!(branch.worktree.exists());
+    }
+
+    #[test]
+    fn naming_the_checked_out_branch_merges_in_the_main_checkout() {
+        let (_tmp, project, branch) = setup("0009");
+        commit(&branch.worktree, "b.txt", "new\n");
+        branch.merge("m", Some("main")).unwrap();
+        assert!(project.join("b.txt").is_file());
+        assert!(!branch.worktree.exists());
     }
 
     #[test]
