@@ -208,7 +208,7 @@ pub async fn project_diff(
         && (server.home.state().join("worktrees").join(&ticket).exists()
             || crate::worker::ticket_closed(&server, &ticket).is_some())
     {
-        let diff = crate::worker::ticket_changes(&server, &ticket)
+        let diff = crate::worker::ticket_changes(&server, &ticket, None)
             .await
             .map_err(|e| ApiError(StatusCode::UNPROCESSABLE_ENTITY, e))?;
         return Ok(Json(diff));

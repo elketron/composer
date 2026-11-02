@@ -23,8 +23,9 @@ impl Tool for MergeTicketTool {
     }
 
     fn description(&self) -> &'static str {
-        "Merge a finished ticket's branch (`ticket/<id>`, from its own worktree) into the \
-         project's checked-out branch, then remove the worktree and the branch. The user is \
+        "Merge a finished ticket's branch (`ticket/<id>`, from its own worktree) into a target \
+         branch: the `into` argument, the ticket's `merge_into:` frontmatter, or the \
+         project's checked-out branch, in that order; then remove the worktree and the branch. The user is \
          asked and sees the changes; that can take hours, so this returns right away and a \
          message tells you later: merged (with the commit), or declined, or why it failed. \
          Meanwhile go on with tickets that don't need this one merged. Read the ticket's \
@@ -35,7 +36,8 @@ impl Tool for MergeTicketTool {
         json!({
             "type": "object",
             "properties": {
-                "ticket": { "type": "string", "description": "ticket id, e.g. 0003" }
+                "ticket": { "type": "string", "description": "ticket id, e.g. 0003" },
+                "into": { "type": "string", "description": "target branch (defaults to the ticket's `merge_into:` frontmatter, then the project's checked-out branch)" }
             },
             "required": ["ticket"]
         })
@@ -48,12 +50,11 @@ impl Tool for MergeTicketTool {
         if server.parent.is_some() || context.session.info().ticket.is_some() {
             return Err("workers cannot merge tickets".into());
         }
-        let changes = ticket_changes(server, &ticket).await?;
+        let changes = ticket_changes(server, &ticket, args.into.as_deref()).await?;
         let review = changes.ticket.as_ref().ok_or("not a ticket worktree")?;
-        let target = review
-            .target
-            .clone()
-            .ok_or("the project has no branch checked out (detached HEAD)")?;
+        let target = review.target.clone().ok_or(
+            "no target branch: pass into, add merge_into to the ticket, or check a branch out",
+        )?;
         if !review.conflicts.is_empty() {
             return Err(format!(
                 "ticket {ticket} conflicts with {target} in: {}. Send its worker a message to \
@@ -131,7 +132,12 @@ async fn ask_and_merge(
         Some(ApprovalDecision::Approve | ApprovalDecision::Always) => {
             let merging = server.clone();
             let id = ticket.clone();
-            match tokio::task::spawn_blocking(move || merge_ticket(&merging, &id)).await {
+            let target_for_merge = target.clone();
+            match tokio::task::spawn_blocking(move || {
+                merge_ticket(&merging, &id, Some(target_for_merge.as_str()))
+            })
+            .await
+            {
                 Ok(Ok(commit)) => {
                     format!("merged into {target} as {commit}; the worktree and branch are removed")
                 }

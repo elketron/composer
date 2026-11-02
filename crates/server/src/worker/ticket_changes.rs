@@ -8,23 +8,31 @@ use crate::project::{TicketBranch, project_diff};
 use crate::server::Server;
 use crate::worker::ticket::{set_ticket_fields, ticket_url};
 
-/// The ticket's changes against where its branch left the project's branch, with what merging
-/// it would do.
-pub async fn ticket_changes(server: &Server, ticket: &str) -> Result<ProjectDiff, String> {
+/// The ticket's changes against where its branch left the target branch (`into`, default: the
+/// project's checked-out branch; the ticket's `merge_into:` frontmatter counts as an `into`),
+/// with what merging it would do.
+pub async fn ticket_changes(
+    server: &Server,
+    ticket: &str,
+    into: Option<&str>,
+) -> Result<ProjectDiff, String> {
     let branch = ticket_branch(server, ticket)?;
-    let base = branch.base()?;
+    let into = merge_target(server, ticket, into);
+    let base = branch.base(into.as_deref())?;
     let mut diff = project_diff(&branch.worktree, Some(&base)).await?;
-    diff.ticket = Some(branch.review()?);
+    diff.ticket = Some(branch.review(into.as_deref())?);
     Ok(diff)
 }
 
-/// Merges the ticket's branch into the project's checked-out branch and removes its worktree
+/// Merges the ticket's branch into the target branch (`into`, default: the ticket's
+/// `merge_into:` frontmatter, else the project's checked-out branch) and removes its worktree
 /// and branch. Returns the merge commit.
-pub fn merge_ticket(server: &Server, ticket: &str) -> Result<String, String> {
+pub fn merge_ticket(server: &Server, ticket: &str, into: Option<&str>) -> Result<String, String> {
     let branch = ticket_branch(server, ticket)?;
     not_running(server, ticket)?;
     let title = ticket_title(server, ticket);
-    let commit = branch.merge(&format!("Merge ticket {ticket}: {title}"))?;
+    let into = merge_target(server, ticket, into);
+    let commit = branch.merge(&format!("Merge ticket {ticket}: {title}"), into.as_deref())?;
     set_ticket_fields(server, ticket, &[("merged", &commit)])?;
     Ok(commit)
 }
@@ -45,6 +53,17 @@ pub fn ticket_closed(server: &Server, ticket: &str) -> Option<String> {
     }
     (page.frontmatter.get_str("discarded").as_deref() == Some("true"))
         .then(|| format!("ticket {ticket} was discarded"))
+}
+
+/// Where this ticket's work lands: the explicit `into`, else its `merge_into:` frontmatter.
+pub fn merge_target(server: &Server, ticket: &str, into: Option<&str>) -> Option<String> {
+    into.map(|s| s.to_string()).or_else(|| {
+        ticket_url(ticket)
+            .ok()
+            .and_then(|url| server.workspace.read_page(&url).ok())
+            .and_then(|page| page.frontmatter.get_str("merge_into"))
+            .filter(|branch| !branch.is_empty())
+    })
 }
 
 fn ticket_branch(server: &Server, ticket: &str) -> Result<TicketBranch, String> {

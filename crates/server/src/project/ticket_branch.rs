@@ -60,10 +60,39 @@ impl TicketBranch {
         git(&self.main, &["symbolic-ref", "--quiet", "--short", "HEAD"]).ok()
     }
 
-    /// Where the ticket branch and the main checkout's HEAD part: what its changes are against.
-    pub fn base(&self) -> Result<String, String> {
-        let head = git(&self.main, &["rev-parse", "HEAD"])?;
+    /// Where the ticket branch and the target branch (`into`, default: the main checkout's
+    /// HEAD) part: what its changes are against.
+    pub fn base(&self, into: Option<&str>) -> Result<String, String> {
+        let head = match into {
+            Some(b) => self.target_ref(b)?,
+            None => git(&self.main, &["rev-parse", "HEAD"])?,
+        };
         git(&self.worktree, &["merge-base", &head, "HEAD"])
+    }
+
+    /// Where merges land: `into` when it names an existing branch, else the checked-out one.
+    fn merge_target(&self, into: Option<&str>) -> Result<Option<String>, String> {
+        match into {
+            Some(b) => {
+                self.target_ref(b)?;
+                Ok(Some(b.to_string()))
+            }
+            None => Ok(self.target()),
+        }
+    }
+
+    /// The tip of `branch`, which must exist.
+    fn target_ref(&self, branch: &str) -> Result<String, String> {
+        git(
+            &self.main,
+            &[
+                "rev-parse",
+                "--quiet",
+                "--verify",
+                &format!("refs/heads/{branch}"),
+            ],
+        )
+        .map_err(|_| format!("the project has no branch `{branch}`; nothing merged"))
     }
 
     /// Commits on the branch that the main checkout's HEAD doesn't have (uncommitted work not
@@ -78,9 +107,13 @@ impl TicketBranch {
         .unwrap_or(0))
     }
 
-    pub fn review(&self) -> Result<TicketReview, String> {
+    pub fn review(&self, into: Option<&str>) -> Result<TicketReview, String> {
         let tip = self.tip()?;
-        let head = git(&self.main, &["rev-parse", "HEAD"])?;
+        let target = self.merge_target(into)?;
+        let head = match &target {
+            Some(b) => self.target_ref(b)?,
+            None => git(&self.main, &["rev-parse", "HEAD"])?,
+        };
         let ahead = git(
             &self.worktree,
             &["rev-list", "--count", &format!("{head}..{}", tip.commit)],
@@ -94,7 +127,7 @@ impl TicketBranch {
         Ok(TicketReview {
             ticket: self.ticket.clone(),
             branch: self.branch.clone(),
-            target: self.target(),
+            target,
             ahead,
             commits: log.lines().map(str::to_string).collect(),
             uncommitted: tip.uncommitted,
@@ -102,27 +135,35 @@ impl TicketBranch {
         })
     }
 
-    /// Merges the branch into the main checkout (`--no-ff`), then removes the worktree and the
-    /// branch. Uncommitted changes in the worktree are committed first. Returns the merge commit.
-    pub fn merge(&self, message: &str) -> Result<String, String> {
-        let Some(target) = self.target() else {
+    /// Merges the branch into `into` (default: the main checkout's checked-out branch),
+    /// with `--no-ff`, then removes the worktree and the branch. A target that isn't checked
+    /// out anywhere is merged in a temporary worktree, leaving the main checkout as it is.
+    /// Uncommitted changes in the worktree are committed first. Returns the merge commit.
+    pub fn merge(&self, message: &str, into: Option<&str>) -> Result<String, String> {
+        let Some(target) = self.merge_target(into)? else {
             return Err(format!(
                 "{} has no branch checked out (detached HEAD); check one out first",
                 self.main.display()
             ));
         };
-        if git(
-            &self.main,
-            &["rev-parse", "--quiet", "--verify", "MERGE_HEAD"],
-        )
-        .is_ok()
+        // git can only merge into what the main checkout has in front of it.
+        let elsewhere = Some(&target) != self.target().as_ref();
+        if !elsewhere
+            && git(
+                &self.main,
+                &["rev-parse", "--quiet", "--verify", "MERGE_HEAD"],
+            )
+            .is_ok()
         {
             return Err(format!(
                 "{} is in the middle of a merge; finish or abort it first",
                 self.main.display()
             ));
         }
-        let head = git(&self.main, &["rev-parse", "HEAD"])?;
+        let head = match into {
+            Some(b) => self.target_ref(b)?,
+            None => git(&self.main, &["rev-parse", "HEAD"])?,
+        };
         let tip = self.tip()?;
         let conflicts = self.conflicts(&head, &tip.commit)?;
         if !conflicts.is_empty() {
@@ -156,24 +197,41 @@ impl TicketBranch {
             )
             .map_err(|e| format!("committing what the worker left uncommitted: {e}"))?;
         }
+        // A target that isn't checked out gets a scratch worktree to merge in.
+        let (repo, scratch) = if elsewhere {
+            let dir = std::env::temp_dir().join(format!(
+                "composer-merge-{}-{}",
+                self.ticket,
+                std::process::id()
+            ));
+            let path = dir.to_string_lossy().to_string();
+            git(&self.main, &["worktree", "add", &path, &target])
+                .map_err(|e| format!("checking {target} out to merge into it: {e}"))?;
+            (dir, Some(path))
+        } else {
+            (self.main.clone(), None)
+        };
         let merged = git(
-            &self.main,
+            &repo,
             &["merge", "--no-ff", "--no-edit", "-m", message, &self.branch],
         );
         if let Err(e) = merged {
-            // Never leave the project half-merged.
-            if git(
-                &self.main,
-                &["rev-parse", "--quiet", "--verify", "MERGE_HEAD"],
-            )
-            .is_ok()
-            {
-                let _ = git(&self.main, &["merge", "--abort"]);
+            // Never leave anything half-merged.
+            if git(&repo, &["rev-parse", "--quiet", "--verify", "MERGE_HEAD"]).is_ok() {
+                let _ = git(&repo, &["merge", "--abort"]);
+            }
+            if let Some(path) = &scratch {
+                let _ = git(&self.main, &["worktree", "remove", "--force", path]);
             }
             return Err(format!("merging {} into {target}: {e}", self.branch));
         }
-        let commit = git(&self.main, &["rev-parse", "--short", "HEAD"])?;
-        self.remove(false)?;
+        let commit = git(&repo, &["rev-parse", "--short", "HEAD"])?;
+        if let Some(path) = &scratch {
+            git(&self.main, &["worktree", "remove", "--force", path])
+                .map_err(|e| format!("removing the scratch worktree {path}: {e}"))?;
+        }
+        // `git branch -d` measures against the checked-out HEAD, which isn't the target here.
+        self.remove(elsewhere)?;
         Ok(commit)
     }
 
@@ -314,7 +372,7 @@ mod tests {
         // The project moves on meanwhile, elsewhere.
         commit(&project, "d.txt", "main\n");
 
-        let review = branch.review().unwrap();
+        let review = branch.review(None).unwrap();
         assert_eq!(review.target.as_deref(), Some("main"));
         assert_eq!(review.ahead, 2, "the commit and the uncommitted changes");
         assert_eq!(review.commits.len(), 1);
@@ -328,7 +386,7 @@ mod tests {
                 .contains("?? c.txt")
         );
 
-        let commit = branch.merge("Merge ticket 0001: B").unwrap();
+        let commit = branch.merge("Merge ticket 0001: B", None).unwrap();
         assert_eq!(
             git(&project, &["log", "-1", "--format=%h %s"]).unwrap(),
             format!("{commit} Merge ticket 0001: B")
@@ -350,8 +408,8 @@ mod tests {
         commit(&branch.worktree, "a.txt", "one\nTWO\nthree\n");
         commit(&project, "a.txt", "one\n2\nthree\n");
 
-        assert_eq!(branch.review().unwrap().conflicts, ["a.txt"]);
-        let error = branch.merge("m").unwrap_err();
+        assert_eq!(branch.review(None).unwrap().conflicts, ["a.txt"]);
+        let error = branch.merge("m", None).unwrap_err();
         assert!(error.contains("conflicts with main in: a.txt"), "{error}");
         assert_eq!(
             git(&project, &["log", "-1", "--format=%s"]).unwrap(),
@@ -371,7 +429,7 @@ mod tests {
         commit(&branch.worktree, "a.txt", "one\nTWO\nthree\n");
         std::fs::write(project.join("a.txt"), "edited here\n").unwrap();
 
-        let error = branch.merge("m").unwrap_err();
+        let error = branch.merge("m", None).unwrap_err();
         assert!(error.contains("merging ticket/0003 into main"), "{error}");
         assert_eq!(
             std::fs::read_to_string(project.join("a.txt")).unwrap(),
@@ -388,9 +446,65 @@ mod tests {
     }
 
     #[test]
+    fn merges_into_another_branch_in_a_scratch_worktree() {
+        let (_tmp, project, branch) = setup("0005");
+        git(&project, &["branch", "dev", "main"]).unwrap();
+        commit(&branch.worktree, "b.txt", "new\n");
+        std::fs::write(project.join("dirty.txt"), "untouched\n").unwrap();
+
+        let review = branch.review(Some("dev")).unwrap();
+        assert_eq!(review.target.as_deref(), Some("dev"));
+        assert_eq!(review.ahead, 1);
+
+        let commit = branch.merge("m", Some("dev")).unwrap();
+        assert_eq!(
+            git(&project, &["log", "-1", "--format=%h %s", "dev"]).unwrap(),
+            format!("{commit} m")
+        );
+        assert_eq!(
+            git(&project, &["log", "-1", "--format=%s"]).unwrap(),
+            "init"
+        );
+        assert_eq!(
+            std::fs::read_to_string(project.join("dirty.txt")).unwrap(),
+            "untouched\n"
+        );
+        assert!(
+            !project.join("b.txt").exists(),
+            "the main checkout stays as it was"
+        );
+        assert!(!branch.worktree.exists());
+        assert!(
+            git(
+                &project,
+                &["rev-parse", "--verify", "--quiet", "ticket/0005"]
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn an_unknown_target_branch_errors_cleanly() {
+        let (_tmp, project, branch) = setup("0006");
+        commit(&branch.worktree, "b.txt", "new\n");
+        let error = branch.merge("m", Some("ghost")).unwrap_err();
+        assert!(error.contains("no branch `ghost`"), "{error}");
+        assert!(branch.worktree.exists());
+        assert_eq!(
+            git(&project, &["log", "-1", "--format=%s"]).unwrap(),
+            "init"
+        );
+    }
+
+    #[test]
     fn nothing_to_merge_and_discard() {
         let (_tmp, project, branch) = setup("0004");
-        assert!(branch.merge("m").unwrap_err().contains("nothing to merge"));
+        assert!(
+            branch
+                .merge("m", None)
+                .unwrap_err()
+                .contains("nothing to merge")
+        );
 
         commit(&branch.worktree, "b.txt", "x\n");
         branch.discard().unwrap();
