@@ -191,7 +191,7 @@ impl Connection {
                 let (connection, server) = (self.clone(), server.clone());
                 tokio::spawn(async move {
                     let ticket = normalize_id(&ticket);
-                    let result = crate::worker::ticket_changes(&server, &ticket)
+                    let result = crate::worker::ticket_changes(&server, &ticket, None)
                         .await
                         .map(|changes| CommandResult::Changes { changes });
                     connection.reply(id, result);
@@ -214,7 +214,7 @@ impl Connection {
                 let (connection, server) = (self.clone(), server.clone());
                 tokio::task::spawn_blocking(move || {
                     let ticket = normalize_id(&ticket);
-                    let result = crate::worker::merge_ticket(&server, &ticket)
+                    let result = crate::worker::merge_ticket(&server, &ticket, None)
                         .map(|commit| CommandResult::Merged { commit });
                     connection.reply(id, result);
                 });

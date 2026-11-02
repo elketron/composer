@@ -82,6 +82,10 @@ pub struct SpawnWorkerArgs {
 #[derive(Debug, Deserialize)]
 pub struct MergeTicketArgs {
     pub ticket: String,
+    /// Target branch; defaults to the ticket's `merge_into:` frontmatter, else the project's
+    /// checked-out branch.
+    #[serde(default)]
+    pub into: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
