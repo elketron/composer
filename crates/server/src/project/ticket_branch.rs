@@ -85,11 +85,25 @@ impl TicketBranch {
     fn checkout_of(&self, branch: &str) -> Result<Option<PathBuf>, String> {
         let list = git(&self.main, &["worktree", "list", "--porcelain"])?;
         let wanted = format!("refs/heads/{branch}");
-        let mut path = None;
-        for line in list.lines() {
-            if let Some(p) = line.strip_prefix("worktree ") {
-                path = Some(PathBuf::from(p));
-            } else if line.strip_prefix("branch ") == Some(wanted.as_str()) {
+        for block in list.split("\n\n") {
+            let mut path = None;
+            let (mut on_branch, mut prunable) = (false, false);
+            for line in block.lines() {
+                if let Some(p) = line.strip_prefix("worktree ") {
+                    path = Some(PathBuf::from(p));
+                } else if line.strip_prefix("branch ") == Some(wanted.as_str()) {
+                    on_branch = true;
+                } else if line.starts_with("prunable") {
+                    prunable = true;
+                }
+            }
+            if on_branch {
+                if prunable {
+                    let dir = path.map(|p| p.display().to_string()).unwrap_or_default();
+                    return Err(format!(
+                        "{branch} is registered in the worktree {dir}, which no longer exists; run `git worktree prune` in the project and try again; nothing merged"
+                    ));
+                }
                 return Ok(path);
             }
         }
@@ -440,6 +454,7 @@ mod tests {
         let (_tmp, project, branch) = setup("0003");
         commit(&branch.worktree, "a.txt", "one\nTWO\nthree\n");
         std::fs::write(project.join("a.txt"), "edited here\n").unwrap();
+        let main_tip = git(&project, &["rev-parse", "main"]).unwrap();
 
         let error = branch.merge("m", None).unwrap_err();
         assert!(error.contains("merging ticket/0003 into main"), "{error}");
@@ -454,6 +469,27 @@ mod tests {
             )
             .is_err()
         );
+        assert_eq!(git(&project, &["rev-parse", "main"]).unwrap(), main_tip);
+        assert!(branch.worktree.exists());
+    }
+
+    #[test]
+    fn a_target_in_a_vanished_worktree_asks_for_a_prune() {
+        let (tmp, project, branch) = setup("0008");
+        let gone = tmp.path().join("gone");
+        git(
+            &project,
+            &["worktree", "add", "-b", "dev", gone.to_str().unwrap()],
+        )
+        .unwrap();
+        std::fs::remove_dir_all(&gone).unwrap();
+        commit(&branch.worktree, "b.txt", "new\n");
+        let dev_tip = git(&project, &["rev-parse", "dev"]).unwrap();
+
+        let error = branch.merge("m", Some("dev")).unwrap_err();
+        assert!(error.contains("git worktree prune"), "{error}");
+        assert!(!error.contains("fatal"), "{error}");
+        assert_eq!(git(&project, &["rev-parse", "dev"]).unwrap(), dev_tip);
         assert!(branch.worktree.exists());
     }
 
