@@ -235,6 +235,38 @@ final class TicketDiscardRequested extends AppAction {
   final String ticket;
 }
 
+/// A comment on a diff line, kept as a draft until the comments are sent.
+final class DiffCommentAdded extends AppAction {
+  const DiffCommentAdded(this.url, this.ticket, this.comment);
+  final String url;
+  final String ticket;
+  final DiffComment comment;
+}
+
+/// A draft comment's message changed.
+final class DiffCommentEdited extends AppAction {
+  const DiffCommentEdited(this.url, this.ticket, this.index, this.message);
+  final String url;
+  final String ticket;
+  final int index;
+  final String message;
+}
+
+/// A draft comment dropped.
+final class DiffCommentRemoved extends AppAction {
+  const DiffCommentRemoved(this.url, this.ticket, this.index);
+  final String url;
+  final String ticket;
+  final int index;
+}
+
+/// Append the drafts to the ticket page (`ticket.comment`).
+final class DiffCommentsSent extends AppAction {
+  const DiffCommentsSent(this.url, this.ticket);
+  final String url;
+  final String ticket;
+}
+
 /// The answer to a ticket command: its result, or why it failed.
 final class TicketReplied extends AppAction {
   const TicketReplied(this.url, this.ticket, {this.result, this.error});

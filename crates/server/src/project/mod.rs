@@ -4,6 +4,7 @@ mod git;
 mod git_diff;
 mod project_list;
 mod project_overview;
+mod semantic_diff;
 mod ticket_branch;
 mod worktree;
 

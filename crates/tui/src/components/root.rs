@@ -193,6 +193,7 @@ impl Component for Root {
             Mode::Insert => self.chat.handle_key(key, state),
             Mode::Command => self.command.handle_key(key, state),
             Mode::Hint => self.page.handle_key(key, state),
+            Mode::Comment => self.changes.handle_key(key, state),
             Mode::Normal => match state.ui.focus {
                 Pane::Chat => self.chat.handle_key(key, state),
                 Pane::Page if state.project_view.open => self.project.handle_key(key, state),

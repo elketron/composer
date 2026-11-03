@@ -464,6 +464,53 @@ impl AppState {
                 },
                 Pending::Discarded(ticket),
             ),
+            Action::DiffSemantic => {
+                self.project.toggle_semantic();
+                vec![]
+            }
+            Action::CommentAdd(comment) => {
+                self.project.drafts.push(comment);
+                vec![]
+            }
+            Action::CommentEdit { index, message } => {
+                if let Some(draft) = self.project.drafts.get_mut(index) {
+                    draft.message = message;
+                }
+                vec![]
+            }
+            Action::CommentRemove(index) => {
+                if index < self.project.drafts.len() {
+                    self.project.drafts.remove(index);
+                }
+                vec![]
+            }
+            Action::CommentsSend => {
+                let ticket = self
+                    .project
+                    .diff
+                    .as_ref()
+                    .and_then(|d| d.ticket.as_ref())
+                    .map(|t| t.ticket.clone());
+                let Some(ticket) = ticket else {
+                    self.ui.flash(
+                        "comments go to a ticket's review: open a worker session's changes",
+                        FlashLevel::Warn,
+                    );
+                    return vec![];
+                };
+                if self.project.drafts.is_empty() {
+                    self.ui.flash("no comments to send", FlashLevel::Warn);
+                    return vec![];
+                }
+                let comments = self.project.drafts.clone();
+                self.send(
+                    ClientCommand::TicketComment {
+                        ticket: ticket.clone(),
+                        comments,
+                    },
+                    Pending::Comments(ticket),
+                )
+            }
             Action::DiffLoaded(diff) => {
                 self.project.loaded(diff);
                 vec![]
@@ -1078,6 +1125,16 @@ impl AppState {
                     FlashLevel::Info,
                 );
                 self.refresh_changes()
+            }
+            (Pending::Comments(ticket), CommandResult::Comments { lines }) => {
+                let sent = self.project.drafts.len();
+                self.project.drafts.clear();
+                self.project.comments = lines;
+                self.ui.flash(
+                    format!("{sent} comment(s) added to ticket {ticket}"),
+                    FlashLevel::Info,
+                );
+                vec![]
             }
             (Pending::Discarded(ticket), CommandResult::Done) => {
                 self.ui.flash(
@@ -1716,5 +1773,57 @@ mod tests {
         );
         assert_eq!(level, FlashLevel::Warn);
         assert!(mcp_summary(&[]).0.starts_with("no MCP servers"));
+    }
+
+    #[test]
+    fn comments_are_sent_to_the_ticket_and_replaced_by_its_lines() {
+        use composer_protocol::http::{DiffComment, ProjectDiff, TicketReview};
+        let (mut state, _) = connected();
+        let comment = DiffComment {
+            file: "a.rs".into(),
+            line: 2,
+            message: "why?".into(),
+            quote: None,
+        };
+        // No ticket review open: nowhere to send them.
+        state.reduce(Action::CommentAdd(comment.clone()));
+        assert!(sent(&state.reduce(Action::CommentsSend)).is_empty());
+        state.project.loaded(ProjectDiff {
+            path: "/wt".into(),
+            branch: None,
+            files: vec![],
+            diff: String::new(),
+            ticket: Some(TicketReview {
+                ticket: "0007".into(),
+                branch: "ticket/0007".into(),
+                target: None,
+                ahead: 0,
+                commits: vec![],
+                uncommitted: false,
+                conflicts: vec![],
+            }),
+        });
+        assert!(
+            state.project.drafts.is_empty(),
+            "another review: its own comments"
+        );
+        state.reduce(Action::CommentAdd(comment.clone()));
+        let effects = state.reduce(Action::CommentsSend);
+        let (id, command) = sent(&effects).remove(0);
+        assert_eq!(
+            command,
+            ClientCommand::TicketComment {
+                ticket: "0007".into(),
+                comments: vec![comment]
+            }
+        );
+        state.reduce(Action::Server(ServerMessage::Ok {
+            id,
+            result: CommandResult::Comments {
+                lines: vec!["- a.rs:2 — why?".into()],
+            },
+        }));
+        assert!(state.project.drafts.is_empty());
+        assert_eq!(state.project.comments, ["- a.rs:2 — why?"]);
     }
 }

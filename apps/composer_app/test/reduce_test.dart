@@ -254,6 +254,28 @@ void main() {
       expect(state.status[url]!.reviews['0008']!.discarded, isTrue);
     });
 
+    test('diff comments: drafted, edited, removed, sent as one command, replaced by the ticket lines', () {
+      const url = 'https://home.ts.net';
+      const a = DiffComment(file: 'a.rs', line: 2, message: 'one', quote: 'x');
+      const b = DiffComment(file: 'b.rs', line: 5, message: 'two');
+      var state = reduce(loaded([home]), const DiffCommentAdded(url, '0007', a)).$1;
+      state = reduce(state, const DiffCommentAdded(url, '0007', b)).$1;
+      state = reduce(state, const DiffCommentEdited(url, '0007', 0, 'one, better')).$1;
+      expect([for (final d in state.status[url]!.reviews['0007']!.drafts) (d.file, d.message, d.quote)], [('a.rs', 'one, better', 'x'), ('b.rs', 'two', null)]);
+      state = reduce(state, const DiffCommentRemoved(url, '0007', 1)).$1;
+      expect(state.status[url]!.reviews['0007']!.drafts.length, 1);
+
+      expect(reduce(loaded([home]), const DiffCommentsSent(url, '0007')).$2, isEmpty, reason: 'nothing drafted, nothing sent');
+      final (sending, effects) = reduce(state, const DiffCommentsSent(url, '0007'));
+      final send = (effects.single as TicketCommand).command as ClientCommandTicketComment;
+      expect((send.ticket, send.comments.single.message), ('0007', 'one, better'));
+      final failed = reduce(sending, const TicketReplied(url, '0007', error: 'no such ticket')).$1;
+      expect(failed.status[url]!.reviews['0007']!.drafts.length, 1, reason: 'a failed send keeps the drafts');
+      final sent = reduce(sending, const TicketReplied(url, '0007', result: CommandResultComments(lines: ['- a.rs:2 — one, better']))).$1;
+      expect(sent.status[url]!.reviews['0007']!.drafts, isEmpty);
+      expect(sent.status[url]!.reviews['0007']!.comments, ['- a.rs:2 — one, better']);
+    });
+
     test('messages and cancel go to the open session only', () {
       expect(reduce(loaded([home]), MessageSubmitted(home.url, 'x')).$2, isEmpty);
       final state = withChat(loaded([home]), 'a');

@@ -244,6 +244,10 @@ pub enum CommandResult {
     Merged {
         commit: String,
     },
+    /// `ticket.comment`: the comment lines on the ticket page, as written.
+    Comments {
+        lines: Vec<String>,
+    },
     /// `session.history`'s events, oldest first; `more`: older ones remain.
     History {
         events: Vec<ServerMessage>,

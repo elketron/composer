@@ -156,6 +156,15 @@ pub enum ClientCommand {
     #[serde(rename = "ticket.changes")]
     TicketChanges { ticket: String },
 
+    /// Appends review comments to the ticket page under `## Comments` (one `- file:line — message`
+    /// line each); the reply is `comments`: every comment line the ticket has now. An empty
+    /// list only reads them.
+    #[serde(rename = "ticket.comment")]
+    TicketComment {
+        ticket: String,
+        comments: Vec<crate::http::DiffComment>,
+    },
+
     /// Merges a ticket's branch into the project's checked-out branch and removes its
     /// worktree; the reply is `merged`.
     #[serde(rename = "ticket.merge")]

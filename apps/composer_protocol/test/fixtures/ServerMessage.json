@@ -125,6 +125,16 @@
   },
   {
     "type": "ok",
+    "id": 152,
+    "result": {
+      "kind": "comments",
+      "lines": [
+        "- a.rs:3 — rename this"
+      ]
+    }
+  },
+  {
+    "type": "ok",
     "id": 53,
     "result": {
       "kind": "history",

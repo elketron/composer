@@ -220,6 +220,16 @@ impl Connection {
                 });
                 None
             }
+            ClientCommand::TicketComment { ticket, comments } => {
+                let (connection, server) = (self.clone(), server.clone());
+                tokio::task::spawn_blocking(move || {
+                    let ticket = normalize_id(&ticket);
+                    let result = crate::worker::ticket_comments(&server, &ticket, &comments)
+                        .map(|lines| CommandResult::Comments { lines });
+                    connection.reply(id, result);
+                });
+                None
+            }
             ClientCommand::TicketDiscard { ticket } => {
                 let (connection, server) = (self.clone(), server.clone());
                 tokio::task::spawn_blocking(move || {
@@ -650,6 +660,7 @@ impl Connection {
             | ClientCommand::HarnessSet { .. }
             | ClientCommand::TicketChanges { .. }
             | ClientCommand::TicketMerge { .. }
+            | ClientCommand::TicketComment { .. }
             | ClientCommand::TicketDiscard { .. }
             | ClientCommand::ModelList
             | ClientCommand::WorkRun { .. }

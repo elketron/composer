@@ -39,7 +39,8 @@
         "path": "a.rs",
         "status": "M",
         "added": 2,
-        "removed": 1
+        "removed": 1,
+        "semantic": "a.rs --- Rust\n1 fn a() {}\n"
       }
     ],
     "diff": "+x",

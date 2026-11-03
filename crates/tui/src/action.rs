@@ -116,6 +116,16 @@ pub enum Action {
     TicketMerge(Option<String>),
     /// Delete a ticket's worktree and branch.
     TicketDiscard(String),
+    /// Semantic (difft) diff or the text diff in the changes view.
+    DiffSemantic,
+    /// Review comments on the diff: drafted here, sent together to the ticket page.
+    CommentAdd(composer_protocol::http::DiffComment),
+    CommentEdit {
+        index: usize,
+        message: String,
+    },
+    CommentRemove(usize),
+    CommentsSend,
     /// Open a project file in the editor at a line.
     OpenFileAt {
         path: String,

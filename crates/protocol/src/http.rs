@@ -341,4 +341,23 @@ pub struct ChangedFile {
     pub status: String,
     pub added: u32,
     pub removed: u32,
+    /// The structural diff of this file from `difft` (plain text, line numbers in its gutter);
+    /// absent when difft isn't installed, doesn't know the language, failed or timed out: the
+    /// text `diff` is the fallback.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub semantic: Option<String>,
+}
+
+/// A review comment on a changed line, appended to the ticket page as
+/// `- file:line — message`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct DiffComment {
+    pub file: String,
+    pub line: u32,
+    pub message: String,
+    /// The commented line's text; written into the comment when it fits one line.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quote: Option<String>,
 }
