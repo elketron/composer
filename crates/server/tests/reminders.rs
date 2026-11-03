@@ -338,3 +338,154 @@ async fn an_unknown_agent_falls_back_to_default_with_a_note() {
         message.content
     );
 }
+
+#[tokio::test]
+async fn replacing_an_existing_reminder_does_not_claim_it() {
+    let page = "---\ntitle: y\ntype: reminder\ndue: 2099-12-31\nstatus: open\naction: notify\nsession:\n---\n# Y\n";
+    let (dir, server, _p, addr) = start(vec![
+        // Turn 1: the agent replaces the whole page; the blank session must stay blank.
+        vec![finished(vec![tool_call(
+            "w",
+            "write",
+            serde_json::json!({ "url": "site://plans/reminders/y.md", "content": page }),
+        )])],
+        vec![ModelEvent::Content("Rewritten.".into()), finished(vec![])],
+    ])
+    .await;
+    let url = SiteUrl::new("plans", "reminders/y.md").unwrap();
+    server.write_page(&url, page, ChangedBy::Agent).unwrap();
+    let mut socket = connect(addr, &server.token).await;
+    send(
+        &mut socket,
+        1,
+        ClientCommand::SessionCreate {
+            agent: "default".into(),
+            project: None,
+        },
+    )
+    .await;
+    let reply = until(&mut socket, |e| {
+        matches!(e, ServerMessage::Ok { id: 1, .. })
+    })
+    .await;
+    let Some(ServerMessage::Ok {
+        result: composer_protocol::CommandResult::Session { session },
+        ..
+    }) = reply.last()
+    else {
+        panic!()
+    };
+    let id = session.id.clone();
+    send(
+        &mut socket,
+        2,
+        ClientCommand::SessionAttach {
+            session: id.clone(),
+            since: None,
+        },
+    )
+    .await;
+    send(
+        &mut socket,
+        3,
+        ClientCommand::MessageSend {
+            session: id,
+            text: "rewrite it".into(),
+            pages: vec![],
+            images: vec![],
+            attachments: vec![],
+        },
+    )
+    .await;
+    let events = until(&mut socket, |e| matches!(e, ServerMessage::TurnDone { .. })).await;
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e, ServerMessage::ToolResult { result, .. }
+        if result.starts_with("replaced site://plans/reminders/y.md")
+            && !result.contains("set to this session"))),
+        "{events:?}"
+    );
+    let written = std::fs::read_to_string(dir.path().join("sites/plans/reminders/y.md")).unwrap();
+    assert_eq!(written, page, "a replace must not stamp session:");
+}
+
+#[tokio::test]
+async fn editing_a_reminders_body_does_not_claim_it() {
+    let (dir, server, _p, addr) = start(vec![
+        // Turn 1: the agent edits the heading; the blank session must stay blank.
+        vec![finished(vec![tool_call(
+            "e",
+            "edit",
+            serde_json::json!({ "url": "site://plans/reminders/z.md", "old_text": "# Z", "new_text": "# Zzz" }),
+        )])],
+        vec![ModelEvent::Content("Edited.".into()), finished(vec![])],
+    ])
+    .await;
+    let url = SiteUrl::new("plans", "reminders/z.md").unwrap();
+    server
+        .write_page(
+            &url,
+            "---\ntitle: z\ntype: reminder\ndue: 2099-12-31\nstatus: open\naction: notify\nsession:\n---\n# Z\n",
+            ChangedBy::Agent,
+        )
+        .unwrap();
+    let mut socket = connect(addr, &server.token).await;
+    send(
+        &mut socket,
+        1,
+        ClientCommand::SessionCreate {
+            agent: "default".into(),
+            project: None,
+        },
+    )
+    .await;
+    let reply = until(&mut socket, |e| {
+        matches!(e, ServerMessage::Ok { id: 1, .. })
+    })
+    .await;
+    let Some(ServerMessage::Ok {
+        result: composer_protocol::CommandResult::Session { session },
+        ..
+    }) = reply.last()
+    else {
+        panic!()
+    };
+    let id = session.id.clone();
+    send(
+        &mut socket,
+        2,
+        ClientCommand::SessionAttach {
+            session: id.clone(),
+            since: None,
+        },
+    )
+    .await;
+    send(
+        &mut socket,
+        3,
+        ClientCommand::MessageSend {
+            session: id,
+            text: "rename it".into(),
+            pages: vec![],
+            images: vec![],
+            attachments: vec![],
+        },
+    )
+    .await;
+    let events = until(&mut socket, |e| matches!(e, ServerMessage::TurnDone { .. })).await;
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e, ServerMessage::ToolResult { result, .. }
+        if result.starts_with("edited site://plans/reminders/z.md")
+            && !result.contains("set to this session"))),
+        "{events:?}"
+    );
+    let written = std::fs::read_to_string(dir.path().join("sites/plans/reminders/z.md")).unwrap();
+    assert!(written.contains("# Zzz"), "{written}");
+    assert!(
+        written.contains("session:\n---"),
+        "an edit must not stamp session: {written}"
+    );
+}

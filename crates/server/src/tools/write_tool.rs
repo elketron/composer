@@ -39,7 +39,12 @@ impl Tool for WriteTool {
         let args: WriteArgs = serde_json::from_value(args).map_err(|e| e.to_string())?;
         let url = context.url(&args.url)?;
         context.check_write(&url)?;
-        let claimed = claim_reminder(&args.content, context.session.id());
+        // Claim on create only: a replace writes the content as given, so a reminder
+        // left with a blank `session:` on purpose stays unclaimed.
+        let created = context.server.workspace.read_page(&url).is_err();
+        let claimed = created
+            .then(|| claim_reminder(&args.content, context.session.id()))
+            .flatten();
         let content = claimed.as_deref().unwrap_or(&args.content);
         let (written, created) = context
             .server

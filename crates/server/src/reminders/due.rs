@@ -77,8 +77,9 @@ pub fn mark_notified(raw: &str, stamp: &str) -> Option<String> {
     set_field(raw, "notified", stamp)
 }
 
-/// A reminder page written in a session without saying whose it is: the page with
+/// A reminder page *created* in a session without saying whose it is: the page with
 /// `session: <session>` added, so it is delivered back there. `None` for anything else.
+/// Only the write-on-create path calls this; edits and replaces leave `session:` alone.
 pub fn claim_reminder(raw: &str, session: &str) -> Option<String> {
     let (Some(yaml), _) = Frontmatter::split(raw) else {
         return None;
