@@ -35,9 +35,9 @@ void main() {
     expect([for (final l in lines) (l.file, l.kind, l.line, l.quote)], [
       ('a.rs', DiffLineKind.hunk, 1, '@@ -1,3 +1,4 @@'),
       ('a.rs', DiffLineKind.context, 1, 'fn a() {'),
-      ('a.rs', DiffLineKind.del, 2, '-    let x = 1;'),
-      ('a.rs', DiffLineKind.add, 2, '    let x = 2;'),
-      ('a.rs', DiffLineKind.add, 3, '    bar();'),
+      ('a.rs', DiffLineKind.del, 2, '-let x = 1;'),
+      ('a.rs', DiffLineKind.add, 2, 'let x = 2;'),
+      ('a.rs', DiffLineKind.add, 3, 'bar();'),
       ('a.rs', DiffLineKind.context, 4, '}'),
       ('n.txt', DiffLineKind.hunk, 1, '@@ -0,0 +1,1 @@'),
       ('n.txt', DiffLineKind.add, 1, 'plain'),
@@ -76,5 +76,39 @@ void main() {
     expect(semantic.where((l) => l.file == 'n.txt').any((l) => l.kind == DiffLineKind.hunk), isTrue, reason: 'no semantic: text fallback');
     final text = diffViewLines(changes, semantic: false);
     expect(text.where((l) => l.file == 'a.rs').any((l) => l.kind == DiffLineKind.hunk), isTrue);
+  });
+
+  test('a removed line anchors where it sits in the new file, not its old number', () {
+    const diff = 'diff --git a/a b/a\n--- a/a\n+++ b/a\n@@ -10,3 +4,2 @@\n ctx\n-gone\n tail\n';
+    final del = parseUnifiedDiff(diff).firstWhere((l) => l.kind == DiffLineKind.del);
+    expect((del.line, del.quote), (5, '-gone'));
+  });
+
+  test('an anchor spans lines of one file as start:end; one line is start == end', () {
+    final lines = parseUnifiedDiff(unified);
+    int at(String quote) => lines.indexWhere((l) => l.quote == quote);
+    final one = diffAnchor(lines, at('bar();'), at('bar();'), 'm')!;
+    expect((one.file, one.start, one.end, one.quote), ('a.rs', 3, 3, 'bar();'));
+    final range = diffAnchor(lines, at('}'), at('fn a() {'), 'm')!;
+    expect((range.start, range.end), (1, 4), reason: 'either direction');
+    expect(range.quote, contains('\n'));
+    expect(diffAnchor(lines, at('}'), at('plain'), 'm'), isNull, reason: 'two files');
+  });
+
+  test('an indented removed line is quoted trimmed with its marker, as the TUI quotes it', () {
+    final lines = parseUnifiedDiff(unified);
+    final del = diffAnchor(lines, lines.indexWhere((l) => l.kind == DiffLineKind.del), lines.indexWhere((l) => l.kind == DiffLineKind.del), 'gone')!;
+    // The same string the TUI test and the server's comment line test pin.
+    expect((del.start, del.end, del.quote), (2, 2, '-let x = 1;'));
+  });
+
+  test('a note or header row inside a range is skipped, as in the TUI', () {
+    final lines = [
+      const DiffLine(DiffLineKind.context, ' a', file: 'f', line: 1, quote: 'a'),
+      const DiffLine(DiffLineKind.meta, r'\ No newline', file: 'f'),
+      const DiffLine(DiffLineKind.context, ' b', file: 'f', line: 2, quote: 'b'),
+    ];
+    final c = diffAnchor(lines, 0, 2, 'm')!;
+    expect((c.start, c.end, c.quote), (1, 2, 'a\nb'));
   });
 }

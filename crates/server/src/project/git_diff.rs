@@ -3,9 +3,10 @@
 use std::path::Path;
 
 use composer_protocol::http::{ChangedFile, ProjectDiff};
+use futures::StreamExt;
 use tokio::process::Command;
 
-use super::semantic_diff::semantic_diff;
+use super::semantic_diff::{find_difft, semantic_diff};
 
 /// git's empty tree: what a repository without commits is compared against.
 const EMPTY_TREE: &str = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
@@ -14,6 +15,8 @@ const UNTRACKED_MAX_BYTES: u64 = 64 * 1024;
 const UNTRACKED_MAX_FILES: usize = 30;
 /// The diff is cut beyond this, so a huge change doesn't flood the client.
 const DIFF_MAX_BYTES: usize = 512 * 1024;
+/// difft runs for this many files at once.
+const DIFFT_PARALLEL: usize = 4;
 
 /// Changes of the working tree (staged or not) against HEAD (or `base`), plus untracked files.
 pub async fn project_diff(path: &Path, base: Option<&str>) -> Result<ProjectDiff, String> {
@@ -39,6 +42,7 @@ pub async fn project_diff(path: &Path, base: Option<&str>) -> Result<ProjectDiff
     };
 
     let mut files = Vec::new();
+    let mut letters = Vec::new();
     let numstat = git(path, &["diff", base, "--numstat", "-z", "--no-renames"]).await?;
     let status = git(path, &["diff", base, "--name-status", "-z", "--no-renames"]).await?;
     let statuses: Vec<&str> = status.split('\0').filter(|s| !s.is_empty()).collect();
@@ -56,8 +60,29 @@ pub async fn project_diff(path: &Path, base: Option<&str>) -> Result<ProjectDiff
             status: letter.chars().next().unwrap_or('M').to_string(),
             added: added.and_then(|a| a.parse().ok()).unwrap_or(0),
             removed: removed.and_then(|r| r.parse().ok()).unwrap_or(0),
-            semantic: semantic_diff(path, base, file, letter).await,
+            semantic: None,
         });
+        letters.push(letter);
+    }
+    // difft is looked up once, now; without it no file needs its old content fetched.
+    if let Some(difft) = find_difft() {
+        let jobs: Vec<(String, String)> = files
+            .iter()
+            .zip(&letters)
+            .map(|(f, letter)| (f.path.clone(), letter.to_string()))
+            .collect();
+        let difft = &difft;
+        let semantic: Vec<Option<String>> =
+            futures::stream::iter(jobs)
+                .map(|(file, letter)| async move {
+                    semantic_diff(difft, path, base, &file, &letter).await
+                })
+                .buffered(DIFFT_PARALLEL)
+                .collect()
+                .await;
+        for (file, semantic) in files.iter_mut().zip(semantic) {
+            file.semantic = semantic;
+        }
     }
     let mut diff = git(
         path,

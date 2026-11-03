@@ -1,5 +1,7 @@
 //! Review comments on a ticket's changes, written onto the ticket page.
 
+use std::sync::Mutex;
+
 use composer_protocol::ChangedBy;
 use composer_protocol::http::DiffComment;
 
@@ -9,9 +11,13 @@ use crate::worker::ticket::ticket_url;
 const HEADING: &str = "## Comments";
 /// A quote longer than this isn't repeated in the comment line.
 const QUOTE_MAX_CHARS: usize = 80;
+/// Comment sends read the page, add lines and write it back: one at a time, so two clients
+/// sending together don't lose each other's lines. (The page write itself has no lock or
+/// compare-and-set, so an agent or editor writing in between can still win.)
+static SEND: Mutex<()> = Mutex::new(());
 
 /// Appends `comments` to the ticket page under `## Comments` (created at the end when missing),
-/// one `- file:line — message` line each, through the server's page write. Returns every line of
+/// one `- file:start:end — message` line each, through the server's page write. Returns every line of
 /// that section as the page has it now.
 pub fn ticket_comments(
     server: &Server,
@@ -19,6 +25,7 @@ pub fn ticket_comments(
     comments: &[DiffComment],
 ) -> Result<Vec<String>, String> {
     let url = ticket_url(ticket).map_err(|e| e.to_string())?;
+    let _sending = SEND.lock().unwrap_or_else(|e| e.into_inner());
     let page = server
         .workspace
         .read_page(&url)
@@ -31,14 +38,14 @@ pub fn ticket_comments(
             &comments.iter().map(comment_line).collect::<Vec<_>>(),
         );
         server
-            .write_page(&url, &raw, ChangedBy::Agent)
+            .write_page(&url, &raw, ChangedBy::App)
             .map_err(|e| e.to_string())?;
         raw
     };
     Ok(comment_lines(&raw))
 }
 
-/// `- file:line — message`, with the quoted line (`file:line — \`quote\`: message`) when it is a
+/// `- file:start:end — message`, with the quoted line (`file:start:end — \`quote\`: message`) when it is a
 /// single short line, so a reader of the ticket alone knows what was meant.
 pub fn comment_line(comment: &DiffComment) -> String {
     let message = comment.message.trim().replace('\n', " ");
@@ -48,9 +55,10 @@ pub fn comment_line(comment: &DiffComment) -> String {
         .map(str::trim)
         .filter(|q| !q.is_empty() && !q.contains('\n') && !q.contains('`'))
         .filter(|q| q.chars().count() <= QUOTE_MAX_CHARS);
+    let anchor = format!("{}:{}:{}", comment.file, comment.start, comment.end);
     match quote {
-        Some(q) => format!("- {}:{} — `{q}`: {message}", comment.file, comment.line),
-        None => format!("- {}:{} — {message}", comment.file, comment.line),
+        Some(q) => format!("- {anchor} — `{q}`: {message}"),
+        None => format!("- {anchor} — {message}"),
     }
 }
 
@@ -100,4 +108,45 @@ pub fn comment_lines(raw: &str) -> Vec<String> {
         }
     }
     lines
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn comment(start: u32, end: u32, quote: Option<&str>) -> DiffComment {
+        DiffComment {
+            file: "a.rs".into(),
+            start,
+            end,
+            message: "why?".into(),
+            quote: quote.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn a_single_line_is_start_equals_end() {
+        assert_eq!(comment_line(&comment(2, 2, None)), "- a.rs:2:2 — why?");
+        assert_eq!(
+            comment_line(&comment(2, 2, Some("let x;"))),
+            "- a.rs:2:2 — `let x;`: why?"
+        );
+    }
+
+    #[test]
+    fn a_range_keeps_both_ends_and_drops_a_multi_line_quote() {
+        assert_eq!(
+            comment_line(&comment(2, 5, Some("a\nb"))),
+            "- a.rs:2:5 — why?"
+        );
+    }
+
+    #[test]
+    fn a_removed_line_quote_is_trimmed_with_its_marker() {
+        // The quote both clients build for `-    let x = 1;` (their tests pin the same string).
+        assert_eq!(
+            comment_line(&comment(2, 2, Some("-let x = 1;"))),
+            "- a.rs:2:2 — `-let x = 1;`: why?"
+        );
+    }
 }

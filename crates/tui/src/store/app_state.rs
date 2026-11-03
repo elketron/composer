@@ -1781,7 +1781,8 @@ mod tests {
         let (mut state, _) = connected();
         let comment = DiffComment {
             file: "a.rs".into(),
-            line: 2,
+            start: 2,
+            end: 2,
             message: "why?".into(),
             quote: None,
         };
@@ -1820,10 +1821,10 @@ mod tests {
         state.reduce(Action::Server(ServerMessage::Ok {
             id,
             result: CommandResult::Comments {
-                lines: vec!["- a.rs:2 — why?".into()],
+                lines: vec!["- a.rs:2:2 — why?".into()],
             },
         }));
         assert!(state.project.drafts.is_empty());
-        assert_eq!(state.project.comments, ["- a.rs:2 — why?"]);
+        assert_eq!(state.project.comments, ["- a.rs:2:2 — why?"]);
     }
 }

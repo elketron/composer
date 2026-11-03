@@ -18,10 +18,16 @@ use crate::theme;
 /// A comment being typed: on a diff line, or an edit of a draft.
 struct CommentInput {
     file: String,
-    line: u32,
+    start: u32,
+    end: u32,
     quote: String,
     text: String,
     editing: Option<usize>,
+}
+
+/// `2` for one line, `2:5` for a range, as written after the file name.
+fn anchor_range(start: u32, end: u32) -> String {
+    format!("{start}:{end}")
 }
 
 /// Footer rows the comments may take at most.
@@ -41,6 +47,9 @@ pub struct ChangesView {
     input: Option<CommentInput>,
     /// The draft selected in the comments list (`C`).
     list: Option<usize>,
+    /// `V` marked the start of a range here (and the diff had this many lines); `c` comments
+    /// from it to the cursor. A reload or `v` changes the lines, which drops it.
+    mark: Option<(usize, usize)>,
 }
 
 impl ChangesView {
@@ -53,22 +62,45 @@ impl ChangesView {
             pending_discard: false,
             input: None,
             list: None,
+            mark: None,
         }
     }
 }
 
 impl ChangesView {
-    /// What a comment on this line anchors to; `None` where there is nothing to comment on.
-    fn anchor(line: &DiffLine) -> Option<(String, u32, String)> {
-        let file = line.file.clone()?;
-        let number = line.line?;
-        let quote = match line.kind {
-            DiffKind::Add | DiffKind::Context => line.text.trim().to_string(),
-            DiffKind::Del => format!("-{}", line.text.trim()),
-            DiffKind::Hunk => line.text.clone(),
-            DiffKind::File | DiffKind::Note => return None,
-        };
-        Some((file, number, quote))
+    /// What a comment on the lines `from..=to` (either order) anchors to: the file, the first
+    /// and last line number in the new file, and the quote. `None` where there is nothing to
+    /// comment on, or the lines span files.
+    fn anchor(lines: &[DiffLine], from: usize, to: usize) -> Option<(String, u32, u32, String)> {
+        let (from, to) = (from.min(to), from.max(to));
+        let mut file = None;
+        let mut numbers = Vec::new();
+        let mut quotes = Vec::new();
+        for line in lines.get(from..=to)? {
+            // Rows with nothing to anchor to (headers, notes) inside a range are skipped.
+            let Some(number) = line
+                .line
+                .filter(|_| !matches!(line.kind, DiffKind::File | DiffKind::Note))
+            else {
+                continue;
+            };
+            if file.is_some() && file != line.file.as_ref() {
+                return None;
+            }
+            file = line.file.as_ref();
+            numbers.push(number);
+            quotes.push(match line.kind {
+                DiffKind::Del => format!("-{}", line.text.trim()),
+                DiffKind::Hunk => line.text.clone(),
+                _ => line.text.trim().to_string(),
+            });
+        }
+        Some((
+            file?.clone(),
+            *numbers.iter().min()?,
+            *numbers.iter().max()?,
+            quotes.join("\n"),
+        ))
     }
 
     /// Keys while typing a comment.
@@ -90,7 +122,8 @@ impl ChangesView {
                         Some(index) => Action::CommentEdit { index, message },
                         None => Action::CommentAdd(DiffComment {
                             file: input.file,
-                            line: input.line,
+                            start: input.start,
+                            end: input.end,
                             message,
                             quote: Some(input.quote).filter(|q| !q.is_empty()),
                         }),
@@ -126,7 +159,8 @@ impl ChangesView {
                 let draft = &drafts[selected];
                 self.input = Some(CommentInput {
                     file: draft.file.clone(),
-                    line: draft.line,
+                    start: draft.start,
+                    end: draft.end,
                     quote: draft.quote.clone().unwrap_or_default(),
                     text: draft.message.clone(),
                     editing: Some(selected),
@@ -155,7 +189,7 @@ impl ChangesView {
                             "comment on"
                         },
                         input.file,
-                        input.line
+                        anchor_range(input.start, input.end)
                     ),
                     Style::new().fg(theme::ACCENT),
                 ),
@@ -169,7 +203,12 @@ impl ChangesView {
         }
         for (i, draft) in project.drafts.iter().enumerate() {
             let marker = if self.list == Some(i) { "▸" } else { " " };
-            let text = format!("{marker} {}:{} — {}", draft.file, draft.line, draft.message);
+            let text = format!(
+                "{marker} {}:{} — {}",
+                draft.file,
+                anchor_range(draft.start, draft.end),
+                draft.message
+            );
             let style = if self.list == Some(i) {
                 theme::bold()
             } else {
@@ -185,9 +224,9 @@ impl ChangesView {
             let hint = if self.list.is_some() {
                 "j/k pick · Enter edit · x remove · S send · Esc back"
             } else if project.drafts.is_empty() {
-                "c comment on the line · v semantic/text"
+                "c comment on the line · V mark a range · v semantic/text"
             } else {
-                "c comment · C edit comments · S send them · v semantic/text"
+                "c comment · V range · C edit comments · S send them · v semantic/text"
             };
             lines.push(Line::from(Span::styled(hint, theme::faint())));
         }
@@ -266,6 +305,9 @@ impl Component for ChangesView {
             return self.list_key(key, state, selected);
         }
         let count = state.project.lines.len();
+        if self.mark.is_some_and(|(_, len)| len != count) {
+            self.mark = None;
+        }
         let page = self.height.get().max(2) / 2;
         let g = std::mem::take(&mut self.pending_g);
         let discard = std::mem::take(&mut self.pending_discard);
@@ -280,12 +322,14 @@ impl Component for ChangesView {
                 return vec![Action::TicketMerge(ticket)];
             }
             (KeyCode::Char('c'), _) if ticket.is_some() => {
-                let anchor = state.project.lines.get(self.cursor).and_then(Self::anchor);
+                let from = self.mark.take().map_or(self.cursor, |(from, _)| from);
+                let anchor = Self::anchor(&state.project.lines, from, self.cursor);
                 match anchor {
-                    Some((file, line, quote)) => {
+                    Some((file, start, end, quote)) => {
                         self.input = Some(CommentInput {
                             file,
-                            line,
+                            start,
+                            end,
                             quote,
                             text: String::new(),
                             editing: None,
@@ -299,6 +343,9 @@ impl Component for ChangesView {
                         )];
                     }
                 }
+            }
+            (KeyCode::Char('V'), _) if ticket.is_some() => {
+                self.mark = self.mark.is_none().then_some((self.cursor, count));
             }
             (KeyCode::Char('C'), _) if !state.project.drafts.is_empty() => self.list = Some(0),
             (KeyCode::Char('S'), _) if ticket.is_some() => return vec![Action::CommentsSend],
@@ -348,6 +395,7 @@ impl Component for ChangesView {
                     }];
                 }
             }
+            (KeyCode::Esc, _) if self.mark.take().is_some() => {}
             (KeyCode::Esc | KeyCode::Char('q'), _) => return vec![Action::ToggleChanges],
             _ => {}
         }
@@ -493,7 +541,10 @@ impl Component for ChangesView {
                 ],
                 DiffKind::Note => vec![Span::styled(line.text.clone(), theme::faint())],
             };
-            if i == self.cursor {
+            let marked = self.mark.is_some_and(|(m, len)| {
+                len == project.lines.len() && (m.min(self.cursor)..=m.max(self.cursor)).contains(&i)
+            });
+            if i == self.cursor || marked {
                 spans.insert(0, Span::styled("▎", Style::new().fg(theme::ACCENT)));
                 let used: usize = spans.iter().map(|s| s.width()).sum();
                 spans.push(Span::raw(" ".repeat(width.saturating_sub(used))));
@@ -589,7 +640,8 @@ mod tests {
                 Action::SetMode(Mode::Normal),
                 Action::CommentAdd(DiffComment {
                     file: "a.rs".into(),
-                    line: 2,
+                    start: 2,
+                    end: 2,
                     message: "why 2?".into(),
                     quote: Some("let x = 2;".into()),
                 })
@@ -615,6 +667,98 @@ mod tests {
         assert_eq!(state.project.drafts.len(), 1);
         press(&mut view, &mut state, "Cx");
         assert!(state.project.drafts.is_empty());
+    }
+
+    #[test]
+    fn a_marked_range_anchors_start_to_end_whichever_way_it_is_marked() {
+        let mut state = state_with_ticket_diff();
+        let mut view = ChangesView::new();
+        // Rows: file header, `fn a() {` (1), `let x = 2;` (2). Mark the second, comment up to the first.
+        press(&mut view, &mut state, "jjVk");
+        let actions = press(&mut view, &mut state, "c");
+        assert_eq!(actions, [Action::SetMode(Mode::Comment)]);
+        let actions = press(&mut view, &mut state, "both<Enter>");
+        let Action::CommentAdd(comment) = &actions[1] else {
+            panic!("{actions:?}")
+        };
+        assert_eq!((comment.start, comment.end), (1, 2));
+        assert_eq!(comment.quote.as_deref(), Some("fn a() {\nlet x = 2;"));
+        // The mark is spent: the next `c` is one line again.
+        press(&mut view, &mut state, "c");
+        let actions = press(&mut view, &mut state, "one<Enter>");
+        let Action::CommentAdd(comment) = &actions[1] else {
+            panic!("{actions:?}")
+        };
+        assert_eq!((comment.start, comment.end), (1, 1));
+    }
+
+    #[test]
+    fn a_removed_line_anchors_where_it_sits_in_the_new_file() {
+        let mut state = state_with_ticket_diff();
+        let mut view = ChangesView::new();
+        press(&mut view, &mut state, "v");
+        let del = state
+            .project
+            .lines
+            .iter()
+            .position(|l| l.kind == DiffKind::Del)
+            .unwrap();
+        press(&mut view, &mut state, &"j".repeat(del));
+        press(&mut view, &mut state, "c");
+        let actions = press(&mut view, &mut state, "gone<Enter>");
+        let Action::CommentAdd(comment) = &actions[1] else {
+            panic!("{actions:?}")
+        };
+        assert_eq!((comment.start, comment.end), (2, 2));
+        assert_eq!(comment.quote.as_deref(), Some("-let x = 1;"));
+    }
+
+    #[test]
+    fn the_mark_goes_with_a_view_switch_and_a_reload() {
+        let mut state = state_with_ticket_diff();
+        let mut view = ChangesView::new();
+        press(&mut view, &mut state, "jjVk");
+        press(&mut view, &mut state, "v");
+        press(&mut view, &mut state, "c");
+        let actions = press(&mut view, &mut state, "x<Enter>");
+        let Action::CommentAdd(comment) = &actions[1] else {
+            panic!("{actions:?}")
+        };
+        assert_eq!(comment.start, comment.end, "v dropped the mark");
+
+        let mut view = ChangesView::new();
+        press(&mut view, &mut state, "V");
+        let mut shorter = state.project.diff.clone().unwrap();
+        shorter.diff.clear();
+        state.project.loaded(shorter);
+        let kept = view.mark;
+        assert!(kept.is_some());
+        press(&mut view, &mut state, "j");
+        assert_eq!(
+            view.mark, None,
+            "a reload with other lines dropped the mark"
+        );
+    }
+
+    #[test]
+    fn a_range_over_a_note_row_skips_it() {
+        let mut state = state_with_ticket_diff();
+        state.project.lines.insert(
+            2,
+            DiffLine {
+                kind: DiffKind::Note,
+                text: "\\ No newline".into(),
+                file: Some("a.rs".into()),
+                line: None,
+            },
+        );
+        let mut view = ChangesView::new();
+        press(&mut view, &mut state, "jVjjc");
+        let actions = press(&mut view, &mut state, "r<Enter>");
+        let Action::CommentAdd(comment) = &actions[1] else {
+            panic!("{actions:?}")
+        };
+        assert_eq!((comment.start, comment.end), (1, 2));
     }
 
     #[test]

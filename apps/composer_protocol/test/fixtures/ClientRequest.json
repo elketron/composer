@@ -88,7 +88,8 @@
     "comments": [
       {
         "file": "a.rs",
-        "line": 3,
+        "start": 3,
+        "end": 5,
         "message": "rename this",
         "quote": "let x = 1;"
       }

@@ -926,7 +926,8 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
             ticket: "0007".into(),
             comments: vec![DiffComment {
                 file: "a.rs".into(),
-                line: 3,
+                start: 3,
+                end: 5,
                 message: "rename this".into(),
                 quote: Some("let x = 1;".into()),
             }],

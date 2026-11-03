@@ -156,7 +156,7 @@ pub enum ClientCommand {
     #[serde(rename = "ticket.changes")]
     TicketChanges { ticket: String },
 
-    /// Appends review comments to the ticket page under `## Comments` (one `- file:line — message`
+    /// Appends review comments to the ticket page under `## Comments` (one `- file:start:end — message`
     /// line each); the reply is `comments`: every comment line the ticket has now. An empty
     /// list only reads them.
     #[serde(rename = "ticket.comment")]
