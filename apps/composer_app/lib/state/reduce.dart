@@ -93,6 +93,26 @@ import 'types.dart';
         _ticketCommand(s, url, ticket, ClientCommandTicketMerge(ticket: ticket)),
       TicketDiscardRequested(:final url, :final ticket) =>
         _ticketCommand(s, url, ticket, ClientCommandTicketDiscard(ticket: ticket)),
+      DiffCommentAdded(:final url, :final ticket, :final comment) =>
+        (_updateDrafts(s, url, ticket, (d) => [...d, comment]), const []),
+      DiffCommentEdited(:final url, :final ticket, :final index, :final message) => (
+          _updateDrafts(s, url, ticket, (d) => [
+            for (var i = 0; i < d.length; i++)
+              if (i != index) d[i] else DiffComment(file: d[i].file, line: d[i].line, message: message, quote: d[i].quote),
+          ]),
+          const [],
+        ),
+      DiffCommentRemoved(:final url, :final ticket, :final index) => (
+          _updateDrafts(s, url, ticket, (d) => [
+            for (var i = 0; i < d.length; i++)
+              if (i != index) d[i],
+          ]),
+          const [],
+        ),
+      DiffCommentsSent(:final url, :final ticket) => () {
+          final drafts = s.statusOf(url).reviews[ticket]?.drafts ?? const <DiffComment>[];
+          return drafts.isEmpty ? (s, const <AppEffect>[]) : _ticketCommand(s, url, ticket, ClientCommandTicketComment(ticket: ticket, comments: drafts));
+        }(),
       TicketReplied(:final url, :final ticket, :final result, :final error) => _ticketReplied(s, url, ticket, result, error),
       CompactRequested(:final url) => _toChat(s, url, (session) => ClientCommandSessionCompact(session: session)),
       TabSelected(:final tab) => (s.copyWith(tab: tab), const []),
@@ -591,12 +611,19 @@ bool stopped(WorkerState state) => state == WorkerState.done || state == WorkerS
       [TicketCommand(url, ticket, command)],
     );
 
+AppState _updateDrafts(AppState s, String url, String ticket, List<DiffComment> Function(List<DiffComment>) change) =>
+    _updateStatus(s, url, (x) {
+      final review = x.reviews[ticket] ?? const TicketReviewState();
+      return x.copyWith(reviews: {...x.reviews, ticket: review.copyWith(drafts: change(review.drafts))});
+    });
+
 (AppState, List<AppEffect>) _ticketReplied(AppState s, String url, String ticket, CommandResult? result, String? error) {
   final review = (s.statusOf(url).reviews[ticket] ?? const TicketReviewState()).copyWith(busy: false, error: error);
   final next = switch (result) {
     CommandResultChanges(:final changes) => review.copyWith(changes: changes),
     CommandResultMerged(:final commit) => review.copyWith(merged: commit),
     CommandResultDone() => review.copyWith(discarded: true),
+    CommandResultComments(:final lines) => review.copyWith(comments: lines, drafts: const []),
     _ => review,
   };
   final notice = switch (result) {

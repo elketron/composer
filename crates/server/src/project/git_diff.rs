@@ -5,6 +5,8 @@ use std::path::Path;
 use composer_protocol::http::{ChangedFile, ProjectDiff};
 use tokio::process::Command;
 
+use super::semantic_diff::semantic_diff;
+
 /// git's empty tree: what a repository without commits is compared against.
 const EMPTY_TREE: &str = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 /// New (untracked) files are shown in full up to this size, and this many of them.
@@ -54,6 +56,7 @@ pub async fn project_diff(path: &Path, base: Option<&str>) -> Result<ProjectDiff
             status: letter.chars().next().unwrap_or('M').to_string(),
             added: added.and_then(|a| a.parse().ok()).unwrap_or(0),
             removed: removed.and_then(|r| r.parse().ok()).unwrap_or(0),
+            semantic: semantic_diff(path, base, file, letter).await,
         });
     }
     let mut diff = git(
@@ -90,6 +93,7 @@ pub async fn project_diff(path: &Path, base: Option<&str>) -> Result<ProjectDiff
             status: "?".into(),
             added,
             removed: 0,
+            semantic: None,
         });
         if let Some(text) = text {
             diff.push_str(&new_file_diff(file, &text));

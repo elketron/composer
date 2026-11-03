@@ -10,6 +10,8 @@ pub enum Mode {
     Insert,
     Command,
     Hint,
+    /// Typing a comment on a diff line (the changes view owns the keys).
+    Comment,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -155,6 +157,8 @@ pub enum Pending {
     /// `ticket.merge` / `ticket.discard` of this ticket.
     Merged(String),
     Discarded(String),
+    /// `ticket.comment` on this ticket: say how many went in, show the lines.
+    Comments(String),
     Ignore,
 }
 

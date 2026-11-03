@@ -1,14 +1,15 @@
 import 'package:composer_protocol/composer_protocol.dart';
 import 'package:flutter/material.dart';
 
-import '../../state/actions.dart';
 import '../../state/types.dart';
 import '../../theme/composer_theme.dart';
 import '../../theme/tokens.dart' as t;
 import '../store_scope.dart';
+import 'diff_page.dart';
+import 'review_actions.dart';
 
-/// A ticket's branch: where it goes, its commits, the changed files and the diff, with Merge and
-/// Discard below. The phone's review screen and the wide layout's Changes tab.
+/// A ticket's branch: where it goes, its commits, the changed files and a button to its diff, with
+/// Merge and Discard below. The phone's review screen and the wide layout's Changes tab.
 class ReviewView extends StatelessWidget {
   const ReviewView({super.key, required this.url, required this.ticket, this.header = false});
 
@@ -25,12 +26,6 @@ class ReviewView extends StatelessWidget {
     final changes = review.changes;
     final ticketReview = changes?.ticket;
     final closed = review.merged != null || review.discarded;
-    final canMerge = !review.busy &&
-        !closed &&
-        ticketReview != null &&
-        ticketReview.target != null &&
-        ticketReview.conflicts.isEmpty &&
-        ticketReview.ahead > 0;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       if (header && ticketReview != null)
         Padding(
@@ -48,34 +43,16 @@ class ReviewView extends StatelessWidget {
             for (final file in changes.files) _file(file),
             const SizedBox(height: 12),
             if (changes.files.isEmpty) const Text('No changes on its branch yet.', style: TextStyle(color: t.faint, fontSize: 13)),
-            for (final line in changes.diff.split('\n')) _diffLine(line),
+            if (changes.diff.trim().isNotEmpty)
+              OutlinedButton(
+                key: const Key('view-diff'),
+                onPressed: () => openDiff(context, url, ticket),
+                child: const Text('View diff'),
+              ),
           ],
         ]),
       ),
-      if (!closed && ticketReview != null)
-        SafeArea(
-          top: false,
-          child: Container(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-            decoration: const BoxDecoration(border: Border(top: BorderSide(color: t.border))),
-            child: Row(children: [
-              Expanded(
-                child: FilledButton(
-                  key: const Key('merge-ticket'),
-                  onPressed: canMerge ? () => store.dispatch(TicketMergeRequested(url, ticket)) : null,
-                  child: Text('Merge into ${ticketReview.target ?? '…'}'),
-                ),
-              ),
-              const SizedBox(width: 8),
-              OutlinedButton(
-                key: const Key('discard-ticket'),
-                style: OutlinedButton.styleFrom(foregroundColor: t.err),
-                onPressed: review.busy ? null : () => _confirmDiscard(context),
-                child: const Text('Discard'),
-              ),
-            ]),
-          ),
-        ),
+      ReviewActions(url: url, ticket: ticket),
     ]);
   }
 
@@ -119,42 +96,5 @@ class ReviewView extends StatelessWidget {
         Text('-${file.removed}', style: mono(size: 12, color: t.err)),
       ]),
     );
-  }
-
-  Widget _diffLine(String line) {
-    final (color, background) = switch (line) {
-      _ when line.startsWith('diff --git') => (t.text, t.raised),
-      _ when line.startsWith('+++') || line.startsWith('---') => (t.muted, null),
-      _ when line.startsWith('@@') => (t.info, null),
-      _ when line.startsWith('+') => (t.ok, t.ok.withValues(alpha: 0.06)),
-      _ when line.startsWith('-') => (t.err, t.err.withValues(alpha: 0.06)),
-      _ => (t.muted, null),
-    };
-    return Container(
-      color: background,
-      padding: EdgeInsets.only(top: line.startsWith('diff --git') ? 4 : 0),
-      child: Text(line.isEmpty ? ' ' : line, style: mono(size: 11.5, color: color)),
-    );
-  }
-
-  Future<void> _confirmDiscard(BuildContext context) async {
-    final store = StoreScope.read(context);
-    final yes = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Discard ticket $ticket?'),
-        content: const Text("Its worktree and branch are deleted, with every change on them. This can't be undone."),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Keep')),
-          TextButton(
-            key: const Key('discard-confirm'),
-            style: TextButton.styleFrom(foregroundColor: t.err),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Discard'),
-          ),
-        ],
-      ),
-    );
-    if (yes ?? false) store.dispatch(TicketDiscardRequested(url, ticket));
   }
 }

@@ -12,9 +12,10 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use composer_protocol::http::{
-    AgentSummary, AppMessage, ChangedFile, PageExcerpt, PageResponse, PipelineSummary, ProjectDiff,
-    ProjectOverview, ProjectSummary, PutPageRequest, PutPageResponse, SearchHit, ServerInfo,
-    SiteSummary, StageState, StageSummary, TicketBranchSummary, TicketReview, WorkSummary,
+    AgentSummary, AppMessage, ChangedFile, DiffComment, PageExcerpt, PageResponse, PipelineSummary,
+    ProjectDiff, ProjectOverview, ProjectSummary, PutPageRequest, PutPageResponse, SearchHit,
+    ServerInfo, SiteSummary, StageState, StageSummary, TicketBranchSummary, TicketReview,
+    WorkSummary,
 };
 use composer_protocol::*;
 use serde_json::{Map, Value, json};
@@ -72,6 +73,7 @@ fn definitions() -> Map<String, Value> {
     let _ = generator.subschema_for::<ProjectDiff>();
     let _ = generator.subschema_for::<ProjectOverview>();
     let _ = generator.subschema_for::<ChangedFile>();
+    let _ = generator.subschema_for::<DiffComment>();
     let _ = generator.subschema_for::<AgentSummary>();
     let _ = generator.subschema_for::<ProjectSummary>();
     let defs = generator.take_definitions(true);
@@ -659,6 +661,12 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
             },
         },
         ServerMessage::Ok {
+            id: 152,
+            result: CommandResult::Comments {
+                lines: vec!["- a.rs:3 — rename this".into()],
+            },
+        },
+        ServerMessage::Ok {
             id: 53,
             result: CommandResult::History {
                 events: vec![ServerMessage::TurnDone {
@@ -914,6 +922,15 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
         ClientCommand::TicketChanges {
             ticket: "0007".into(),
         },
+        ClientCommand::TicketComment {
+            ticket: "0007".into(),
+            comments: vec![DiffComment {
+                file: "a.rs".into(),
+                line: 3,
+                message: "rename this".into(),
+                quote: Some("let x = 1;".into()),
+            }],
+        },
         ClientCommand::ProjectOverview {
             project: "game".into(),
         },
@@ -1022,6 +1039,7 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
                 status: "M".into(),
                 added: 2,
                 removed: 1,
+                semantic: Some("a.rs --- Rust\n1 fn a() {}\n".into()),
             }],
             diff: "+x".into(),
             ticket: Some(TicketReview {

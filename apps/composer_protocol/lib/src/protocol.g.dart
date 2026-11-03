@@ -158,6 +158,7 @@ class ChangedFile {
     required this.status,
     required this.added,
     required this.removed,
+    this.semantic,
   });
 
   final String path;
@@ -169,11 +170,17 @@ class ChangedFile {
 
   final int removed;
 
+  /// The structural diff of this file from `difft` (plain text, line numbers in its gutter);
+  /// absent when difft isn't installed, doesn't know the language, failed or timed out: the
+  /// text `diff` is the fallback.
+  final String? semantic;
+
   factory ChangedFile.fromJson(Map<String, Object?> json) => ChangedFile(
         path: json['path'] as String,
         status: json['status'] as String,
         added: (json['added'] as num).toInt(),
         removed: (json['removed'] as num).toInt(),
+        semantic: json['semantic'] == null ? null : json['semantic'] as String,
       );
 
   Map<String, Object?> toJson() => {
@@ -181,6 +188,7 @@ class ChangedFile {
         'status': status,
         'added': added,
         'removed': removed,
+        if (semantic != null) 'semantic': semantic,
       };
 }
 
@@ -264,6 +272,7 @@ sealed class ClientCommand {
         'work.new' => ClientCommandWorkNew.fromJson(json),
         'work.run' => ClientCommandWorkRun.fromJson(json),
         'ticket.changes' => ClientCommandTicketChanges.fromJson(json),
+        'ticket.comment' => ClientCommandTicketComment.fromJson(json),
         'ticket.merge' => ClientCommandTicketMerge.fromJson(json),
         'ticket.discard' => ClientCommandTicketDiscard.fromJson(json),
         'approval.respond' => ClientCommandApprovalRespond.fromJson(json),
@@ -730,6 +739,31 @@ final class ClientCommandTicketChanges extends ClientCommand {
       };
 }
 
+/// Appends review comments to the ticket page under `## Comments` (one `- file:line — message`
+/// line each); the reply is `comments`: every comment line the ticket has now. An empty
+/// list only reads them.
+final class ClientCommandTicketComment extends ClientCommand {
+  const ClientCommandTicketComment({
+    required this.ticket,
+    required this.comments,
+  });
+
+  final String ticket;
+
+  final List<DiffComment> comments;
+
+  factory ClientCommandTicketComment.fromJson(Map<String, Object?> json) => ClientCommandTicketComment(
+        ticket: json['ticket'] as String,
+        comments: (json['comments'] as List).map((e) => DiffComment.fromJson(e as Map<String, Object?>)).toList(),
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'ticket.comment',
+        'ticket': ticket,
+        'comments': comments.map((e) => e.toJson()).toList(),
+      };
+}
+
 /// Merges a ticket's branch into the project's checked-out branch and removes its
 /// worktree; the reply is `merged`.
 final class ClientCommandTicketMerge extends ClientCommand {
@@ -1045,6 +1079,7 @@ sealed class CommandResult {
         'models' => CommandResultModels.fromJson(json),
         'changes' => CommandResultChanges.fromJson(json),
         'merged' => CommandResultMerged.fromJson(json),
+        'comments' => CommandResultComments.fromJson(json),
         'history' => CommandResultHistory.fromJson(json),
         'project' => CommandResultProject.fromJson(json),
         'mcp_servers' => CommandResultMcpServers.fromJson(json),
@@ -1291,6 +1326,24 @@ final class CommandResultMerged extends CommandResult {
       };
 }
 
+/// `ticket.comment`: the comment lines on the ticket page, as written.
+final class CommandResultComments extends CommandResult {
+  const CommandResultComments({
+    required this.lines,
+  });
+
+  final List<String> lines;
+
+  factory CommandResultComments.fromJson(Map<String, Object?> json) => CommandResultComments(
+        lines: (json['lines'] as List).map((e) => e as String).toList(),
+      );
+
+  Map<String, Object?> toJson() => {
+        'kind': 'comments',
+        'lines': lines,
+      };
+}
+
 /// `session.history`'s events, oldest first; `more`: older ones remain.
 final class CommandResultHistory extends CommandResult {
   const CommandResultHistory({
@@ -1440,6 +1493,40 @@ final class CommandResultUnknown extends CommandResult {
   final Map<String, Object?> raw;
 
   Map<String, Object?> toJson() => raw;
+}
+
+/// A review comment on a changed line, appended to the ticket page as
+/// `- file:line — message`.
+class DiffComment {
+  const DiffComment({
+    required this.file,
+    required this.line,
+    required this.message,
+    this.quote,
+  });
+
+  final String file;
+
+  final int line;
+
+  final String message;
+
+  /// The commented line's text; written into the comment when it fits one line.
+  final String? quote;
+
+  factory DiffComment.fromJson(Map<String, Object?> json) => DiffComment(
+        file: json['file'] as String,
+        line: (json['line'] as num).toInt(),
+        message: json['message'] as String,
+        quote: json['quote'] == null ? null : json['quote'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'file': file,
+        'line': line,
+        'message': message,
+        if (quote != null) 'quote': quote,
+      };
 }
 
 /// An external harness (or one of its models) for a project: allowed by config.toml, and

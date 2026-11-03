@@ -1,5 +1,7 @@
 //! Unified diff → display lines that know their file and line.
 
+use composer_protocol::http::ProjectDiff;
+
 use crate::store::types::{DiffKind, DiffLine};
 
 pub fn parse_diff(diff: &str) -> Vec<DiffLine> {
@@ -55,6 +57,78 @@ pub fn parse_diff(diff: &str) -> Vec<DiffLine> {
     lines
 }
 
+/// The lines the changes view shows: per file the text diff's hunks, or (`semantic`, and the
+/// server sent one for it) difft's structural diff.
+pub fn view_lines(diff: &ProjectDiff, semantic: bool) -> Vec<DiffLine> {
+    let text = parse_diff(&diff.diff);
+    if !semantic {
+        return text;
+    }
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < text.len() {
+        let end = text[i + 1..]
+            .iter()
+            .position(|l| l.kind == DiffKind::File)
+            .map_or(text.len(), |p| i + 1 + p);
+        out.push(text[i].clone());
+        let structural = text[i]
+            .file
+            .as_deref()
+            .filter(|_| text[i].kind == DiffKind::File)
+            .and_then(|file| diff.files.iter().find(|f| f.path == file))
+            .and_then(|f| f.semantic.as_deref());
+        match structural {
+            Some(semantic) => out.extend(parse_semantic(text[i].file.as_deref(), semantic)),
+            None => out.extend(text[i + 1..end].iter().cloned()),
+        }
+        i = end;
+    }
+    out
+}
+
+/// difft's plain output for one file: a header, then rows of a gutter (two line-number cells,
+/// old and new, as wide as the biggest number and at least 2, and a space) and the code. An
+/// unchanged row shows one number, a changed one the number on its side; plain output doesn't
+/// say which rows were removed or added, so they are all context. A row anchors to the number
+/// it shows (the new one when both).
+pub fn parse_semantic(file: Option<&str>, semantic: &str) -> Vec<DiffLine> {
+    let mut rows: Vec<&str> = semantic.lines().collect();
+    if rows.first().is_some_and(|r| r.contains(" --- ")) {
+        rows.remove(0);
+    }
+    let digits = |s: &str| s.trim().len();
+    let mut width = 2;
+    for row in &rows {
+        let mut cells = row.split_whitespace();
+        for cell in [cells.next(), cells.next()].into_iter().flatten() {
+            if cell.chars().all(|c| c.is_ascii_digit()) {
+                width = width.max(digits(cell));
+            }
+        }
+    }
+    rows.iter()
+        .filter(|row| !row.trim().is_empty())
+        .map(|row| {
+            let cell = |from: usize, to: usize| -> Option<u32> {
+                row.get(from..to.min(row.len()))
+                    .and_then(|c| c.trim().parse().ok())
+            };
+            let number = cell(width, 2 * width).or_else(|| cell(0, width));
+            DiffLine {
+                kind: if number.is_some() {
+                    DiffKind::Context
+                } else {
+                    DiffKind::Note
+                },
+                text: row.get(2 * width + 1..).unwrap_or("").to_string(),
+                file: file.map(str::to_string),
+                line: number,
+            }
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -84,5 +158,80 @@ mod tests {
         );
         assert_eq!(lines[4].file.as_deref(), Some("src/x.rs"));
         assert_eq!(lines[9].file.as_deref(), Some("gone.rs"));
+    }
+
+    const DIFFT: &str = "a.rs --- Rust\n1    fn a() {\n2        let x = 1;\n   2     let x = 2;\n   4     bar();\n   5 }\n";
+
+    #[test]
+    fn semantic_rows_anchor_to_the_number_their_gutter_shows() {
+        let rows = parse_semantic(Some("a.rs"), DIFFT);
+        let shown: Vec<(Option<u32>, &str)> =
+            rows.iter().map(|l| (l.line, l.text.as_str())).collect();
+        assert_eq!(
+            shown,
+            [
+                (Some(1), "fn a() {"),
+                (Some(2), "    let x = 1;"),
+                (Some(2), "    let x = 2;"),
+                (Some(4), "    bar();"),
+                (Some(5), "}"),
+            ]
+        );
+        let wide = "b.py --- Python\n 98    l98\n100    l100\n   100 changed\n";
+        let shown: Vec<_> = parse_semantic(None, wide)
+            .iter()
+            .map(|l| (l.line, l.text.clone()))
+            .collect();
+        assert_eq!(
+            shown,
+            [
+                (Some(98), "l98".into()),
+                (Some(100), "l100".into()),
+                (Some(100), "changed".into())
+            ]
+        );
+    }
+
+    fn project_diff(semantic: Option<&str>) -> ProjectDiff {
+        use composer_protocol::http::ChangedFile;
+        let file = |path: &str, semantic: Option<&str>| ChangedFile {
+            path: path.into(),
+            status: "M".into(),
+            added: 1,
+            removed: 1,
+            semantic: semantic.map(str::to_string),
+        };
+        ProjectDiff {
+            path: "/wt".into(),
+            branch: None,
+            files: vec![file("a.rs", semantic), file("n.txt", None)],
+            diff: "diff --git a/a.rs b/a.rs\n--- a/a.rs\n+++ b/a.rs\n@@ -1,2 +1,2 @@\n fn a() {\n-    let x = 1;\n+    let x = 2;\ndiff --git a/n.txt b/n.txt\n--- a/n.txt\n+++ b/n.txt\n@@ -1 +1 @@\n-a\n+b\n".into(),
+            ticket: None,
+        }
+    }
+
+    #[test]
+    fn the_structural_diff_replaces_only_the_files_that_have_one() {
+        let diff = project_diff(Some(DIFFT));
+        let semantic = view_lines(&diff, true);
+        let hunks = |lines: &[DiffLine], file: &str| {
+            lines
+                .iter()
+                .filter(|l| l.kind == DiffKind::Hunk && l.file.as_deref() == Some(file))
+                .count()
+        };
+        assert_eq!(hunks(&semantic, "a.rs"), 0, "a.rs shows difft's rows");
+        assert_eq!(
+            hunks(&semantic, "n.txt"),
+            1,
+            "n.txt falls back to its text diff"
+        );
+        assert!(semantic.iter().any(|l| l.text == "    bar();"));
+        let text = view_lines(&diff, false);
+        assert_eq!(hunks(&text, "a.rs"), 1);
+        assert!(!text.iter().any(|l| l.text == "    bar();"));
+        // Without a semantic diff from the server, both views are the text diff.
+        let none = project_diff(None);
+        assert_eq!(view_lines(&none, true), view_lines(&none, false));
     }
 }

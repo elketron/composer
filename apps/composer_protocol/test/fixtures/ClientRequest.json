@@ -83,21 +83,34 @@
   },
   {
     "id": 15,
+    "type": "ticket.comment",
+    "ticket": "0007",
+    "comments": [
+      {
+        "file": "a.rs",
+        "line": 3,
+        "message": "rename this",
+        "quote": "let x = 1;"
+      }
+    ]
+  },
+  {
+    "id": 16,
     "type": "project.overview",
     "project": "game"
   },
   {
-    "id": 16,
+    "id": 17,
     "type": "pipeline.list"
   },
   {
-    "id": 17,
+    "id": 18,
     "type": "pipeline.new",
     "kind": "video",
     "name": "shorts"
   },
   {
-    "id": 18,
+    "id": 19,
     "type": "work.new",
     "pipeline": "coding",
     "name": "save-system",
@@ -105,35 +118,35 @@
     "brief": "Three save slots."
   },
   {
-    "id": 19,
+    "id": 20,
     "type": "work.run",
     "work": "coding/save-system",
     "stage": "02_plan"
   },
   {
-    "id": 20,
+    "id": 21,
     "type": "ticket.merge",
     "ticket": "0007"
   },
   {
-    "id": 21,
+    "id": 22,
     "type": "ticket.discard",
     "ticket": "0007"
   },
   {
-    "id": 22,
+    "id": 23,
     "type": "subscribe",
     "urls": [
       "*"
     ]
   },
   {
-    "id": 23,
+    "id": 24,
     "type": "worker.hello",
     "session": "a3f1"
   },
   {
-    "id": 24,
+    "id": 25,
     "type": "worker.event",
     "event": {
       "type": "turn.started",
@@ -142,16 +155,16 @@
     }
   },
   {
-    "id": 25,
+    "id": 26,
     "type": "slot.acquire"
   },
   {
-    "id": 26,
+    "id": 27,
     "type": "slot.release",
     "grant": 7
   },
   {
-    "id": 27,
+    "id": 28,
     "type": "approval.ask",
     "site": "t",
     "recipe": "r",
@@ -160,30 +173,30 @@
     "hash": "h"
   },
   {
-    "id": 28,
+    "id": 29,
     "type": "worker.finish",
     "state": "failed",
     "summary": "why"
   },
   {
-    "id": 29,
+    "id": 30,
     "type": "tool.list",
     "session": "a3f1"
   },
   {
-    "id": 30,
+    "id": 31,
     "type": "harness.list",
     "project": "composer"
   },
   {
-    "id": 31,
+    "id": 32,
     "type": "harness.set",
     "project": "composer",
     "entry": "claude-code",
     "on": false
   },
   {
-    "id": 32,
+    "id": 33,
     "type": "tool.call",
     "session": "a3f1",
     "name": "open",

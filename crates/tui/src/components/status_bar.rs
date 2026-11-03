@@ -28,6 +28,7 @@ impl Component for StatusBar {
             Mode::Insert => (" INSERT ", theme::OK),
             Mode::Command => (" COMMAND ", theme::INFO),
             Mode::Hint => (" HINT ", theme::WARN),
+            Mode::Comment => (" COMMENT ", theme::WARN),
         };
         let sep = || Span::styled(" │ ", theme::faint());
         let mut left = vec![

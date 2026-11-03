@@ -158,7 +158,15 @@ class Upload {
 
 /// A ticket's branch on the review screen: its changes, and what became of it.
 class TicketReviewState {
-  const TicketReviewState({this.changes, this.busy = false, this.error, this.merged, this.discarded = false});
+  const TicketReviewState({
+    this.changes,
+    this.busy = false,
+    this.error,
+    this.merged,
+    this.discarded = false,
+    this.drafts = const [],
+    this.comments = const [],
+  });
 
   /// The changes against the project's branch, with what merging does (`ticket.changes`).
   final ProjectDiff? changes;
@@ -171,11 +179,28 @@ class TicketReviewState {
   final String? merged;
   final bool discarded;
 
-  TicketReviewState copyWith({ProjectDiff? changes, bool? busy, String? error, String? merged, bool? discarded}) => TicketReviewState(
+  /// Comments written in the diff view, not sent yet.
+  final List<DiffComment> drafts;
+
+  /// The comment lines on the ticket page (`- file:line — message`), as the last send left them.
+  final List<String> comments;
+
+  TicketReviewState copyWith({
+    ProjectDiff? changes,
+    bool? busy,
+    String? error,
+    String? merged,
+    bool? discarded,
+    List<DiffComment>? drafts,
+    List<String>? comments,
+  }) =>
+      TicketReviewState(
         changes: changes ?? this.changes,
         busy: busy ?? this.busy,
         error: error,
         merged: merged ?? this.merged,
         discarded: discarded ?? this.discarded,
+        drafts: drafts ?? this.drafts,
+        comments: comments ?? this.comments,
       );
 }
