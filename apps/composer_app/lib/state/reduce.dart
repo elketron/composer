@@ -98,7 +98,7 @@ import 'types.dart';
       DiffCommentEdited(:final url, :final ticket, :final index, :final message) => (
           _updateDrafts(s, url, ticket, (d) => [
             for (var i = 0; i < d.length; i++)
-              if (i != index) d[i] else DiffComment(file: d[i].file, line: d[i].line, message: message, quote: d[i].quote),
+              if (i != index) d[i] else DiffComment(file: d[i].file, start: d[i].start, end: d[i].end, message: message, quote: d[i].quote),
           ]),
           const [],
         ),

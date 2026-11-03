@@ -93,7 +93,7 @@ void main() {
     await tester.enterText(find.byKey(const Key('comment-field')), 'why 2?');
     await tester.tap(find.byKey(const Key('comment-add')));
     await tester.pump();
-    expect(find.text('a.rs:2 — why 2?'), findsOneWidget);
+    expect(find.text('a.rs:2:2 — why 2?'), findsOneWidget);
 
     // A hunk is commentable too; edit that comment, then drop it.
     await tester.tap(find.text('@@ -0,0 +1,1 @@'));
@@ -106,21 +106,21 @@ void main() {
     await tester.enterText(find.byKey(const Key('comment-field')), 'new file, why?');
     await tester.tap(find.byKey(const Key('comment-add')));
     await tester.pump();
-    expect(find.text('n.txt:1 — new file, why?'), findsOneWidget);
+    expect(find.text('n.txt:1:1 — new file, why?'), findsOneWidget);
     await tester.tap(find.byKey(const Key('draft-remove-1')));
     await tester.pump();
-    expect(find.textContaining('n.txt:1'), findsNothing);
+    expect(find.textContaining('n.txt:1:1'), findsNothing);
 
     await tester.tap(find.byKey(const Key('send-comments')));
     await tester.pump();
     final send = h.commands.single as ClientCommandTicketComment;
     expect(send.ticket, '0007');
-    expect([for (final c in send.comments) (c.file, c.line, c.message, c.quote)], [('a.rs', 2, 'why 2?', '    let x = 2;')]);
+    expect([for (final c in send.comments) (c.file, c.start, c.end, c.message, c.quote)], [('a.rs', 2, 2, 'why 2?', '    let x = 2;')]);
 
     // The server's answer: the page's comment lines, shown; the drafts are gone.
-    h.store.dispatch(TicketReplied(home.url, '0007', result: const CommandResultComments(lines: ['- a.rs:2 — `let x = 2;`: why 2?'])));
+    h.store.dispatch(TicketReplied(home.url, '0007', result: const CommandResultComments(lines: ['- a.rs:2:2 — `let x = 2;`: why 2?'])));
     await tester.pump();
-    expect(find.text('- a.rs:2 — `let x = 2;`: why 2?'), findsOneWidget);
+    expect(find.text('- a.rs:2:2 — `let x = 2;`: why 2?'), findsOneWidget);
     expect(find.byKey(const Key('send-comments')), findsNothing);
   });
 
@@ -140,10 +140,28 @@ void main() {
     await tester.tap(find.byKey(const Key('send-comments')));
     await tester.pump();
     final c = (h.commands.single as ClientCommandTicketComment).comments.single;
-    expect((c.file, c.line, c.quote), ('a.rs', 2, 'let x = 2;'));
+    expect((c.file, c.start, c.end, c.quote), ('a.rs', 2, 2, 'let x = 2;'));
 
     await tester.tap(find.text('Text'));
     await tester.pump();
     expect(find.text('+    let x = 2;'), findsOneWidget);
+  });
+
+  testWidgets('a long press marks a range, the next tap comments on the span; the anchor is start:end', (tester) async {
+    final h = Harness(diff());
+    await h.show(tester, const DiffPage(url: 'https://home.ts.net', ticket: '0007'));
+    await tester.longPress(find.text(' fn a() {'));
+    await tester.pump();
+    await tester.tap(find.text('+    let x = 2;'));
+    await tester.pump();
+    expect(find.text('a.rs:1:2'), findsOneWidget);
+    await tester.enterText(find.byKey(const Key('comment-field')), 'both');
+    await tester.tap(find.byKey(const Key('comment-add')));
+    await tester.pump();
+    expect(find.text('a.rs:1:2 — both'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('send-comments')));
+    await tester.pump();
+    final c = (h.commands.single as ClientCommandTicketComment).comments.single;
+    expect((c.file, c.start, c.end), ('a.rs', 1, 2));
   });
 }

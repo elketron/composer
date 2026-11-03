@@ -34,6 +34,9 @@ class _DiffPageState extends State<DiffPage> {
   int? _open;
   int? _editing;
 
+  /// A long press marked the start of a range here; the next tap picks its end.
+  int? _from;
+
   @override
   Widget build(BuildContext context) {
     final store = StoreScope.of(context);
@@ -63,6 +66,7 @@ class _DiffPageState extends State<DiffPage> {
                   _semantic = v.first;
                   _open = null;
                   _editing = null;
+                  _from = null;
                 }),
               ),
             ),
@@ -75,7 +79,7 @@ class _DiffPageState extends State<DiffPage> {
         Expanded(
           child: ListView(padding: const EdgeInsets.fromLTRB(12, 8, 12, 12), children: [
             if (changes != null && lines.isEmpty) const Text('No changes on its branch yet.', style: TextStyle(color: t.faint, fontSize: 13)),
-            for (var i = 0; i < lines.length; i++) ..._line(store, review, lines[i], i),
+            for (var i = 0; i < lines.length; i++) ..._line(store, review, lines, i),
             const SizedBox(height: 16),
             ..._comments(store, review),
           ]),
@@ -95,7 +99,8 @@ class _DiffPageState extends State<DiffPage> {
     );
   }
 
-  List<Widget> _line(AppStore store, TicketReviewState review, DiffLine line, int index) {
+  List<Widget> _line(AppStore store, TicketReviewState review, List<DiffLine> lines, int index) {
+    final line = lines[index];
     if (line.kind == DiffLineKind.file) {
       final file = review.changes?.files.where((f) => f.path == line.file).firstOrNull;
       return [
@@ -117,9 +122,9 @@ class _DiffPageState extends State<DiffPage> {
       DiffLineKind.meta => (t.faint, null),
       _ => (t.muted, null),
     };
-    final marked = review.drafts.any((d) => d.file == line.file && d.line == line.line && d.quote == line.quote);
+    final marked = review.drafts.any((d) => d.file == line.file && line.line != null && d.start <= line.line! && line.line! <= d.end);
     final text = Container(
-      color: background,
+      color: _from == index ? t.accent.withValues(alpha: 0.15) : background,
       width: double.infinity,
       child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Expanded(child: Text(line.text.isEmpty ? ' ' : line.text, style: mono(size: 11.5, color: color))),
@@ -128,28 +133,43 @@ class _DiffPageState extends State<DiffPage> {
     );
     return [
       if (line.commentable)
-        InkWell(key: Key('diff-line-$index'), onTap: () => setState(() {
-              _open = _open == index ? null : index;
-              _editing = null;
-            }), child: text)
+        InkWell(
+          key: Key('diff-line-$index'),
+          onLongPress: () => setState(() => _from = _from == index ? null : index),
+          onTap: () => setState(() {
+            _open = _open == index ? null : index;
+            _editing = null;
+          }),
+          child: text,
+        )
       else
         text,
-      if (_open == index && _editing == null)
-        DiffCommentBox(
-          anchor: '${line.file}:${line.line}',
-          quote: line.quote,
-          onCancel: () => setState(() => _open = null),
-          onSave: (message) {
-            store.dispatch(DiffCommentAdded(
-              widget.url,
-              widget.ticket,
-              DiffComment(file: line.file, line: line.line!, message: message, quote: line.quote),
-            ));
-            setState(() => _open = null);
-          },
-        ),
+      if (_open == index && _editing == null) _newComment(store, lines, index),
     ];
   }
+
+  /// The box under the tapped line; with a range marked (long press) it comments on the span.
+  Widget _newComment(AppStore store, List<DiffLine> lines, int index) {
+    final from = _from ?? index;
+    final preview = diffAnchor(lines, from, index, '');
+    if (preview == null) {
+      return DiffCommentBox(anchor: 'No single file here: pick lines of one file', onCancel: _close, onSave: (_) {});
+    }
+    return DiffCommentBox(
+      anchor: '${preview.file}:${preview.start}:${preview.end}',
+      quote: preview.quote,
+      onCancel: _close,
+      onSave: (message) {
+        store.dispatch(DiffCommentAdded(widget.url, widget.ticket, diffAnchor(lines, from, index, message)!));
+        _close();
+      },
+    );
+  }
+
+  void _close() => setState(() {
+        _open = null;
+        _from = null;
+      });
 
   List<Widget> _comments(AppStore store, TicketReviewState review) {
     if (review.drafts.isEmpty && review.comments.isEmpty) return const [];
@@ -159,7 +179,7 @@ class _DiffPageState extends State<DiffPage> {
         for (var i = 0; i < review.drafts.length; i++)
           if (_editing == i)
             DiffCommentBox(
-              anchor: '${review.drafts[i].file}:${review.drafts[i].line}',
+              anchor: _anchor(review.drafts[i]),
               quote: review.drafts[i].quote,
               initial: review.drafts[i].message,
               onCancel: () => setState(() => _editing = null),
@@ -170,7 +190,7 @@ class _DiffPageState extends State<DiffPage> {
             )
           else
             Row(key: Key('draft-$i'), children: [
-              Expanded(child: Text('${review.drafts[i].file}:${review.drafts[i].line} — ${review.drafts[i].message}', style: mono(size: 12, color: t.text))),
+              Expanded(child: Text('${_anchor(review.drafts[i])} — ${review.drafts[i].message}', style: mono(size: 12, color: t.text))),
               IconButton(
                 key: Key('draft-edit-$i'),
                 tooltip: 'Edit',
@@ -195,6 +215,8 @@ class _DiffPageState extends State<DiffPage> {
       ],
     ];
   }
+
+  String _anchor(DiffComment c) => '${c.file}:${c.start}:${c.end}';
 
   Widget _banner(String text, Color color) => Container(
         margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),

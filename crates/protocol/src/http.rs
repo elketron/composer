@@ -355,7 +355,10 @@ pub struct ChangedFile {
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct DiffComment {
     pub file: String,
-    pub line: u32,
+    /// The first and last line the comment is about, in the new file (`start == end` for one
+    /// line; a removed line anchors where it sits in the new file).
+    pub start: u32,
+    pub end: u32,
     pub message: String,
     /// The commented line's text; written into the comment when it fits one line.
     #[serde(default, skip_serializing_if = "Option::is_none")]

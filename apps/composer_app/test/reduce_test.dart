@@ -256,8 +256,8 @@ void main() {
 
     test('diff comments: drafted, edited, removed, sent as one command, replaced by the ticket lines', () {
       const url = 'https://home.ts.net';
-      const a = DiffComment(file: 'a.rs', line: 2, message: 'one', quote: 'x');
-      const b = DiffComment(file: 'b.rs', line: 5, message: 'two');
+      const a = DiffComment(file: 'a.rs', start: 2, end: 2, message: 'one', quote: 'x');
+      const b = DiffComment(file: 'b.rs', start: 5, end: 7, message: 'two');
       var state = reduce(loaded([home]), const DiffCommentAdded(url, '0007', a)).$1;
       state = reduce(state, const DiffCommentAdded(url, '0007', b)).$1;
       state = reduce(state, const DiffCommentEdited(url, '0007', 0, 'one, better')).$1;
@@ -271,9 +271,9 @@ void main() {
       expect((send.ticket, send.comments.single.message), ('0007', 'one, better'));
       final failed = reduce(sending, const TicketReplied(url, '0007', error: 'no such ticket')).$1;
       expect(failed.status[url]!.reviews['0007']!.drafts.length, 1, reason: 'a failed send keeps the drafts');
-      final sent = reduce(sending, const TicketReplied(url, '0007', result: CommandResultComments(lines: ['- a.rs:2 — one, better']))).$1;
+      final sent = reduce(sending, const TicketReplied(url, '0007', result: CommandResultComments(lines: ['- a.rs:2:2 — one, better']))).$1;
       expect(sent.status[url]!.reviews['0007']!.drafts, isEmpty);
-      expect(sent.status[url]!.reviews['0007']!.comments, ['- a.rs:2 — one, better']);
+      expect(sent.status[url]!.reviews['0007']!.comments, ['- a.rs:2:2 — one, better']);
     });
 
     test('messages and cancel go to the open session only', () {

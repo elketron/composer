@@ -77,4 +77,21 @@ void main() {
     final text = diffViewLines(changes, semantic: false);
     expect(text.where((l) => l.file == 'a.rs').any((l) => l.kind == DiffLineKind.hunk), isTrue);
   });
+
+  test('a removed line anchors where it sits in the new file, not its old number', () {
+    const diff = 'diff --git a/a b/a\n--- a/a\n+++ b/a\n@@ -10,3 +4,2 @@\n ctx\n-gone\n tail\n';
+    final del = parseUnifiedDiff(diff).firstWhere((l) => l.kind == DiffLineKind.del);
+    expect((del.line, del.quote), (5, '-gone'));
+  });
+
+  test('an anchor spans lines of one file as start:end; one line is start == end', () {
+    final lines = parseUnifiedDiff(unified);
+    int at(String quote) => lines.indexWhere((l) => l.quote == quote);
+    final one = diffAnchor(lines, at('    bar();'), at('    bar();'), 'm')!;
+    expect((one.file, one.start, one.end, one.quote), ('a.rs', 3, 3, '    bar();'));
+    final range = diffAnchor(lines, at('}'), at('fn a() {'), 'm')!;
+    expect((range.start, range.end), (1, 4), reason: 'either direction');
+    expect(range.quote, contains('\n'));
+    expect(diffAnchor(lines, at('}'), at('plain'), 'm'), isNull, reason: 'two files');
+  });
 }

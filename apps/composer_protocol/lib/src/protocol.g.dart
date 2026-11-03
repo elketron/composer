@@ -739,7 +739,7 @@ final class ClientCommandTicketChanges extends ClientCommand {
       };
 }
 
-/// Appends review comments to the ticket page under `## Comments` (one `- file:line — message`
+/// Appends review comments to the ticket page under `## Comments` (one `- file:start:end — message`
 /// line each); the reply is `comments`: every comment line the ticket has now. An empty
 /// list only reads them.
 final class ClientCommandTicketComment extends ClientCommand {
@@ -1500,14 +1500,19 @@ final class CommandResultUnknown extends CommandResult {
 class DiffComment {
   const DiffComment({
     required this.file,
-    required this.line,
+    required this.start,
+    required this.end,
     required this.message,
     this.quote,
   });
 
   final String file;
 
-  final int line;
+  /// The first and last line the comment is about, in the new file (`start == end` for one
+  /// line; a removed line anchors where it sits in the new file).
+  final int start;
+
+  final int end;
 
   final String message;
 
@@ -1516,14 +1521,16 @@ class DiffComment {
 
   factory DiffComment.fromJson(Map<String, Object?> json) => DiffComment(
         file: json['file'] as String,
-        line: (json['line'] as num).toInt(),
+        start: (json['start'] as num).toInt(),
+        end: (json['end'] as num).toInt(),
         message: json['message'] as String,
         quote: json['quote'] == null ? null : json['quote'] as String,
       );
 
   Map<String, Object?> toJson() => {
         'file': file,
-        'line': line,
+        'start': start,
+        'end': end,
         'message': message,
         if (quote != null) 'quote': quote,
       };

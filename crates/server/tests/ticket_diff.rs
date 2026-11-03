@@ -50,6 +50,7 @@ async fn changes(socket: &mut Socket, id: u64) -> ProjectDiff {
 }
 
 async fn comment(socket: &mut Socket, id: u64, comments: Vec<DiffComment>) -> Vec<String> {
+    let comments_empty = comments.is_empty();
     send(
         socket,
         id,
@@ -64,6 +65,18 @@ async fn comment(socket: &mut Socket, id: u64, comments: Vec<DiffComment>) -> Ve
         |e| matches!(e, ServerMessage::Ok { id: i, .. } if *i == id),
     )
     .await;
+    if !comments_empty {
+        assert!(
+            reply.iter().any(|m| matches!(
+                m,
+                ServerMessage::PageChanged {
+                    by: ChangedBy::App,
+                    ..
+                }
+            )),
+            "a user's comments are written as the app: {reply:?}"
+        );
+    }
     let Some(ServerMessage::Ok {
         result: CommandResult::Comments { lines },
         ..
@@ -158,15 +171,17 @@ async fn semantic_diff_falls_back_without_difft_and_comments_land_on_the_ticket(
     // Comments: appended under a new `## Comments` heading, then to it; an empty list reads.
     let one = DiffComment {
         file: "a.rs".into(),
-        line: 2,
+        start: 2,
+        end: 2,
         message: "why 2?".into(),
         quote: Some("let x = 2;".into()),
     };
     let lines = comment(&mut socket, 3, vec![one]).await;
-    assert_eq!(lines, ["- a.rs:2 — `let x = 2;`: why 2?"]);
+    assert_eq!(lines, ["- a.rs:2:2 — `let x = 2;`: why 2?"]);
     let two = DiffComment {
         file: "notes.txt".into(),
-        line: 1,
+        start: 1,
+        end: 3,
         message: "drop this".into(),
         quote: Some("a".repeat(200)),
     };
@@ -174,14 +189,14 @@ async fn semantic_diff_falls_back_without_difft_and_comments_land_on_the_ticket(
     assert_eq!(
         lines,
         [
-            "- a.rs:2 — `let x = 2;`: why 2?",
-            "- notes.txt:1 — drop this"
+            "- a.rs:2:2 — `let x = 2;`: why 2?",
+            "- notes.txt:1:3 — drop this"
         ]
     );
     assert_eq!(comment(&mut socket, 5, vec![]).await, lines);
     let page = std::fs::read_to_string(home.join("sites/orchestration/tickets/0001.md")).unwrap();
     assert!(
-        page.contains("## Result\n\ndone\n\n## Comments\n\n- a.rs:2"),
+        page.contains("## Result\n\ndone\n\n## Comments\n\n- a.rs:2:2"),
         "{page}"
     );
 }

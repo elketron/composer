@@ -2,8 +2,9 @@ import 'package:composer_protocol/composer_protocol.dart';
 
 enum DiffLineKind { file, hunk, add, del, context, meta }
 
-/// One line of the diff view. `line` is what a comment on it anchors to (`file:line`): the new
-/// file's line number, the old one for a removed line; null where nothing can be commented.
+/// One line of the diff view. `line` is what a comment on it anchors to (`file:start:end`): the
+/// new file's line number, for a removed line where it sits in the new file; null where nothing
+/// can be commented.
 class DiffLine {
   const DiffLine(this.kind, this.text, {this.file = '', this.line, this.quote});
   final DiffLineKind kind;
@@ -19,14 +20,14 @@ class DiffLine {
   bool get commentable => line != null;
 }
 
-final _hunk = RegExp(r'^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@');
+final _hunk = RegExp(r'^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@');
 final _difftHeader = RegExp(r'^(.*) --- \S.*$');
 
 /// The unified diff as lines, each knowing its file and line number.
 List<DiffLine> parseUnifiedDiff(String diff) {
   final out = <DiffLine>[];
   var file = '';
-  var oldLine = 0, newLine = 0;
+  var newLine = 0;
   var inHunk = false;
   for (final raw in diff.split('\n')) {
     if (raw.startsWith('diff --git ')) {
@@ -38,15 +39,13 @@ List<DiffLine> parseUnifiedDiff(String diff) {
       out.add(DiffLine(DiffLineKind.meta, raw, file: file));
     } else if (_hunk.firstMatch(raw) case final m?) {
       inHunk = true;
-      oldLine = int.parse(m[1]!);
-      newLine = int.parse(m[2]!);
+      newLine = int.parse(m[1]!);
       out.add(DiffLine(DiffLineKind.hunk, raw, file: file, line: newLine, quote: raw));
     } else if (inHunk && raw.startsWith('+')) {
       out.add(DiffLine(DiffLineKind.add, raw, file: file, line: newLine++, quote: raw.substring(1)));
     } else if (inHunk && raw.startsWith('-')) {
-      out.add(DiffLine(DiffLineKind.del, raw, file: file, line: oldLine++, quote: raw));
+      out.add(DiffLine(DiffLineKind.del, raw, file: file, line: newLine < 1 ? 1 : newLine, quote: raw));
     } else if (inHunk && raw.startsWith(' ')) {
-      oldLine++;
       out.add(DiffLine(DiffLineKind.context, raw, file: file, line: newLine++, quote: raw.substring(1)));
     } else if (raw.isNotEmpty) {
       out.add(DiffLine(DiffLineKind.meta, raw, file: file));
@@ -103,4 +102,31 @@ List<DiffLine> diffViewLines(ProjectDiff changes, {required bool semantic}) {
     }
   }
   return out;
+}
+
+/// What a comment on the lines `from..to` (either order) anchors to: the file, the first and
+/// last line number, the quote (several lines are joined by `\n`). Null where there is nothing
+/// to comment on, or the lines span files.
+DiffComment? diffAnchor(List<DiffLine> lines, int from, int to, String message) {
+  final (a, b) = from <= to ? (from, to) : (to, from);
+  String? file;
+  final numbers = <int>[];
+  final quotes = <String>[];
+  for (final line in lines.sublist(a, b + 1)) {
+    if (line.kind == DiffLineKind.file) continue;
+    if (!line.commentable) return null;
+    if (file != null && file != line.file) return null;
+    file = line.file;
+    numbers.add(line.line!);
+    quotes.add(line.quote ?? '');
+  }
+  if (file == null) return null;
+  final quote = quotes.join('\n');
+  return DiffComment(
+    file: file,
+    start: numbers.reduce((x, y) => x < y ? x : y),
+    end: numbers.reduce((x, y) => x > y ? x : y),
+    message: message,
+    quote: quote.isEmpty ? null : quote,
+  );
 }
