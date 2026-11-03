@@ -50,7 +50,6 @@ async fn changes(socket: &mut Socket, id: u64) -> ProjectDiff {
 }
 
 async fn comment(socket: &mut Socket, id: u64, comments: Vec<DiffComment>) -> Vec<String> {
-    let comments_empty = comments.is_empty();
     send(
         socket,
         id,
@@ -65,18 +64,6 @@ async fn comment(socket: &mut Socket, id: u64, comments: Vec<DiffComment>) -> Ve
         |e| matches!(e, ServerMessage::Ok { id: i, .. } if *i == id),
     )
     .await;
-    if !comments_empty {
-        assert!(
-            reply.iter().any(|m| matches!(
-                m,
-                ServerMessage::PageChanged {
-                    by: ChangedBy::App,
-                    ..
-                }
-            )),
-            "a user's comments are written as the app: {reply:?}"
-        );
-    }
     let Some(ServerMessage::Ok {
         result: CommandResult::Comments { lines },
         ..
@@ -176,7 +163,19 @@ async fn semantic_diff_falls_back_without_difft_and_comments_land_on_the_ticket(
         message: "why 2?".into(),
         quote: Some("let x = 2;".into()),
     };
+    let mut changes_seen = server.hub.subscribe();
     let lines = comment(&mut socket, 3, vec![one]).await;
+    let mut by = None;
+    while let Ok(message) = changes_seen.try_recv() {
+        if let ServerMessage::PageChanged { by: who, .. } = &*message {
+            by = Some(*who);
+        }
+    }
+    assert_eq!(
+        by,
+        Some(ChangedBy::App),
+        "a user's comments are written as the app"
+    );
     assert_eq!(lines, ["- a.rs:2:2 — `let x = 2;`: why 2?"]);
     let two = DiffComment {
         file: "notes.txt".into(),
