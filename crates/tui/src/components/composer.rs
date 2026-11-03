@@ -1,3 +1,5 @@
+use std::cell::Cell;
+
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::Frame;
 use ratatui::layout::{Position, Rect};
@@ -17,6 +19,8 @@ pub struct Composer {
     text: String,
     /// Byte offset of the cursor in `text`.
     cursor: usize,
+    /// Text width at the last render, so the arrow keys move between displayed lines.
+    wrap_width: Cell<usize>,
 }
 
 impl Composer {
@@ -24,6 +28,7 @@ impl Composer {
         Self {
             text: String::new(),
             cursor: 0,
+            wrap_width: Cell::new(usize::MAX),
         }
     }
 
@@ -78,6 +83,44 @@ impl Composer {
             .next()
             .map_or(self.cursor, |c| self.cursor + c.len_utf8())
     }
+
+    /// Move the cursor `delta` displayed lines away, keeping the column where the
+    /// line allows it (clamped to its end). Off the first/last line: nothing.
+    fn move_cursor_line(&mut self, delta: i32) {
+        let rows = wrap_positions(&self.text, self.wrap_width.get());
+        let (row, col) = cursor_position(&rows, &self.text, self.cursor);
+        let Ok(target) = i32::try_from(row).map(|r| r + delta) else {
+            return;
+        };
+        let Ok(target) = usize::try_from(target) else {
+            return;
+        };
+        if target >= rows.len() {
+            return;
+        }
+        let (start, end) = rows[target];
+        let line_end = self.text[..end].strip_suffix('\n').map_or(end, |s| s.len());
+        let mut used = 0;
+        let mut pos = start;
+        for (i, c) in self.text[start..line_end].char_indices() {
+            let w = c.width().unwrap_or(0);
+            if used + w > col {
+                break;
+            }
+            used += w;
+            pos = start + i + c.len_utf8();
+        }
+        // The byte at a wrapped line's end starts the next line, so a cursor parked at a
+        // full-width column cannot rest there: stop at the line's last character instead.
+        if line_end == end && target < rows.len() - 1 && pos >= end {
+            pos = start
+                + self.text[start..end]
+                    .char_indices()
+                    .next_back()
+                    .map_or(0, |(i, _)| i);
+        }
+        self.cursor = pos;
+    }
 }
 
 impl Component for Composer {
@@ -113,6 +156,8 @@ impl Component for Composer {
             }
             (KeyCode::Left, _) => self.cursor = self.prev_boundary(),
             (KeyCode::Right, _) => self.cursor = self.next_boundary(),
+            (KeyCode::Up, _) => self.move_cursor_line(-1),
+            (KeyCode::Down, _) => self.move_cursor_line(1),
             (KeyCode::Home, _) | (KeyCode::Char('a'), KeyModifiers::CONTROL) => self.cursor = 0,
             (KeyCode::End, _) | (KeyCode::Char('e'), KeyModifiers::CONTROL) => {
                 self.cursor = self.text.len()
@@ -141,6 +186,7 @@ impl Component for Composer {
             width: inner.width.saturating_sub(2),
             ..inner
         };
+        self.wrap_width.set(inner.width as usize);
         if !state.attachments.files.is_empty() {
             let chips = Rect { height: 1, ..inner };
             frame.render_widget(Paragraph::new(file_chips(state)), chips);
@@ -289,6 +335,89 @@ fn cursor_position(rows: &[(usize, usize)], text: &str, cursor: usize) -> (usize
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::store::types::Startup;
+
+    fn press(composer: &mut Composer, state: &AppState, keys: &str) {
+        for key in crate::headless::parse_keys(keys).unwrap() {
+            composer.handle_key(key, state);
+        }
+    }
+
+    fn state() -> AppState {
+        AppState::new(Startup::default(), 160_000)
+    }
+
+    #[test]
+    fn arrows_move_the_cursor_between_lines() {
+        let state = state();
+        let mut composer = Composer::new();
+        press(&mut composer, &state, "ab<Enter>cdef<Enter>ghi");
+        assert_eq!(composer.cursor, 11, "the cursor starts at the end");
+        press(&mut composer, &state, "<Up>");
+        assert_eq!(composer.cursor, 6, "up keeps the column on the middle line");
+        press(&mut composer, &state, "<Up>");
+        assert_eq!(
+            composer.cursor, 2,
+            "the shorter first line clamps the column"
+        );
+        press(&mut composer, &state, "<Up>");
+        assert_eq!(composer.cursor, 2, "off the first line: still nothing");
+        press(&mut composer, &state, "<Down>");
+        assert_eq!(composer.cursor, 5, "down keeps the column");
+        press(&mut composer, &state, "<Down>");
+        assert_eq!(composer.cursor, 10, "back on the last line");
+        press(&mut composer, &state, "<Down>");
+        assert_eq!(composer.cursor, 10, "off the last line: still nothing");
+    }
+
+    #[test]
+    fn arrows_move_between_wrapped_lines() {
+        let state = state();
+        let mut composer = Composer::new();
+        composer.wrap_width.set(4);
+        press(&mut composer, &state, "abcd<Enter>ef");
+        press(&mut composer, &state, "<Up>");
+        assert_eq!(
+            composer.cursor, 2,
+            "up a wrapped line, clamped to its column"
+        );
+        press(&mut composer, &state, "<Down>");
+        assert_eq!(composer.cursor, 7, "and back down");
+    }
+    #[test]
+    fn a_full_wrapped_line_ends_one_character_short() {
+        let state = state();
+        let mut composer = Composer::new();
+        composer.wrap_width.set(4);
+        press(&mut composer, &state, "abcdefgh");
+        assert_eq!(
+            composer.cursor, 8,
+            "the cursor sits at the end of the last row"
+        );
+        press(&mut composer, &state, "<Up>");
+        assert_eq!(
+            composer.cursor, 3,
+            "the row above is full too: land on its last character, not on the row break"
+        );
+    }
+
+    #[test]
+    fn arrows_use_the_width_the_last_render_had() {
+        let state = state();
+        let mut composer = Composer::new();
+        press(&mut composer, &state, "abcdefgh<Enter>xy");
+        let mut terminal =
+            ratatui::Terminal::new(ratatui::backend::TestBackend::new(8, 6)).unwrap();
+        terminal
+            .draw(|frame| composer.render(frame, frame.area(), &state))
+            .unwrap();
+        // Rows of 4: "abcd", "efgh", "xy"; the cursor starts at the end (byte 11).
+        assert_eq!(composer.cursor, 11);
+        press(&mut composer, &state, "<Up>");
+        assert_eq!(composer.cursor, 6, "one row up, at the same column");
+        press(&mut composer, &state, "<Up>");
+        assert_eq!(composer.cursor, 2, "and up again");
+    }
 
     #[test]
     fn pasted_paths_of_existing_files() {
