@@ -47,8 +47,9 @@ pub struct ChangesView {
     input: Option<CommentInput>,
     /// The draft selected in the comments list (`C`).
     list: Option<usize>,
-    /// `V` marked the start of a range here; `c` comments from it to the cursor.
-    mark: Option<usize>,
+    /// `V` marked the start of a range here (and the diff had this many lines); `c` comments
+    /// from it to the cursor. A reload or `v` changes the lines, which drops it.
+    mark: Option<(usize, usize)>,
 }
 
 impl ChangesView {
@@ -76,9 +77,12 @@ impl ChangesView {
         let mut numbers = Vec::new();
         let mut quotes = Vec::new();
         for line in lines.get(from..=to)? {
-            let number = match line.kind {
-                DiffKind::File | DiffKind::Note => continue,
-                _ => line.line?,
+            // Rows with nothing to anchor to (headers, notes) inside a range are skipped.
+            let Some(number) = line
+                .line
+                .filter(|_| !matches!(line.kind, DiffKind::File | DiffKind::Note))
+            else {
+                continue;
             };
             if file.is_some() && file != line.file.as_ref() {
                 return None;
@@ -301,6 +305,9 @@ impl Component for ChangesView {
             return self.list_key(key, state, selected);
         }
         let count = state.project.lines.len();
+        if self.mark.is_some_and(|(_, len)| len != count) {
+            self.mark = None;
+        }
         let page = self.height.get().max(2) / 2;
         let g = std::mem::take(&mut self.pending_g);
         let discard = std::mem::take(&mut self.pending_discard);
@@ -315,7 +322,7 @@ impl Component for ChangesView {
                 return vec![Action::TicketMerge(ticket)];
             }
             (KeyCode::Char('c'), _) if ticket.is_some() => {
-                let from = self.mark.take().unwrap_or(self.cursor);
+                let from = self.mark.take().map_or(self.cursor, |(from, _)| from);
                 let anchor = Self::anchor(&state.project.lines, from, self.cursor);
                 match anchor {
                     Some((file, start, end, quote)) => {
@@ -338,7 +345,7 @@ impl Component for ChangesView {
                 }
             }
             (KeyCode::Char('V'), _) if ticket.is_some() => {
-                self.mark = self.mark.is_none().then_some(self.cursor);
+                self.mark = self.mark.is_none().then_some((self.cursor, count));
             }
             (KeyCode::Char('C'), _) if !state.project.drafts.is_empty() => self.list = Some(0),
             (KeyCode::Char('S'), _) if ticket.is_some() => return vec![Action::CommentsSend],
@@ -534,9 +541,9 @@ impl Component for ChangesView {
                 ],
                 DiffKind::Note => vec![Span::styled(line.text.clone(), theme::faint())],
             };
-            let marked = self
-                .mark
-                .is_some_and(|m| (m.min(self.cursor)..=m.max(self.cursor)).contains(&i));
+            let marked = self.mark.is_some_and(|(m, len)| {
+                len == project.lines.len() && (m.min(self.cursor)..=m.max(self.cursor)).contains(&i)
+            });
             if i == self.cursor || marked {
                 spans.insert(0, Span::styled("▎", Style::new().fg(theme::ACCENT)));
                 let used: usize = spans.iter().map(|s| s.width()).sum();
@@ -704,6 +711,54 @@ mod tests {
         };
         assert_eq!((comment.start, comment.end), (2, 2));
         assert_eq!(comment.quote.as_deref(), Some("-let x = 1;"));
+    }
+
+    #[test]
+    fn the_mark_goes_with_a_view_switch_and_a_reload() {
+        let mut state = state_with_ticket_diff();
+        let mut view = ChangesView::new();
+        press(&mut view, &mut state, "jjVk");
+        press(&mut view, &mut state, "v");
+        press(&mut view, &mut state, "c");
+        let actions = press(&mut view, &mut state, "x<Enter>");
+        let Action::CommentAdd(comment) = &actions[1] else {
+            panic!("{actions:?}")
+        };
+        assert_eq!(comment.start, comment.end, "v dropped the mark");
+
+        let mut view = ChangesView::new();
+        press(&mut view, &mut state, "V");
+        let mut shorter = state.project.diff.clone().unwrap();
+        shorter.diff.clear();
+        state.project.loaded(shorter);
+        let kept = view.mark;
+        assert!(kept.is_some());
+        press(&mut view, &mut state, "j");
+        assert_eq!(
+            view.mark, None,
+            "a reload with other lines dropped the mark"
+        );
+    }
+
+    #[test]
+    fn a_range_over_a_note_row_skips_it() {
+        let mut state = state_with_ticket_diff();
+        state.project.lines.insert(
+            2,
+            DiffLine {
+                kind: DiffKind::Note,
+                text: "\\ No newline".into(),
+                file: Some("a.rs".into()),
+                line: None,
+            },
+        );
+        let mut view = ChangesView::new();
+        press(&mut view, &mut state, "jVjjc");
+        let actions = press(&mut view, &mut state, "r<Enter>");
+        let Action::CommentAdd(comment) = &actions[1] else {
+            panic!("{actions:?}")
+        };
+        assert_eq!((comment.start, comment.end), (1, 2));
     }
 
     #[test]

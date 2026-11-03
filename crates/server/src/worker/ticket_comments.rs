@@ -140,4 +140,13 @@ mod tests {
             "- a.rs:2:5 — why?"
         );
     }
+
+    #[test]
+    fn a_removed_line_quote_is_trimmed_with_its_marker() {
+        // The quote both clients build for `-    let x = 1;` (their tests pin the same string).
+        assert_eq!(
+            comment_line(&comment(2, 2, Some("-let x = 1;"))),
+            "- a.rs:2:2 — `-let x = 1;`: why?"
+        );
+    }
 }

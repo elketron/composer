@@ -42,11 +42,11 @@ List<DiffLine> parseUnifiedDiff(String diff) {
       newLine = int.parse(m[1]!);
       out.add(DiffLine(DiffLineKind.hunk, raw, file: file, line: newLine, quote: raw));
     } else if (inHunk && raw.startsWith('+')) {
-      out.add(DiffLine(DiffLineKind.add, raw, file: file, line: newLine++, quote: raw.substring(1)));
+      out.add(DiffLine(DiffLineKind.add, raw, file: file, line: newLine++, quote: raw.substring(1).trim()));
     } else if (inHunk && raw.startsWith('-')) {
-      out.add(DiffLine(DiffLineKind.del, raw, file: file, line: newLine < 1 ? 1 : newLine, quote: raw));
+      out.add(DiffLine(DiffLineKind.del, raw, file: file, line: newLine < 1 ? 1 : newLine, quote: '-${raw.substring(1).trim()}'));
     } else if (inHunk && raw.startsWith(' ')) {
-      out.add(DiffLine(DiffLineKind.context, raw, file: file, line: newLine++, quote: raw.substring(1)));
+      out.add(DiffLine(DiffLineKind.context, raw, file: file, line: newLine++, quote: raw.substring(1).trim()));
     } else if (raw.isNotEmpty) {
       out.add(DiffLine(DiffLineKind.meta, raw, file: file));
     }
@@ -106,15 +106,14 @@ List<DiffLine> diffViewLines(ProjectDiff changes, {required bool semantic}) {
 
 /// What a comment on the lines `from..to` (either order) anchors to: the file, the first and
 /// last line number, the quote (several lines are joined by `\n`). Null where there is nothing
-/// to comment on, or the lines span files.
+/// to comment on, or the lines span files. Rows with nothing to anchor to are skipped.
 DiffComment? diffAnchor(List<DiffLine> lines, int from, int to, String message) {
   final (a, b) = from <= to ? (from, to) : (to, from);
   String? file;
   final numbers = <int>[];
   final quotes = <String>[];
   for (final line in lines.sublist(a, b + 1)) {
-    if (line.kind == DiffLineKind.file) continue;
-    if (!line.commentable) return null;
+    if (!line.commentable) continue; // headers and notes inside a range are skipped
     if (file != null && file != line.file) return null;
     file = line.file;
     numbers.add(line.line!);

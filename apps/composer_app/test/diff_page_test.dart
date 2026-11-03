@@ -115,7 +115,7 @@ void main() {
     await tester.pump();
     final send = h.commands.single as ClientCommandTicketComment;
     expect(send.ticket, '0007');
-    expect([for (final c in send.comments) (c.file, c.start, c.end, c.message, c.quote)], [('a.rs', 2, 2, 'why 2?', '    let x = 2;')]);
+    expect([for (final c in send.comments) (c.file, c.start, c.end, c.message, c.quote)], [('a.rs', 2, 2, 'why 2?', 'let x = 2;')]);
 
     // The server's answer: the page's comment lines, shown; the drafts are gone.
     h.store.dispatch(TicketReplied(home.url, '0007', result: const CommandResultComments(lines: ['- a.rs:2:2 — `let x = 2;`: why 2?'])));
@@ -163,5 +163,42 @@ void main() {
     await tester.pump();
     final c = (h.commands.single as ClientCommandTicketComment).comments.single;
     expect((c.file, c.start, c.end), ('a.rs', 1, 2));
+  });
+
+  testWidgets('editing a range draft keeps its end; the mark is spent after use; the whole range shows it has a comment', (tester) async {
+    final h = Harness(diff());
+    await h.show(tester, const DiffPage(url: 'https://home.ts.net', ticket: '0007'));
+    final marked = find.byWidgetPredicate((w) => w is Container && w.color != null && w.color!.a > 0.1 && w.color!.a < 0.2);
+    await tester.longPress(find.text(' fn a() {'));
+    await tester.pump();
+    expect(marked, findsOneWidget, reason: 'the marked start is highlighted');
+    await tester.tap(find.text(' }'));
+    await tester.pump();
+    await tester.enterText(find.byKey(const Key('comment-field')), 'span');
+    await tester.tap(find.byKey(const Key('comment-add')));
+    await tester.pump();
+    expect(find.text('a.rs:1:3 — span'), findsOneWidget);
+    expect(marked, findsNothing, reason: 'the highlight goes with the mark');
+    // hunk, context, removed, added, context: every line of the range, not only its ends.
+    expect(find.byIcon(Icons.comment), findsNWidgets(5));
+
+    await tester.tap(find.byKey(const Key('draft-edit-0')));
+    await tester.pump();
+    await tester.enterText(find.byKey(const Key('comment-field')), 'span, better');
+    await tester.tap(find.byKey(const Key('comment-add')));
+    await tester.pump();
+    expect(find.text('a.rs:1:3 — span, better'), findsOneWidget);
+
+    // The mark was spent by the first comment: a plain tap is one line again.
+    await tester.tap(find.text('+    let x = 2;'));
+    await tester.pump();
+    expect(find.text('a.rs:2:2'), findsOneWidget);
+    await tester.enterText(find.byKey(const Key('comment-field')), 'one');
+    await tester.tap(find.byKey(const Key('comment-add')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('send-comments')));
+    await tester.pump();
+    final sent = (h.commands.single as ClientCommandTicketComment).comments;
+    expect([for (final c in sent) (c.start, c.end, c.message)], [(1, 3, 'span, better'), (2, 2, 'one')]);
   });
 }
