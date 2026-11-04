@@ -99,7 +99,14 @@ impl Composer {
             return;
         }
         let (start, end) = rows[target];
-        let line_end = self.text[..end].strip_suffix('\n').map_or(end, |s| s.len());
+        // An empty row (only ever the last one, after a trailing newline) holds no newline
+        // of its own: the byte before it belongs to the row above, so there is nothing to
+        // strip.
+        let line_end = if end > start {
+            self.text[..end].strip_suffix('\n').map_or(end, |s| s.len())
+        } else {
+            end
+        };
         let mut used = 0;
         let mut pos = start;
         for (i, c) in self.text[start..line_end].char_indices() {
@@ -368,6 +375,23 @@ mod tests {
         assert_eq!(composer.cursor, 10, "back on the last line");
         press(&mut composer, &state, "<Down>");
         assert_eq!(composer.cursor, 10, "off the last line: still nothing");
+    }
+
+    #[test]
+    fn down_onto_an_empty_last_row_lands_on_it() {
+        let state = state();
+        let mut composer = Composer::new();
+        press(&mut composer, &state, "abcd<Enter>");
+        press(&mut composer, &state, "<Up>");
+        assert_eq!(
+            composer.cursor, 0,
+            "up from the empty row keeps its column (0)"
+        );
+        press(&mut composer, &state, "<Down>");
+        assert_eq!(
+            composer.cursor, 5,
+            "the row below is empty: land at its start"
+        );
     }
 
     #[test]
