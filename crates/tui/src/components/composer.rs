@@ -10,6 +10,7 @@ use unicode_width::UnicodeWidthChar;
 
 use crate::action::Action;
 use crate::components::Component;
+use crate::row::Row;
 use crate::store::AppState;
 use crate::store::types::{Mode, UploadState};
 use crate::theme;
@@ -98,33 +99,14 @@ impl Composer {
         if target >= rows.len() {
             return;
         }
-        let (start, end) = rows[target];
-        // An empty row (only ever the last one, after a trailing newline) holds no newline
-        // of its own: the byte before it belongs to the row above, so there is nothing to
-        // strip.
-        let line_end = if end > start {
-            self.text[..end].strip_suffix('\n').map_or(end, |s| s.len())
-        } else {
-            end
-        };
-        let mut used = 0;
-        let mut pos = start;
-        for (i, c) in self.text[start..line_end].char_indices() {
-            let w = c.width().unwrap_or(0);
-            if used + w > col {
-                break;
-            }
-            used += w;
-            pos = start + i + c.len_utf8();
-        }
+        let target_row = rows[target];
+        let mut pos = target_row.offset_at_column(&self.text, col);
+
         // The byte at a wrapped line's end starts the next line, so a cursor parked at a
         // full-width column cannot rest there: stop at the line's last character instead.
-        if line_end == end && target < rows.len() - 1 && pos >= end {
-            pos = start
-                + self.text[start..end]
-                    .char_indices()
-                    .next_back()
-                    .map_or(0, |(i, _)| i);
+        if !target_row.hard_break(&self.text) && target < rows.len() - 1 && pos >= target_row.end()
+        {
+            pos = target_row.last_char_offset(&self.text);
         }
         self.cursor = pos;
     }
@@ -217,9 +199,9 @@ impl Component for Composer {
             .iter()
             .skip(first)
             .take(inner.height as usize)
-            .map(|&(start, end)| {
+            .map(|row| {
                 Line::from(Span::styled(
-                    self.text[start..end].trim_end_matches('\n').to_string(),
+                    row.content(&self.text).to_string(),
                     theme::text(),
                 ))
             })
@@ -303,37 +285,41 @@ fn percent_decode(text: &str) -> String {
     String::from_utf8_lossy(&out).into_owned()
 }
 
+/// A constructed range never runs backwards; the type keeps it that way.
+fn row(start: usize, end: usize) -> Row {
+    Row::new(start, end).expect("a constructed range never runs backwards")
+}
+
 /// Byte ranges of each displayed row (hard newlines and wrapping at `width`).
-fn wrap_positions(text: &str, width: usize) -> Vec<(usize, usize)> {
+fn wrap_positions(text: &str, width: usize) -> Vec<Row> {
     let width = width.max(1);
     let mut rows = Vec::new();
     let mut start = 0;
     let mut used = 0;
     for (i, c) in text.char_indices() {
         if c == '\n' {
-            rows.push((start, i + 1));
+            rows.push(row(start, i + 1));
             start = i + 1;
             used = 0;
             continue;
         }
         let w = c.width().unwrap_or(0);
         if used + w > width {
-            rows.push((start, i));
+            rows.push(row(start, i));
             start = i;
             used = 0;
         }
         used += w;
     }
-    rows.push((start, text.len()));
+    rows.push(row(start, text.len()));
     rows
 }
 
-fn cursor_position(rows: &[(usize, usize)], text: &str, cursor: usize) -> (usize, usize) {
-    for (row, &(start, end)) in rows.iter().enumerate() {
-        let last = row == rows.len() - 1;
-        if cursor >= start && (cursor < end || last) {
-            let col = text[start..cursor].chars().filter_map(|c| c.width()).sum();
-            return (row, col);
+fn cursor_position(rows: &[Row], text: &str, cursor: usize) -> (usize, usize) {
+    for (i, row) in rows.iter().enumerate() {
+        let last = i == rows.len() - 1;
+        if row.holds_cursor(cursor, last) {
+            return (i, row.column_of(text, cursor));
         }
     }
     (0, 0)

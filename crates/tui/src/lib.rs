@@ -21,6 +21,7 @@ mod headless;
 mod keymap;
 pub mod markdown;
 mod options;
+mod row;
 pub mod snapshot;
 pub mod store;
 mod terminal;
