@@ -317,3 +317,146 @@ async fn actions_lists_recipes_with_approval_state() {
     );
     assert!(!results[1].contains("_helper"));
 }
+
+async fn http(
+    server: &composer_server::Server,
+    addr: std::net::SocketAddr,
+    path: &str,
+    body: Option<serde_json::Value>,
+) -> (u16, serde_json::Value) {
+    let client = reqwest::Client::new();
+    let url = format!("http://{addr}{path}");
+    let request = match body {
+        Some(body) => client.post(url).json(&body),
+        None => client.get(url),
+    };
+    let response = request.bearer_auth(&server.token).send().await.unwrap();
+    (
+        response.status().as_u16(),
+        response.json().await.unwrap_or_default(),
+    )
+}
+
+#[tokio::test]
+async fn an_app_lists_and_runs_actions_over_http() {
+    if !has_just() {
+        return;
+    }
+    let (dir, server, _p, addr) = start(vec![]).await;
+    let site = dir.path().join("sites/tools");
+    std::fs::create_dir_all(&site).unwrap();
+    std::fs::write(
+        site.join("justfile"),
+        "# Greets someone.\nhello name:\n    echo \"hi {{name}} from $COMPOSER_SITE\"\n_helper:\n    true\n",
+    )
+    .unwrap();
+
+    let (status, list) = http(&server, addr, "/api/actions/tools", None).await;
+    assert_eq!(status, 200);
+    assert_eq!(
+        list,
+        json!([{ "name": "hello", "doc": "Greets someone.", "parameters": ["name"], "approved": false }])
+    );
+
+    // Pre-approved seed recipe: runs, and the caller gets the output.
+    let (status, run) = http(
+        &server,
+        addr,
+        "/api/actions/orchestration/new-ticket",
+        Some(json!({ "args": ["From an app"] })),
+    )
+    .await;
+    assert_eq!(status, 200, "{run}");
+    assert_eq!(run["status"], "ok");
+    assert!(
+        run["output"]
+            .as_str()
+            .unwrap()
+            .contains("site://orchestration/tickets/0001"),
+        "{run}"
+    );
+
+    // Unknown and private recipes are 404.
+    let (status, _) = http(&server, addr, "/api/actions/tools/_helper", Some(json!({}))).await;
+    assert_eq!(status, 404);
+}
+
+async fn answer(socket: &mut Socket, decision: ApprovalDecision) {
+    let events = until(socket, |e| {
+        matches!(e, ServerMessage::ApprovalRequest { .. })
+    })
+    .await;
+    let Some(ServerMessage::ApprovalRequest { request, .. }) = events.last() else {
+        panic!()
+    };
+    send(
+        socket,
+        9,
+        ClientCommand::ApprovalRespond {
+            request: request.clone(),
+            decision,
+        },
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn an_app_run_needs_approval_first() {
+    if !has_just() {
+        return;
+    }
+    let (dir, server, _p, addr) = start(vec![]).await;
+    let site = dir.path().join("sites/tools");
+    std::fs::create_dir_all(&site).unwrap();
+    std::fs::write(
+        site.join("justfile"),
+        "hello name:\n    echo \"hi {{name}} from $COMPOSER_SITE\"\n",
+    )
+    .unwrap();
+    let path = "/api/actions/tools/hello";
+
+    // No session to ask: refused, nothing ran.
+    let (status, body) = http(&server, addr, path, Some(json!({ "args": ["bob"] }))).await;
+    assert_eq!(status, 403, "{body}");
+
+    // With a session: the clients are asked; denied → 403.
+    let mut socket = connect(addr, &server.token).await;
+    let id = session(&mut socket).await;
+    let call = |name: &'static str| {
+        let (server, id) = (server.clone(), id.clone());
+        tokio::spawn(async move {
+            http(
+                &server,
+                addr,
+                path,
+                Some(json!({ "args": [name], "session": id })),
+            )
+            .await
+        })
+    };
+    let pending = call("eve");
+    answer(&mut socket, ApprovalDecision::Deny).await;
+    assert_eq!(pending.await.unwrap().0, 403);
+
+    // Approved → runs with the output; the next call needs no question.
+    let pending = call("ann");
+    answer(&mut socket, ApprovalDecision::Approve).await;
+    let (status, run) = pending.await.unwrap();
+    assert_eq!(status, 200, "{run}");
+    assert!(
+        run["output"]
+            .as_str()
+            .unwrap()
+            .trim_end()
+            .ends_with("hi ann from tools")
+    );
+    let (status, run) = http(&server, addr, path, Some(json!({ "args": ["bob"] }))).await;
+    assert_eq!(status, 200, "{run}");
+    assert!(
+        run["output"]
+            .as_str()
+            .unwrap()
+            .trim_end()
+            .ends_with("hi bob from tools")
+    );
+}

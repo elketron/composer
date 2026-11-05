@@ -1,5 +1,6 @@
 //! The WS/HTTP API. Every route requires a token, except pairing.
 
+mod action_routes;
 mod api_error;
 mod app_routes;
 mod attachment_routes;
@@ -59,6 +60,8 @@ pub fn router(server: Arc<Server>) -> Router {
             "/api/sessions/{id}/project/diff",
             get(http_routes::project_diff),
         )
+        .route("/api/actions/{site}", get(action_routes::list))
+        .route("/api/actions/{site}/{recipe}", post(action_routes::run))
         .route(
             "/api/files/{site}/{*path}",
             get(app_routes::get_file).put(app_routes::put_file),

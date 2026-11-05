@@ -1,0 +1,178 @@
+//! Site actions for micro apps: the registry the `actions` and `run` tools speak, over HTTP.
+
+use std::sync::Arc;
+use std::time::Duration;
+
+use axum::Json;
+use axum::extract::{Path, State};
+use axum::http::StatusCode;
+use composer_core::SiteUrl;
+use composer_protocol::ApprovalDecision;
+use serde::{Deserialize, Serialize};
+use tokio_util::sync::CancellationToken;
+
+use crate::actions::{Justfile, RecipeEnv, run_recipe};
+use crate::api::ApiError;
+use crate::server::Server;
+
+#[derive(Serialize)]
+pub struct ActionInfo {
+    name: String,
+    doc: Option<String>,
+    /// `name`, `name=default` or `*name`, as in `actions`.
+    parameters: Vec<String>,
+    approved: bool,
+}
+
+#[derive(Deserialize, Default)]
+pub struct RunRequest {
+    /// Recipe arguments, in order.
+    #[serde(default)]
+    args: Vec<String>,
+    /// The session whose clients are asked when the recipe needs approval (an app's URL carries
+    /// `session=<id>`). Without one, a recipe that needs approval is not run.
+    session: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct RunResponse {
+    /// `ok`, `failed`, `timed out` or `killed`.
+    status: String,
+    exit_code: Option<i32>,
+    output: String,
+}
+
+/// `GET /api/actions/<site>`: the site's public recipes, with their approval state.
+pub async fn list(
+    State(server): State<Arc<Server>>,
+    Path(site): Path<String>,
+) -> Result<Json<Vec<ActionInfo>>, ApiError> {
+    let justfile = load(&server, &site).await?;
+    let site = SiteUrl::new(&site, "")?.site().to_string();
+    Ok(Json(
+        justfile
+            .recipes()
+            .into_iter()
+            .filter(|r| !r.private)
+            .map(|r| ActionInfo {
+                approved: server
+                    .approvals
+                    .is_approved(&site, &r.name, &justfile.hash(&r.name)),
+                name: r.name,
+                doc: r.doc,
+                parameters: r.parameters,
+            })
+            .collect(),
+    ))
+}
+
+/// `POST /api/actions/<site>/<recipe>` with `{ "args": [...], "session": "<id>" }`: runs the
+/// recipe and answers with its output. An unapproved recipe version asks the session's clients
+/// and waits; with no session (or when denied) it answers 403 and does not run.
+pub async fn run(
+    State(server): State<Arc<Server>>,
+    Path((site, recipe)): Path<(String, String)>,
+    body: Option<Json<RunRequest>>,
+) -> Result<Json<RunResponse>, ApiError> {
+    let Json(request) = body.unwrap_or_default();
+    let justfile = load(&server, &site).await?;
+    let site = SiteUrl::new(&site, "")?.site().to_string();
+    let found = justfile
+        .recipe(&recipe)
+        .filter(|r| !r.private)
+        .ok_or_else(|| {
+            ApiError(
+                StatusCode::NOT_FOUND,
+                format!("no action `{recipe}` in site://{site}"),
+            )
+        })?;
+    let hash = justfile.hash(&found.name);
+    let session = match &request.session {
+        Some(id) => Some(server.sessions.get(id)?),
+        None => None,
+    };
+    let cancel = CancellationToken::new();
+
+    if !server.approvals.is_approved(&site, &found.name, &hash) {
+        let Some(session) = &session else {
+            return Err(ApiError(
+                StatusCode::FORBIDDEN,
+                format!(
+                    "`{}` needs the user's approval before it runs; pass `session` to ask them",
+                    found.name
+                ),
+            ));
+        };
+        let body = justfile.show(&found.name).await.map_err(unprocessable)?;
+        let answer = server
+            .request_approval(
+                session,
+                &site,
+                &found.name,
+                &request.args,
+                body,
+                &hash,
+                &cancel,
+            )
+            .await;
+        match answer.map(|a| a.decision) {
+            Some(ApprovalDecision::Approve | ApprovalDecision::Always) => server
+                .approvals
+                .approve(&site, &found.name, &hash)
+                .map_err(ApiError::from)?,
+            _ => {
+                return Err(ApiError(
+                    StatusCode::FORBIDDEN,
+                    format!("running `{}` was not approved", found.name),
+                ));
+            }
+        }
+        // Run only what was approved.
+        let current = load(&server, &site).await?;
+        if current.hash(&found.name) != hash {
+            return Err(ApiError(
+                StatusCode::CONFLICT,
+                "the recipe changed while waiting for approval; run it again".into(),
+            ));
+        }
+    }
+
+    let env = RecipeEnv {
+        site: site.clone(),
+        session: request.session.clone().unwrap_or_default(),
+        project: session.as_ref().and_then(|s| s.info().project),
+    };
+    let timeout = Duration::from_secs(server.config().agent.recipe_timeout_secs);
+    let output = run_recipe(
+        &justfile,
+        &found.name,
+        &request.args,
+        &env,
+        timeout,
+        &cancel,
+    )
+    .await
+    .map_err(unprocessable)?;
+    let status = match (output.exit_code, output.timed_out) {
+        (_, true) => "timed out",
+        (Some(0), _) => "ok",
+        (Some(_), _) => "failed",
+        (None, _) => "killed",
+    };
+    Ok(Json(RunResponse {
+        status: status.into(),
+        exit_code: output.exit_code,
+        output: output.output,
+    }))
+}
+
+async fn load(server: &Server, site: &str) -> Result<Justfile, ApiError> {
+    let url = SiteUrl::new(site, "")?;
+    Justfile::load(&server.workspace.root().join(url.site()))
+        .await
+        .map_err(|e| ApiError(StatusCode::NOT_FOUND, e))
+}
+
+fn unprocessable(error: String) -> ApiError {
+    ApiError(StatusCode::UNPROCESSABLE_ENTITY, error)
+}
