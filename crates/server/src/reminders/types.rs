@@ -1,6 +1,8 @@
 use chrono::NaiveDateTime;
 use composer_core::SiteUrl;
 
+use crate::reminders::Recurrence;
+
 /// A reminder whose time has come and that hasn't been delivered.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DueReminder {
@@ -12,4 +14,6 @@ pub struct DueReminder {
     pub session: Option<String>,
     /// Who gets a new session for it when it has none (`agent:`, default `default`).
     pub agent: String,
+    /// How often it comes back (`recurs:`); `None` for a one-off.
+    pub recurs: Option<Recurrence>,
 }

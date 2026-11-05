@@ -8,7 +8,7 @@ use composer_protocol::{ChangedBy, ChatMessage, MessageSource, Role, ServerMessa
 
 use crate::agent::AgentDefinition;
 use crate::reminders::due::parse_time;
-use crate::reminders::{DueReminder, due_reminders, mark_notified};
+use crate::reminders::{DueReminder, due_reminders, mark_fired, mark_notified, roll_recurring};
 use crate::server::Server;
 use crate::session::submit;
 
@@ -39,16 +39,22 @@ pub fn check_reminders(server: &Arc<Server>, now: NaiveDateTime) -> Vec<DueRemin
         .collect()
 }
 
-/// Records `notified:` in the page, then tells the clients (and the agent). Returns false if
-/// the page couldn't be marked: delivering it anyway would repeat it every check.
+/// Records the delivery in the page (`notified:`, or for a recurring reminder its next `due:`),
+/// then tells the clients (and the agent). Returns false if the page couldn't be written:
+/// delivering it anyway would repeat it every check.
 fn deliver(server: &Arc<Server>, reminder: &DueReminder, now: NaiveDateTime) -> bool {
     let url = &reminder.url;
     let stamp = now.format("%Y-%m-%d %H:%M").to_string();
+    let mut next = None;
     let marked = server
         .workspace
         .read_page(url)
         .map_err(|e| e.to_string())
-        .and_then(|page| mark_notified(&page.raw, &stamp).ok_or_else(|| "no frontmatter".into()))
+        .and_then(|page| {
+            let (text, rolled_to) = record(reminder, &page.raw, now, &stamp);
+            next = rolled_to;
+            text.ok_or_else(|| "no frontmatter".into())
+        })
         // Not the agent and not an app: the server's own bookkeeping, as for an editor's change.
         .and_then(|text| {
             server
@@ -61,8 +67,12 @@ fn deliver(server: &Arc<Server>, reminder: &DueReminder, now: NaiveDateTime) -> 
     }
 
     let due = reminder.due_at.format("%Y-%m-%d %H:%M").to_string();
-    let session = post_to_session(server, reminder, &due);
-    tracing::info!("reminder {url} (due {due}) delivered");
+    let next = next.map(|next| next.format("%Y-%m-%d %H:%M").to_string());
+    let session = post_to_session(server, reminder, &due, next.as_deref());
+    match &next {
+        Some(next) => tracing::info!("reminder {url} (due {due}) delivered, next due {next}"),
+        None => tracing::info!("reminder {url} (due {due}) delivered"),
+    }
     server.hub.send(ServerMessage::ReminderDue {
         url: url.to_string(),
         title: reminder.title.clone(),
@@ -73,10 +83,36 @@ fn deliver(server: &Arc<Server>, reminder: &DueReminder, now: NaiveDateTime) -> 
     true
 }
 
+/// The page after going off at `now`, and the next firing if it recurs. A one-off gets
+/// `notified:`; a recurring one rolls `due:` on (or, past the end of the calendar, `fired:`, which
+/// holds it like `notified:` does). `None` text: no frontmatter to write into.
+fn record(
+    reminder: &DueReminder,
+    raw: &str,
+    now: NaiveDateTime,
+    stamp: &str,
+) -> (Option<String>, Option<NaiveDateTime>) {
+    let Some(recurs) = reminder.recurs else {
+        return (mark_notified(raw, stamp), None);
+    };
+    match recurs.next_after(reminder.due_at, now) {
+        Some(next) => (roll_recurring(raw, next, stamp), Some(next)),
+        None => {
+            tracing::warn!("reminder {}: no next {recurs} firing", reminder.url);
+            (mark_fired(raw, stamp), None)
+        }
+    }
+}
+
 /// Posts the reminder into its session; without one (or if it's gone), into a new session
 /// for its agent (`agent:`, default `default`). An agent name that doesn't resolve falls
 /// back to `default`, and the message says so. Returns the session id.
-fn post_to_session(server: &Arc<Server>, reminder: &DueReminder, due: &str) -> Option<String> {
+fn post_to_session(
+    server: &Arc<Server>,
+    reminder: &DueReminder,
+    due: &str,
+    next: Option<&str>,
+) -> Option<String> {
     let existing = reminder
         .session
         .as_deref()
@@ -109,10 +145,17 @@ fn post_to_session(server: &Arc<Server>, reminder: &DueReminder, due: &str) -> O
             }
         }
     };
+    // Done stops a recurring reminder for good, so it's not what handling one firing asks for.
+    let handled = match (reminder.recurs, next) {
+        (Some(recurs), Some(next)) => format!(
+            "; it recurs {recurs} and is next due {next}, so leave its status open (done stops it)"
+        ),
+        _ => "; when it's handled, set its status to done".into(),
+    };
     let message = ChatMessage {
         role: Role::User,
         content: format!(
-            "{} (due {due}). Open {} for what to do; when it's handled, set its status to done.{}",
+            "{} (due {due}). Open {} for what to do{handled}.{}",
             reminder.title,
             reminder.url,
             note.unwrap_or_default()

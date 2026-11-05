@@ -3,11 +3,14 @@
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use composer_core::{Frontmatter, Index};
 
-use crate::reminders::DueReminder;
+use crate::reminders::{DueReminder, Recurrence};
 
 /// Open, undelivered reminders due at or before `now` (local time), oldest first.
 /// `due` is a date, optionally with a time (`2026-10-19 20:00`); `time:` sets the time
 /// separately; without either, `default_time`. Pages with a `due` that doesn't parse are skipped.
+/// A recurring reminder (`recurs:`) is never `notified:`: its delivery rolls `due:` on instead,
+/// and only a `fired:` stamp (left when it can't roll) holds it back. A `recurs:` that doesn't
+/// parse goes off once, like any reminder, with a warning.
 pub fn due_reminders(
     index: &Index,
     now: NaiveDateTime,
@@ -20,10 +23,32 @@ pub fn due_reminders(
             let status = e.frontmatter.get_str("status").unwrap_or_default();
             status.is_empty() || status.eq_ignore_ascii_case("open")
         })
-        .filter(|e| e.frontmatter.get("notified").is_none_or(|v| v.is_null()))
         .filter_map(|e| {
+            let recurs_text = e
+                .frontmatter
+                .get_str("recurs")
+                .filter(|r| !r.trim().is_empty());
+            let recurs = recurs_text.as_deref().and_then(Recurrence::parse);
+            let gate = if recurs.is_some() {
+                "fired"
+            } else {
+                "notified"
+            };
+            if e.frontmatter.get(gate).is_some_and(|v| !v.is_null()) {
+                return None;
+            }
             let due_at = due_at(&e.frontmatter, default_time)?;
-            (due_at <= now).then(|| DueReminder {
+            if due_at > now {
+                return None;
+            }
+            // Only once: going off as a one-off stamps `notified:`.
+            if let (Some(text), None) = (&recurs_text, recurs) {
+                tracing::warn!(
+                    "reminder {}: recurs: {text} isn't daily, weekly, monthly or <n>d, so it goes off once",
+                    e.url
+                );
+            }
+            Some(DueReminder {
                 url: e.url.clone(),
                 title: e.title.clone(),
                 due_at,
@@ -38,6 +63,7 @@ pub fn due_reminders(
                     .map(|a| a.trim().to_string())
                     .filter(|a| !a.is_empty())
                     .unwrap_or_else(|| "default".into()),
+                recurs,
             })
         })
         .collect();
@@ -77,6 +103,42 @@ pub fn mark_notified(raw: &str, stamp: &str) -> Option<String> {
     set_field(raw, "notified", stamp)
 }
 
+/// A recurring reminder's page after it went off at `stamp`: `due:` moved to `next` (written as
+/// it was, with or without its time), `fired:` cleared, and a `- fired <stamp>` line appended to
+/// the body as its history. `None` if the page has no frontmatter.
+pub fn roll_recurring(raw: &str, next: NaiveDateTime, stamp: &str) -> Option<String> {
+    let (Some(yaml), _) = Frontmatter::split(raw) else {
+        return None;
+    };
+    let frontmatter = Frontmatter::parse(yaml).ok()?;
+    let with_time = frontmatter
+        .get_str("due")
+        .is_some_and(|due| due.trim().contains([' ', 'T']));
+    let due = if with_time {
+        next.format("%Y-%m-%d %H:%M")
+    } else {
+        next.format("%Y-%m-%d")
+    };
+    let rolled = set_field(raw, "due", &due.to_string())?;
+    let mut text = remove_field(&rolled, "fired")?;
+    let newline = if raw.contains("\r\n") { "\r\n" } else { "\n" };
+    if !text.ends_with(newline) {
+        text.push_str(newline);
+    }
+    // A blank line before the first history line, so it doesn't run into the text above.
+    let last = text.trim_end().rsplit(newline).next().unwrap_or_default();
+    if !last.starts_with("- fired ") {
+        text.push_str(newline);
+    }
+    text.push_str(&format!("- fired {stamp}{newline}"));
+    Some(text)
+}
+
+/// The page with `fired: <stamp>`: a recurring reminder that went off but couldn't roll on.
+pub fn mark_fired(raw: &str, stamp: &str) -> Option<String> {
+    set_field(raw, "fired", stamp)
+}
+
 /// A reminder page *created* in a session without saying whose it is: the page with
 /// `session: <session>` added, so it is delivered back there. `None` for anything else.
 /// Only the write-on-create path calls this; edits and replaces leave `session:` alone.
@@ -107,6 +169,21 @@ fn set_field(raw: &str, key: &str, value: &str) -> Option<String> {
     match (1..close).find(|&i| lines[i].starts_with(&prefix)) {
         Some(i) => lines[i] = &line,
         None => lines.insert(close, &line),
+    }
+    Some(lines.join(newline))
+}
+
+/// Removes the `key:` line from the frontmatter, if there is one.
+fn remove_field(raw: &str, key: &str) -> Option<String> {
+    let newline = if raw.contains("\r\n") { "\r\n" } else { "\n" };
+    let mut lines: Vec<&str> = raw.split(newline).collect();
+    if lines.first()?.trim_end() != "---" {
+        return None;
+    }
+    let close = lines.iter().skip(1).position(|l| l.trim_end() == "---")? + 1;
+    let prefix = format!("{key}:");
+    if let Some(i) = (1..close).find(|&i| lines[i].starts_with(&prefix)) {
+        lines.remove(i);
     }
     Some(lines.join(newline))
 }
@@ -169,6 +246,65 @@ mod tests {
         let ask = due_reminders(&index, at("2026-10-19 09:00"), nine).remove(0);
         assert_eq!(ask.session.as_deref(), Some("ab12"));
         assert_eq!(ask.agent, "default");
+    }
+
+    #[test]
+    fn recurring_reminders_answer_to_fired_not_notified() {
+        let index = index(&[
+            (
+                "daily.md",
+                "type: reminder\ndue: 2026-10-19\nrecurs: daily\nnotified: 2026-10-18 09:00",
+            ),
+            (
+                "held.md",
+                "type: reminder\ndue: 2026-10-19\nrecurs: weekly\nfired: 2026-10-19 09:00",
+            ),
+            (
+                "odd.md",
+                "type: reminder\ndue: 2026-10-19\nrecurs: sometimes",
+            ),
+            (
+                "odd-sent.md",
+                "type: reminder\ndue: 2026-10-19\nrecurs: sometimes\nnotified: 2026-10-19 09:00",
+            ),
+        ]);
+        let nine = NaiveTime::from_hms_opt(9, 0, 0).unwrap();
+        let due = due_reminders(&index, at("2026-10-19 10:00"), nine);
+        let found: Vec<_> = due
+            .iter()
+            .map(|r| (r.url.path().to_string(), r.recurs))
+            .collect();
+        assert_eq!(
+            found,
+            [
+                ("daily.md".to_string(), Some(Recurrence::Days(1))),
+                ("odd.md".to_string(), None)
+            ]
+        );
+    }
+
+    #[test]
+    fn rolling_moves_due_and_keeps_history() {
+        let page = "---\ntitle: x\ntype: reminder\ndue: 2026-10-19\ntime: \"20:00\"\nrecurs: daily\nfired:\n---\n# x\n\nWater the plants.\n";
+        let once = roll_recurring(page, at("2026-10-20 20:00"), "2026-10-19 20:00").unwrap();
+        assert_eq!(
+            once,
+            "---\ntitle: x\ntype: reminder\ndue: 2026-10-20\ntime: \"20:00\"\nrecurs: daily\n---\n# x\n\nWater the plants.\n\n- fired 2026-10-19 20:00\n"
+        );
+        let twice = roll_recurring(&once, at("2026-10-21 20:00"), "2026-10-20 20:01").unwrap();
+        assert!(
+            twice.contains("due: 2026-10-21\n")
+                && twice
+                    .ends_with("plants.\n\n- fired 2026-10-19 20:00\n- fired 2026-10-20 20:01\n"),
+            "{twice}"
+        );
+        // A time inside `due:` stays inside it; a body without a final newline gets one.
+        let inline = "---\ntype: reminder\ndue: 2026-10-19 08:30\nrecurs: 2d\n---\nbody";
+        assert_eq!(
+            roll_recurring(inline, at("2026-10-21 08:30"), "2026-10-19 08:30").unwrap(),
+            "---\ntype: reminder\ndue: 2026-10-21 08:30\nrecurs: 2d\n---\nbody\n\n- fired 2026-10-19 08:30\n"
+        );
+        assert!(roll_recurring("no frontmatter", at("2026-10-21 08:30"), "now").is_none());
     }
 
     #[test]
