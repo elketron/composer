@@ -1,10 +1,9 @@
 use std::time::Duration;
 
 use async_trait::async_trait;
-use composer_protocol::ApprovalDecision;
 use serde_json::{Value, json};
 
-use crate::actions::{Justfile, RecipeEnv, run_recipe};
+use crate::actions::{Justfile, RecipeEnv, check_args, ensure_approved, run_recipe};
 use crate::tools::args::RunArgs;
 use crate::tools::{Tool, ToolContext};
 
@@ -56,48 +55,19 @@ impl Tool for RunTool {
         if recipe.private {
             return Err(format!("`{}` is a private helper recipe", recipe.name));
         }
-        let hash = justfile.hash(&recipe.name);
-
-        if !server.approvals.is_approved(&site, &recipe.name, &hash) {
-            let body = justfile.show(&recipe.name).await?;
-            let decision = server
-                .request_approval(
-                    &context.session,
-                    &site,
-                    &recipe.name,
-                    &args.args,
-                    body,
-                    &hash,
-                    &context.cancel,
-                )
-                .await;
-            match decision.map(|answer| (answer.decision, answer.reason)) {
-                // The orchestrator's approval holds for this run (the worker's approvals are
-                // kept in memory), the user's for good.
-                Some((ApprovalDecision::Approve | ApprovalDecision::Always, _)) => server
-                    .approvals
-                    .approve(&site, &recipe.name, &hash)
-                    .map_err(|e| e.to_string())?,
-                Some((ApprovalDecision::Deny, Some(reason))) => {
-                    return Err(format!(
-                        "your orchestrator denied running `{}`: {reason}",
-                        recipe.name
-                    ));
-                }
-                Some((ApprovalDecision::Deny, None)) => {
-                    return Err(format!(
-                        "the user denied running `{}`; ask them why before trying again",
-                        recipe.name
-                    ));
-                }
-                None => return Err("cancelled by the user".into()),
-            }
-            // The justfile may have changed while the user was looking: run only what they approved.
-            let current = Justfile::load(&site_dir).await?;
-            if current.hash(&recipe.name) != hash {
-                return Err("the recipe changed while waiting for approval; run it again".into());
-            }
-        }
+        check_args(&recipe, &args.args, false)?;
+        ensure_approved(
+            server,
+            &context.session,
+            &site,
+            &justfile,
+            &recipe,
+            &args.args,
+            true,
+            &context.cancel,
+        )
+        .await
+        .map_err(|refusal| refusal.message().to_string())?;
 
         let env = RecipeEnv {
             site: site.clone(),

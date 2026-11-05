@@ -11,7 +11,7 @@ use composer_protocol::{
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
-use crate::actions::{ApprovalAnswer, Approvals, PendingApprovals};
+use crate::actions::{ApprovalAnswer, ApprovalWait, Approvals, PendingApprovals};
 use crate::config::Config;
 use crate::devices::Devices;
 use crate::error::{Result, ServerError};
@@ -517,21 +517,18 @@ impl Server {
             }
         }
         let answer = self.pending_approvals.add(&request, message.clone());
+        let mut wait =
+            ApprovalWait::new(&self.pending_approvals, &self.hub, session, request, after);
         self.hub.send(message);
         let decision = tokio::select! {
             decision = answer => decision.ok(),
             _ = cancel.cancelled() => None,
         };
-        self.pending_approvals.remove(&request);
-        self.hub.send(ServerMessage::ApprovalResolved {
-            request,
-            session: session.id().to_string(),
-            approved: matches!(
-                decision,
-                Some(ApprovalDecision::Approve | ApprovalDecision::Always)
-            ),
-        });
-        session.update_info(&self.hub, |info| info.state = after);
+        wait.set_approved(matches!(
+            decision,
+            Some(ApprovalDecision::Approve | ApprovalDecision::Always)
+        ));
+        drop(wait);
         decision.map(|decision| ApprovalAnswer {
             decision,
             reason: None,

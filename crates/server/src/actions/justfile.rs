@@ -142,10 +142,15 @@ fn recipe_info(recipe: &Value) -> Recipe {
         || recipe["attributes"]
             .as_array()
             .is_some_and(|a| a.iter().any(|x| x == "private"));
-    let parameters = recipe["parameters"]
-        .as_array()
-        .into_iter()
-        .flatten()
+    let params = recipe["parameters"].as_array().cloned().unwrap_or_default();
+    let names: Vec<&str> = params.iter().filter_map(|p| p["name"].as_str()).collect();
+    let interpolates_parameters =
+        references(&recipe["body"], &names) || references(&recipe["dependencies"], &names);
+    let variadic = params
+        .last()
+        .is_some_and(|p| p["kind"].as_str().is_some_and(|k| k != "singular"));
+    let parameters = params
+        .iter()
         .map(|p| {
             let name = p["name"].as_str().unwrap_or_default();
             let variadic = if p["kind"].as_str().is_some_and(|k| k != "singular") {
@@ -161,6 +166,9 @@ fn recipe_info(recipe: &Value) -> Recipe {
         .collect();
     Recipe {
         doc: recipe["doc"].as_str().map(str::to_string),
+        parameter_count: params.len(),
+        variadic,
+        interpolates_parameters,
         parameters,
         private,
         name,
@@ -171,5 +179,22 @@ fn default_text(value: &Value) -> String {
     match value {
         Value::String(s) => format!("'{s}'"),
         other => other.to_string(),
+    }
+}
+
+/// Whether `value` (a recipe body or dependency list from the dump) has a `{{name}}` of one of `names`.
+fn references(value: &Value, names: &[&str]) -> bool {
+    match value {
+        Value::Array(items) => {
+            if let [Value::String(kind), Value::String(name)] = items.as_slice()
+                && kind == "variable"
+                && names.contains(&name.as_str())
+            {
+                return true;
+            }
+            items.iter().any(|item| references(item, names))
+        }
+        Value::Object(map) => map.values().any(|item| references(item, names)),
+        _ => false,
     }
 }
