@@ -9,6 +9,7 @@ mod connection;
 mod event_scope;
 pub(crate) mod glob;
 mod http_routes;
+mod launcher_routes;
 mod pair_routes;
 mod ws_routes;
 
@@ -62,6 +63,8 @@ pub fn router(server: Arc<Server>) -> Router {
         )
         .route("/api/actions/{site}", get(action_routes::list))
         .route("/api/actions/{site}/{recipe}", post(action_routes::run))
+        .route("/api/launcher", get(launcher_routes::list))
+        .route("/api/launcher/{name}", post(launcher_routes::launch))
         .route(
             "/api/files/{site}/{*path}",
             get(app_routes::get_file).put(app_routes::put_file),

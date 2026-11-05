@@ -4,8 +4,8 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::config_sections::{
-    AgentConfig, AttachmentsConfig, ClaudeCodeConfig, McpServerConfig, PipelinesConfig,
-    ProjectsConfig, ProviderConfig, RemindersConfig, ServerConfig, System1Config,
+    AgentConfig, AttachmentsConfig, ClaudeCodeConfig, LauncherEntry, McpServerConfig,
+    PipelinesConfig, ProjectsConfig, ProviderConfig, RemindersConfig, ServerConfig, System1Config,
 };
 use crate::error::{Result, ServerError};
 
@@ -33,6 +33,9 @@ pub struct Config {
     /// MCP servers by name, `[mcp.github]`.
     #[serde(default)]
     pub mcp: BTreeMap<String, McpServerConfig>,
+    /// Launcher entries, `[[launcher]]`: apps the web's apps can open on the desktop.
+    #[serde(default)]
+    pub launcher: Vec<LauncherEntry>,
 }
 
 impl Config {
@@ -93,6 +96,17 @@ mod tests {
         assert_eq!(Config::parse(&c.to_toml()).unwrap(), c);
     }
 
+    #[test]
+    fn launcher_entries() {
+        let c = Config::parse(
+            "[[launcher]]\nname = \"blender\"\ncommand = \"blender\"\nfolder = \"app/blockouts\"\nargs = [\"--background\"]\n\n[[launcher]]\nname = \"viewer\"\ncommand = \"xdg-open\"\nfolder = \"app\"\n",
+        )
+        .unwrap();
+        assert_eq!(c.launcher.len(), 2);
+        assert_eq!(c.launcher[0].args, ["--background"]);
+        assert!(c.launcher[1].args.is_empty());
+        assert_eq!(Config::parse(&c.to_toml()).unwrap(), c);
+    }
     #[test]
     fn per_project_settings() {
         let c = Config::parse(

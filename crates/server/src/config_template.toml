@@ -108,6 +108,17 @@ image_max_edge = 1500
 # Text and PDF text beyond this many KB is cut before it reaches the model.
 inline_max_kb = 100
 
+# Apps the web's apps can launch on this machine's desktop: one [[launcher]] entry per
+# launch button, and declaring an entry is its approval. The folder must be inside the
+# projects directory (a project, or a folder inside one: the scoped slice you want the app
+# to see); the command runs as `command <args...> <folder>`, working in that folder. The
+# apps ask `GET /api/launcher` and `POST /api/launcher/<name>`.
+# [[launcher]]
+# name = "blender-blockouts"
+# command = "xterminal"
+# folder = "myproject/blockouts"
+# args = ["--class", "blender"]
+
 # MCP servers whose tools your agents may use. An agent gets a server's tools by listing them in
 # its `tools:` (`github__*`, or one: `github__get_issue`); calls outside `allow` ask you first
 # ("always" remembers the tool). `${VAR}` comes from composer's environment.
