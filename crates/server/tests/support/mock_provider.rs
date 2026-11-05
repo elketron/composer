@@ -1,5 +1,6 @@
 use std::collections::VecDeque;
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use async_trait::async_trait;
 use composer_server::provider::{ModelEvent, ModelRequest, ModelStream, Provider};
@@ -10,6 +11,8 @@ use tokio::sync::mpsc;
 pub struct MockProvider {
     scripts: Mutex<VecDeque<Vec<ModelEvent>>>,
     pub requests: Mutex<Vec<ModelRequest>>,
+    /// Model calls never answer, so a turn stays in progress.
+    pub stalled: AtomicBool,
 }
 
 impl MockProvider {
@@ -17,6 +20,7 @@ impl MockProvider {
         Self {
             scripts: Mutex::new(scripts.into()),
             requests: Mutex::new(Vec::new()),
+            stalled: AtomicBool::new(false),
         }
     }
 
@@ -33,6 +37,9 @@ impl Provider for MockProvider {
 
     async fn stream(&self, request: ModelRequest) -> Result<ModelStream, String> {
         self.requests.lock().unwrap().push(request);
+        if self.stalled.load(Ordering::SeqCst) {
+            std::future::pending::<()>().await;
+        }
         let events = self
             .scripts
             .lock()

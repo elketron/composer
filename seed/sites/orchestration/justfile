@@ -3,6 +3,7 @@
 new-ticket title:
     #!/usr/bin/env bash
     set -euo pipefail
+    case "$1" in *$'\n'*) echo "a ticket title is one line" >&2; exit 1 ;; esac
     mkdir -p tickets
     title=$(printf '%s' "$1" | sed -e 's/[\/&]/\\&/g')
     last=$(ls tickets | grep -E '^[0-9]{4}\.md$' | sort | tail -n1 | cut -c1-4 || true)

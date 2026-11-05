@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use serde_json::{Value, json};
 
-use crate::actions::Justfile;
+use crate::actions::{Caller, Justfile};
 use crate::tools::args::ActionsArgs;
 use crate::tools::{Tool, ToolContext};
 
@@ -41,6 +41,7 @@ impl Tool for ActionsTool {
                 &site,
                 &recipe.name,
                 &justfile.hash(&recipe.name),
+                Caller::Agent,
             );
             let mut line = format!("- {}", recipe.name);
             for parameter in &recipe.parameters {

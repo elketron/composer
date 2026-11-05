@@ -6,6 +6,7 @@ use composer_core::SiteUrl;
 use composer_protocol::ChangedBy;
 use composer_protocol::http::WorkSummary;
 
+use crate::actions::Caller;
 use crate::pipeline::pipeline::Pipeline;
 use crate::pipeline::work::Work;
 use crate::server::Server;
@@ -305,11 +306,11 @@ pub fn prepare_board(server: &std::sync::Arc<Server>, site: &str) {
         if justfile.recipes().iter().all(|r| r.name != "ui-build") {
             return;
         }
-        if let Err(e) = server
-            .approvals
-            .approve(&site, "ui-build", &justfile.hash("ui-build"))
-        {
-            tracing::warn!("approving {site}'s ui-build: {e}");
+        let hash = justfile.hash("ui-build");
+        for caller in [Caller::Agent, Caller::App] {
+            if let Err(e) = server.approvals.approve(&site, "ui-build", &hash, caller) {
+                tracing::warn!("approving {site}'s ui-build: {e}");
+            }
         }
         if !server.config().pipelines.build_board {
             return;

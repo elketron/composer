@@ -9,6 +9,7 @@ use tokio_util::sync::CancellationToken;
 use crate::error::{Result, ServerError};
 use crate::hub::EventHub;
 use crate::provider::ModelMessage;
+use crate::session::types::OpenApprovals;
 use crate::session::{History, Transcript};
 
 /// One conversation with an agent. Stored in `state/sessions/<id>/`:
@@ -24,6 +25,7 @@ pub struct Session {
     inbox: Mutex<VecDeque<ChatMessage>>,
     running: AtomicBool,
     cancel: Mutex<CancellationToken>,
+    open_approvals: Mutex<OpenApprovals>,
 }
 
 impl Session {
@@ -54,6 +56,10 @@ impl Session {
             inbox: Mutex::new(VecDeque::new()),
             running: AtomicBool::new(false),
             cancel: Mutex::new(CancellationToken::new()),
+            open_approvals: Mutex::new(OpenApprovals {
+                count: 0,
+                after: TurnState::Idle,
+            }),
         }))
     }
 
@@ -76,6 +82,31 @@ impl Session {
         };
         self.save_meta();
         hub.send(ServerMessage::SessionUpdated { session: info });
+    }
+
+    /// An approval request opened: the session shows `needs approval` until the last one closes.
+    pub fn approval_opened(&self, hub: &EventHub) {
+        let mut open = self.open_approvals.lock().expect("approvals lock");
+        match self.info().state {
+            // Asked of the parent while its worker process already waits: back to work after.
+            TurnState::AwaitingApproval if open.count == 0 => open.after = TurnState::Running,
+            TurnState::AwaitingApproval => {}
+            state => open.after = state,
+        }
+        open.count += 1;
+        self.update_info(hub, |info| info.state = TurnState::AwaitingApproval);
+    }
+
+    /// An approval request closed. The last one puts back what the session was doing (an idle
+    /// orchestrator stays idle), unless a turn started or ended meanwhile (an app's request isn't
+    /// part of a turn): the state that turn set is the right one.
+    pub fn approval_closed(&self, hub: &EventHub) {
+        let mut open = self.open_approvals.lock().expect("approvals lock");
+        open.count -= 1;
+        if open.count == 0 && self.info().state == TurnState::AwaitingApproval {
+            let after = open.after;
+            self.update_info(hub, |info| info.state = after);
+        }
     }
 
     pub fn transcript(&self) -> &Transcript {

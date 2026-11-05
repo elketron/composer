@@ -9,6 +9,7 @@ use composer_protocol::{
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
+use crate::actions::Caller;
 use crate::agent::AgentDefinition;
 use crate::api::event_scope::{EventScope, scope};
 use crate::api::glob::url_matches;
@@ -406,7 +407,10 @@ impl Connection {
         body: String,
         hash: &str,
     ) -> Result<(bool, Option<String>), String> {
-        if server.approvals.is_approved(site, recipe, hash) {
+        if server
+            .approvals
+            .is_approved(site, recipe, hash, Caller::Agent)
+        {
             return Ok((true, None));
         }
         let id = self
@@ -438,7 +442,7 @@ impl Connection {
         if approved && reason.is_none() {
             server
                 .approvals
-                .approve(site, recipe, hash)
+                .approve(site, recipe, hash, Caller::Agent)
                 .map_err(|e| e.to_string())?;
         }
         Ok((approved, reason))

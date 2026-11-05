@@ -117,6 +117,9 @@ Without a session (or when it's gone), a new session is started for it, for `age
 - Recipes run in their site folder with `COMPOSER_SITE`, `COMPOSER_SESSION`, `COMPOSER_PROJECT`; stdout and stderr share one pipe (true order); killed after `agent.recipe_timeout_secs` or on cancel.
 - The request goes to every client attached to the session (and is re-sent on attach); `approval.resolved` closes it everywhere.
 - Stored in `state/approvals.json`, outside agent reach.
+- Approvals are per caller: one for an agent's `run` does not count on an app's `POST /api/actions/<site>/<recipe>`, or the reverse. The token alone must not equal a shell, and an approved recipe that runs its argument would otherwise be one. An app call to a recipe not approved for apps asks the clients of its `session` (without one: 403). Stock recipes are pre-approved for both.
+- `[metadata('app')]` on a recipe lets apps use a version approved for agents. It is not an approval itself, because the token can write justfiles: a marked version nobody approved still asks. The hash covers the mark, so adding it asks again, with the mark in the body shown.
+- On that route, arguments starting with `-` (for a recipe with `{{name}}`: any word starting with `-`) and shell syntax pasted as `{{name}}` are refused (`actions::check_args`). Recipes don't need `--`.
 
 ### Agent definitions
 

@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use crate::actions::Approval;
+use crate::actions::{Approval, Caller, Recipe};
 use crate::error::{Result, ServerError};
 
 /// Approved recipe versions, persisted in `state/approvals.json` (outside every site,
@@ -37,22 +37,36 @@ impl Approvals {
         })
     }
 
-    pub fn is_approved(&self, site: &str, recipe: &str, hash: &str) -> bool {
+    pub fn is_approved(&self, site: &str, recipe: &str, hash: &str, caller: Caller) -> bool {
         self.approved
             .lock()
             .expect("approvals lock")
             .iter()
-            .any(|a| a.site == site && a.recipe == recipe && a.hash == hash)
+            .any(|a| a.site == site && a.recipe == recipe && a.hash == hash && a.caller == caller)
     }
 
-    /// Records an approval. Older versions of the same recipe are forgotten.
-    pub fn approve(&self, site: &str, recipe: &str, hash: &str) -> Result<()> {
+    /// Whether `caller` may run this version of `recipe` without asking. The `[metadata('app')]`
+    /// mark lets an app use a version approved for agents; it is not an approval itself, because
+    /// the token can write justfiles. The hash covers the mark, so adding it asks again.
+    pub fn may_run(&self, site: &str, recipe: &Recipe, hash: &str, caller: Caller) -> bool {
+        self.is_approved(site, &recipe.name, hash, caller)
+            || (caller == Caller::App
+                && recipe.app_visible
+                && self.is_approved(site, &recipe.name, hash, Caller::Agent))
+    }
+
+    /// Records an approval for `caller`. Older versions of the same recipe are forgotten, for
+    /// every caller.
+    pub fn approve(&self, site: &str, recipe: &str, hash: &str, caller: Caller) -> Result<()> {
         let mut approved = self.approved.lock().expect("approvals lock");
-        approved.retain(|a| !(a.site == site && a.recipe == recipe));
+        approved.retain(|a| {
+            !(a.site == site && a.recipe == recipe) || (a.hash == hash && a.caller != caller)
+        });
         approved.push(Approval {
             site: site.to_string(),
             recipe: recipe.to_string(),
             hash: hash.to_string(),
+            caller,
             approved_at: chrono::Utc::now().to_rfc3339(),
         });
         if self.read_only {

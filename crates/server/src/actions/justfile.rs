@@ -146,6 +146,13 @@ fn recipe_info(recipe: &Value) -> Recipe {
     let names: Vec<&str> = params.iter().filter_map(|p| p["name"].as_str()).collect();
     let interpolates_parameters =
         references(&recipe["body"], &names) || references(&recipe["dependencies"], &names);
+    let app_visible = recipe["attributes"].as_array().is_some_and(|attributes| {
+        attributes
+            .iter()
+            .filter_map(|a| a["metadata"].as_array())
+            .flatten()
+            .any(|value| value == "app")
+    });
     let variadic = params
         .last()
         .is_some_and(|p| p["kind"].as_str().is_some_and(|k| k != "singular"));
@@ -169,6 +176,7 @@ fn recipe_info(recipe: &Value) -> Recipe {
         parameter_count: params.len(),
         variadic,
         interpolates_parameters,
+        app_visible,
         parameters,
         private,
         name,

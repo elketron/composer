@@ -3,16 +3,16 @@ use std::sync::Arc;
 use composer_protocol::ApprovalDecision;
 use tokio_util::sync::CancellationToken;
 
-use crate::actions::{Justfile, Recipe, Refusal};
+use crate::actions::{Caller, Justfile, Recipe, Refusal};
 use crate::server::Server;
 use crate::session::Session;
 
-/// Makes sure this version of `recipe` is approved to run, asking the session's clients when it
-/// is not, and answers `Ok` when it may run. Shared by the `run` tool and the HTTP route.
+/// Makes sure this version of `recipe` is approved for `caller`, asking the session's clients
+/// when it is not, and answers `Ok` when it may run. Shared by the `run` tool and the HTTP route.
 ///
 /// An approval a user gave is remembered. One an orchestrator or `[system1]` gave for a worker
-/// holds for this run only, unless `remember_delegated` (a worker process keeps approvals in
-/// memory, so remembering there is the same thing).
+/// holds for this run only, except in a worker process, which keeps approvals in memory and ends
+/// with its ticket.
 #[allow(clippy::too_many_arguments)]
 pub async fn ensure_approved(
     server: &Arc<Server>,
@@ -21,23 +21,29 @@ pub async fn ensure_approved(
     justfile: &Justfile,
     recipe: &Recipe,
     args: &[String],
-    remember_delegated: bool,
+    caller: Caller,
     cancel: &CancellationToken,
 ) -> Result<(), Refusal> {
     let hash = justfile.hash(&recipe.name);
-    if server.approvals.is_approved(site, &recipe.name, &hash) {
+    if server.approvals.may_run(site, recipe, &hash, caller) {
         return Ok(());
     }
-    let body = justfile.show(&recipe.name).await.map_err(Refusal::Denied)?;
+    let mut body = justfile.show(&recipe.name).await.map_err(Refusal::Denied)?;
+    if caller == Caller::App {
+        body = format!(
+            "# An app asks to run this. Approving lets any app or paired device run this version \
+             with any arguments, without asking.\n\n{body}"
+        );
+    }
     let answer = server
         .request_approval(session, site, &recipe.name, args, body, &hash, cancel)
         .await;
     match answer.map(|a| (a.decision, a.reason)) {
         Some((ApprovalDecision::Approve | ApprovalDecision::Always, reason)) => {
-            if reason.is_none() || remember_delegated {
+            if reason.is_none() || server.parent.is_some() {
                 server
                     .approvals
-                    .approve(site, &recipe.name, &hash)
+                    .approve(site, &recipe.name, &hash, caller)
                     .map_err(|e| Refusal::Denied(e.to_string()))?;
             }
         }

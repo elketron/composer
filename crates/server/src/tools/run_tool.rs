@@ -3,7 +3,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use serde_json::{Value, json};
 
-use crate::actions::{Justfile, RecipeEnv, check_args, ensure_approved, run_recipe};
+use crate::actions::{Caller, Justfile, RecipeEnv, check_args, ensure_approved, run_recipe};
 use crate::tools::args::RunArgs;
 use crate::tools::{Tool, ToolContext};
 
@@ -63,7 +63,7 @@ impl Tool for RunTool {
             &justfile,
             &recipe,
             &args.args,
-            true,
+            Caller::Agent,
             &context.cancel,
         )
         .await
