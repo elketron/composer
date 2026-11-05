@@ -489,3 +489,133 @@ async fn editing_a_reminders_body_does_not_claim_it() {
         "an edit must not stamp session: {written}"
     );
 }
+
+#[tokio::test]
+async fn a_recurring_reminder_rolls_on_and_stays_open() {
+    let reply = || {
+        vec![
+            ModelEvent::Content("Done for today.".into()),
+            finished(vec![]),
+        ]
+    };
+    let (dir, server, _p, addr) = start(vec![reply(), reply(), reply()]).await;
+    let url = SiteUrl::new("plans", "reminders/plants.md").unwrap();
+    server
+        .write_page(
+            &url,
+            "---\ntitle: Water the plants\ntype: reminder\ndue: 2099-10-19\ntime: \"20:00\"\nrecurs: daily\nstatus: open\n---\n# Water the plants\n\nThe ones on the balcony.\n",
+            ChangedBy::Agent,
+        )
+        .unwrap();
+    let path = dir.path().join("sites/plans/reminders/plants.md");
+    let mut socket = connect(addr, &server.token).await;
+
+    assert_eq!(check_reminders(&server, at("2099-10-19 20:00")).len(), 1);
+    let page = std::fs::read_to_string(&path).unwrap();
+    assert_eq!(
+        page,
+        "---\ntitle: Water the plants\ntype: reminder\ndue: 2099-10-20\ntime: \"20:00\"\nrecurs: daily\nstatus: open\n---\n# Water the plants\n\nThe ones on the balcony.\n\n- fired 2099-10-19 20:00\n"
+    );
+    let events = until(&mut socket, |e| {
+        matches!(e, ServerMessage::ReminderDue { .. })
+    })
+    .await;
+    let Some(ServerMessage::ReminderDue {
+        due,
+        session: Some(session),
+        ..
+    }) = events.last()
+    else {
+        panic!("{events:?}")
+    };
+    assert_eq!(due, "2099-10-19 20:00");
+    send(
+        &mut socket,
+        1,
+        ClientCommand::SessionAttach {
+            session: session.clone(),
+            since: None,
+        },
+    )
+    .await;
+    let events = until(&mut socket, |e| matches!(e, ServerMessage::TurnDone { .. })).await;
+    let message = events
+        .iter()
+        .find_map(|e| match e {
+            ServerMessage::MessageDone { message, .. } if message.source.is_some() => Some(message),
+            _ => None,
+        })
+        .unwrap();
+    assert!(
+        message
+            .content
+            .contains("it recurs daily and is next due 2099-10-20 20:00, so leave its status open"),
+        "{}",
+        message.content
+    );
+
+    // Not again until tomorrow evening; then once more, and the history grows.
+    assert!(check_reminders(&server, at("2099-10-20 19:59")).is_empty());
+    assert_eq!(check_reminders(&server, at("2099-10-20 20:02")).len(), 1);
+    let page = std::fs::read_to_string(&path).unwrap();
+    assert!(page.contains("due: 2099-10-21\n"), "{page}");
+    assert!(
+        page.ends_with("balcony.\n\n- fired 2099-10-19 20:00\n- fired 2099-10-20 20:02\n"),
+        "{page}"
+    );
+
+    // Dropping it stops it.
+    server
+        .write_page(
+            &url,
+            &page.replace("status: open", "status: done"),
+            ChangedBy::External,
+        )
+        .unwrap();
+    assert!(check_reminders(&server, at("2099-10-25 20:00")).is_empty());
+}
+
+/// `due:` owns the phase: the next firing counts on from the `due:` that fired, so moving
+/// `due:` (to another day or time) moves the whole series; missed firings are skipped.
+#[tokio::test]
+async fn editing_due_on_a_recurring_reminder_resets_its_phase() {
+    let reply = || vec![ModelEvent::Content("Ok.".into()), finished(vec![])];
+    let (dir, server, _p, _addr) = start(vec![reply(), reply(), reply()]).await;
+    let url = SiteUrl::new("plans", "reminders/standup.md").unwrap();
+    let path = dir.path().join("sites/plans/reminders/standup.md");
+    server
+        .write_page(
+            &url,
+            "---\ntitle: Standup notes\ntype: reminder\ndue: 2099-10-19 09:00\nrecurs: weekly\n---\n",
+            ChangedBy::Agent,
+        )
+        .unwrap();
+    assert_eq!(check_reminders(&server, at("2099-10-19 09:00")).len(), 1);
+    let page = std::fs::read_to_string(&path).unwrap();
+    assert!(page.contains("due: 2099-10-26 09:00\n"), "{page}");
+
+    // Moved to Wednesday afternoon: that is when it goes off, and a week on from there next.
+    server
+        .write_page(
+            &url,
+            &page.replace("due: 2099-10-26 09:00", "due: 2099-10-21 14:30"),
+            ChangedBy::External,
+        )
+        .unwrap();
+    assert!(check_reminders(&server, at("2099-10-21 14:29")).is_empty());
+    assert_eq!(check_reminders(&server, at("2099-10-21 14:30")).len(), 1);
+    let page = std::fs::read_to_string(&path).unwrap();
+    assert!(page.contains("due: 2099-10-28 14:30\n"), "{page}");
+
+    // Off for three weeks: one late delivery, and the series keeps its Wednesday 14:30.
+    let delivered = check_reminders(&server, at("2099-11-15 10:00"));
+    assert_eq!(delivered.len(), 1);
+    let page = std::fs::read_to_string(&path).unwrap();
+    assert!(page.contains("due: 2099-11-18 14:30\n"), "{page}");
+    assert!(
+        page.ends_with(
+            "- fired 2099-10-19 09:00\n- fired 2099-10-21 14:30\n- fired 2099-11-15 10:00\n"
+        ),
+        "{page}"
+    );
+}
