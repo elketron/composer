@@ -10,7 +10,7 @@ use crate::reminders::{DueReminder, Recurrence};
 /// separately; without either, `default_time`. Pages with a `due` that doesn't parse are skipped.
 /// A recurring reminder (`recurs:`) is never `notified:`: its delivery rolls `due:` on instead,
 /// and only a `fired:` stamp (left when it can't roll) holds it back. A `recurs:` that doesn't
-/// parse goes off once, like any reminder.
+/// parse goes off once, like any reminder, with a warning.
 pub fn due_reminders(
     index: &Index,
     now: NaiveDateTime,
@@ -24,10 +24,11 @@ pub fn due_reminders(
             status.is_empty() || status.eq_ignore_ascii_case("open")
         })
         .filter_map(|e| {
-            let recurs = e
+            let recurs_text = e
                 .frontmatter
                 .get_str("recurs")
-                .and_then(|r| Recurrence::parse(&r));
+                .filter(|r| !r.trim().is_empty());
+            let recurs = recurs_text.as_deref().and_then(Recurrence::parse);
             let gate = if recurs.is_some() {
                 "fired"
             } else {
@@ -37,7 +38,17 @@ pub fn due_reminders(
                 return None;
             }
             let due_at = due_at(&e.frontmatter, default_time)?;
-            (due_at <= now).then(|| DueReminder {
+            if due_at > now {
+                return None;
+            }
+            // Only once: going off as a one-off stamps `notified:`.
+            if let (Some(text), None) = (&recurs_text, recurs) {
+                tracing::warn!(
+                    "reminder {}: recurs: {text} isn't daily, weekly, monthly or <n>d, so it goes off once",
+                    e.url
+                );
+            }
+            Some(DueReminder {
                 url: e.url.clone(),
                 title: e.title.clone(),
                 due_at,

@@ -619,3 +619,31 @@ async fn editing_due_on_a_recurring_reminder_resets_its_phase() {
         "{page}"
     );
 }
+
+/// Recorded before delivered: a recurring reminder whose page can't be written goes nowhere
+/// (no session, no event), and goes off once the page is writable again.
+#[tokio::test]
+async fn a_recurring_reminder_that_cant_roll_is_not_delivered() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let reply = || vec![ModelEvent::Content("Ok.".into()), finished(vec![])];
+    let (dir, server, _p, _addr) = start(vec![reply()]).await;
+    let url = SiteUrl::new("plans", "reminders/backup.md").unwrap();
+    let path = dir.path().join("sites/plans/reminders/backup.md");
+    let page =
+        "---\ntitle: Check the backup\ntype: reminder\ndue: 2099-10-19 07:00\nrecurs: daily\n---\n";
+    server.write_page(&url, page, ChangedBy::Agent).unwrap();
+    let sessions = server.sessions.list().len();
+
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o444)).unwrap();
+    let delivered = check_reminders(&server, at("2099-10-19 07:00"));
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+    assert!(delivered.is_empty(), "{delivered:?}");
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), page);
+    assert_eq!(server.sessions.list().len(), sessions, "no session started");
+
+    assert_eq!(check_reminders(&server, at("2099-10-19 07:01")).len(), 1);
+    let rolled = std::fs::read_to_string(&path).unwrap();
+    assert!(rolled.contains("due: 2099-10-20 07:00\n"), "{rolled}");
+    assert_eq!(server.sessions.list().len(), sessions + 1);
+}
