@@ -428,6 +428,7 @@ impl Connection {
                 args,
                 body,
                 hash,
+                Caller::Agent,
                 &CancellationToken::new(),
             )
             .await;

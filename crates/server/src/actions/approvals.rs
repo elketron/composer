@@ -1,5 +1,8 @@
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+
+use tempfile::NamedTempFile;
 
 use crate::actions::{Approval, Caller, Recipe};
 use crate::error::{Result, ServerError};
@@ -73,6 +76,17 @@ impl Approvals {
             return Ok(());
         }
         let json = serde_json::to_string_pretty(&*approved).expect("approvals serialize");
-        std::fs::write(&self.path, json).map_err(|e| ServerError::io(&self.path, e))
+        self.replace_file(&json)
+            .map_err(|e| ServerError::io(&self.path, e))
+    }
+
+    /// Writes a temporary file and renames it, so that a crash or a process starting meanwhile
+    /// never finds half a file: `load` refuses one it can't parse.
+    fn replace_file(&self, json: &str) -> std::io::Result<()> {
+        let mut file = NamedTempFile::new_in(self.path.parent().unwrap_or(Path::new(".")))?;
+        file.write_all(json.as_bytes())?;
+        file.as_file().sync_all()?;
+        file.persist(&self.path)?;
+        Ok(())
     }
 }

@@ -12,8 +12,10 @@ use axum::routing::post;
 use composer_protocol::{
     ApprovalDecision, ClientCommand, CommandResult, ServerMessage, SessionInfo, TurnState,
 };
-use composer_server::actions::{Approvals, Caller, Justfile};
+use composer_server::Server;
+use composer_server::actions::{Approvals, Caller, Justfile, ensure_approved};
 use composer_server::provider::ModelEvent;
+use composer_server::session::Session;
 use composer_server::worker::Verdict;
 use composer_server::{Config, Home, init_home, update_home};
 use serde_json::{Value, json};
@@ -807,6 +809,75 @@ async fn a_new_version_forgets_the_old_one_for_every_caller() {
     assert!(!approvals.is_approved("s", "r", "v2", Caller::App));
 }
 
+#[test]
+fn saving_approvals_replaces_the_file_whole() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("approvals.json");
+    let approvals = Approvals::load(&path).unwrap();
+    approvals.approve("s", "r", "v1", Caller::Agent).unwrap();
+    let before = std::fs::read_to_string(&path).unwrap();
+    // A second name for the old file: writing in place would change it too.
+    let old = dir.path().join("old");
+    std::fs::hard_link(&path, &old).unwrap();
+
+    approvals.approve("s", "r", "v2", Caller::Agent).unwrap();
+    assert_eq!(std::fs::read_to_string(&old).unwrap(), before);
+    assert!(
+        Approvals::load(&path)
+            .unwrap()
+            .is_approved("s", "r", "v2", Caller::Agent)
+    );
+    assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 2);
+}
+
+#[tokio::test]
+async fn an_agents_prompt_for_a_marked_recipe_says_it_opens_it_to_apps() {
+    if !has_just() {
+        return;
+    }
+    let mut scripts = run_turn("tools", "act", &[]);
+    scripts.extend(run_turn("tools", "plain", &[]));
+    let (dir, server, _p, addr) = start(scripts).await;
+    let site = tools_site(
+        &dir,
+        "[metadata('app')]\nact:\n    touch ran\nplain:\n    touch plain\n",
+    );
+    let mut socket = connect(addr, &server.token).await;
+    let id = session(&mut socket).await;
+    let prompt = async |socket: &mut Socket| {
+        let events = until(socket, |e| {
+            matches!(e, ServerMessage::ApprovalRequest { .. })
+        })
+        .await;
+        let Some(ServerMessage::ApprovalRequest { request, body, .. }) = events.last() else {
+            panic!()
+        };
+        (request.clone(), body.clone())
+    };
+
+    ask(&mut socket, &id, 3).await;
+    let (request, body) = prompt(&mut socket).await;
+    assert!(
+        body.starts_with("# Marked [metadata('app')]. Approving also lets any app"),
+        "{body}"
+    );
+    respond(&mut socket, request, ApprovalDecision::Approve).await;
+    until(&mut socket, |e| matches!(e, ServerMessage::TurnDone { .. })).await;
+    assert!(site.join("ran").exists());
+    // What it warned about: apps now run it unasked.
+    std::fs::remove_file(site.join("ran")).unwrap();
+    let (status, _) = http(&server, addr, "/api/actions/tools/act", Some(json!({}))).await;
+    assert_eq!(status, 200);
+    assert!(site.join("ran").exists());
+
+    // A recipe without the mark opens nothing, and doesn't say so.
+    ask(&mut socket, &id, 4).await;
+    let (request, body) = prompt(&mut socket).await;
+    assert!(!body.contains("any app"), "{body}");
+    respond(&mut socket, request, ApprovalDecision::Deny).await;
+    until(&mut socket, |e| matches!(e, ServerMessage::TurnDone { .. })).await;
+}
+
 #[tokio::test]
 async fn the_app_mark_extends_an_approval_but_is_not_one() {
     if !has_just() {
@@ -953,7 +1024,7 @@ async fn system1_config(answer: Arc<Mutex<String>>, delay: Duration) -> Config {
 }
 
 #[tokio::test]
-async fn a_delegated_answer_holds_for_one_call_and_a_users_is_remembered() {
+async fn a_delegated_answer_holds_for_one_run_and_a_users_is_remembered() {
     if !has_just() {
         return;
     }
@@ -961,36 +1032,23 @@ async fn a_delegated_answer_holds_for_one_call_and_a_users_is_remembered() {
         r#"{"decision":"approve","reason":"ok"}"#.to_string(),
     ));
     let config = system1_config(verdict.clone(), Duration::ZERO).await;
-    let (dir, server, _p, addr) = start_with(config, vec![]).await;
-    let site = tools_site(&dir, "act:\n    touch ran\n");
+    let mut scripts = run_turn("tools", "act", &[]);
+    scripts.extend(run_turn("tools", "act", &[]));
+    scripts.extend(run_turn("tools", "act", &[]));
+    let (dir, server, _p, addr) = start_with(config, scripts).await;
+    let site = tools_site(&dir, "[metadata('app')]\nact:\n    touch ran\n");
     let orchestrator = server.sessions.create("orchestrator", None).unwrap();
     server
         .sessions
-        .create_with_info(worker_info(orchestrator.id(), TurnState::Running))
+        .create_with_info(worker_info(orchestrator.id(), TurnState::Idle))
         .unwrap();
     let hash = Justfile::load(&site).await.unwrap().hash("act");
     let path = "/api/actions/tools/act";
     let remembered = || {
         server
             .approvals
-            .is_approved("tools", "act", &hash, Caller::App)
+            .is_approved("tools", "act", &hash, Caller::Agent)
     };
-
-    // `[system1]` approves: it runs, and nothing is remembered.
-    let (status, body) = http(&server, addr, path, Some(json!({ "session": "w1" }))).await;
-    assert_eq!(status, 200, "{body}");
-    assert!(site.join("ran").exists());
-    assert!(!remembered());
-
-    // `[system1]` denies: it doesn't run.
-    std::fs::remove_file(site.join("ran")).unwrap();
-    *verdict.lock().unwrap() = r#"{"decision":"deny","reason":"no"}"#.into();
-    let (status, _) = http(&server, addr, path, Some(json!({ "session": "w1" }))).await;
-    assert_eq!(status, 403);
-    assert!(!site.join("ran").exists());
-
-    // `[system1]` has no view: the user answers, and that is remembered.
-    *verdict.lock().unwrap() = "hmm".into();
     let mut socket = connect(addr, &server.token).await;
     send(
         &mut socket,
@@ -1001,21 +1059,119 @@ async fn a_delegated_answer_holds_for_one_call_and_a_users_is_remembered() {
         },
     )
     .await;
-    let pending = {
-        let server = server.clone();
-        tokio::spawn(async move {
-            http(
-                &server,
-                addr,
-                "/api/actions/tools/act",
-                Some(json!({ "session": "w1" })),
-            )
-            .await
-        })
-    };
+
+    // `[system1]` approves: it runs, and nothing is remembered, so the mark opens nothing.
+    ask(&mut socket, "w1", 3).await;
+    until(&mut socket, |e| matches!(e, ServerMessage::TurnDone { .. })).await;
+    assert!(site.join("ran").exists());
+    assert!(!remembered());
+    assert_eq!(http(&server, addr, path, Some(json!({}))).await.0, 403);
+
+    // `[system1]` denies: it doesn't run.
+    std::fs::remove_file(site.join("ran")).unwrap();
+    *verdict.lock().unwrap() = r#"{"decision":"deny","reason":"no"}"#.into();
+    ask(&mut socket, "w1", 4).await;
+    until(&mut socket, |e| matches!(e, ServerMessage::TurnDone { .. })).await;
+    assert!(!site.join("ran").exists());
+
+    // `[system1]` has no view: the user answers, and that is remembered.
+    *verdict.lock().unwrap() = "hmm".into();
+    ask(&mut socket, "w1", 5).await;
     answer(&mut socket, ApprovalDecision::Approve).await;
-    assert_eq!(pending.await.unwrap().0, 200);
+    until(&mut socket, |e| matches!(e, ServerMessage::TurnDone { .. })).await;
+    assert!(site.join("ran").exists());
     assert!(remembered());
+}
+
+/// An app's call naming a ticket's session, sent while nobody has answered.
+fn app_call_in_w1(
+    server: &Arc<Server>,
+    addr: std::net::SocketAddr,
+) -> tokio::task::JoinHandle<(u16, Value)> {
+    let server = server.clone();
+    tokio::spawn(async move {
+        http(
+            &server,
+            addr,
+            "/api/actions/tools/act",
+            Some(json!({ "session": "w1" })),
+        )
+        .await
+    })
+}
+
+#[tokio::test]
+async fn an_apps_call_in_a_tickets_session_asks_the_user_not_system1() {
+    if !has_just() {
+        return;
+    }
+    let verdict = Arc::new(Mutex::new(
+        r#"{"decision":"approve","reason":"ok"}"#.to_string(),
+    ));
+    let config = system1_config(verdict, Duration::ZERO).await;
+    let (dir, server, _p, addr) = start_with(config, vec![]).await;
+    let site = tools_site(&dir, "act:\n    touch ran\n");
+    let orchestrator = server.sessions.create("orchestrator", None).unwrap();
+    server
+        .sessions
+        .create_with_info(worker_info(orchestrator.id(), TurnState::Idle))
+        .unwrap();
+    let hash = Justfile::load(&site).await.unwrap().hash("act");
+    let mut socket = connect(addr, &server.token).await;
+    send(
+        &mut socket,
+        2,
+        ClientCommand::SessionAttach {
+            session: "w1".into(),
+            since: None,
+        },
+    )
+    .await;
+
+    let pending = app_call_in_w1(&server, addr);
+    let request = open_request(&mut socket).await;
+    assert!(!pending.is_finished());
+    assert!(!site.join("ran").exists());
+    respond(&mut socket, request, ApprovalDecision::Approve).await;
+    assert_eq!(pending.await.unwrap().0, 200);
+    assert!(site.join("ran").exists());
+    assert!(
+        server
+            .approvals
+            .is_approved("tools", "act", &hash, Caller::App)
+    );
+}
+
+#[tokio::test]
+async fn an_apps_call_in_a_tickets_session_asks_the_user_not_its_orchestrator() {
+    if !has_just() {
+        return;
+    }
+    let (dir, server, provider, addr) = start(vec![]).await;
+    provider.stalled.store(true, Ordering::SeqCst);
+    let site = tools_site(&dir, "act:\n    touch ran\n");
+    let orchestrator = server.sessions.create("orchestrator", None).unwrap();
+    server
+        .sessions
+        .create_with_info(worker_info(orchestrator.id(), TurnState::Idle))
+        .unwrap();
+    let mut socket = connect(addr, &server.token).await;
+    send(
+        &mut socket,
+        2,
+        ClientCommand::SessionAttach {
+            session: "w1".into(),
+            since: None,
+        },
+    )
+    .await;
+
+    let pending = app_call_in_w1(&server, addr);
+    let request = open_request(&mut socket).await;
+    assert!(provider.requests().is_empty(), "the orchestrator was asked");
+    respond(&mut socket, request, ApprovalDecision::Deny).await;
+    assert_eq!(pending.await.unwrap().0, 403);
+    assert!(!site.join("ran").exists());
 }
 
 /// Polls until `done`, for what happens a moment after a client drops its request.
@@ -1028,8 +1184,33 @@ async fn eventually(done: impl Fn() -> bool) {
     }
 }
 
+/// An agent's call reaching its approval as a `run` would; aborting it is the turn going away.
+async fn agent_call(
+    server: &Arc<Server>,
+    worker: &Arc<Session>,
+    site: &std::path::Path,
+) -> tokio::task::JoinHandle<()> {
+    let justfile = Justfile::load(site).await.unwrap();
+    let recipe = justfile.recipe("act").unwrap();
+    let (server, worker) = (server.clone(), worker.clone());
+    tokio::spawn(async move {
+        let cancel = tokio_util::sync::CancellationToken::new();
+        let _ = ensure_approved(
+            &server,
+            &worker,
+            "tools",
+            &justfile,
+            &recipe,
+            &[],
+            Caller::Agent,
+            &cancel,
+        )
+        .await;
+    })
+}
+
 #[tokio::test]
-async fn a_client_that_goes_away_while_system1_decides_closes_the_request() {
+async fn a_caller_that_goes_away_while_system1_decides_closes_the_request() {
     if !has_just() {
         return;
     }
@@ -1037,25 +1218,14 @@ async fn a_client_that_goes_away_while_system1_decides_closes_the_request() {
         r#"{"decision":"approve","reason":"ok"}"#.to_string(),
     ));
     let config = system1_config(verdict, Duration::from_secs(60)).await;
-    let (dir, server, _p, addr) = start_with(config, vec![]).await;
+    let (dir, server, _p, _addr) = start_with(config, vec![]).await;
     let site = tools_site(&dir, "act:\n    touch ran\n");
     let orchestrator = server.sessions.create("orchestrator", None).unwrap();
     let worker = server
         .sessions
         .create_with_info(worker_info(orchestrator.id(), TurnState::Idle))
         .unwrap();
-    let call = {
-        let server = server.clone();
-        tokio::spawn(async move {
-            http(
-                &server,
-                addr,
-                "/api/actions/tools/act",
-                Some(json!({ "session": "w1" })),
-            )
-            .await
-        })
-    };
+    let call = agent_call(&server, &worker, &site).await;
     let waiting = || worker.info().state == TurnState::AwaitingApproval;
     eventually(waiting).await;
     assert!(waiting());
@@ -1068,11 +1238,11 @@ async fn a_client_that_goes_away_while_system1_decides_closes_the_request() {
 }
 
 #[tokio::test]
-async fn a_client_that_goes_away_while_the_orchestrator_decides_closes_the_request() {
+async fn a_caller_that_goes_away_while_the_orchestrator_decides_closes_the_request() {
     if !has_just() {
         return;
     }
-    let (dir, server, provider, addr) = start(vec![]).await;
+    let (dir, server, provider, _addr) = start(vec![]).await;
     // Its turn stays in progress, so the request stays with it.
     provider.stalled.store(true, Ordering::SeqCst);
     let site = tools_site(&dir, "act:\n    touch ran\n");
@@ -1081,18 +1251,7 @@ async fn a_client_that_goes_away_while_the_orchestrator_decides_closes_the_reque
         .sessions
         .create_with_info(worker_info(orchestrator.id(), TurnState::Idle))
         .unwrap();
-    let call = {
-        let server = server.clone();
-        tokio::spawn(async move {
-            http(
-                &server,
-                addr,
-                "/api/actions/tools/act",
-                Some(json!({ "session": "w1" })),
-            )
-            .await
-        })
-    };
+    let call = agent_call(&server, &worker, &site).await;
     let asked = || !provider.requests().is_empty();
     eventually(asked).await;
     assert!(asked());

@@ -11,7 +11,7 @@ use composer_protocol::{
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
-use crate::actions::{ApprovalAnswer, ApprovalWait, Approvals, PendingApprovals};
+use crate::actions::{ApprovalAnswer, ApprovalWait, Approvals, Caller, PendingApprovals};
 use crate::config::Config;
 use crate::devices::Devices;
 use crate::error::{Result, ServerError};
@@ -361,6 +361,10 @@ impl Server {
 
     /// Asks attached clients to approve a recipe version and waits for the answer.
     /// The session shows `needs approval` meanwhile. `None` if the turn was cancelled.
+    ///
+    /// An app's call (`Caller::App`) goes to the user even in a ticket's session: the app picks the
+    /// session, and a prompt can't guard against a mistake if the caller's own side answers it.
+    /// A worker process serves no HTTP, so what it passes to its parent is always an agent's.
     #[allow(clippy::too_many_arguments)]
     pub async fn request_approval(
         self: &Arc<Self>,
@@ -370,6 +374,7 @@ impl Server {
         args: &[String],
         body: String,
         hash: &str,
+        caller: Caller,
         cancel: &CancellationToken,
     ) -> Option<ApprovalAnswer> {
         // In a worker process the parent asks its clients (or this worker's orchestrator).
@@ -403,6 +408,7 @@ impl Server {
                 hash: hash.to_string(),
                 rule: None,
             },
+            caller != Caller::App,
             cancel,
         )
         .await
@@ -433,6 +439,7 @@ impl Server {
                 hash: String::new(),
                 rule,
             },
+            true,
             cancel,
         )
         .await
@@ -440,11 +447,12 @@ impl Server {
 
     /// Sends the approval request `message` (given its id) to every client and waits for an
     /// answer; the session shows `needs approval` meanwhile. A worker's tool or recipe goes to
-    /// its orchestrator first, when it decides them ([`WorkerApprovals`]).
+    /// its orchestrator first, when it decides them ([`WorkerApprovals`]) and `delegate` allows it.
     async fn ask_clients(
         self: &Arc<Self>,
         session: &Session,
         message: impl FnOnce(String) -> ServerMessage,
+        delegate: bool,
         cancel: &CancellationToken,
     ) -> Option<ApprovalAnswer> {
         let request = format!("{:08x}", rand::random::<u32>());
@@ -459,6 +467,7 @@ impl Server {
             args,
             ..
         } = &mut message
+            && delegate
             && WorkerApprovals::delegable(self, session, *kind)
         {
             let what = match kind {
