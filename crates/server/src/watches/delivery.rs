@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use composer_protocol::{ChatMessage, MessageSource, PageChangeKind, Role};
 
@@ -14,23 +14,36 @@ use crate::watches::WatchHit;
 /// ten renders landing together are one turn, not ten.
 const SETTLE: Duration = Duration::from_millis(500);
 
+/// Hits that never pause (a progress file written every few hundred ms) are still delivered
+/// this often: one session's busy watch must not hold back everyone's messages.
+const MAX_DELAY: Duration = Duration::from_secs(2);
+
 /// Delivers watch hits for as long as the server runs.
 pub async fn run_watches(server: Arc<Server>) {
     let Some(mut hits) = server.watches.take_receiver() else {
         return;
     };
     let mut pending: BTreeMap<String, Vec<WatchHit>> = BTreeMap::new();
+    let mut started = Instant::now();
     loop {
+        let left = MAX_DELAY.saturating_sub(started.elapsed());
         let next = if pending.is_empty() {
             hits.recv().await.map(Some)
+        } else if left.is_zero() {
+            Some(None)
         } else {
-            tokio::time::timeout(SETTLE, hits.recv())
+            tokio::time::timeout(SETTLE.min(left), hits.recv())
                 .await
                 .map_or(Some(None), |next| next.map(Some))
         };
         match next {
             None => return,
-            Some(Some(hit)) => pending.entry(hit.session.clone()).or_default().push(hit),
+            Some(Some(hit)) => {
+                if pending.is_empty() {
+                    started = Instant::now();
+                }
+                pending.entry(hit.session.clone()).or_default().push(hit);
+            }
             Some(None) => {
                 for (session, hits) in std::mem::take(&mut pending) {
                     deliver(&server, &session, &hits);

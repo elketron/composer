@@ -186,3 +186,102 @@ async fn a_watching_session_hears_when_files_land() {
     // Once: the watch ended with that message.
     assert!(server.watches.for_session(&session).is_empty());
 }
+
+#[tokio::test]
+async fn a_steady_trickle_of_changes_is_still_delivered() {
+    let (_dir, server, _provider, addr) = start(vec![
+        vec![finished(vec![
+            tool_call("w1", "watch", json!({ "pattern": "plans/*/progress/**" })),
+            tool_call(
+                "w2",
+                "watch",
+                json!({ "pattern": "plans/jobs/**", "once": false }),
+            ),
+        ])],
+        vec![ModelEvent::Content("Watching.".into()), finished(vec![])],
+        vec![
+            ModelEvent::Content("Progress noted.".into()),
+            finished(vec![]),
+        ],
+    ])
+    .await;
+    let mut socket = connect(addr, &server.token).await;
+    send(
+        &mut socket,
+        1,
+        ClientCommand::SessionCreate {
+            agent: "default".into(),
+            project: None,
+        },
+    )
+    .await;
+    let reply = until(&mut socket, |e| {
+        matches!(e, ServerMessage::Ok { id: 1, .. })
+    })
+    .await;
+    let Some(ServerMessage::Ok {
+        result: CommandResult::Session { session },
+        ..
+    }) = reply.last()
+    else {
+        panic!("{reply:?}")
+    };
+    let session = session.id.clone();
+    send(
+        &mut socket,
+        2,
+        ClientCommand::SessionAttach {
+            session: session.clone(),
+            since: None,
+        },
+    )
+    .await;
+    send(
+        &mut socket,
+        3,
+        ClientCommand::MessageSend {
+            session: session.clone(),
+            text: "watch the job".into(),
+            pages: vec![],
+            images: vec![],
+            attachments: vec![],
+        },
+    )
+    .await;
+    let events = until(&mut socket, |e| matches!(e, ServerMessage::TurnDone { .. })).await;
+    // A glob in the middle is refused, not half-understood.
+    assert!(
+        events.iter().any(|e| matches!(e,
+            ServerMessage::ToolResult { result, is_error: true, .. } if result.contains("only a trailing"))),
+        "{events:?}"
+    );
+
+    // A job writes its progress every 150 ms for 6 s: hits never settle for 500 ms.
+    let writer = server.clone();
+    let trickle = tokio::spawn(async move {
+        let url = composer_core::SiteUrl::new("plans", "jobs/progress.json").unwrap();
+        for n in 0..40 {
+            writer
+                .write_file(
+                    &url,
+                    format!("{{\"step\": {n}}}").as_bytes(),
+                    ChangedBy::App,
+                )
+                .unwrap();
+            tokio::time::sleep(Duration::from_millis(150)).await;
+        }
+    });
+    let started = std::time::Instant::now();
+    let events = until(&mut socket, |e| {
+        matches!(e, ServerMessage::MessageDone { message, .. }
+            if matches!(message.source, Some(MessageSource::Watch { .. })))
+    })
+    .await;
+    // Delivered within the max delay, while the job is still writing.
+    assert!(
+        started.elapsed() < Duration::from_secs(4) && !trickle.is_finished(),
+        "{:?} {events:?}",
+        started.elapsed()
+    );
+    trickle.abort();
+}

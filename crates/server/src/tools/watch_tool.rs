@@ -16,9 +16,10 @@ impl Tool for WatchTool {
     fn description(&self) -> &'static str {
         "Get a message when files in a site change (created, written, deleted), instead of \
          checking back: e.g. a render or a job report landing. `pattern` is a file's URL, \
-         `site://x/dir/*` (files in dir) or `site://x/dir/**` (anything below). By default the \
-         watch ends after the first message (`once: false` keeps it). Changes you make yourself \
-         are not reported. `stop: true` removes a watch; no pattern lists yours."
+         `site://x/dir/*` (files in dir) or `site://x/dir/**` (anything below); a glob only at \
+         the end. By default the watch ends after the first message (`once: false` keeps it). \
+         Your own writes through write/edit are not reported (files your actions write are). \
+         `stop: true` removes a watch; no pattern lists yours."
     }
 
     fn parameters(&self) -> Value {
@@ -35,7 +36,7 @@ impl Tool for WatchTool {
     async fn call(&self, context: &ToolContext, args: Value) -> Result<String, String> {
         let args: WatchArgs = serde_json::from_value(args).map_err(|e| e.to_string())?;
         let server = &context.server;
-        if server.parent.is_some() {
+        if server.parent.is_some() || context.session.info().ticket.is_some() {
             return Err("workers cannot watch files; report back with `finish` instead".into());
         }
         let session = context.session.id();
@@ -60,9 +61,15 @@ impl Tool for WatchTool {
         }
         // The site part must be a URL you could open.
         let base = pattern
-            .trim_end_matches("/**")
-            .trim_end_matches("/*")
+            .strip_suffix("/**")
+            .or_else(|| pattern.strip_suffix("/*"))
+            .unwrap_or(&pattern)
             .to_string();
+        if base.contains('*') {
+            return Err(format!(
+                "{pattern}: only a trailing /* or /** is supported, e.g. site://x/dir/**"
+            ));
+        }
         let url = context.url(&base)?;
         context.check_read(&url)?;
         server.watches.add(FileWatch {

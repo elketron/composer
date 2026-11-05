@@ -75,8 +75,9 @@ Plus `templates/sdk` (TS) and `templates/app` (Svelte scaffold).
   (media, JSON, not only pages) gives `page.changed`; changes settle for 100 ms first (at most 1 s
   for a burst that never pauses), so a burst is one event and an editor's temp-file-and-rename save
   makes none for the temp file. A session can `watch` a URL pattern (`site://x/dir/**`): matching
-  changes, except its own writes, are posted to it as a message (`source: watch`), once by default
-  (`once: false` keeps it); hits settle 500 ms into one message. Watches live in `state/watches.json`.
+  changes, except its own writes through `write`/`edit`, are posted to it as a message (`source: watch`),
+  once by default (`once: false` keeps it); hits settle 500 ms into one message (at most 2 s). Only a
+  trailing glob is supported. Watches live in `state/watches.json` (saved atomically).
 - **Config reload:** saving `config.toml` applies it to the running server (also `config.reload`, `:reload` in
   the TUI); every client gets `config.reloaded`. A file that doesn't parse keeps the running config and the
   error is told. `provider`, `server.bind`, `agent.slots` and `attachments.max_mb` are read at startup: a change

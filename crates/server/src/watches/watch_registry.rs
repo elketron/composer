@@ -1,7 +1,9 @@
-use std::path::PathBuf;
+use std::io::Write;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use composer_protocol::PageChangeKind;
+use tempfile::NamedTempFile;
 use tokio::sync::mpsc;
 
 use crate::api::glob::url_matches;
@@ -19,7 +21,10 @@ pub struct WatchRegistry {
 }
 
 impl WatchRegistry {
-    /// The registry kept in `file`; a missing or unreadable file starts it empty.
+    /// The registry kept in `file`; a missing or unreadable file starts it empty (with a
+    /// warning), like the other runtime state (`tool_rules.json`, `projects.json`). Unlike
+    /// `approvals.json`, which refuses to load: losing watches costs a missed message, while
+    /// losing approvals would forget what the user allowed.
     pub fn load(file: PathBuf) -> Self {
         let watches = match std::fs::read_to_string(&file) {
             Ok(text) => serde_json::from_str(&text).unwrap_or_else(|e| {
@@ -127,10 +132,20 @@ impl WatchRegistry {
             return;
         };
         let text = serde_json::to_string_pretty(watches).expect("watches serialize");
-        if let Err(e) = std::fs::write(file, text) {
+        if let Err(e) = replace_file(file, &text) {
             tracing::warn!("{}: {e}", file.display());
         }
     }
+}
+
+/// Writes a temporary file and renames it, so a crash never leaves half a file (which `load`
+/// would read as no watches at all).
+fn replace_file(path: &Path, text: &str) -> std::io::Result<()> {
+    let mut file = NamedTempFile::new_in(path.parent().unwrap_or(Path::new(".")))?;
+    file.write_all(text.as_bytes())?;
+    file.as_file().sync_all()?;
+    file.persist(path)?;
+    Ok(())
 }
 
 #[cfg(test)]
