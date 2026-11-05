@@ -207,6 +207,7 @@ impl SessionStore {
                             Some(format!("worker #{session}"))
                         }
                         Some(MessageSource::Reminder { .. }) => Some("reminder".into()),
+                        Some(MessageSource::Watch { .. }) => Some("watch".into()),
                         _ => None,
                     },
                     files: message.attachments.iter().map(|a| a.name.clone()).collect(),

@@ -1,5 +1,7 @@
+use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use notify::{RecursiveMode, Watcher};
 use tokio::sync::mpsc;
@@ -10,8 +12,16 @@ use crate::server::Server;
 /// Editors write a file in several steps (truncate, write, rename): reload once they're done.
 const CONFIG_SETTLE: Duration = Duration::from_millis(300);
 
+/// Changes in the sites are collected until none came for this long, then synced once per path:
+/// a burst of writes is one event, and an editor's temp file (written, then renamed over the
+/// page) has come and gone by then, so it makes none.
+const SITES_SETTLE: Duration = Duration::from_millis(100);
+
+/// A burst that never pauses (a log being appended to) is still synced this often.
+const SITES_MAX_DELAY: Duration = Duration::from_secs(1);
+
 /// Watches the sites folder; every changed path is synced into the index and
-/// broadcast. Also `config.toml`: a change reloads it. Keep the returned watcher alive for as
+/// broadcast (`page.changed`, any file, not only pages), after a short settle ([`SITES_SETTLE`]). Also `config.toml`: a change reloads it. Keep the returned watcher alive for as
 /// long as watching should last.
 pub fn watch(server: &Arc<Server>) -> Result<notify::RecommendedWatcher> {
     let (tx, mut rx) = mpsc::unbounded_channel();
@@ -20,8 +30,9 @@ pub fn watch(server: &Arc<Server>) -> Result<notify::RecommendedWatcher> {
         if let Ok(event) = event.as_ref()
             && !event.kind.is_access()
         {
+            let created = event.kind.is_create();
             for path in &event.paths {
-                let _ = tx.send(path.clone());
+                let _ = tx.send((path.clone(), created));
             }
         }
     })
@@ -54,14 +65,43 @@ pub fn watch(server: &Arc<Server>) -> Result<notify::RecommendedWatcher> {
 
     let server = Arc::downgrade(server);
     tokio::spawn(async move {
-        while let Some(path) = rx.recv().await {
-            let Some(server) = server.upgrade() else {
-                return;
-            };
-            if path == config_file {
-                let _ = config_tx.send(());
+        // Each path once, and whether it was created within the burst.
+        let mut burst: HashMap<PathBuf, bool> = HashMap::new();
+        let mut started = Instant::now();
+        loop {
+            let left = SITES_MAX_DELAY.saturating_sub(started.elapsed());
+            let next = if burst.is_empty() {
+                rx.recv().await.map(Some)
+            } else if left.is_zero() {
+                Some(None)
             } else {
-                server.sync_path(&path);
+                tokio::time::timeout(SITES_SETTLE.min(left), rx.recv())
+                    .await
+                    .map_or(Some(None), |next| next.map(Some))
+            };
+            match next {
+                None => return,
+                Some(Some((path, _))) if path == config_file => {
+                    let _ = config_tx.send(());
+                }
+                Some(Some((path, created))) => {
+                    if burst.is_empty() {
+                        started = Instant::now();
+                    }
+                    burst.entry(path).or_insert(created);
+                }
+                // Settled (or waited long enough): sync what changed.
+                Some(None) => {
+                    let Some(server) = server.upgrade() else {
+                        return;
+                    };
+                    for (path, created) in burst.drain() {
+                        // Born and gone within the burst (a temp file): nothing happened.
+                        if !created || path.exists() {
+                            server.sync_path(&path);
+                        }
+                    }
+                }
             }
         }
     });

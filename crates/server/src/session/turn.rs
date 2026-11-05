@@ -121,6 +121,9 @@ fn accept_user_message(server: &Arc<Server>, session: &Arc<Session>, message: Ch
         Some(MessageSource::Reminder { url }) => {
             content = format!("[reminder {url} is due]\n{content}")
         }
+        Some(MessageSource::Watch { pattern }) => {
+            content = format!("[files changed under your watch {pattern}]\n{content}")
+        }
         _ => {}
     }
     let stored = session.push_history(ModelMessage::User { content, images });

@@ -71,7 +71,12 @@ Plus `templates/sdk` (TS) and `templates/app` (Svelte scaffold).
   - Context: 256K. Compaction threshold configurable, default well below max (e.g. 160K) since long contexts are slow locally.
   - **Parallelism 2:** ~40–50 t/s with one stream, ~20–30 t/s each with two. The parent server owns a **global slot limiter** (default 2 slots) shared by all sessions, workers and compaction turns.
 - **Sessions:** free-form, many per project. A session may have an **active project** (a real code directory outside the workspace), set with `:project <name>` in the TUI, `composer --project <name>`, or by the agent via `set_project(path)`. A name (or relative path) is a folder in the projects directory (`[projects] dir` in config.toml, default `~/Projects`, also where `new_project` creates projects); `~/...` and absolute paths are taken as they are, and the CLI's `--project .` is the current directory. `:project none` (or the × by the project in the app's chat header) unsets it; `new_project` makes the new project active. A new session (`:new`) starts in the current session's project. Persisted in `state/sessions/`.
-- **File watcher:** keeps the index fresh, pushes page changes to connected clients.
+- **File watcher:** keeps the index fresh, pushes page changes to connected clients. Any file in a site
+  (media, JSON, not only pages) gives `page.changed`; changes settle for 100 ms first (at most 1 s
+  for a burst that never pauses), so a burst is one event and an editor's temp-file-and-rename save
+  makes none for the temp file. A session can `watch` a URL pattern (`site://x/dir/**`): matching
+  changes, except its own writes, are posted to it as a message (`source: watch`), once by default
+  (`once: false` keeps it); hits settle 500 ms into one message. Watches live in `state/watches.json`.
 - **Config reload:** saving `config.toml` applies it to the running server (also `config.reload`, `:reload` in
   the TUI); every client gets `config.reloaded`. A file that doesn't parse keeps the running config and the
   error is told. `provider`, `server.bind`, `agent.slots` and `attachments.max_mb` are read at startup: a change

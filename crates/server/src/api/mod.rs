@@ -7,7 +7,7 @@ mod attachment_routes;
 mod auth;
 mod connection;
 mod event_scope;
-mod glob;
+pub(crate) mod glob;
 mod http_routes;
 mod pair_routes;
 mod ws_routes;

@@ -876,6 +876,13 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
                 url: "site://calendar/reminders/review.md".into(),
             },
         },
+        ServerMessage::TurnQueued {
+            session: s(),
+            seq: 5,
+            source: MessageSource::Watch {
+                pattern: "site://video/work/renders/**".into(),
+            },
+        },
     ];
     let commands = vec![
         ClientCommand::SessionCreate {

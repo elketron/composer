@@ -25,6 +25,7 @@ use crate::provider::{OpenAiProvider, Provider};
 use crate::session::{Session, SessionManager};
 use crate::slot_pool::SlotPool;
 use crate::tools::ToolRegistry;
+use crate::watches::{WRITER, WatchRegistry};
 use crate::worker::{ParentLink, Verdict, WorkerApprovals, WorkerRegistry};
 
 /// The running harness. Shared as `Arc<Server>` by the API, turns and tools.
@@ -51,6 +52,8 @@ pub struct Server {
     pub devices: Devices,
     /// Worker processes this server started.
     pub workers: WorkerRegistry,
+    /// Sessions' watches on site files (`state/watches.json`).
+    pub watches: WatchRegistry,
     /// Harnesses turned off per project at runtime (`state/projects.json`).
     pub switches: HarnessSwitches,
     /// Tools the user always allows an external harness, per project.
@@ -135,6 +138,10 @@ impl Server {
             pending_approvals: PendingApprovals::default(),
             worker_approvals: WorkerApprovals::default(),
             workers: WorkerRegistry::default(),
+            watches: match &parent {
+                None => WatchRegistry::load(home.state().join("watches.json")),
+                Some(_) => WatchRegistry::in_memory(),
+            },
             switches: HarnessSwitches::load(home.state().join("projects.json")),
             tool_rules: ToolRules::load(home.state().join("tool_rules.json")),
             devices: Devices::new(&home.state()),
@@ -253,6 +260,7 @@ impl Server {
         *self.watcher.lock().expect("watcher lock") = Some(crate::watcher::watch(self)?);
         tokio::spawn(crate::reminders::run_reminders(self.clone()));
         tokio::spawn(crate::pipeline::run_gates(self.clone()));
+        tokio::spawn(crate::watches::run_watches(self.clone()));
         self.workers.recover_orphans(self);
         self.workers.schedule_paused(self);
         let router = crate::api::router(self.clone());
@@ -306,6 +314,9 @@ impl Server {
             kind,
             by,
         });
+        let writer = WRITER.try_with(|session| session.clone()).ok();
+        self.watches
+            .changed(&written.to_string(), kind, writer.as_deref());
         Ok((written, created))
     }
 
@@ -357,6 +368,7 @@ impl Server {
             kind,
             by: ChangedBy::External,
         });
+        self.watches.changed(&url.to_string(), kind, None);
     }
 
     /// Asks attached clients to approve a recipe version and waits for the answer.

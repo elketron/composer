@@ -426,5 +426,14 @@
       "kind": "reminder",
       "url": "site://calendar/reminders/review.md"
     }
+  },
+  {
+    "type": "turn.queued",
+    "session": "a3f1",
+    "seq": 5,
+    "source": {
+      "kind": "watch",
+      "pattern": "site://video/work/renders/**"
+    }
   }
 ]
