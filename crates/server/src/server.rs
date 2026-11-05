@@ -449,14 +449,7 @@ impl Server {
     ) -> Option<ApprovalAnswer> {
         let request = format!("{:08x}", rand::random::<u32>());
         let mut message = message(request.clone());
-        let before = session.info().state;
-        session.update_info(&self.hub, |info| info.state = TurnState::AwaitingApproval);
-        // Back to what it was doing (an idle orchestrator stays idle).
-        let after = if before == TurnState::AwaitingApproval {
-            TurnState::Running
-        } else {
-            before
-        };
+        let mut wait = ApprovalWait::new(self, session, request.clone());
         if let ServerMessage::ApprovalRequest {
             kind,
             title,
@@ -480,10 +473,7 @@ impl Server {
             let mut decided_by = self.config().system1.model.clone();
             let mut verdict = tokio::select! {
                 verdict = crate::worker::system1::decide(self, session, &what, body) => verdict,
-                _ = cancel.cancelled() => {
-                    session.update_info(&self.hub, |info| info.state = after);
-                    return None;
-                }
+                _ = cancel.cancelled() => return None,
             };
             if verdict.is_none()
                 && let Some(orchestrator) = WorkerApprovals::decider(self, session, *kind)
@@ -493,13 +483,9 @@ impl Server {
                     .worker_approvals
                     .ask(self, &orchestrator, session, &request, &what, body, cancel)
                     .await;
-                if verdict.is_none() {
-                    session.update_info(&self.hub, |info| info.state = after);
-                    return None;
-                }
+                verdict.as_ref()?;
             }
             let decided = |decision, reason: String| {
-                session.update_info(&self.hub, |info| info.state = after);
                 Some(ApprovalAnswer {
                     decision,
                     reason: Some(reason),
@@ -517,8 +503,7 @@ impl Server {
             }
         }
         let answer = self.pending_approvals.add(&request, message.clone());
-        let mut wait =
-            ApprovalWait::new(&self.pending_approvals, &self.hub, session, request, after);
+        wait.set_announced();
         self.hub.send(message);
         let decision = tokio::select! {
             decision = answer => decision.ok(),

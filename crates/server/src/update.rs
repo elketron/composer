@@ -53,12 +53,20 @@ pub async fn update_home(home: &Home, dry_run: bool) -> Result<Vec<UpdateItem>> 
         }
     }
     if !dry_run {
-        let installed: Vec<String> = items
-            .iter()
-            .filter(|i| matches!(i.outcome, UpdateOutcome::Added | UpdateOutcome::Replaced))
-            .map(|i| home.root().join(&i.path).display().to_string())
+        // Also the ones already up to date: they may predate approvals per caller.
+        let stock_justfiles: Vec<String> = stock()
+            .into_iter()
+            .flat_map(|(name, dir)| {
+                files(dir)
+                    .into_iter()
+                    .map(move |(rel, new)| (home.root().join(name).join(rel), new))
+            })
+            .filter(|(path, new)| {
+                path.ends_with("justfile") && std::fs::read(path).ok().as_deref() == Some(*new)
+            })
+            .map(|(path, _)| path.display().to_string())
             .collect();
-        approve_seed_recipes(home, &installed).await?;
+        approve_seed_recipes(home, &stock_justfiles).await?;
     }
     Ok(items)
 }

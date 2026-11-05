@@ -115,8 +115,13 @@ impl WorkerApprovals {
             verdict = verdict => verdict.ok(),
             _ = cancel.cancelled() => None,
         };
-        self.waiting.lock().expect("approvals lock").remove(id);
+        self.forget(id);
         verdict
+    }
+
+    /// Request `id` is over: its orchestrator can't answer it any more.
+    pub fn forget(&self, id: &str) {
+        self.waiting.lock().expect("approvals lock").remove(id);
     }
 
     /// `answer_approval` from `orchestrator`: the request `id`, else the one request waiting on

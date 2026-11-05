@@ -10,7 +10,9 @@ use composer_core::SiteUrl;
 use serde::{Deserialize, Serialize};
 use tokio_util::sync::CancellationToken;
 
-use crate::actions::{Justfile, RecipeEnv, Refusal, check_args, ensure_approved, run_recipe};
+use crate::actions::{
+    Caller, Justfile, RecipeEnv, Refusal, check_args, ensure_approved, run_recipe,
+};
 use crate::api::ApiError;
 use crate::server::Server;
 
@@ -41,7 +43,7 @@ pub struct RunResponse {
     output: String,
 }
 
-/// `GET /api/actions/<site>`: the site's public recipes, with their approval state.
+/// `GET /api/actions/<site>`: the site's public recipes, with whether apps may run them unasked.
 pub async fn list(
     State(server): State<Arc<Server>>,
     Path(site): Path<String>,
@@ -56,7 +58,7 @@ pub async fn list(
             .map(|r| ActionInfo {
                 approved: server
                     .approvals
-                    .is_approved(&site, &r.name, &justfile.hash(&r.name)),
+                    .may_run(&site, &r, &justfile.hash(&r.name), Caller::App),
                 name: r.name,
                 doc: r.doc,
                 parameters: r.parameters,
@@ -66,8 +68,9 @@ pub async fn list(
 }
 
 /// `POST /api/actions/<site>/<recipe>` with `{ "args": [...], "session": "<id>" }`: runs the
-/// recipe and answers with its output. An unapproved recipe version asks the session's clients
-/// and waits; with no session (or when denied) it answers 403 and does not run.
+/// recipe and answers with its output. A recipe version not approved for apps (an approval for an
+/// agent's `run` doesn't count, unless the recipe is marked `[metadata('app')]`) asks the session's
+/// clients and waits; with no session (or when denied) it answers 403 and does not run.
 pub async fn run(
     State(server): State<Arc<Server>>,
     Path((site, recipe)): Path<(String, String)>,
@@ -95,13 +98,14 @@ pub async fn run(
 
     if !server
         .approvals
-        .is_approved(&site, &found.name, &justfile.hash(&found.name))
+        .may_run(&site, &found, &justfile.hash(&found.name), Caller::App)
     {
         let Some(session) = &session else {
             return Err(ApiError(
                 StatusCode::FORBIDDEN,
                 format!(
-                    "`{}` needs the user's approval before it runs; pass `session` to ask them",
+                    "`{}` needs the user's approval for apps before it runs (one for an agent's \
+                     `run` doesn't count); pass `session` to ask them",
                     found.name
                 ),
             ));
@@ -113,7 +117,7 @@ pub async fn run(
             &justfile,
             &found,
             &request.args,
-            false,
+            Caller::App,
             &cancel,
         )
         .await

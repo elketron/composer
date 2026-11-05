@@ -3,7 +3,7 @@ use std::path::Path;
 
 use include_dir::{Dir, include_dir};
 
-use crate::actions::{Approvals, Justfile};
+use crate::actions::{Approvals, Caller, Justfile};
 use crate::config::Config;
 use crate::error::{Result, ServerError};
 use crate::home::Home;
@@ -46,7 +46,8 @@ pub fn local_token(home: &Home) -> Result<String> {
         .map_err(|e| ServerError::io(&path, e))
 }
 
-/// Pre-approves the recipes of the stock justfiles among `paths` (as `init` and `update` install them).
+/// Pre-approves the recipes of the stock justfiles among `paths` (as `init` and `update` install
+/// them), for agents and apps.
 pub(crate) async fn approve_seed_recipes(home: &Home, created: &[String]) -> Result<()> {
     let approvals = Approvals::load(&home.approvals_file())?;
     for path in created.iter().filter(|p| p.ends_with("/justfile")) {
@@ -60,7 +61,9 @@ pub(crate) async fn approve_seed_recipes(home: &Home, created: &[String]) -> Res
             continue;
         };
         for recipe in justfile.recipes() {
-            approvals.approve(site, &recipe.name, &justfile.hash(&recipe.name))?;
+            let hash = justfile.hash(&recipe.name);
+            approvals.approve(site, &recipe.name, &hash, Caller::Agent)?;
+            approvals.approve(site, &recipe.name, &hash, Caller::App)?;
         }
     }
     Ok(())

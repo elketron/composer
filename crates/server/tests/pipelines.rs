@@ -6,6 +6,7 @@ mod support;
 use composer_core::SiteUrl;
 use composer_protocol::{ChangedBy, ClientCommand, CommandResult, ServerMessage};
 use composer_server::Config;
+use composer_server::actions::Caller;
 use composer_server::pipeline::{Work, pipeline};
 use composer_server::provider::ModelEvent;
 use serde_json::json;
@@ -107,7 +108,11 @@ async fn pipelines_and_works() {
         .await
         .unwrap()
         .hash("ui-build");
-    let approved = || server.approvals.is_approved("coding", "ui-build", &hash);
+    let approved = || {
+        server
+            .approvals
+            .is_approved("coding", "ui-build", &hash, Caller::Agent)
+    };
     for _ in 0..50 {
         if approved() {
             break;
