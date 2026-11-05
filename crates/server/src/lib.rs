@@ -14,6 +14,7 @@ mod hash;
 mod home;
 mod hub;
 mod init;
+mod launcher;
 pub mod mcp;
 pub mod mcp_clients;
 pub mod pipeline;
@@ -32,14 +33,16 @@ pub mod worker;
 
 pub use config::Config;
 pub use config_sections::{
-    AgentConfig, AttachmentsConfig, ClaudeCodeConfig, McpServerConfig, PipelinesConfig,
-    ProjectSettings, ProjectsConfig, ProviderConfig, RemindersConfig, ServerConfig,
+    AgentConfig, AttachmentsConfig, ClaudeCodeConfig, LauncherEntry, McpServerConfig,
+    PipelinesConfig, ProjectSettings, ProjectsConfig, ProviderConfig, RemindersConfig,
+    ServerConfig,
 };
 pub use error::{Result, ServerError};
 pub use hash::content_hash;
 pub use home::Home;
 pub use hub::EventHub;
 pub use init::{init_home, local_token};
+pub use launcher::LauncherInfo;
 pub use server::Server;
 pub use slot_guard::SlotGuard;
 pub use slot_pool::SlotPool;

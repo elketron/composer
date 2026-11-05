@@ -187,6 +187,22 @@ pub struct McpServerConfig {
     pub enabled: bool,
 }
 
+/// An app a site's app can launch on this machine's desktop: one `[[launcher]]` entry per
+/// launch button; declaring it here is its approval (like an allowed folder).
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+pub struct LauncherEntry {
+    /// What the apps call it by (`POST /api/launcher/<name>`).
+    pub name: String,
+    /// The program to run: a name on `PATH` or a path.
+    pub command: String,
+    /// The folder to open it on: a project in the projects directory, or a folder inside one
+    /// (a scoped slice). It is passed to the command as its last argument, after `args`.
+    pub folder: String,
+    /// Extra arguments, put before the folder path.
+    #[serde(default)]
+    pub args: Vec<String>,
+}
+
 /// llama.cpp's `llama-server` on this machine; set your own in config.toml.
 fn default_base_url() -> String {
     "http://127.0.0.1:8080/v1".into()
