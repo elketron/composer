@@ -24,6 +24,7 @@ mod spawn_worker_tool;
 mod stop_worker_tool;
 mod tool_context;
 mod tool_registry;
+mod watch_tool;
 mod write_tool;
 
 use async_trait::async_trait;

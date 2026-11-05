@@ -27,6 +27,7 @@ mod slot_pool;
 pub mod tools;
 mod update;
 mod watcher;
+pub mod watches;
 pub mod worker;
 
 pub use config::Config;

@@ -26,8 +26,10 @@ use crate::tools::search_tool::SearchTool;
 use crate::tools::set_project_tool::SetProjectTool;
 use crate::tools::spawn_worker_tool::SpawnWorkerTool;
 use crate::tools::stop_worker_tool::StopWorkerTool;
+use crate::tools::watch_tool::WatchTool;
 use crate::tools::write_tool::WriteTool;
 use crate::tools::{CallResult, Tool, ToolContext, text_result};
+use crate::watches::WRITER;
 
 /// All tools the server provides. An agent gets the ones its `tools:` lists.
 pub struct ToolRegistry {
@@ -57,6 +59,7 @@ impl ToolRegistry {
                 Arc::new(ContinueWorkerTool),
                 Arc::new(StopWorkerTool),
                 Arc::new(AnswerApprovalTool),
+                Arc::new(WatchTool),
                 Arc::new(FinishTool),
             ],
         }
@@ -144,6 +147,12 @@ impl ToolRegistry {
             }
             return text_result(format!("unknown tool `{name}`"), true);
         };
-        tool.call_result(context, args).await
+        // Its own writes don't wake its watches.
+        WRITER
+            .scope(
+                context.session.id().to_string(),
+                tool.call_result(context, args),
+            )
+            .await
     }
 }

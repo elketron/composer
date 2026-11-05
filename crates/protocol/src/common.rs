@@ -83,6 +83,10 @@ pub enum MessageSource {
     Reminder {
         url: Url,
     },
+    /// Files the session watches (the `watch` tool) changed; `pattern` is what it watched.
+    Watch {
+        pattern: String,
+    },
 }
 
 /// A complete chat message, as stored in the transcript.

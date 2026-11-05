@@ -1621,6 +1621,7 @@ sealed class MessageSource {
         'worker' => MessageSourceWorker.fromJson(json),
         'server' => MessageSourceServer.fromJson(json),
         'reminder' => MessageSourceReminder.fromJson(json),
+        'watch' => MessageSourceWatch.fromJson(json),
         _ => MessageSourceUnknown(json),
       };
 
@@ -1700,6 +1701,24 @@ final class MessageSourceReminder extends MessageSource {
   Map<String, Object?> toJson() => {
         'kind': 'reminder',
         'url': url,
+      };
+}
+
+/// Files the session watches (the `watch` tool) changed; `pattern` is what it watched.
+final class MessageSourceWatch extends MessageSource {
+  const MessageSourceWatch({
+    required this.pattern,
+  });
+
+  final String pattern;
+
+  factory MessageSourceWatch.fromJson(Map<String, Object?> json) => MessageSourceWatch(
+        pattern: json['pattern'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'kind': 'watch',
+        'pattern': pattern,
       };
 }
 

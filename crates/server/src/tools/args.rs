@@ -136,3 +136,17 @@ pub struct RunStageArgs {
     pub work: String,
     pub stage: Option<String>,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct WatchArgs {
+    /// Missing: list the session's watches.
+    pub pattern: Option<String>,
+    #[serde(default = "yes")]
+    pub once: bool,
+    #[serde(default)]
+    pub stop: bool,
+}
+
+fn yes() -> bool {
+    true
+}
