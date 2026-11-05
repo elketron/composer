@@ -435,6 +435,8 @@ Every session event has a monotonically increasing `seq` and is appended to `tra
 | `PUT /api/pages/{site}/{path}` | write a page (apps) |
 | `GET /api/files/{site}/{path}` / `PUT` | non-markdown files (json, png) |
 | `GET /api/search?q=` | full text + frontmatter filters |
+| `GET /api/launcher` | the `[[launcher]]` entries of config.toml (apps show one launch button per entry) |
+| `POST /api/launcher/{name}` | spawn that entry on the desktop: `command <args...> <folder>`, working in the folder, answering with its pid |
 | `POST /api/sessions/{id}/messages` | app push (`text`, `pages`, `images`) |
 | `GET /{site}/` | built micro app |
 
