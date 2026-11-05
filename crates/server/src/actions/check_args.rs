@@ -7,8 +7,11 @@ use crate::actions::Recipe;
 /// With `strict` (a caller that is not an agent session: an app over HTTP) two more things are
 /// refused:
 /// - Options: an argument starting with `-` (a recipe with `{{name}}`: any word of it), so a call
-///   can't turn into `rm --version` or `find data -name x -delete`. Recipes don't have to use `--`,
-///   and an argument that really starts with `-` can't come through this route.
+///   can't turn into `rm --version` or, pasted, `find data -name x -delete`. Recipes don't have to
+///   use `--`, and an argument that really starts with `-` can't come through this route.
+///   A recipe that reads its arguments from the shell must quote them (`"$1"`, `"$name"`): the
+///   shell splits an unquoted `$1`, so `nomatch -o -delete` still arrives as options. Checking
+///   every word for all recipes would refuse plain values like the title `a -b`.
 /// - Shell syntax, when the recipe pastes arguments into the shell as `{{name}}`. Read from the
 ///   justfile dump, this can't tell `{{ quote(name) }}` (safe) from the rest, so it is refused too.
 ///
