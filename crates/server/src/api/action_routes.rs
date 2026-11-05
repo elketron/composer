@@ -7,11 +7,10 @@ use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use composer_core::SiteUrl;
-use composer_protocol::ApprovalDecision;
 use serde::{Deserialize, Serialize};
 use tokio_util::sync::CancellationToken;
 
-use crate::actions::{Justfile, RecipeEnv, run_recipe};
+use crate::actions::{Justfile, RecipeEnv, Refusal, check_args, ensure_approved, run_recipe};
 use crate::api::ApiError;
 use crate::server::Server;
 
@@ -86,14 +85,18 @@ pub async fn run(
                 format!("no action `{recipe}` in site://{site}"),
             )
         })?;
-    let hash = justfile.hash(&found.name);
+    check_args(&found, &request.args, true)
+        .map_err(|e| ApiError(StatusCode::UNPROCESSABLE_ENTITY, e))?;
     let session = match &request.session {
         Some(id) => Some(server.sessions.get(id)?),
         None => None,
     };
     let cancel = CancellationToken::new();
 
-    if !server.approvals.is_approved(&site, &found.name, &hash) {
+    if !server
+        .approvals
+        .is_approved(&site, &found.name, &justfile.hash(&found.name))
+    {
         let Some(session) = &session else {
             return Err(ApiError(
                 StatusCode::FORBIDDEN,
@@ -103,38 +106,21 @@ pub async fn run(
                 ),
             ));
         };
-        let body = justfile.show(&found.name).await.map_err(unprocessable)?;
-        let answer = server
-            .request_approval(
-                session,
-                &site,
-                &found.name,
-                &request.args,
-                body,
-                &hash,
-                &cancel,
-            )
-            .await;
-        match answer.map(|a| a.decision) {
-            Some(ApprovalDecision::Approve | ApprovalDecision::Always) => server
-                .approvals
-                .approve(&site, &found.name, &hash)
-                .map_err(ApiError::from)?,
-            _ => {
-                return Err(ApiError(
-                    StatusCode::FORBIDDEN,
-                    format!("running `{}` was not approved", found.name),
-                ));
-            }
-        }
-        // Run only what was approved.
-        let current = load(&server, &site).await?;
-        if current.hash(&found.name) != hash {
-            return Err(ApiError(
-                StatusCode::CONFLICT,
-                "the recipe changed while waiting for approval; run it again".into(),
-            ));
-        }
+        ensure_approved(
+            &server,
+            session,
+            &site,
+            &justfile,
+            &found,
+            &request.args,
+            false,
+            &cancel,
+        )
+        .await
+        .map_err(|refusal| match refusal {
+            Refusal::Denied(m) => ApiError(StatusCode::FORBIDDEN, m),
+            Refusal::Changed(m) => ApiError(StatusCode::CONFLICT, m),
+        })?;
     }
 
     let env = RecipeEnv {

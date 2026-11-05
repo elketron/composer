@@ -9,6 +9,14 @@ pub struct Recipe {
     pub parameters: Vec<String>,
     /// `[private]` or `_`-prefixed: helpers, not runnable by the agent.
     pub private: bool,
+    /// How many parameters it declares (a variadic counts as one).
+    pub parameter_count: usize,
+    /// The last parameter takes any number of arguments.
+    pub variadic: bool,
+    /// The body (or a dependency's arguments) interpolates a parameter as `{{name}}`, which pastes
+    /// the raw argument into the shell. The safe forms are `"$1"` with positional arguments, or
+    /// an exported parameter (`$name`).
+    pub interpolates_parameters: bool,
 }
 
 /// One approved recipe version (`state/approvals.json`).
@@ -35,4 +43,21 @@ pub struct RunOutput {
 pub struct ApprovalAnswer {
     pub decision: composer_protocol::ApprovalDecision,
     pub reason: Option<String>,
+}
+
+/// Why a recipe was not approved to run.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Refusal {
+    /// Denied by the user or an orchestrator, or the question was cancelled.
+    Denied(String),
+    /// The justfile changed while the question was open.
+    Changed(String),
+}
+
+impl Refusal {
+    pub fn message(&self) -> &str {
+        match self {
+            Refusal::Denied(m) | Refusal::Changed(m) => m,
+        }
+    }
 }
