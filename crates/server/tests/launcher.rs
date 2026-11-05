@@ -139,3 +139,41 @@ async fn an_unknown_entry_is_404() {
     let (status, _) = http(&server, addr, "/api/launcher/nope").await;
     assert_eq!(status, 404);
 }
+
+#[tokio::test]
+async fn the_folder_is_the_last_argument() {
+    let projects = tempfile::tempdir().unwrap();
+    let slice = projects.path().join("app/blockouts");
+    std::fs::create_dir_all(&slice).unwrap();
+    let mut config = Config::defaults();
+    config.projects.dir = projects.path().to_str().unwrap().into();
+    // Leaves the working directory first, so only "$1" (the folder argument) finds the slice.
+    config.launcher = vec![entry(
+        "stub",
+        "/bin/sh",
+        "app/blockouts",
+        &["-c", "cd /; touch \"$1/marker\"", "x"],
+    )];
+    let (_dir, server, _p, addr) = start_with(config, vec![]).await;
+    let (status, result) = http(&server, addr, "/api/launcher/stub").await;
+    assert_eq!(status, 200, "{}", result);
+    assert!(
+        wait_for(&slice.join("marker")).await,
+        "the folder was not passed last"
+    );
+}
+
+#[tokio::test]
+async fn a_symlinked_projects_directory_still_launches() {
+    let real = tempfile::tempdir().unwrap();
+    let links = tempfile::tempdir().unwrap();
+    let projects = links.path().join("Projects");
+    std::os::unix::fs::symlink(real.path(), &projects).unwrap();
+    std::fs::create_dir_all(real.path().join("app")).unwrap();
+    let mut config = Config::defaults();
+    config.projects.dir = projects.to_str().unwrap().into();
+    config.launcher = vec![stub("stub", "app")];
+    let (_dir, server, _p, addr) = start_with(config, vec![]).await;
+    let (status, result) = http(&server, addr, "/api/launcher/stub").await;
+    assert_eq!(status, 200, "{}", result);
+}

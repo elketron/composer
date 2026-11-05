@@ -111,7 +111,7 @@ inline_max_kb = 100
 # Apps the web's apps can launch on this machine's desktop: one [[launcher]] entry per
 # launch button, and declaring an entry is its approval. The folder must be inside the
 # projects directory (a project, or a folder inside one: the scoped slice you want the app
-# to see); the command runs as `command <args...> <folder>`, working in that folder. The
+# to see; the directory itself counts too); the command runs as `command <args...> <folder>`, working in that folder. The
 # apps ask `GET /api/launcher` and `POST /api/launcher/<name>`.
 # [[launcher]]
 # name = "blender-blockouts"

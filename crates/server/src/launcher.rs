@@ -56,12 +56,15 @@ pub fn scoped_folder(config: &Config, entry: &LauncherEntry) -> Result<PathBuf, 
     let resolved = resolve_project(&entry.folder, &config.projects.dir)?;
     let folder = PathBuf::from(resolved);
     let scope = expand_home(&config.projects.dir);
+    // The folder comes back canonical from `resolve_project`; the scope must match it
+    // even when the projects directory is itself a symlink.
+    let scope = scope.canonicalize().unwrap_or(scope);
     if folder.starts_with(&scope) {
         Ok(folder)
     } else {
         Err(format!(
             "launcher entry {} opens {}, which is outside the allowed scope (projects \
-             under {}); move it inside a project folder or name a project in `folder",
+             under {}); move it inside a project folder or point `folder` at one",
             entry.name,
             tilde(&folder),
             tilde(&scope),
