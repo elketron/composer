@@ -13,8 +13,7 @@ use crate::pipeline::types::FINISHED;
 use crate::pipeline::work::Work;
 use crate::server::Server;
 use crate::session::Session;
-use crate::worker::ticket::TicketId;
-use crate::worker::ticket::{set_field, ticket_url};
+use crate::worker::ticket::{TicketId, set_field, ticket_url};
 
 /// The agent a stage runs as unless its contract names another.
 const STAGE_AGENT: &str = "stage";
@@ -478,5 +477,26 @@ async fn gate_changed(server: &Arc<Server>, url: &str) -> Result<(), String> {
                 .map(|_| ())
         }
         _ => Ok(()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_work_spec_never_leaves_the_web() {
+        // The workspace folder above the web holds a pipeline-looking page and a work: `..` must
+        // not reach it (0149 F6: `Pipeline::from_dir` and `Work::load` build site URLs, which
+        // refuse it).
+        let dir = tempfile::tempdir().unwrap();
+        let web = dir.path().join("sites");
+        std::fs::create_dir_all(dir.path().join("w")).unwrap();
+        std::fs::create_dir_all(&web).unwrap();
+        std::fs::write(dir.path().join("index.md"), "---\ntype: pipeline\n---\n").unwrap();
+        std::fs::write(dir.path().join("w/index.md"), "---\ntype: work\n---\n").unwrap();
+        for spec in ["../w", "site://../w", "./w"] {
+            assert!(find_work(&web, spec).is_err(), "{spec}");
+        }
     }
 }

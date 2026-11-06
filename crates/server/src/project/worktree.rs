@@ -1,9 +1,9 @@
 //! Per-ticket git worktrees, so workers on the same project don't collide.
 
-use crate::worker::ticket::TicketId;
 use std::path::{Path, PathBuf};
 
 use crate::project::git::git;
+use crate::worker::ticket::TicketId;
 
 /// Where a ticket's worker works.
 #[derive(Debug, Clone, PartialEq, Eq)]

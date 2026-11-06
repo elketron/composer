@@ -447,9 +447,7 @@ async fn a_workspaces_routes_never_serve_the_others_things() {
             "hello-from-b",
             "app of b",
         ];
-        // Finding F4 of 0149 (open until 0150): the launcher lists A's own config entries even
-        // when one names B's project; launching it is refused (see the launcher test).
-        if (200..300).contains(&status) && !attack.ends_with("/api/launcher") {
+        if (200..300).contains(&status) {
             // A route that answers for any name (a listing, a search, a write) must answer
             // with A's things only.
             for thing in b_things {
@@ -893,5 +891,51 @@ async fn a_session_left_in_the_other_workspaces_project_opens_none_of_it() {
         result.is_error && result.images.is_empty(),
         "{}",
         result.text
+    );
+}
+
+#[tokio::test]
+async fn a_worker_session_id_cannot_climb_into_the_other_workspace() {
+    let f = fixture().await;
+    let climbing = format!("../../../b/state/sessions/{}-x", f.b.session);
+    let info = SessionInfo {
+        id: climbing,
+        agent: "worker".into(),
+        project: None,
+        ticket: None,
+        parent: None,
+        worker: None,
+        state: TurnState::Idle,
+        last_seq: 0,
+        context_tokens: 0,
+        model: None,
+        preview: None,
+        updated: chrono::Utc::now().to_rfc3339(),
+    };
+    assert!(f.a.server.sessions.create_with_info(info).is_err());
+    let landed =
+        f.b.server
+            .home
+            .sessions()
+            .join(format!("{}-x", f.b.session));
+    assert!(!landed.exists(), "A made a session folder in B");
+}
+
+#[tokio::test]
+async fn a_stale_session_shows_no_diff_of_the_other_workspaces_project() {
+    let f = fixture().await;
+    let stale =
+        f.a.server
+            .sessions
+            .create("all", Some(f.b.project.clone()))
+            .unwrap();
+    let path = format!("/w/default/api/sessions/{}/project/diff", stale.id());
+    let (status, text) = http(f.addr, "GET", &path, &f.a.server.token, None).await;
+    assert_eq!(status, 403, "{text}");
+    // A's own session still gets its diff.
+    let path = format!("/w/default/api/sessions/{}/project/diff", f.a.session);
+    assert_eq!(
+        http(f.addr, "GET", &path, &f.a.server.token, None).await.0,
+        200
     );
 }

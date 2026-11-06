@@ -1,12 +1,12 @@
 //! A ticket's worktree and branch, seen from the project it goes back into: review, merge,
 //! discard.
 
-use crate::worker::ticket::TicketId;
 use std::path::{Path, PathBuf};
 
 use composer_protocol::http::TicketReview;
 
 use crate::project::git::{git, git_output, git_with};
+use crate::worker::ticket::TicketId;
 
 /// Identity for the throwaway commit of uncommitted changes (never kept or shown).
 const SCRATCH_IDENTITY: [(&str, &str); 4] = [
