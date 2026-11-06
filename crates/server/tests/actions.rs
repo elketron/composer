@@ -1363,9 +1363,13 @@ async fn recipes_on_the_route_get_their_composer_variables() {
         "env:\n    @echo \"$COMPOSER_SITE|$COMPOSER_SESSION|$COMPOSER_PROJECT\"\n",
     );
     approve(&server, &site, "env").await;
+    // The project as checked for the workspace: a real folder, by its real path.
+    let project = dir.path().join("some-project");
+    std::fs::create_dir_all(&project).unwrap();
+    let project = project.canonicalize().unwrap().display().to_string();
     let session = server
         .sessions
-        .create("default", Some("/some/project".to_string()))
+        .create("default", Some(project.clone()))
         .unwrap();
     let (status, body) = http(
         &server,
@@ -1377,7 +1381,7 @@ async fn recipes_on_the_route_get_their_composer_variables() {
     assert_eq!(status, 200, "{body}");
     assert_eq!(
         body["output"].as_str().unwrap().trim(),
-        format!("tools|{}|/some/project", session.id())
+        format!("tools|{}|{project}", session.id())
     );
 }
 

@@ -5,18 +5,10 @@ use std::time::Duration;
 use tokio_util::sync::CancellationToken;
 
 use crate::actions::justfile::just;
-use crate::actions::{Justfile, RunOutput};
+use crate::actions::{Justfile, RecipeEnv, RunOutput};
 
 /// Output kept for the model: the start and the end, which is where errors are.
 const MAX_OUTPUT: usize = 16_000;
-
-/// Context passed to recipes as environment variables.
-#[derive(Debug, Clone, Default)]
-pub struct RecipeEnv {
-    pub site: String,
-    pub session: String,
-    pub project: Option<String>,
-}
 
 /// Runs a recipe in its site folder. Killed on timeout or cancel.
 pub async fn run_recipe(
@@ -33,9 +25,7 @@ pub async fn run_recipe(
     command
         .arg(recipe)
         .args(args)
-        .env("COMPOSER_SITE", &env.site)
-        .env("COMPOSER_SESSION", &env.session)
-        .env("COMPOSER_PROJECT", env.project.as_deref().unwrap_or(""))
+        .envs(env.vars())
         .stdin(Stdio::null())
         .stdout(writer.try_clone().map_err(|e| e.to_string())?)
         .stderr(writer)

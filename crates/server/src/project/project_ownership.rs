@@ -8,38 +8,69 @@ use crate::workspace_name::WorkspaceName;
 /// Which workspace owns which project folder: one index for the whole host (`state/projects.json`
 /// at the home root), so a project belongs to exactly one workspace. Nested folders count as the
 /// same project: a workspace can't take `~/x/sub` while another owns `~/x`, or the other way.
-#[derive(Debug)]
 pub struct ProjectOwnership {
+    /// Where claims are saved; `None` keeps them in memory (a standalone server, a worker).
     file: Option<PathBuf>,
     owners: Mutex<BTreeMap<ProjectPath, WorkspaceName>>,
+    /// Told of each new claim (a workspace's index letting go of a project another one took).
+    on_claim: Mutex<Vec<ClaimListener>>,
+}
+
+/// Called with a newly claimed project and its owner.
+pub type ClaimListener = Box<dyn Fn(&ProjectPath, &WorkspaceName) + Send + Sync>;
+
+impl std::fmt::Debug for ProjectOwnership {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ProjectOwnership")
+            .field("file", &self.file)
+            .field("owners", &self.owners)
+            .finish_non_exhaustive()
+    }
 }
 
 impl ProjectOwnership {
     /// The index saved at `file` (empty when missing or unreadable; unknown paths are dropped).
     pub fn load(file: PathBuf) -> Self {
-        let saved: BTreeMap<String, String> = std::fs::read_to_string(&file)
+        let owners = Self::read(&file);
+        Self::with(Some(file), owners)
+    }
+
+    /// The index at `file` as it is now, never written back: a worker process's view. The host
+    /// keeps the real one; a claim made here stays in this process.
+    pub fn snapshot(file: &std::path::Path) -> Self {
+        Self::with(None, Self::read(file))
+    }
+
+    /// An index kept in memory only (a server serving one workspace alone).
+    pub fn in_memory() -> Self {
+        Self::with(None, BTreeMap::new())
+    }
+
+    fn with(file: Option<PathBuf>, owners: BTreeMap<ProjectPath, WorkspaceName>) -> Self {
+        Self {
+            file,
+            owners: Mutex::new(owners),
+            on_claim: Mutex::new(Vec::new()),
+        }
+    }
+
+    fn read(file: &std::path::Path) -> BTreeMap<ProjectPath, WorkspaceName> {
+        let saved: BTreeMap<String, String> = std::fs::read_to_string(file)
             .ok()
             .and_then(|text| serde_json::from_str(&text).ok())
             .unwrap_or_default();
-        let owners = saved
+        saved
             .into_iter()
             .filter_map(|(path, owner)| {
                 let path = ProjectPath::existing(std::path::Path::new(&path)).ok()?;
                 Some((path, WorkspaceName::new(&owner).ok()?))
             })
-            .collect();
-        Self {
-            file: Some(file),
-            owners: Mutex::new(owners),
-        }
+            .collect()
     }
 
-    /// An index kept in memory only (a server serving one workspace alone).
-    pub fn in_memory() -> Self {
-        Self {
-            file: None,
-            owners: Mutex::new(BTreeMap::new()),
-        }
+    /// Calls `listener` after every new claim from now on.
+    pub fn on_claim(&self, listener: ClaimListener) {
+        self.on_claim.lock().expect("listeners lock").push(listener);
     }
 
     /// The workspace owning `project`, or a folder it is nested in or contains, if any.
@@ -83,6 +114,10 @@ impl ProjectOwnership {
         }
         owners.insert(project.clone(), workspace.clone());
         self.save(&owners);
+        drop(owners);
+        for listener in self.on_claim.lock().expect("listeners lock").iter() {
+            listener(project, workspace);
+        }
         Ok(())
     }
 

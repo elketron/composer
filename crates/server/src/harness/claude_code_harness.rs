@@ -103,7 +103,7 @@ impl Harness for ClaudeCodeHarness {
             "args": ["mcp", "--session", request.session, "--parent", parent],
             "env": server.home.env().into_iter().collect::<std::collections::BTreeMap<_, _>>(),
         }}});
-        let read_dirs = read_dirs(&config.read_dirs);
+        let read_dirs = read_dirs(&config.read_dirs, |p| server.foreign_path(p));
         let tools: Vec<String> = config
             .allowed_tools
             .iter()
@@ -278,8 +278,13 @@ fn system_prompt(agent: &str) -> String {
 }
 
 /// `[claude_code] read_dirs` that exist, each with its path in Claude Code's rule syntax
-/// (`~/x/**`, or `//abs/**` for an absolute path).
-pub(crate) fn read_dirs(dirs: &[String]) -> Vec<(PathBuf, String)> {
+/// (`~/x/**`, or `//abs/**` for an absolute path). A folder `foreign` to the workspace (another
+/// workspace's folder or project, see [`Server::foreign_path`]) is left out: a global config's
+/// `read_dirs` apply to every workspace, and none of them may read another's.
+pub(crate) fn read_dirs(
+    dirs: &[String],
+    foreign: impl Fn(&Path) -> bool,
+) -> Vec<(PathBuf, String)> {
     dirs.iter()
         .filter_map(|dir| {
             let dir = dir.trim_end_matches('/');
@@ -292,6 +297,10 @@ pub(crate) fn read_dirs(dirs: &[String]) -> Vec<(PathBuf, String)> {
                 return None;
             };
             let path = crate::tools::expand_home(dir);
+            if path.is_dir() && foreign(&path) {
+                tracing::warn!("[claude_code] read_dirs: `{dir}` is another workspace's; left out");
+                return None;
+            }
             path.is_dir().then_some((path, rule))
         })
         .collect()
@@ -329,14 +338,17 @@ mod tests {
     fn read_dirs_become_rules() {
         let dir = tempfile::tempdir().unwrap();
         let absolute = dir.path().display().to_string();
-        let found = read_dirs(&[
+        let dirs = [
             format!("{absolute}/"),
             format!("{absolute}/missing"),
             "relative/dir".into(),
-        ]);
+        ];
+        let found = read_dirs(&dirs, |_| false);
         assert_eq!(
             found,
             vec![(dir.path().to_path_buf(), format!("/{absolute}/**"))]
         );
+        // Another workspace's folder is never readable.
+        assert!(read_dirs(&dirs, |p| p == dir.path()).is_empty());
     }
 }

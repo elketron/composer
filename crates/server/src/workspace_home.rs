@@ -92,6 +92,46 @@ impl WorkspaceHome {
         self.home == self.root
     }
 
+    /// Whose part of the composer home `path` lies in or holds, when that is not this workspace's
+    /// and not a shared part (the library `sites/`, `global/`, `templates/`): another workspace's
+    /// folder, the home's own `state/` (master token, project owners), or a folder holding every
+    /// workspace. What an agent of this workspace may never work in or link to. `None` for paths
+    /// outside the home, and always for a standalone home.
+    pub fn foreign_part(&self, path: &Path) -> Option<String> {
+        if self.is_standalone() {
+            return None;
+        }
+        let real = |p: &Path| p.canonicalize().unwrap_or_else(|_| p.to_path_buf());
+        let (path, own, home) = (real(path), real(&self.root), real(&self.home));
+        if path.starts_with(&own) {
+            return None;
+        }
+        if own.starts_with(&path) {
+            return Some(format!(
+                "{} holds every workspace of the composer home",
+                path.display()
+            ));
+        }
+        let rel = path.strip_prefix(&home).ok()?;
+        let mut parts = rel.components().map(|c| c.as_os_str().to_string_lossy());
+        match (parts.next().as_deref(), parts.next()) {
+            (Some("sites" | "global" | "templates"), _) => None,
+            (Some("workspaces"), Some(other)) => Some(format!(
+                "{} is in workspace `{other}`'s folder",
+                path.display()
+            )),
+            _ => Some(format!(
+                "{} is the composer home's own state",
+                path.display()
+            )),
+        }
+    }
+
+    /// The home's index of which workspace owns which project.
+    pub fn projects_file(&self) -> PathBuf {
+        crate::Home::new(&self.home).projects_file()
+    }
+
     /// Where the host mounts this workspace's API: `/w/<name>`, or `""` when standalone (served
     /// alone, as tests do).
     pub fn route_base(&self) -> String {

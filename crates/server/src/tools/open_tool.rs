@@ -131,9 +131,8 @@ fn project_file(context: &ToolContext, raw: &str) -> Result<PathBuf, String> {
         .info()
         .project
         .ok_or("no active project: open a site's picture with a site:// URL")?;
-    let project = expand_home(&project)
-        .canonicalize()
-        .map_err(|e| format!("the project folder: {e}"))?;
+    // Checked again: a session's project may have become another workspace's since it was set.
+    let project = PathBuf::from(context.server.see_project(&project)?);
     let path = if raw.starts_with('/') || raw.starts_with('~') {
         expand_home(raw)
     } else {

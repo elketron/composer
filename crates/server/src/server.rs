@@ -68,8 +68,9 @@ pub struct Server {
     listen_addr: OnceLock<SocketAddr>,
     /// Where this workspace's routes are mounted (`/w/<name>`, or empty when served alone).
     route_base: OnceLock<String>,
-    /// Which workspace owns which project: the host's index, shared by all its workspaces.
-    ownership: OnceLock<Arc<ProjectOwnership>>,
+    /// Which workspace owns which project: the host's index, shared by all its workspaces (a
+    /// worker reads a snapshot of it). Shared with the web's mount guard.
+    ownership: Arc<RwLock<Arc<ProjectOwnership>>>,
     /// Hash of each file as we last saw or wrote it; tells the watcher which changes are ours.
     known_hashes: Mutex<HashMap<PathBuf, String>>,
     watcher: Mutex<Option<notify::RecommendedWatcher>>,
@@ -115,6 +116,12 @@ impl Server {
         // directory; one that lands elsewhere is refused, not followed. Same allowance as
         // the launcher scope keys off.
         let web = Web::with_allowed(home.sites(), vec![expand_home(&config.projects.dir)]);
+        // Set before the first index, so no page behind a closed mount is ever in it.
+        let ownership = Arc::new(RwLock::new(Arc::new(match &parent {
+            Some(_) if !home.is_standalone() => ProjectOwnership::snapshot(&home.projects_file()),
+            _ => ProjectOwnership::in_memory(),
+        })));
+        web.set_mount_guard(mount_guard(&home, &ownership));
         if !web.root().is_dir() {
             return Err(ServerError::Invalid(format!(
                 "{} does not exist; run `composer init` first",
@@ -145,7 +152,13 @@ impl Server {
             sessions: SessionManager::load(&sessions_dir)?,
             slots,
             tools: ToolRegistry::standard(),
-            mcp: RwLock::new(Arc::new(McpServers::new(&config.mcp))),
+            mcp: RwLock::new(Arc::new(McpServers::new(
+                &config.mcp,
+                home.env()
+                    .into_iter()
+                    .map(|(k, v)| (k.to_string(), v))
+                    .collect(),
+            ))),
             approvals,
             pending_approvals: PendingApprovals::default(),
             worker_approvals: WorkerApprovals::default(),
@@ -162,7 +175,7 @@ impl Server {
             worker_finished: AtomicBool::new(false),
             listen_addr: OnceLock::new(),
             route_base: OnceLock::new(),
-            ownership: OnceLock::new(),
+            ownership,
             index: RwLock::new(index),
             known_hashes: Mutex::new(HashMap::new()),
             watcher: Mutex::new(None),
@@ -271,29 +284,32 @@ impl Server {
         self.worker_finished.store(true, Ordering::SeqCst);
     }
 
-    /// Joins the host's project ownership index (before serving). Fails if this server already
-    /// started using an index of its own.
-    pub fn share_ownership(&self, shared: Arc<ProjectOwnership>) -> Result<()> {
-        self.ownership.set(shared.clone()).map_err(|_| {
-            ServerError::Invalid("project ownership was set up before joining the host".into())
-        })?;
-        // A mount in this web may not point into another workspace's project.
-        let workspace = self.home.name().clone();
-        self.web
-            .set_mount_guard(Arc::new(move |target| shared.refuses(target, &workspace)));
+    /// Joins the host's project ownership index (before serving): from then on a project another
+    /// workspace claims leaves this one's index, and its mounts close.
+    pub fn share_ownership(self: &Arc<Self>, shared: Arc<ProjectOwnership>) -> Result<()> {
+        *self.ownership.write().expect("ownership lock") = shared.clone();
+        let (server, workspace) = (Arc::downgrade(self), self.home.name().clone());
+        shared.on_claim(Box::new(move |_, owner| {
+            if *owner != workspace
+                && let Some(server) = server.upgrade()
+            {
+                server.reindex();
+            }
+        }));
+        self.reindex();
         Ok(())
     }
 
-    fn ownership(&self) -> &Arc<ProjectOwnership> {
-        self.ownership
-            .get_or_init(|| Arc::new(ProjectOwnership::in_memory()))
+    fn ownership(&self) -> Arc<ProjectOwnership> {
+        self.ownership.read().expect("ownership lock").clone()
     }
 
     /// The project `path` names (a name in the projects directory, `~/...` or absolute), for
     /// working in it: claimed for this workspace if no workspace owns it yet, refused if another
-    /// one does (or owns a folder it is nested in or contains).
+    /// one does (or owns a folder it is nested in or contains), or if it is part of another
+    /// workspace's folder.
     pub fn use_project(&self, path: &str) -> std::result::Result<String, String> {
-        let project = ProjectPath::resolve(path, &self.config().projects.dir)?;
+        let project = self.project(path)?;
         self.ownership().claim(&project, self.home.name())?;
         Ok(project.to_string())
     }
@@ -301,14 +317,42 @@ impl Server {
     /// Like [`Server::use_project`] for looking only: refused if another workspace owns it,
     /// nothing claimed.
     pub fn see_project(&self, path: &str) -> std::result::Result<String, String> {
-        let project = ProjectPath::resolve(path, &self.config().projects.dir)?;
+        let project = self.project(path)?;
         self.ownership().check(&project, self.home.name())?;
         Ok(project.to_string())
     }
 
+    /// `path` as a project folder, unless it is part of another workspace's folder.
+    fn project(&self, path: &str) -> std::result::Result<ProjectPath, String> {
+        let project = ProjectPath::resolve(path, &self.config().projects.dir)?;
+        match self.home.foreign_part(project.as_path()) {
+            Some(part) => Err(format!(
+                "{part}: an agent of workspace `{}` works only inside its own workspace. Pick a \
+                 project of this workspace.",
+                self.home.name()
+            )),
+            None => Ok(project),
+        }
+    }
+
     /// Whether another workspace owns `project` (for leaving it out of listings).
     pub fn owned_elsewhere(&self, project: &ProjectPath) -> bool {
-        self.ownership().check(project, self.home.name()).is_err()
+        self.foreign_path(project.as_path())
+    }
+
+    /// Whether `path` (a folder or file) is another workspace's: in or holding its folder, or a
+    /// project it owns. What this workspace's agents may not read, link to or be pointed at.
+    pub fn foreign_path(&self, path: &Path) -> bool {
+        foreign(&self.home, &self.ownership(), path)
+    }
+
+    /// Builds the index again from the web as it is now (a mount closed, a project claimed
+    /// elsewhere).
+    pub fn reindex(&self) {
+        match Index::build(&self.web) {
+            Ok(index) => *self.index.write().expect("index lock") = index,
+            Err(e) => tracing::warn!("reindexing workspace {}: {e}", self.home.name()),
+        }
     }
 
     /// Where this workspace's routes are mounted: `/w/<name>`, or `""` when it is served alone.
@@ -657,6 +701,23 @@ impl Server {
             self.index.write().expect("index lock").upsert(&page);
         }
     }
+}
+
+/// What a mount in `home`'s web may not point at: a folder [`foreign`] to its workspace.
+fn mount_guard(
+    home: &WorkspaceHome,
+    ownership: &Arc<RwLock<Arc<ProjectOwnership>>>,
+) -> composer_core::MountGuard {
+    let (home, ownership) = (home.clone(), ownership.clone());
+    Arc::new(move |target| {
+        let ownership = ownership.read().expect("ownership lock").clone();
+        foreign(&home, &ownership, target)
+    })
+}
+
+/// Whether `path` is another workspace's: in (or holding) its folder, or a project it owns.
+fn foreign(home: &WorkspaceHome, ownership: &ProjectOwnership, path: &Path) -> bool {
+    home.foreign_part(path).is_some() || ownership.refuses(path, home.name())
 }
 
 /// Inside a site, not in a hidden folder, `node_modules` or a site's `ui/`.

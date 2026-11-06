@@ -69,11 +69,7 @@ impl Tool for RunTool {
         .await
         .map_err(|refusal| refusal.message().to_string())?;
 
-        let env = RecipeEnv {
-            site: site.clone(),
-            session: context.session.id().to_string(),
-            project: context.session.info().project,
-        };
+        let env = RecipeEnv::new(server, &site, Some(&context.session));
         let timeout = Duration::from_secs(server.config().agent.recipe_timeout_secs);
         let output = run_recipe(
             &justfile,

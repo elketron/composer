@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::time::Duration;
 
 use serde_json::{Value, json};
@@ -21,14 +22,18 @@ pub struct McpClient {
 }
 
 impl McpClient {
-    /// Starts or reaches the server, does the handshake and lists its tools.
-    pub async fn connect(name: &str, config: &McpServerConfig) -> Result<Self, String> {
+    /// Starts or reaches the server, does the handshake and lists its tools. A stdio server
+    /// starts with `workspace`'s variables set (its own `env` on top).
+    pub async fn connect(
+        name: &str,
+        config: &McpServerConfig,
+        workspace: &BTreeMap<String, String>,
+    ) -> Result<Self, String> {
         let transport: Box<dyn Transport> = if !config.command.is_empty() {
-            let env = config
-                .env
-                .iter()
-                .map(|(k, v)| Ok((k.clone(), expand(v)?)))
-                .collect::<Result<_, String>>()?;
+            let mut env = workspace.clone();
+            for (key, value) in &config.env {
+                env.insert(key.clone(), expand(value, workspace)?);
+            }
             Box::new(StdioTransport::spawn(
                 name,
                 &config.command,
@@ -40,7 +45,7 @@ impl McpClient {
             let headers = config
                 .headers
                 .iter()
-                .map(|(k, v)| Ok((k.clone(), expand(v)?)))
+                .map(|(k, v)| Ok((k.clone(), expand(v, workspace)?)))
                 .collect::<Result<_, String>>()?;
             Box::new(HttpTransport::new(
                 name,
@@ -214,8 +219,9 @@ pub fn output_text(result: &Value) -> String {
     text
 }
 
-/// `${VAR}` replaced from composer's environment; an unset variable is an error, not "".
-pub fn expand(value: &str) -> Result<String, String> {
+/// `${VAR}` replaced from `workspace`'s variables, else composer's environment; an unset variable
+/// is an error, not "".
+pub fn expand(value: &str, workspace: &BTreeMap<String, String>) -> Result<String, String> {
     let mut out = String::new();
     let mut rest = value;
     while let Some(start) = rest.find("${") {
@@ -226,7 +232,10 @@ pub fn expand(value: &str) -> Result<String, String> {
             return Ok(out);
         };
         let var = &after[..end];
-        let value = std::env::var(var)
+        let value = workspace
+            .get(var)
+            .cloned()
+            .map_or_else(|| std::env::var(var), Ok)
             .map_err(|_| format!("`${{{var}}}` is not set in composer's environment"))?;
         out.push_str(&value);
         rest = &after[end + 1..];
@@ -244,11 +253,11 @@ mod tests {
         // SAFETY: the test sets a variable no other test reads.
         unsafe { std::env::set_var("COMPOSER_MCP_TEST_TOKEN", "abc") };
         assert_eq!(
-            expand("Bearer ${COMPOSER_MCP_TEST_TOKEN}").unwrap(),
+            expand("Bearer ${COMPOSER_MCP_TEST_TOKEN}", &BTreeMap::new()).unwrap(),
             "Bearer abc"
         );
-        assert_eq!(expand("plain").unwrap(), "plain");
-        assert!(expand("${COMPOSER_MCP_SURELY_UNSET}").is_err());
+        assert_eq!(expand("plain", &BTreeMap::new()).unwrap(), "plain");
+        assert!(expand("${COMPOSER_MCP_SURELY_UNSET}", &BTreeMap::new()).is_err());
     }
 
     #[test]
