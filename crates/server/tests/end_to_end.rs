@@ -352,7 +352,7 @@ async fn http_pages_auth_and_conflicts() {
         .send()
         .await
         .unwrap();
-    assert_eq!(unauthorized.status(), 401);
+    assert_eq!(unauthorized.status(), 404);
 
     let page: serde_json::Value = client
         .get(format!("{base}/api/pages/memory/user"))

@@ -28,12 +28,21 @@ export interface PageChange {
 
 const params = new URLSearchParams(location.search);
 
-/** This app's site: the first path segment (`/design/` → `design`). */
-export const site: string = location.pathname.split('/').filter(Boolean)[0] ?? '';
+const segments = location.pathname.split('/').filter(Boolean);
+const inWorkspace = segments[0] === 'w' && segments.length >= 2;
+
+/** Where this workspace's API lives: `/w/<workspace>` (apps are served under it), else `''`. */
+export const base: string = inWorkspace ? `/w/${segments[1]}` : '';
+
+/** This app's workspace (`default`, ...), or `null` when served without one. */
+export const workspace: string | null = inWorkspace ? segments[1] : null;
+
+/** This app's site: the segment after the workspace (`/w/default/design/` → `design`). */
+export const site: string = segments[inWorkspace ? 2 : 0] ?? '';
 
 /** The session that opened the app; messages from `send` go there. Survives reloads. */
 export const session: string | null = (() => {
-  const key = `composer:${site}:session`;
+  const key = `composer:${workspace ?? ''}:${site}:session`;
   const fromUrl = params.get('session');
   try {
     if (fromUrl) sessionStorage.setItem(key, fromUrl);
@@ -65,13 +74,13 @@ async function json<T>(response: Response): Promise<T> {
 
 /** Reads a markdown page (frontmatter parsed). */
 export async function page(url: string): Promise<Page> {
-  return json(await fetch(`/api/pages/${apiPath(url)}`));
+  return json(await fetch(`${base}/api/pages/${apiPath(url)}`));
 }
 
 /** Writes a page. With `ifMatch` (a page's `hash`), fails if it changed meanwhile. */
 export async function putPage(url: string, content: string, ifMatch?: string): Promise<{ url: string; hash: string }> {
   return json(
-    await fetch(`/api/pages/${apiPath(url)}`, {
+    await fetch(`${base}/api/pages/${apiPath(url)}`, {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ content, if_match: ifMatch ?? null }),
@@ -81,14 +90,14 @@ export async function putPage(url: string, content: string, ifMatch?: string): P
 
 /** Reads any file of a site (JSON, images, ...). */
 export async function file(url: string): Promise<Response> {
-  const response = await fetch(`/api/files/${apiPath(url)}`);
+  const response = await fetch(`${base}/api/files/${apiPath(url)}`);
   if (!response.ok) throw new Error(`${url}: ${response.status}`);
   return response;
 }
 
 /** Writes any file of a site, e.g. `mockup.json` or a `snapshot.png` blob. */
 export async function putFile(url: string, body: Blob | string): Promise<void> {
-  const response = await fetch(`/api/files/${apiPath(url)}`, { method: 'PUT', body });
+  const response = await fetch(`${base}/api/files/${apiPath(url)}`, { method: 'PUT', body });
   if (!response.ok) throw new Error(`${url}: ${response.status}`);
 }
 
@@ -113,7 +122,7 @@ export interface ActionResult {
 
 /** A site's runnable actions (its justfile's public recipes). Defaults to this app's site. */
 export async function listActions(siteName: string = site): Promise<Action[]> {
-  return json(await fetch(`/api/actions/${siteName}`));
+  return json(await fetch(`${base}/api/actions/${siteName}`));
 }
 
 /**
@@ -127,7 +136,7 @@ export async function runAction(
   options: { site?: string; session?: string } = {},
 ): Promise<ActionResult> {
   return json(
-    await fetch(`/api/actions/${options.site ?? site}/${recipe}`, {
+    await fetch(`${base}/api/actions/${options.site ?? site}/${recipe}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ args, session: options.session ?? session }),
@@ -137,7 +146,7 @@ export async function runAction(
 
 /** Full text and frontmatter search: `type:ticket status:open`, `site:design words`. */
 export async function search(query: string): Promise<SearchHit[]> {
-  return json(await fetch(`/api/search?q=${encodeURIComponent(query)}`));
+  return json(await fetch(`${base}/api/search?q=${encodeURIComponent(query)}`));
 }
 
 /**
@@ -146,7 +155,7 @@ export async function search(query: string): Promise<SearchHit[]> {
  */
 export async function send(text: string, options: { pages?: string[]; images?: string[] } = {}): Promise<void> {
   if (!session) throw new Error('no session: open this app from the TUI (a)');
-  const response = await fetch(`/api/sessions/${session}/messages`, {
+  const response = await fetch(`${base}/api/sessions/${session}/messages`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ site, text, pages: options.pages ?? [], images: options.images ?? [] }),
@@ -176,7 +185,7 @@ export function isConnected(): boolean {
 }
 
 function connect() {
-  const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
+  const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}${base}/ws`);
   socket = ws;
   ws.onopen = () => {
     connected = true;

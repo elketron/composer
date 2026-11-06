@@ -104,7 +104,7 @@ async fn apps_are_served_with_cookie_auth() {
     let base = format!("http://{addr}");
     let client = no_redirects();
 
-    // /plans?token=… → /plans/?token=… (keeps the query).
+    // /plans?token=… → plans/?token=… (relative, so it stays in the workspace; keeps the query).
     let redirect = client
         .get(format!("{base}/plans?token={}&session=ab12", server.token))
         .send()
@@ -113,7 +113,7 @@ async fn apps_are_served_with_cookie_auth() {
     assert_eq!(redirect.status(), 308);
     assert_eq!(
         redirect.headers()["location"],
-        format!("/plans/?token={}&session=ab12", server.token)
+        format!("plans/?token={}&session=ab12", server.token)
     );
 
     // Opening with the token sets the cookie.
@@ -151,7 +151,7 @@ async fn apps_are_served_with_cookie_auth() {
             .await
             .unwrap()
             .status(),
-        401
+        404
     );
     assert_eq!(
         client

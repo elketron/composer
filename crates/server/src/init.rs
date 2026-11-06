@@ -35,6 +35,7 @@ pub async fn init_home(home: &Home) -> Result<Vec<String>> {
         fs::create_dir_all(&dir).map_err(|e| ServerError::io(&dir, e))?;
     }
     write_new(&home.global_config_file(), Config::TEMPLATE, &mut created)?;
+    write_new(&home.master_token_file(), &new_token(), &mut created)?;
     install(&StockRoot::library(home), &mut created)?;
     if home.workspace_names()?.is_empty() {
         let default = home.workspace(&WorkspaceName::default_workspace());
@@ -69,15 +70,17 @@ pub async fn init_workspace(workspace: &WorkspaceHome) -> Result<Vec<String>> {
 
 /// Reads the workspace's token, creating it if needed.
 pub fn local_token(workspace: &WorkspaceHome) -> Result<String> {
-    let path = workspace.token_file();
+    read_or_create_token(&workspace.token_file())
+}
+
+/// Reads a token file, creating it (and its folder) with a new token if it doesn't exist.
+pub(crate) fn read_or_create_token(path: &Path) -> Result<String> {
     if !path.exists() {
-        let state = workspace.state();
-        fs::create_dir_all(&state).map_err(|e| ServerError::io(&state, e))?;
-        fs::write(&path, new_token()).map_err(|e| ServerError::io(&path, e))?;
+        write_creating_dirs(path, new_token().as_bytes())?;
     }
-    fs::read_to_string(&path)
+    fs::read_to_string(path)
         .map(|t| t.trim().to_string())
-        .map_err(|e| ServerError::io(&path, e))
+        .map_err(|e| ServerError::io(path, e))
 }
 
 /// Pre-approves the recipes of the stock justfiles among `paths` (as `init` and `update` install

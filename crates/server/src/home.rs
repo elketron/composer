@@ -59,6 +59,11 @@ impl Home {
         self.root.join("state")
     }
 
+    /// The master token (`state/token`): lists every workspace (`/api/workspaces`), opens none.
+    pub fn master_token_file(&self) -> PathBuf {
+        self.state().join("token")
+    }
+
     pub fn workspaces_dir(&self) -> PathBuf {
         self.root.join("workspaces")
     }

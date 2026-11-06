@@ -24,14 +24,15 @@ pub struct PairForm {
     pub name: String,
 }
 
-/// `GET /pair?code=...`: asks to confirm, so a link preview can't use up the code.
+/// `GET /pair?code=...` (under the workspace's routes): asks to confirm, so a link preview can't
+/// use up the code. The form posts to the relative `pair`, i.e. this workspace's.
 pub async fn pair_page(Query(params): Query<HashMap<String, String>>) -> Html<String> {
     let code = params.get("code").cloned().unwrap_or_default();
     let code = html_escape(&code);
     page(&format!(
         "<h1>Pair this device</h1>\
          <p>It gets its own token for composer. You can revoke it with <code>composer devices revoke</code>.</p>\
-         <form method=\"post\" action=\"/pair\">\
+         <form method=\"post\" action=\"pair\">\
            <label>code<input name=\"code\" value=\"{code}\" autocomplete=\"off\" required></label>\
            <label>device name (optional)<input name=\"name\" placeholder=\"the name given to composer pair\"></label>\
            <button type=\"submit\">Pair</button>\
@@ -53,8 +54,16 @@ pub async fn pair_submit(
     match server.devices.redeem(&form.code, Some(&form.name)) {
         Ok(Some((name, token))) => {
             tracing::info!("paired device `{name}`");
-            let mut response = (StatusCode::SEE_OTHER, [(header::LOCATION, "/chat/")]).into_response();
-            set_cookie(&mut response, &token, is_https(&headers), Some(DEVICE_COOKIE_SECONDS));
+            let chat = format!("{}/chat/", server.route_base());
+            let mut response =
+                (StatusCode::SEE_OTHER, [(header::LOCATION, chat.as_str())]).into_response();
+            set_cookie(
+                &mut response,
+                &token,
+                is_https(&headers),
+                Some(DEVICE_COOKIE_SECONDS),
+                server.route_base(),
+            );
             response
         }
         Ok(None) => (

@@ -4,7 +4,7 @@ use std::process::Command;
 
 use anyhow::{Context, bail};
 use composer_server::devices::Devices;
-use composer_server::{WorkspaceHome, WorkspaceName, local_token};
+use composer_server::{WorkspaceHome, local_token};
 use serde_json::{Value, json};
 
 /// Where `login` stores a remote server: `<composer home>/remote.json`.
@@ -21,14 +21,8 @@ pub fn client(home: &WorkspaceHome) -> anyhow::Result<(String, String)> {
         }
     }
     let config = home.load_config()?;
-    // The default workspace also answers unprefixed until clients address workspaces (0146).
-    let base = if home.is_standalone() || home.name().as_str() == WorkspaceName::DEFAULT {
-        String::new()
-    } else {
-        format!("/w/{}", home.name())
-    };
     Ok((
-        format!("http://{}{base}", config.server.bind),
+        format!("http://{}{}", config.server.bind, home.route_base()),
         local_token(home)?,
     ))
 }
@@ -37,12 +31,16 @@ pub fn client(home: &WorkspaceHome) -> anyhow::Result<(String, String)> {
 pub fn pair(home: &WorkspaceHome, name: &str) -> anyhow::Result<()> {
     let config = home.load_config()?;
     let code = Devices::new(&home.state()).create_code(name)?;
+    // The pairing routes are the workspace's own: a device paired here opens only this workspace.
     let (base, served) = match tailscale_name() {
         Some(host) => (
-            format!("https://{host}"),
+            format!("https://{host}{}", home.route_base()),
             tailscale_serves(&config.server.bind),
         ),
-        None => (format!("http://{}", config.server.bind), true),
+        None => (
+            format!("http://{}{}", config.server.bind, home.route_base()),
+            true,
+        ),
     };
     let url = format!("{base}/pair?code={code}");
     let qr = qrcode::QrCode::new(url.as_bytes())?

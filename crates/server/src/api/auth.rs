@@ -9,9 +9,12 @@ use crate::server::Server;
 
 pub const COOKIE: &str = "composer_token";
 
-/// Requires a token (the local one or a paired device's): `Authorization: Bearer <t>`,
-/// `?token=<t>`, or the cookie that a `?token=` request (or pairing) sets. Browser
+/// Requires a token of this workspace (its own or a device paired to it): `Authorization:
+/// Bearer <t>`, `?token=<t>`, or the cookie that a `?token=` request (or pairing) sets. Browser
 /// requests must also come from our own origin.
+///
+/// Without one the answer is 404, the same as for a workspace that doesn't exist: a token for
+/// one workspace can't even learn that another exists.
 pub async fn require_token(
     State(server): State<Arc<Server>>,
     request: Request,
@@ -39,7 +42,11 @@ pub async fn require_token(
         .filter_map(|pair| pair.trim().split_once('='))
         .any(|(k, v)| k == COOKIE && server.accepts_token(v));
     if !(bearer || query_token.is_some() || cookie) {
-        return (StatusCode::UNAUTHORIZED, "missing or wrong token").into_response();
+        return (
+            StatusCode::NOT_FOUND,
+            "not found (or not with this token: each workspace has its own)",
+        )
+            .into_response();
     }
 
     if let Some(origin) = headers.get(header::ORIGIN).and_then(|v| v.to_str().ok())
@@ -51,7 +58,7 @@ pub async fn require_token(
     let secure = is_https(headers);
     let mut response = next.run(request).await;
     if let Some(token) = query_token.filter(|_| !cookie) {
-        set_cookie(&mut response, &token, secure, None);
+        set_cookie(&mut response, &token, secure, None, server.route_base());
     }
     response
 }
@@ -76,9 +83,16 @@ pub fn is_https(headers: &HeaderMap) -> bool {
 }
 
 /// The auth cookie: HttpOnly, SameSite=Strict, `Secure` over HTTPS. `max_age` in seconds
-/// makes it outlive the browser session (paired devices).
-pub fn set_cookie(response: &mut Response, token: &str, secure: bool, max_age: Option<u64>) {
-    let mut value = format!("{COOKIE}={token}; Path=/; HttpOnly; SameSite=Strict");
+/// makes it outlive the browser session (paired devices). Scoped to the workspace's routes
+/// (`route_base`), so each workspace keeps its own cookie in one browser.
+pub fn set_cookie(
+    response: &mut Response,
+    token: &str,
+    secure: bool,
+    max_age: Option<u64>,
+    route_base: &str,
+) {
+    let mut value = format!("{COOKIE}={token}; Path={route_base}/; HttpOnly; SameSite=Strict");
     if secure {
         value.push_str("; Secure");
     }
