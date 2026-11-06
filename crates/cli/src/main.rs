@@ -1,4 +1,5 @@
 mod remote;
+mod workspaces;
 
 use std::path::PathBuf;
 
@@ -120,6 +121,14 @@ enum Command {
         #[command(subcommand)]
         action: LibraryCommand,
     },
+    /// Workspaces of this home: make a new one (optionally from a template), list them, or list
+    /// the templates (global/workspace-templates/<name>.toml).
+    ///
+    /// `composer workspace new printing --template 3d`.
+    Workspace {
+        #[command(subcommand)]
+        action: WorkspaceCommand,
+    },
     /// Run a worker on a ticket (started by the server for `spawn_worker`).
     #[command(hide = true)]
     Worker {
@@ -153,6 +162,21 @@ enum Command {
         #[arg(long)]
         new: bool,
     },
+}
+
+#[derive(Subcommand)]
+enum WorkspaceCommand {
+    /// Make a workspace: the stock sites from the library, then the template's sites and config.
+    /// A running server serves it right away.
+    New {
+        name: String,
+        #[arg(long)]
+        template: Option<String>,
+    },
+    /// The workspaces and what they installed from the library.
+    List,
+    /// The workspace templates.
+    Templates,
 }
 
 #[derive(Subcommand)]
@@ -290,6 +314,13 @@ async fn main() -> anyhow::Result<()> {
             let change = state.map(|s| (entry, s == "on"));
             composer_server::client::harness(&server_url, &token, project, change).await?;
         }
+        Some(Command::Workspace { action }) => match action {
+            WorkspaceCommand::New { name, template } => {
+                workspaces::new(&home, &name, template).await?
+            }
+            WorkspaceCommand::List => workspaces::list(&home)?,
+            WorkspaceCommand::Templates => workspaces::templates(&home)?,
+        },
         Some(Command::Library { action }) => {
             use composer_server::client::LibraryAction;
             let action = match action {

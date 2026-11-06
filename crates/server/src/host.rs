@@ -1,16 +1,11 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use axum::Json;
-use axum::http::{HeaderMap, StatusCode, Uri, header};
-use axum::response::{IntoResponse, Response};
-use axum::routing::get;
-use serde_json::json;
 use tokio::net::TcpListener;
 
 use crate::error::{Result, ServerError};
 use crate::home::Home;
-use crate::project::{ProjectOwnership, ProjectPath};
+use crate::host_state::{HostState, Starter};
 use crate::server::{Server, shutdown_signal};
 use crate::workspace_name::WorkspaceName;
 
@@ -22,8 +17,7 @@ use crate::workspace_name::WorkspaceName;
 /// and the map of workspaces. Each workspace's API is mounted at `/w/<name>/`; the only route
 /// outside them is `/api/workspaces`.
 pub struct Host {
-    home: Home,
-    workspaces: BTreeMap<WorkspaceName, Arc<Server>>,
+    state: Arc<HostState>,
 }
 
 impl Host {
@@ -62,34 +56,31 @@ impl Host {
                 "a host serves at least one workspace".into(),
             ));
         }
-        let ownership = Arc::new(ProjectOwnership::load(home.projects_file()));
-        for server in workspaces.values() {
-            server.share_ownership(ownership.clone())?;
+        let state = Arc::new(HostState::new(home));
+        for (name, server) in workspaces {
+            state.add(name, server)?;
         }
-        for (name, server) in &workspaces {
-            claim_configured_projects(name, server)?;
-        }
-        Ok(Self { home, workspaces })
+        Ok(Self { state })
     }
 
     pub fn home(&self) -> &Home {
-        &self.home
+        &self.state.home
     }
 
-    pub fn workspace(&self, name: &WorkspaceName) -> Option<&Arc<Server>> {
-        self.workspaces.get(name)
+    pub fn workspace(&self, name: &WorkspaceName) -> Option<Arc<Server>> {
+        self.state.workspace(name)
     }
 
-    pub fn workspaces(&self) -> impl Iterator<Item = (&WorkspaceName, &Arc<Server>)> {
-        self.workspaces.iter()
+    pub fn workspaces(&self) -> Vec<(WorkspaceName, Arc<Server>)> {
+        self.state.list()
     }
 
     /// `default`, else the first by name: whose config holds the host's own settings.
-    pub fn default_workspace(&self) -> &Arc<Server> {
-        self.workspaces
-            .get(&WorkspaceName::default_workspace())
-            .or_else(|| self.workspaces.values().next())
-            .expect("start refuses a home without workspaces")
+    pub fn default_workspace(&self) -> Arc<Server> {
+        self.state
+            .workspace(&WorkspaceName::default_workspace())
+            .or_else(|| self.state.list().into_iter().next().map(|(_, s)| s))
+            .expect("a host serves at least one workspace")
     }
 
     /// `server.bind` (global config, or the default workspace's override).
@@ -97,18 +88,36 @@ impl Host {
         self.default_workspace().config().server.bind.clone()
     }
 
+    /// Creates workspace `name` (from `template`, if given) and serves it right away.
+    pub async fn create(
+        &self,
+        name: &WorkspaceName,
+        template: Option<&str>,
+    ) -> Result<Arc<Server>> {
+        self.state.create(name, template).await
+    }
+
+    /// How [`Host::create`] starts a new workspace's server (tests: with a mock provider).
+    pub fn set_starter(&self, starter: Starter) {
+        self.state.set_starter(starter);
+    }
+
     /// Starts every workspace's background work and serves all their APIs on `listener` until it
-    /// fails or the process is told to stop, then stops every workspace's workers.
+    /// fails or the process is told to stop, then stops every workspace's workers. A workspace
+    /// created meanwhile is served from then on.
     pub async fn serve(&self, listener: TcpListener) -> Result<()> {
         let addr = listener
             .local_addr()
             .map_err(|e| ServerError::Invalid(format!("listener address: {e}")))?;
-        let mut router = axum::Router::new().route("/api/workspaces", self.workspace_list()?);
-        for server in self.workspaces.values() {
-            let base = server.home.route_base();
-            server.start_background(addr, &base)?;
-            router = router.nest(&base, crate::api::router(server.clone()));
-        }
+        let master = crate::init::read_or_create_token(&self.state.home.master_token_file())?;
+        self.state.listening(addr)?;
+        let dispatching = self.state.clone();
+        let router = axum::Router::new()
+            .route(
+                "/api/workspaces",
+                crate::host_routes::workspaces(self.state.clone(), master),
+            )
+            .fallback(move |request| crate::host_routes::dispatch(dispatching.clone(), request));
         let serving = axum::serve(listener, router);
         tokio::select! {
             served = serving => {
@@ -119,73 +128,9 @@ impl Host {
             }
         }
         // Workers run in their own process groups: stop them, or they outlive the server.
-        for server in self.workspaces.values() {
+        for (_, server) in self.state.list() {
             server.workers.shutdown().await;
         }
         Ok(())
     }
-
-    /// `GET /api/workspaces`: the workspaces the presented token opens, as `[{name, base}]`. The
-    /// master token lists all of them; a workspace's (or its devices') token lists that one; any
-    /// other gets 404, like everything else it can't open.
-    fn workspace_list(&self) -> Result<axum::routing::MethodRouter> {
-        let master = crate::init::read_or_create_token(&self.home.master_token_file())?;
-        let workspaces: Arc<Vec<(WorkspaceName, Arc<Server>)>> = Arc::new(
-            self.workspaces
-                .iter()
-                .map(|(name, server)| (name.clone(), server.clone()))
-                .collect(),
-        );
-        Ok(get(move |headers: HeaderMap, uri: Uri| async move {
-            let Some(token) = presented_token(&headers, &uri) else {
-                return not_found();
-            };
-            let open: Vec<_> = workspaces
-                .iter()
-                .filter(|(_, server)| token == master || server.accepts_token(&token))
-                .map(|(name, server)| json!({ "name": name.as_str(), "base": server.home.route_base() }))
-                .collect();
-            if open.is_empty() {
-                return not_found();
-            }
-            Json(open).into_response()
-        }))
-    }
-}
-
-/// The token from `Authorization: Bearer` or `?token=`.
-fn presented_token(headers: &HeaderMap, uri: &Uri) -> Option<String> {
-    let bearer = headers
-        .get(header::AUTHORIZATION)
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.strip_prefix("Bearer "));
-    let query = uri
-        .query()
-        .unwrap_or("")
-        .split('&')
-        .filter_map(|pair| pair.split_once('='))
-        .find(|(k, _)| *k == "token")
-        .map(|(_, v)| v);
-    bearer.or(query).map(str::to_string)
-}
-
-fn not_found() -> Response {
-    (StatusCode::NOT_FOUND, "not found").into_response()
-}
-
-/// Claims the projects `server`'s config names for its workspace.
-fn claim_configured_projects(name: &WorkspaceName, server: &Server) -> Result<()> {
-    let config = server.config();
-    for key in config.projects.settings.keys() {
-        if ProjectPath::resolve(key, &config.projects.dir).is_err() {
-            tracing::warn!("workspace {name}: [projects.\"{key}\"] is not a folder; skipped");
-            continue;
-        }
-        server.use_project(key).map_err(|e| {
-            ServerError::Invalid(format!(
-                "workspace {name}'s config.toml names [projects.\"{key}\"], but {e}"
-            ))
-        })?;
-    }
-    Ok(())
 }

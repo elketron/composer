@@ -37,7 +37,7 @@ async fn host(home: &Home, projects_dir: &str, b_config: &str) -> composer_serve
     Host::new(home.clone(), servers)
 }
 
-fn server<'a>(host: &'a Host, name: &str) -> &'a Arc<Server> {
+fn server(host: &Host, name: &str) -> Arc<Server> {
     host.workspace(&WorkspaceName::new(name).unwrap()).unwrap()
 }
 
@@ -84,7 +84,7 @@ async fn a_project_used_by_one_workspace_is_closed_to_the_other() {
             .map(|p| p.name)
             .collect()
     };
-    let (in_a, in_b) = (names(a), names(b));
+    let (in_a, in_b) = (names(&a), names(&b));
     assert!(
         in_a.contains(&"x".to_string()) && !in_a.contains(&"y".to_string()),
         "{in_a:?}"
