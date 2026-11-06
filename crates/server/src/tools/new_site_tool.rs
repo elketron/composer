@@ -18,7 +18,7 @@ impl Tool for NewSiteTool {
 
     fn description(&self) -> &'static str {
         "Create a new site (a top-level folder of the web) with its index.md homepage and list it \
-         on Home. The homepage gets stub Layout, Page format, Rules and Pages sections; fill them \
+         on WorkspaceHome. The homepage gets stub Layout, Page format, Rules and Pages sections; fill them \
          in with `edit` for what the site will hold. Then the site can take actions (write \
          site://<name>/justfile) and an app (`new_app`)."
     }
@@ -94,19 +94,19 @@ fn homepage(title: &str, about: &str) -> String {
     )
 }
 
-/// Adds the site to the table on Home. Returns a note for the result.
+/// Adds the site to the table on WorkspaceHome. Returns a note for the result.
 fn list_on_home(context: &ToolContext, name: &str, about: &str) -> String {
     let home = SiteUrl::new("home", "").expect("valid");
     if context.check_write(&home).is_err() {
-        return "; not listed on Home (you may not edit it), add it there yourself".into();
+        return "; not listed on WorkspaceHome (you may not edit it), add it there yourself".into();
     }
     match add_to_home(&context.server, name, about, ChangedBy::Agent) {
-        Ok(()) => " and listed it on Home".into(),
-        Err(why) => format!("; not listed on Home ({why}), add it there yourself"),
+        Ok(()) => " and listed it on WorkspaceHome".into(),
+        Err(why) => format!("; not listed on WorkspaceHome ({why}), add it there yourself"),
     }
 }
 
-/// Adds a row for the site to Home's Sites table.
+/// Adds a row for the site to WorkspaceHome's Sites table.
 pub(crate) fn add_to_home(
     server: &Server,
     name: &str,

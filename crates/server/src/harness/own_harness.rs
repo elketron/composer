@@ -35,8 +35,8 @@ impl Harness for OwnHarness {
         server: &Arc<Server>,
         request: StartRequest,
     ) -> Result<Arc<dyn HarnessRun>, String> {
-        let listen = server
-            .listen_addr()
+        let parent = server
+            .parent_url()
             .ok_or("the server is not listening yet")?;
         // Kept across runs: a resumed one goes on in the same log.
         let log = std::fs::OpenOptions::new()
@@ -59,8 +59,8 @@ impl Harness for OwnHarness {
                 "--agent",
                 &request.agent,
             ])
-            .args(["--parent", &format!("http://{listen}")])
-            .env("COMPOSER_HOME", server.home.root())
+            .args(["--parent", &parent])
+            .envs(server.home.env())
             .stdin(Stdio::null())
             .stdout(log.try_clone().map_err(|e| e.to_string())?)
             .stderr(log);

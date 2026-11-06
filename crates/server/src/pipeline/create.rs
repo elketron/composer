@@ -72,7 +72,7 @@ pub fn templates(server: &Server) -> Vec<Pipeline> {
 }
 
 /// Makes the site `name` (default: the kind) from `templates/pipelines/<kind>/` and lists it on
-/// Home. Never touches an existing site.
+/// WorkspaceHome. Never touches an existing site.
 pub fn new_pipeline(
     server: &Server,
     kind: &str,
@@ -114,7 +114,7 @@ pub fn new_pipeline(
         .map_err(|e| format!("writing the justfile: {e}"))?;
     }
     let pipeline = Pipeline::from_dir(name, &dir).ok_or("the template has no pipeline index")?;
-    // Not listed on Home is no reason to fail: the site is there.
+    // Not listed on WorkspaceHome is no reason to fail: the site is there.
     let _ = add_to_home(server, name, &pipeline.about, by);
     Ok(pipeline)
 }

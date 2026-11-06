@@ -7,7 +7,7 @@ use std::collections::VecDeque;
 use std::time::Duration;
 
 use composer_protocol::{ClientCommand, CommandResult, ServerMessage, WorkerState};
-use composer_server::{Home, Server, init_home};
+use composer_server::{Server, WorkspaceHome, init_workspace};
 use serde_json::json;
 use support::{Reply, Scripts, fake_model_logged, send, until};
 
@@ -40,8 +40,8 @@ async fn a_stopped_worker_goes_on_from_its_history() {
     .await;
 
     let dir = tempfile::tempdir().unwrap();
-    let home = Home::new(dir.path());
-    init_home(&home).await.unwrap();
+    let home = WorkspaceHome::new(dir.path());
+    init_workspace(&home).await.unwrap();
     std::fs::create_dir_all(dir.path().join("sites/orchestration/tickets")).unwrap();
     let ticket_file = dir.path().join("sites/orchestration/tickets/0001.md");
     std::fs::write(

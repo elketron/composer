@@ -51,8 +51,8 @@ impl Harness for ClaudeCodeHarness {
         request: StartRequest,
     ) -> Result<Arc<dyn HarnessRun>, String> {
         let config = &server.config().claude_code;
-        let listen = server
-            .listen_addr()
+        let parent = server
+            .parent_url()
             .ok_or("the server is not listening yet")?;
         let folder = request
             .project
@@ -100,8 +100,8 @@ impl Harness for ClaudeCodeHarness {
         let mcp = json!({ "mcpServers": { "composer": {
             "type": "stdio",
             "command": server.worker_exe,
-            "args": ["mcp", "--session", request.session, "--parent", format!("http://{listen}")],
-            "env": { "COMPOSER_HOME": server.home.root() },
+            "args": ["mcp", "--session", request.session, "--parent", parent],
+            "env": server.home.env().into_iter().collect::<std::collections::BTreeMap<_, _>>(),
         }}});
         let read_dirs = read_dirs(&config.read_dirs);
         let tools: Vec<String> = config

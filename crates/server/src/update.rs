@@ -1,11 +1,13 @@
-//! `composer update`: brings the stock sites and templates in the home folder up to this
-//! binary's versions without losing the user's (or the agents') changes.
+//! `composer update`: brings the stock sites and templates up to this binary's versions without
+//! losing the user's (or the agents') changes: the home's library and templates, and each
+//! workspace's own copy of the stock sites.
 //!
-//! Every stock file installed is also kept in `state/seed/` as the base. Per file:
-//! unchanged since installed → replaced; changed by the user and upstream → three-way merge
-//! (`git merge-file`); a conflict, or no base to merge from, leaves the user's file alone and
-//! puts the new version in `state/updates/` to look at. Either way the new version becomes the
-//! base, so the next update doesn't report the file again: `state/updates/` is the to-do list.
+//! Every stock file installed is also kept in `state/seed/` (the home's or the workspace's) as
+//! the base. Per file: unchanged since installed → replaced; changed by the user and upstream →
+//! three-way merge (`git merge-file`); a conflict, or no base to merge from, leaves the user's
+//! file alone and puts the new version in `state/updates/` to look at. Either way the new version
+//! becomes the base, so the next update doesn't report the file again: `state/updates/` is the
+//! to-do list.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -14,7 +16,8 @@ use include_dir::Dir;
 
 use crate::error::{Result, ServerError};
 use crate::home::Home;
-use crate::init::{approve_seed_recipes, stock, write_creating_dirs};
+use crate::init::{approve_seed_recipes, write_creating_dirs};
+use crate::stock_root::StockRoot;
 
 /// What happened to one stock file.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -33,56 +36,90 @@ pub enum UpdateOutcome {
     Review { review: PathBuf },
 }
 
-/// One stock file that changed, by its path in the home folder (`sites/home/index.md`).
+/// One stock file that changed, by its path in the home folder
+/// (`sites/home/index.md` for the library, `workspaces/default/sites/home/index.md` for a workspace).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UpdateItem {
     pub path: String,
     pub outcome: UpdateOutcome,
 }
 
+/// The library and templates, then each workspace.
+fn stock_roots(home: &Home) -> Result<Vec<StockRoot>> {
+    let mut roots = vec![StockRoot::library(home)];
+    for name in home.workspace_names()? {
+        roots.push(StockRoot::workspace(&home.workspace(&name)));
+    }
+    Ok(roots)
+}
+
 /// Updates the stock files (or, with `dry_run`, says what it would do). Files already up to
 /// date, files the user deleted, and files only the user changed are left alone and not listed.
 pub async fn update_home(home: &Home, dry_run: bool) -> Result<Vec<UpdateItem>> {
     let mut items = Vec::new();
-    for (name, dir) in stock() {
+    for stock in stock_roots(home)? {
+        items.extend(update_root(&stock, dry_run).await?);
+    }
+    Ok(items)
+}
+
+async fn update_root(stock: &StockRoot, dry_run: bool) -> Result<Vec<UpdateItem>> {
+    let mut items = Vec::new();
+    for (name, dir) in stock.trees() {
         for (rel, new) in files(dir) {
             let path = format!("{name}/{}", rel.display());
-            if let Some(outcome) = update_file(home, &path, new, dry_run)? {
-                items.push(UpdateItem { path, outcome });
+            if let Some(outcome) = update_file(stock, &path, new, dry_run)? {
+                items.push(UpdateItem {
+                    path: stock.label(&path),
+                    outcome,
+                });
             }
         }
     }
+    let Some(approvals) = stock.approvals() else {
+        return Ok(items);
+    };
     if !dry_run {
         // Also the ones already up to date: they may predate approvals per caller.
-        let stock_justfiles: Vec<String> = stock()
-            .into_iter()
+        let stock_justfiles: Vec<String> = stock
+            .trees()
+            .iter()
             .flat_map(|(name, dir)| {
                 files(dir)
                     .into_iter()
-                    .map(move |(rel, new)| (home.root().join(name).join(rel), new))
+                    .map(move |(rel, new)| (stock.root().join(name).join(rel), new))
             })
             .filter(|(path, new)| {
                 path.ends_with("justfile") && std::fs::read(path).ok().as_deref() == Some(*new)
             })
             .map(|(path, _)| path.display().to_string())
             .collect();
-        approve_seed_recipes(home, &stock_justfiles).await?;
+        approve_seed_recipes(approvals, &stock_justfiles).await?;
     }
     Ok(items)
 }
 
 /// Stock files whose new version isn't installed yet (what `update` would look at).
 pub fn pending_updates(home: &Home) -> usize {
-    stock()
-        .into_iter()
+    stock_roots(home)
+        .unwrap_or_default()
+        .iter()
+        .map(pending_in)
+        .sum()
+}
+
+fn pending_in(stock: &StockRoot) -> usize {
+    stock
+        .trees()
+        .iter()
         .flat_map(|(name, dir)| {
             files(dir)
                 .into_iter()
                 .map(move |(rel, new)| (name, rel, new))
         })
         .filter(|(name, rel, new)| {
-            let base = std::fs::read(home.seed_base().join(name).join(rel)).ok();
-            let current = std::fs::read(home.root().join(name).join(rel)).ok();
+            let base = std::fs::read(stock.seed_base().join(name).join(rel)).ok();
+            let current = std::fs::read(stock.root().join(name).join(rel)).ok();
             match (base, current) {
                 (Some(base), _) => base != *new,
                 (None, current) => current.as_deref() != Some(*new),
@@ -103,16 +140,16 @@ fn files(dir: &'static Dir<'static>) -> Vec<(PathBuf, &'static [u8])> {
 }
 
 fn update_file(
-    home: &Home,
+    stock: &StockRoot,
     path: &str,
     new: &[u8],
     dry_run: bool,
 ) -> Result<Option<UpdateOutcome>> {
-    let target = home.root().join(path);
-    let base_path = home.seed_base().join(path);
+    let target = stock.root().join(path);
+    let base_path = stock.seed_base().join(path);
     let base = read_optional(&base_path)?;
     let current = read_optional(&target)?;
-    let review = home.updates().join(path);
+    let review = stock.updates().join(path);
     let write = |path: &Path, content: &[u8]| {
         if dry_run {
             Ok(())
@@ -144,7 +181,7 @@ fn update_file(
             write(&target, new)?;
             UpdateOutcome::Replaced
         }
-        (Some(current), Some(base)) => match merge(home, &current, &base, new)? {
+        (Some(current), Some(base)) => match merge(stock, &current, &base, new)? {
             Merge::Clean(merged) => {
                 write(&target, &merged)?;
                 UpdateOutcome::Merged
@@ -184,12 +221,12 @@ enum Merge {
 }
 
 /// Three-way merge of the user's version and the new one, from the installed base.
-fn merge(home: &Home, current: &[u8], base: &[u8], new: &[u8]) -> Result<Merge> {
+fn merge(stock: &StockRoot, current: &[u8], base: &[u8], new: &[u8]) -> Result<Merge> {
     let text = |b: &[u8]| std::str::from_utf8(b).is_ok() && !b.contains(&0);
     if !(text(current) && text(base) && text(new)) {
         return Ok(Merge::Impossible);
     }
-    let scratch = home.state().join("merge");
+    let scratch = stock.merge_scratch();
     std::fs::create_dir_all(&scratch).map_err(|e| ServerError::io(&scratch, e))?;
     let paths = ["yours", "installed", "new"].map(|n| scratch.join(n));
     for (path, content) in paths.iter().zip([current, base, new]) {
@@ -223,14 +260,25 @@ fn merge(home: &Home, current: &[u8], base: &[u8], new: &[u8]) -> Result<Merge> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::init::init_home;
+    use crate::init::{init_home, stock};
+    use crate::workspace_home::WorkspaceHome;
+    use crate::workspace_name::WorkspaceName;
 
-    fn page(home: &Home, path: &str) -> String {
+    /// A fresh home and its default workspace, where the user's changes happen.
+    async fn fresh() -> (tempfile::TempDir, Home, WorkspaceHome) {
+        let dir = tempfile::tempdir().unwrap();
+        let home = Home::new(dir.path());
+        init_home(&home).await.unwrap();
+        let workspace = home.workspace(&WorkspaceName::default_workspace());
+        (dir, home, workspace)
+    }
+
+    fn page(home: &WorkspaceHome, path: &str) -> String {
         std::fs::read_to_string(home.root().join(path)).unwrap()
     }
 
     /// Pretends `path` was installed as `old` and the user's copy is `current`.
-    fn installed(home: &Home, path: &str, old: &str, current: Option<&str>) {
+    fn installed(home: &WorkspaceHome, path: &str, old: &str, current: Option<&str>) {
         std::fs::write(home.seed_base().join(path), old).unwrap();
         match current {
             Some(text) => std::fs::write(home.root().join(path), text).unwrap(),
@@ -246,55 +294,41 @@ mod tests {
 
     #[tokio::test]
     async fn a_fresh_home_is_up_to_date() {
-        let dir = tempfile::tempdir().unwrap();
-        let home = Home::new(dir.path());
-        init_home(&home).await.unwrap();
+        let (_dir, home, _) = fresh().await;
         assert_eq!(pending_updates(&home), 0);
         assert!(update_home(&home, false).await.unwrap().is_empty());
     }
 
     #[tokio::test]
     async fn keeps_what_the_user_changed() {
-        let dir = tempfile::tempdir().unwrap();
-        let home = Home::new(dir.path());
-        init_home(&home).await.unwrap();
+        let (_dir, home, ws) = fresh().await;
         let new_home = stock_text("sites/home/index.md");
         let new_default = stock_text("sites/agents/default.md");
         let new_memory = stock_text("sites/memory/index.md");
 
         // Untouched by the user: replaced.
-        installed(
-            &home,
-            "sites/home/index.md",
-            "old home\n",
-            Some("old home\n"),
-        );
+        installed(&ws, "sites/home/index.md", "old home\n", Some("old home\n"));
         // Changed by both, in different places: merged.
         let old_default = new_default.replacen("Be direct", "Be brief", 1);
         let mine = old_default.replacen("title: Default", "title: My default", 1);
-        installed(&home, "sites/agents/default.md", &old_default, Some(&mine));
+        installed(&ws, "sites/agents/default.md", &old_default, Some(&mine));
         // Changed by both in the same place: conflict, untouched.
         let old_memory = new_memory.replacen("# Memory", "# Old memory", 1);
         let my_memory = new_memory.replacen("# Memory", "# My memory", 1);
-        installed(
-            &home,
-            "sites/memory/index.md",
-            &old_memory,
-            Some(&my_memory),
-        );
+        installed(&ws, "sites/memory/index.md", &old_memory, Some(&my_memory));
         // Deleted by the user: stays deleted.
-        installed(&home, "sites/plans/index.md", "old plans\n", None);
+        installed(&ws, "sites/plans/index.md", "old plans\n", None);
         // A new stock file.
-        std::fs::remove_file(home.root().join("sites/agents/worker.md")).unwrap();
-        std::fs::remove_file(home.seed_base().join("sites/agents/worker.md")).unwrap();
+        std::fs::remove_file(ws.root().join("sites/agents/worker.md")).unwrap();
+        std::fs::remove_file(ws.seed_base().join("sites/agents/worker.md")).unwrap();
         // No base (an older install) and different: left for review.
-        std::fs::remove_file(home.seed_base().join("sites/agents/orchestrator.md")).unwrap();
-        std::fs::write(home.root().join("sites/agents/orchestrator.md"), "mine\n").unwrap();
+        std::fs::remove_file(ws.seed_base().join("sites/agents/orchestrator.md")).unwrap();
+        std::fs::write(ws.root().join("sites/agents/orchestrator.md"), "mine\n").unwrap();
 
         assert_eq!(pending_updates(&home), 6);
         let dry = update_home(&home, true).await.unwrap();
         assert_eq!(
-            page(&home, "sites/home/index.md"),
+            page(&ws, "sites/home/index.md"),
             "old home\n",
             "dry run writes nothing"
         );
@@ -304,33 +338,33 @@ mod tests {
         let outcome = |path: &str| {
             items
                 .iter()
-                .find(|i| i.path == path)
+                .find(|i| i.path == format!("workspaces/default/{path}"))
                 .map(|i| i.outcome.clone())
         };
         assert_eq!(
             outcome("sites/home/index.md"),
             Some(UpdateOutcome::Replaced)
         );
-        assert_eq!(page(&home, "sites/home/index.md"), new_home);
+        assert_eq!(page(&ws, "sites/home/index.md"), new_home);
 
         assert_eq!(
             outcome("sites/agents/default.md"),
             Some(UpdateOutcome::Merged)
         );
-        let merged = page(&home, "sites/agents/default.md");
+        let merged = page(&ws, "sites/agents/default.md");
         assert!(
             merged.contains("title: My default") && merged.contains("Be direct"),
             "{merged}"
         );
 
-        let review = home.updates().join("sites/memory/index.md");
+        let review = ws.updates().join("sites/memory/index.md");
         assert_eq!(
             outcome("sites/memory/index.md"),
             Some(UpdateOutcome::Conflict {
                 review: review.clone()
             })
         );
-        assert_eq!(page(&home, "sites/memory/index.md"), my_memory);
+        assert_eq!(page(&ws, "sites/memory/index.md"), my_memory);
         let marked = std::fs::read_to_string(&review).unwrap();
         assert!(
             marked.contains("<<<<<<< yours") && marked.contains(">>>>>>> new"),
@@ -338,7 +372,7 @@ mod tests {
         );
 
         assert_eq!(outcome("sites/plans/index.md"), None);
-        assert!(!home.root().join("sites/plans/index.md").exists());
+        assert!(!ws.root().join("sites/plans/index.md").exists());
         assert_eq!(
             outcome("sites/agents/worker.md"),
             Some(UpdateOutcome::Added)
@@ -347,7 +381,7 @@ mod tests {
             outcome("sites/agents/orchestrator.md"),
             Some(UpdateOutcome::Review { .. })
         ));
-        assert_eq!(page(&home, "sites/agents/orchestrator.md"), "mine\n");
+        assert_eq!(page(&ws, "sites/agents/orchestrator.md"), "mine\n");
 
         // Reported once: what's left is in state/updates/.
         assert_eq!(pending_updates(&home), 0);

@@ -4,7 +4,7 @@ use composer_protocol::{Attachment, SessionInfo};
 use serde_json::Value;
 
 use crate::attachments::resolve;
-use crate::home::Home;
+use crate::workspace_home::WorkspaceHome;
 
 /// A file a ticket refers to, checked.
 #[derive(Debug, Clone)]
@@ -18,7 +18,11 @@ pub struct TicketFile {
 /// A ticket's `attachments:` (`<session>/<file>` refs, e.g. from the orchestrator's chat) that
 /// belong to its project: uploaded to a session working in that same project (or, for a
 /// ticket without one, a session without one). Others are left out and logged.
-pub fn ticket_files(home: &Home, refs: Option<&Value>, project: Option<&str>) -> Vec<TicketFile> {
+pub fn ticket_files(
+    home: &WorkspaceHome,
+    refs: Option<&Value>,
+    project: Option<&str>,
+) -> Vec<TicketFile> {
     let refs: Vec<&str> = match refs {
         Some(Value::Array(items)) => items.iter().filter_map(Value::as_str).collect(),
         Some(Value::String(one)) => vec![one.as_str()],

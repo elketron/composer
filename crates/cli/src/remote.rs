@@ -4,29 +4,38 @@ use std::process::Command;
 
 use anyhow::{Context, bail};
 use composer_server::devices::Devices;
-use composer_server::{Config, Home, local_token};
+use composer_server::{WorkspaceHome, WorkspaceName, local_token};
 use serde_json::{Value, json};
 
-/// Where `login` stores a remote server: `<home>/remote.json`.
-fn remote_file(home: &Home) -> std::path::PathBuf {
-    home.root().join("remote.json")
+/// Where `login` stores a remote server: `<composer home>/remote.json`.
+fn remote_file(home: &WorkspaceHome) -> std::path::PathBuf {
+    home.home_root().join("remote.json")
 }
 
 /// The server this machine talks to: the one from `composer login`, else the local one.
-pub fn client(home: &Home) -> anyhow::Result<(String, String)> {
+pub fn client(home: &WorkspaceHome) -> anyhow::Result<(String, String)> {
     if let Ok(text) = std::fs::read_to_string(remote_file(home)) {
         let remote: Value = serde_json::from_str(&text).context("reading remote.json")?;
         if let (Some(server), Some(token)) = (remote["server"].as_str(), remote["token"].as_str()) {
             return Ok((server.to_string(), token.to_string()));
         }
     }
-    let config = Config::load(&home.config_file())?;
-    Ok((format!("http://{}", config.server.bind), local_token(home)?))
+    let config = home.load_config()?;
+    // The default workspace also answers unprefixed until clients address workspaces (0146).
+    let base = if home.is_standalone() || home.name().as_str() == WorkspaceName::DEFAULT {
+        String::new()
+    } else {
+        format!("/w/{}", home.name())
+    };
+    Ok((
+        format!("http://{}{base}", config.server.bind),
+        local_token(home)?,
+    ))
 }
 
 /// `composer pair`: a one-time code, as a QR code for phones and a command for computers.
-pub fn pair(home: &Home, name: &str) -> anyhow::Result<()> {
-    let config = Config::load(&home.config_file())?;
+pub fn pair(home: &WorkspaceHome, name: &str) -> anyhow::Result<()> {
+    let config = home.load_config()?;
     let code = Devices::new(&home.state()).create_code(name)?;
     let (base, served) = match tailscale_name() {
         Some(host) => (
@@ -55,7 +64,7 @@ pub fn pair(home: &Home, name: &str) -> anyhow::Result<()> {
 }
 
 /// `composer devices [revoke <name>]`
-pub fn devices(home: &Home, revoke: Option<String>) -> anyhow::Result<()> {
+pub fn devices(home: &WorkspaceHome, revoke: Option<String>) -> anyhow::Result<()> {
     let devices = Devices::new(&home.state());
     if let Some(name) = revoke {
         if !devices.revoke(&name)? {
@@ -84,7 +93,7 @@ pub fn devices(home: &Home, revoke: Option<String>) -> anyhow::Result<()> {
 
 /// `composer login <server> <code>`: pairs this machine with a remote server.
 pub async fn login(
-    home: &Home,
+    home: &WorkspaceHome,
     server: &str,
     code: &str,
     name: Option<String>,
@@ -105,7 +114,7 @@ pub async fn login(
             body["error"].as_str().unwrap_or(status.as_str())
         );
     }
-    std::fs::create_dir_all(home.root())?;
+    std::fs::create_dir_all(home.home_root())?;
     let remote = json!({ "server": server, "token": body["token"], "name": body["name"] });
     std::fs::write(remote_file(home), serde_json::to_string_pretty(&remote)?)?;
     println!(
@@ -115,7 +124,7 @@ pub async fn login(
     Ok(())
 }
 
-pub fn logout(home: &Home) -> anyhow::Result<()> {
+pub fn logout(home: &WorkspaceHome) -> anyhow::Result<()> {
     match std::fs::remove_file(remote_file(home)) {
         Ok(()) => println!("forgot the remote server; `composer` uses the local one again"),
         Err(_) => println!("not logged in to a remote server"),

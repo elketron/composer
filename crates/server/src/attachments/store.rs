@@ -5,10 +5,10 @@ use composer_protocol::Attachment;
 use crate::attachments::{AttachmentKind, classify, prepare_image};
 use crate::config_sections::AttachmentsConfig;
 use crate::hash::content_hash;
-use crate::home::Home;
+use crate::workspace_home::WorkspaceHome;
 
 /// A session's attachments: `state/sessions/<id>/attachments`.
-pub fn folder(home: &Home, session: &str) -> PathBuf {
+pub fn folder(home: &WorkspaceHome, session: &str) -> PathBuf {
     home.sessions().join(session).join("attachments")
 }
 
@@ -51,7 +51,7 @@ pub fn sanitize_name(name: &str) -> String {
 /// Stores an upload for `session`: checked (size, type), images made safe (see
 /// [`prepare_image`]), named `<hash>-<name>`. The same content uploaded again is stored once.
 pub fn save(
-    home: &Home,
+    home: &WorkspaceHome,
     config: &AttachmentsConfig,
     session: &str,
     name: &str,
@@ -98,7 +98,7 @@ pub fn save(
 /// A client's reference to an attachment of `session`: the stored file it names (which must be
 /// in that session's folder), described from the file itself. Returns it with its path.
 pub fn resolve(
-    home: &Home,
+    home: &WorkspaceHome,
     session: &str,
     reference: &Attachment,
 ) -> Result<(Attachment, PathBuf), String> {
@@ -155,7 +155,7 @@ mod tests {
     #[test]
     fn saves_once_and_resolves_only_its_own() {
         let tmp = tempfile::tempdir().unwrap();
-        let home = Home::new(tmp.path());
+        let home = WorkspaceHome::new(tmp.path());
         let saved = save(&home, &config(), "s1", "../notes.md", b"# notes").unwrap();
         assert!(saved.file.ends_with("-notes.md"));
         assert_eq!((saved.mime.as_str(), saved.size), ("text/markdown", 7));
@@ -186,7 +186,7 @@ mod tests {
     #[test]
     fn refuses_what_it_does_not_take() {
         let tmp = tempfile::tempdir().unwrap();
-        let home = Home::new(tmp.path());
+        let home = WorkspaceHome::new(tmp.path());
         let small = AttachmentsConfig {
             max_mb: 1,
             ..config()

@@ -9,7 +9,7 @@ mod support;
 use std::collections::VecDeque;
 
 use composer_protocol::{ClientCommand, CommandResult, ServerMessage, WorkerState};
-use composer_server::{Home, Server, init_home};
+use composer_server::{Server, WorkspaceHome, init_workspace};
 use serde_json::json;
 use support::{Reply, Scripts, fake_model_logged, send, until};
 
@@ -59,8 +59,8 @@ async fn stages_run_in_order_and_stop_at_a_gate() {
     .await;
 
     let dir = tempfile::tempdir().unwrap();
-    let home = Home::new(dir.path());
-    init_home(&home).await.unwrap();
+    let home = WorkspaceHome::new(dir.path());
+    init_workspace(&home).await.unwrap();
     std::fs::write(
         home.config_file(),
         format!("[provider]\nbase_url = \"{base_url}\"\n"),

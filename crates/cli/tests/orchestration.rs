@@ -8,7 +8,7 @@ use std::collections::VecDeque;
 use composer_protocol::{
     ClientCommand, CommandResult, MessageSource, Role, ServerMessage, WorkerState,
 };
-use composer_server::{Home, Server, init_home};
+use composer_server::{Server, WorkspaceHome, init_workspace};
 use serde_json::json;
 use support::{Reply, Scripts, fake_model, send, until};
 
@@ -42,8 +42,8 @@ async fn orchestrator_runs_a_worker_process_on_a_ticket() {
     .await;
 
     let dir = tempfile::tempdir().unwrap();
-    let home = Home::new(dir.path());
-    init_home(&home).await.unwrap();
+    let home = WorkspaceHome::new(dir.path());
+    init_workspace(&home).await.unwrap();
     let worker = std::fs::read_to_string(dir.path().join("sites/agents/worker.md")).unwrap();
     std::fs::write(
         dir.path().join("sites/agents/reviewer.md"),

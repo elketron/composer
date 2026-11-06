@@ -106,8 +106,8 @@ async fn a_mount_existing_at_server_start_is_scanned() {
     // (the test builds its home before starting the server, unlike `listen`).
     let projects = tempfile::tempdir().unwrap();
     let home_dir = tempfile::tempdir().unwrap();
-    let home = composer_server::Home::new(home_dir.path());
-    composer_server::init_home(&home).await.unwrap();
+    let home = composer_server::WorkspaceHome::new(home_dir.path());
+    composer_server::init_workspace(&home).await.unwrap();
     let mounted = projects.path().join("ref2img");
     std::fs::create_dir_all(&mounted).unwrap();
     std::os::unix::fs::symlink(&mounted, home.sites().join("plans/mounted")).unwrap();
