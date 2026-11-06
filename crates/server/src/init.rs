@@ -7,7 +7,7 @@ use crate::actions::{Approvals, Caller, Justfile};
 use crate::config::Config;
 use crate::error::{Result, ServerError};
 use crate::home::Home;
-use crate::library::Library;
+use crate::library::{Library, SiteName, WorkspaceLibrary};
 use crate::stock_root::StockRoot;
 use crate::workspace_home::WorkspaceHome;
 use crate::workspace_name::WorkspaceName;
@@ -59,7 +59,13 @@ pub async fn init_workspace(workspace: &WorkspaceHome) -> Result<Vec<String>> {
         fs::create_dir_all(&dir).map_err(|e| ServerError::io(&dir, e))?;
     }
     let stock = StockRoot::workspace(workspace);
-    install(&stock, &mut created)?;
+    // In a home with a library, a new workspace installs its stock sites from there (and so
+    // updates them from there). Standalone workspaces, and homes whose library isn't a repo yet,
+    // get them from the binary as before.
+    match from_library(workspace)? {
+        Some(library) => install_stock_from(&library, workspace, &mut created).await?,
+        None => install(&stock, &mut created)?,
+    }
     let config = if workspace.is_standalone() {
         Config::TEMPLATE
     } else {
@@ -73,9 +79,58 @@ pub async fn init_workspace(workspace: &WorkspaceHome) -> Result<Vec<String>> {
     Ok(created)
 }
 
+/// The names of the binary's stock sites (`agents`, `home`, ...).
+pub(crate) fn stock_site_names() -> Vec<String> {
+    SEED.dirs()
+        .filter_map(|d| d.path().file_name()?.to_str().map(str::to_string))
+        .collect()
+}
+
+/// The binary's stock version of `rel` (`orchestration/justfile`), if it has one.
+pub(crate) fn stock_file(rel: &Path) -> Option<&'static [u8]> {
+    SEED.get_file(rel).map(|f| f.contents())
+}
+
 /// The library commit message for this binary's stock.
 pub(crate) fn stock_message() -> String {
     format!("stock: composer {}", env!("CARGO_PKG_VERSION"))
+}
+
+/// The library a new workspace installs from, if it has one with commits.
+fn from_library(workspace: &WorkspaceHome) -> Result<Option<WorkspaceLibrary>> {
+    let Ok(library) = WorkspaceLibrary::of(workspace) else {
+        return Ok(None);
+    };
+    let head = library.library().head().map_err(ServerError::Invalid)?;
+    Ok(head.map(|_| library))
+}
+
+/// Installs the stock sites the workspace doesn't have yet from the library, and records the
+/// workspace as installing from it (even when it had them all).
+async fn install_stock_from(
+    library: &WorkspaceLibrary,
+    workspace: &WorkspaceHome,
+    created: &mut Vec<String>,
+) -> Result<()> {
+    for name in stock_site_names() {
+        let site = SiteName::new(&name).map_err(ServerError::Invalid)?;
+        if workspace.sites().join(&name).exists() {
+            continue;
+        }
+        let approvals = library.approvals().map_err(ServerError::Invalid)?;
+        library
+            .install(&site, None, &approvals)
+            .await
+            .map_err(ServerError::Invalid)?;
+        created.push(workspace.sites().join(&name).display().to_string());
+    }
+    if !workspace.library_file().exists() {
+        library
+            .installed()
+            .and_then(|installed| installed.save())
+            .map_err(ServerError::Invalid)?;
+    }
+    Ok(())
 }
 
 /// Reads the workspace's token, creating it if needed.
@@ -96,7 +151,11 @@ pub(crate) fn read_or_create_token(path: &Path) -> Result<String> {
 /// Pre-approves the recipes of the stock justfiles among `paths` (as `init` and `update` install
 /// them), for agents and apps.
 pub(crate) async fn approve_seed_recipes(approvals: &Path, created: &[String]) -> Result<()> {
-    let approvals = Approvals::load(approvals)?;
+    approve_recipes_in(&Approvals::load(approvals)?, created).await
+}
+
+/// The same, into approvals already loaded (a running server's own).
+pub(crate) async fn approve_recipes_in(approvals: &Approvals, created: &[String]) -> Result<()> {
     for path in created.iter().filter(|p| p.ends_with("/justfile")) {
         let Some(site_dir) = Path::new(path).parent() else {
             continue;

@@ -16,9 +16,10 @@ use include_dir::Dir;
 
 use crate::error::{Result, ServerError};
 use crate::home::Home;
-use crate::init::{approve_seed_recipes, stock_message, write_creating_dirs};
-use crate::library::Library;
+use crate::init::{approve_seed_recipes, stock_message, stock_site_names, write_creating_dirs};
+use crate::library::{Library, SiteName, WorkspaceLibrary};
 use crate::stock_root::StockRoot;
+use crate::workspace_home::WorkspaceHome;
 
 /// What happened to one stock file.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -27,6 +28,8 @@ pub enum UpdateOutcome {
     Added,
     /// Unchanged since installed; replaced with the new version.
     Replaced,
+    /// Unchanged since installed, and gone from the library: removed.
+    Removed,
     /// Changed on both sides; merged without conflicts.
     Merged,
     /// Changed on both sides and the merge conflicts: the file is untouched, the merge with
@@ -45,15 +48,6 @@ pub struct UpdateItem {
     pub outcome: UpdateOutcome,
 }
 
-/// The library and templates, then each workspace.
-fn stock_roots(home: &Home) -> Result<Vec<StockRoot>> {
-    let mut roots = vec![StockRoot::library(home)];
-    for name in home.workspace_names()? {
-        roots.push(StockRoot::workspace(&home.workspace(&name)));
-    }
-    Ok(roots)
-}
-
 /// Updates the stock files (or, with `dry_run`, says what it would do). Files already up to
 /// date, files the user deleted, and files only the user changed are left alone and not listed.
 ///
@@ -68,15 +62,60 @@ pub async fn update_home(home: &Home, dry_run: bool) -> Result<Vec<UpdateItem>> 
         };
         library.record(before).map_err(ServerError::Invalid)?;
     }
-    let mut items = Vec::new();
-    for stock in stock_roots(home)? {
-        items.extend(update_root(&stock, dry_run).await?);
-    }
+    let mut items = update_root(&StockRoot::library(home), dry_run).await?;
     if !dry_run {
-        library
+        let recorded = library
             .record(&stock_message())
             .map_err(ServerError::Invalid)?;
+        // Workspaces join at the latest stock commit: a library that never had one (it became a
+        // repo already holding this stock) gets one that says so.
+        let never = library
+            .last_stock_commit()
+            .map_err(ServerError::Invalid)?
+            .is_none();
+        if recorded.is_none() && never {
+            library
+                .mark(&stock_message())
+                .map_err(ServerError::Invalid)?;
+        }
     }
+    for name in home.workspace_names()? {
+        let workspace = home.workspace(&name);
+        items.extend(update_workspace(&library, &workspace, dry_run).await?);
+    }
+    Ok(items)
+}
+
+/// A workspace's installed sites from the library. One whose stock sites came from the binary
+/// (before the library) gets a last update from the binary, then joins: its stock sites are
+/// recorded as installed from the library's latest stock commit.
+async fn update_workspace(
+    library: &Library,
+    workspace: &WorkspaceHome,
+    dry_run: bool,
+) -> Result<Vec<UpdateItem>> {
+    let mut items = Vec::new();
+    let from_library = WorkspaceLibrary::of(workspace).map_err(ServerError::Invalid)?;
+    if !workspace.library_file().exists() {
+        items.extend(update_root(&StockRoot::workspace(workspace), dry_run).await?);
+        let stock = library.last_stock_commit().map_err(ServerError::Invalid)?;
+        if let (false, Some(commit)) = (dry_run, stock) {
+            let names: Vec<SiteName> = stock_site_names()
+                .iter()
+                .filter_map(|n| SiteName::new(n).ok())
+                .collect();
+            from_library
+                .adopt(&names, &commit)
+                .map_err(ServerError::Invalid)?;
+        }
+    }
+    let approvals = from_library.approvals().map_err(ServerError::Invalid)?;
+    items.extend(
+        from_library
+            .update(dry_run, &approvals)
+            .await
+            .map_err(ServerError::Invalid)?,
+    );
     Ok(items)
 }
 
@@ -117,12 +156,22 @@ async fn update_root(stock: &StockRoot, dry_run: bool) -> Result<Vec<UpdateItem>
 }
 
 /// Stock files whose new version isn't installed yet (what `update` would look at).
+/// For a workspace that installs from the library: how many of its installed sites the library
+/// is ahead of.
 pub fn pending_updates(home: &Home) -> usize {
-    stock_roots(home)
+    let workspaces: usize = home
+        .workspace_names()
         .unwrap_or_default()
         .iter()
-        .map(pending_in)
-        .sum()
+        .map(|name| {
+            let workspace = home.workspace(name);
+            match WorkspaceLibrary::of(&workspace) {
+                Ok(library) if workspace.library_file().exists() => library.behind(),
+                _ => pending_in(&StockRoot::workspace(&workspace)),
+            }
+        })
+        .sum();
+    pending_in(&StockRoot::library(home)) + workspaces
 }
 
 fn pending_in(stock: &StockRoot) -> usize {
@@ -229,7 +278,7 @@ fn read_optional(path: &Path) -> Result<Option<Vec<u8>>> {
     }
 }
 
-enum Merge {
+pub(crate) enum Merge {
     Clean(Vec<u8>),
     /// With conflict markers.
     Conflict(Vec<u8>),
@@ -239,11 +288,22 @@ enum Merge {
 
 /// Three-way merge of the user's version and the new one, from the installed base.
 fn merge(stock: &StockRoot, current: &[u8], base: &[u8], new: &[u8]) -> Result<Merge> {
+    merge_three(&stock.merge_scratch(), current, base, new)
+}
+
+/// Three-way merge (`git merge-file`) of `current` and `new` from `base`, using `scratch` (a
+/// folder of its own, removed afterwards) for the three files.
+pub(crate) fn merge_three(
+    scratch: &Path,
+    current: &[u8],
+    base: &[u8],
+    new: &[u8],
+) -> Result<Merge> {
     let text = |b: &[u8]| std::str::from_utf8(b).is_ok() && !b.contains(&0);
     if !(text(current) && text(base) && text(new)) {
         return Ok(Merge::Impossible);
     }
-    let scratch = stock.merge_scratch();
+    let scratch = scratch.to_path_buf();
     std::fs::create_dir_all(&scratch).map_err(|e| ServerError::io(&scratch, e))?;
     let paths = ["yours", "installed", "new"].map(|n| scratch.join(n));
     for (path, content) in paths.iter().zip([current, base, new]) {
@@ -281,12 +341,23 @@ mod tests {
     use crate::workspace_home::WorkspaceHome;
     use crate::workspace_name::WorkspaceName;
 
-    /// A fresh home and its default workspace, where the user's changes happen.
+    /// A fresh home and its default workspace, where the user's changes happen. The workspace is
+    /// one from before the library (stock from the binary, `state/seed` bases): these tests cover
+    /// that path, which such a workspace takes once before it joins the library.
     async fn fresh() -> (tempfile::TempDir, Home, WorkspaceHome) {
         let dir = tempfile::tempdir().unwrap();
         let home = Home::new(dir.path());
         init_home(&home).await.unwrap();
         let workspace = home.workspace(&WorkspaceName::default_workspace());
+        std::fs::remove_dir_all(workspace.root()).unwrap();
+        let standalone_then_moved = WorkspaceHome::new(dir.path().join("old"));
+        crate::init::init_workspace(&standalone_then_moved)
+            .await
+            .unwrap();
+        std::fs::rename(dir.path().join("old"), workspace.root()).unwrap();
+        // A standalone workspace carries templates and a full config; this one wouldn't.
+        let _ = std::fs::remove_dir_all(workspace.root().join("templates"));
+        let _ = std::fs::remove_dir_all(workspace.seed_base().join("templates"));
         (dir, home, workspace)
     }
 

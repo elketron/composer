@@ -3,7 +3,10 @@ use std::fmt;
 /// A commit of the library repo: a full 40-hex-digit SHA-1, as git prints it. Only built from
 /// git's own output or checked input, so it can always be put in a git command line (never an
 /// option, never a range).
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
+#[serde(try_from = "String", into = "String")]
 pub struct LibraryCommit(String);
 
 impl LibraryCommit {
@@ -23,6 +26,19 @@ impl LibraryCommit {
     /// The first 12 digits, for messages.
     pub fn short(&self) -> &str {
         &self.0[..12]
+    }
+}
+
+impl TryFrom<String> for LibraryCommit {
+    type Error = String;
+    fn try_from(raw: String) -> Result<Self, String> {
+        Self::parse(&raw)
+    }
+}
+
+impl From<LibraryCommit> for String {
+    fn from(commit: LibraryCommit) -> String {
+        commit.0
     }
 }
 

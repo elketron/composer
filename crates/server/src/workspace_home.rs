@@ -183,6 +183,11 @@ impl WorkspaceHome {
         self.state().join("seed")
     }
 
+    /// The sites this workspace installed from the library, and from which commit.
+    pub fn library_file(&self) -> PathBuf {
+        self.state().join("library.json")
+    }
+
     /// New stock versions `update` could not apply, for the user to look at.
     pub fn updates(&self) -> PathBuf {
         self.state().join("updates")

@@ -259,6 +259,23 @@ pub enum CommandResult {
     McpServers {
         servers: Vec<crate::http::McpServerInfo>,
     },
+    /// `library.list`.
+    Library {
+        sites: Vec<crate::http::LibrarySiteInfo>,
+    },
+    /// `library.install`: the site as installed, from which library site and commit (12 digits),
+    /// how many files; `has_ui`: build it with its `ui-build` action.
+    LibraryInstalled {
+        site: String,
+        from: String,
+        commit: String,
+        files: usize,
+        has_ui: bool,
+    },
+    /// `library.update`: the files that changed (or would, for a dry run).
+    LibraryUpdated {
+        changes: Vec<crate::http::LibraryChange>,
+    },
     ConfigReloaded {
         /// False: the file says what the server already runs with.
         changed: bool,

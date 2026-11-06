@@ -58,6 +58,18 @@ impl Library {
         self.head()
     }
 
+    /// Commits nothing but `message`: marks that the library holds what it says (the stock of a
+    /// version, when that stock brought no change).
+    pub fn mark(&self, message: &str) -> Result<Option<LibraryCommit>, String> {
+        if self.head()?.is_none() {
+            return Ok(None);
+        }
+        let mut args = IDENTITY.to_vec();
+        args.extend(["commit", "-q", "--allow-empty", "-m", message]);
+        git(&self.root, &args)?;
+        self.head()
+    }
+
     /// The latest commit, `None` before the first.
     pub fn head(&self) -> Result<Option<LibraryCommit>, String> {
         if !self.root.join(".git").exists() {
@@ -67,6 +79,51 @@ impl Library {
             Ok(sha) => LibraryCommit::parse(&sha).map(Some),
             Err(_) => Ok(None),
         }
+    }
+
+    /// Whether `site` changed between `commit` and HEAD.
+    pub fn changed_since(&self, commit: &LibraryCommit, site: &str) -> Result<bool, String> {
+        let site = site_name(site)?;
+        let output = git_output(
+            &self.root,
+            &[
+                "diff",
+                "--quiet",
+                commit.as_str(),
+                "HEAD",
+                "--",
+                &format!("{site}/"),
+            ],
+            &[],
+        )?;
+        match output.status.code() {
+            Some(0) => Ok(false),
+            Some(1) => Ok(true),
+            _ => Err(String::from_utf8_lossy(&output.stderr).trim().to_string()),
+        }
+    }
+
+    /// Whether the library has `commit`.
+    pub fn has(&self, commit: &LibraryCommit) -> Result<bool, String> {
+        let spec = format!("{commit}^{{commit}}");
+        let output = git_output(&self.root, &["cat-file", "-e", &spec], &[])?;
+        Ok(output.status.success())
+    }
+
+    /// The latest commit of the binary's stock (`stock: ...`): what a workspace's stock sites were
+    /// copied from before installs were recorded.
+    pub fn last_stock_commit(&self) -> Result<Option<LibraryCommit>, String> {
+        if self.head()?.is_none() {
+            return Ok(None);
+        }
+        let sha = git(
+            &self.root,
+            &["log", "-1", "--format=%H", "--grep=^stock: ", "HEAD"],
+        )?;
+        if sha.is_empty() {
+            return Ok(None);
+        }
+        LibraryCommit::parse(&sha).map(Some)
     }
 
     /// The library's sites at HEAD, each with the last commit that changed it.

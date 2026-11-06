@@ -82,11 +82,20 @@ async fn a_library_from_before_repos_becomes_one_on_update() {
     init_home(&home).await.unwrap();
     std::fs::remove_dir_all(home.library().join(".git")).unwrap();
     std::fs::remove_file(home.library().join(".gitignore")).unwrap();
+    // Nor did its workspace know the library.
+    let workspace = home.workspace(&composer_server::WorkspaceName::default_workspace());
+    std::fs::remove_file(workspace.library_file()).unwrap();
     update_home(&home, false).await.unwrap();
+    // Its stock is current, so the stock commit only marks it: workspaces join there.
     assert_eq!(
         log(&home),
-        ["library: as it was before it became a git repo"]
+        [
+            log(&home)[0].clone(),
+            "library: as it was before it became a git repo".to_string()
+        ]
     );
+    assert!(log(&home)[0].starts_with("stock: composer "));
+    assert!(workspace.library_file().is_file(), "the workspace joined");
 }
 
 #[tokio::test]

@@ -402,3 +402,39 @@ pub struct DiffComment {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub quote: Option<String>,
 }
+
+/// `library.list`: one site of the library, and this workspace's copies of it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct LibrarySiteInfo {
+    pub site: String,
+    /// The last library commit that changed it (12 digits).
+    pub commit: String,
+    /// This workspace's sites installed from it.
+    pub installed: Vec<InstalledSiteInfo>,
+}
+
+/// A workspace site installed from the library.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct InstalledSiteInfo {
+    pub site: String,
+    /// The library changed it since: `library.update` brings it in.
+    pub behind: bool,
+}
+
+/// `library.update`: what happened to one file of an installed site.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct LibraryChange {
+    /// `workspaces/<ws>/sites/<site>/<file>`.
+    pub path: String,
+    /// `added`, `replaced`, `removed`, `merged`, `conflict` or `review`.
+    pub outcome: String,
+    /// For `conflict` and `review`: the library's version (with conflict markers) to look at.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub review: Option<String>,
+}

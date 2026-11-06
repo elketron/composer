@@ -2,10 +2,16 @@
 //! repo so a workspace's installed copy can be merged against the commit it came from (plan
 //! phase 2). Library sites hold no pages or app state: only their [`SiteDefinition`].
 
+mod installed_sites;
 mod library_commit;
 mod library_repo;
 mod site_definition;
+mod site_name;
+mod workspace_library;
 
+pub use installed_sites::{Installed, InstalledSites};
 pub use library_commit::LibraryCommit;
 pub use library_repo::Library;
 pub use site_definition::SiteDefinition;
+pub use site_name::SiteName;
+pub use workspace_library::{Installation, LibrarySiteState, WorkspaceLibrary};
