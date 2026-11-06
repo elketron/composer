@@ -7,6 +7,7 @@ use crate::actions::{Approvals, Caller, Justfile};
 use crate::config::Config;
 use crate::error::{Result, ServerError};
 use crate::home::Home;
+use crate::library::Library;
 use crate::stock_root::StockRoot;
 use crate::workspace_home::WorkspaceHome;
 use crate::workspace_name::WorkspaceName;
@@ -37,6 +38,10 @@ pub async fn init_home(home: &Home) -> Result<Vec<String>> {
     write_new(&home.global_config_file(), Config::TEMPLATE, &mut created)?;
     write_new(&home.master_token_file(), &new_token(), &mut created)?;
     install(&StockRoot::library(home), &mut created)?;
+    // The library is a git repo from the start; its first commit is the stock it came with.
+    Library::of(home)
+        .record(&stock_message())
+        .map_err(ServerError::Invalid)?;
     if home.workspace_names()?.is_empty() {
         let default = home.workspace(&WorkspaceName::default_workspace());
         created.extend(init_workspace(&default).await?);
@@ -66,6 +71,11 @@ pub async fn init_workspace(workspace: &WorkspaceHome) -> Result<Vec<String>> {
         approve_seed_recipes(approvals, &created).await?;
     }
     Ok(created)
+}
+
+/// The library commit message for this binary's stock.
+pub(crate) fn stock_message() -> String {
+    format!("stock: composer {}", env!("CARGO_PKG_VERSION"))
 }
 
 /// Reads the workspace's token, creating it if needed.

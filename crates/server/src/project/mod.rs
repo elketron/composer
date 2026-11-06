@@ -1,6 +1,6 @@
 //! The active project: a git checkout outside the workspace.
 
-mod git;
+pub(crate) mod git;
 mod git_diff;
 mod project_list;
 mod project_overview;

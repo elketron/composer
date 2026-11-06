@@ -16,7 +16,8 @@ use include_dir::Dir;
 
 use crate::error::{Result, ServerError};
 use crate::home::Home;
-use crate::init::{approve_seed_recipes, write_creating_dirs};
+use crate::init::{approve_seed_recipes, stock_message, write_creating_dirs};
+use crate::library::Library;
 use crate::stock_root::StockRoot;
 
 /// What happened to one stock file.
@@ -55,10 +56,26 @@ fn stock_roots(home: &Home) -> Result<Vec<StockRoot>> {
 
 /// Updates the stock files (or, with `dry_run`, says what it would do). Files already up to
 /// date, files the user deleted, and files only the user changed are left alone and not listed.
+///
+/// The library is committed before (whatever was edited by hand, or the whole folder when it
+/// wasn't a repo yet) and after (the new stock), so its history tells the two apart.
 pub async fn update_home(home: &Home, dry_run: bool) -> Result<Vec<UpdateItem>> {
+    let library = Library::of(home);
+    if !dry_run {
+        let before = match library.head().map_err(ServerError::Invalid)? {
+            None => "library: as it was before it became a git repo",
+            Some(_) => "library: changes made before this update",
+        };
+        library.record(before).map_err(ServerError::Invalid)?;
+    }
     let mut items = Vec::new();
     for stock in stock_roots(home)? {
         items.extend(update_root(&stock, dry_run).await?);
+    }
+    if !dry_run {
+        library
+            .record(&stock_message())
+            .map_err(ServerError::Invalid)?;
     }
     Ok(items)
 }
