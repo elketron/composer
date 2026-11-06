@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
 use crate::error::{CoreError, Result};
+use crate::mounts::Mounts;
 use crate::page::Page;
 use crate::site_url::SiteUrl;
 use crate::types::SiteInfo;
@@ -12,11 +13,47 @@ use crate::types::SiteInfo;
 #[derive(Debug, Clone)]
 pub struct Workspace {
     root: PathBuf,
+    mounts: Mounts,
 }
 
 impl Workspace {
     pub fn new(root: impl Into<PathBuf>) -> Self {
-        Self { root: root.into() }
+        let root = root.into();
+        Self {
+            mounts: Mounts::new(root.clone()),
+            root,
+        }
+    }
+
+    /// Plus `allowed`: roots a symlink inside a site may point into (scoped mounts,
+    /// ticket 0122: the projects directory from config); the web itself stays allowed.
+    pub fn with_allowed(root: impl Into<PathBuf>, allowed: Vec<PathBuf>) -> Self {
+        let root = root.into();
+        Self {
+            mounts: Mounts::with_allowed(root.clone(), allowed),
+            root,
+        }
+    }
+
+    /// Swap the allowed roots a mount may point into (config reload).
+    pub fn set_allowed(&self, allowed: Vec<PathBuf>) {
+        self.mounts.set_allowed(Some(allowed));
+    }
+
+    /// The mount points there are now (symlinks into an allowed root), as web paths.
+    pub fn mount_points(&self) -> Vec<PathBuf> {
+        self.mounts.current()
+    }
+
+    /// Whether the web may read, list, write or watch `path` (its own address for it).
+    pub fn allows(&self, path: &Path) -> bool {
+        self.mounts.allows(path)
+    }
+
+    /// The same check as an error, naming the mount when a symlink is refused.
+    /// Public so the server's file routes guard their own reads the same way.
+    pub fn check(&self, path: &Path) -> Result<()> {
+        self.mounts.check(path)
     }
 
     pub fn root(&self) -> &Path {
@@ -54,11 +91,14 @@ impl Workspace {
     /// The existing file `url` refers to.
     pub fn locate(&self, url: &SiteUrl) -> Result<PathBuf> {
         let site_dir = self.site_dir(url)?;
-        url.candidates()
+        let path = url
+            .candidates()
             .into_iter()
             .map(|c| site_dir.join(c))
             .find(|p| p.is_file())
-            .ok_or_else(|| CoreError::PageNotFound(url.to_string()))
+            .ok_or_else(|| CoreError::PageNotFound(url.to_string()))?;
+        self.check(&path)?;
+        Ok(path)
     }
 
     pub fn read_page(&self, url: &SiteUrl) -> Result<Page> {
@@ -86,6 +126,7 @@ impl Workspace {
             }
             Err(e) => return Err(e),
         };
+        self.check(&path)?;
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).map_err(|e| io(parent, e))?;
         }
@@ -105,15 +146,21 @@ impl Workspace {
 
     /// Every markdown page in the workspace.
     /// Skips hidden folders, `node_modules`, and each site's `ui/` folder.
+    /// With an allowed list set, follows symlinks that land inside the web or an allowed
+    /// root (scoped mounts); a mount pointing elsewhere contributes no pages. Without an
+    /// allowed list, walks do not descend into symlinks, as before the feature.
     pub fn all_pages(&self) -> impl Iterator<Item = PathBuf> + '_ {
+        let follow = self.mounts.follows_links();
         WalkDir::new(&self.root)
             .min_depth(1)
+            .follow_links(follow)
             .into_iter()
             .filter_entry(|e| {
                 let name = e.file_name().to_string_lossy();
                 !(name.starts_with('.')
                     || name == "node_modules"
                     || (e.depth() == 2 && name == "ui" && e.file_type().is_dir()))
+                    && self.allows(e.path())
             })
             .filter_map(|e| e.ok())
             .filter(|e| {

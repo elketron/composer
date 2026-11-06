@@ -78,6 +78,22 @@ Plus `templates/sdk` (TS) and `templates/app` (Svelte scaffold).
   changes, except its own writes through `write`/`edit`, are posted to it as a message (`source: watch`),
   once by default (`once: false` keeps it); hits settle 500 ms into one message (at most 2 s). Only a
   trailing glob is supported. Watches live in `state/watches.json` (saved atomically).
+  A folder inside a site may be a **mount**: a symlink into the projects directory
+  (`[projects] dir`), so a pipeline work can hold real code and outputs inside the web. Reads,
+  listings, writes, indexing and the watcher follow mounts that land inside the web or an
+  allowed root; a symlink landing elsewhere is refused, not followed (reads and writes through
+  it error — HTTP `GET`/`PUT /api/files` answer 403 — and it contributes no pages or events).
+  Without an allowed list configured, walks do not descend into symlinks at all (the pre-mount
+  behaviour). The root watcher follows no symlinks; a dedicated mount watcher is the only
+  watcher on mounts — a mount that exists at startup is attached to it then, and one created
+  while running is attached when its create event arrives, because inotify reports a symlink
+  as a file, not a directory. It reports the web's address for files under a mount. A site
+  folder that is itself a symlink into an allowed root is a mount too. When the inotify watch
+  budget runs out, notify hands the backend's `MaxFilesWatch` error to our callback, which
+  logs it (`file watch:`); watches past that point are not attached, so changes there are
+  lost — reported, not silently. Changing `projects.dir` in `config.toml` re-points the
+  allowance for everything after; pages under a mount the new scope drops stay indexed until
+  something changes them.
 - **Config reload:** saving `config.toml` applies it to the running server (also `config.reload`, `:reload` in
   the TUI); every client gets `config.reloaded`. A file that doesn't parse keeps the running config and the
   error is told. `provider`, `server.bind`, `agent.slots` and `attachments.max_mb` are read at startup: a change

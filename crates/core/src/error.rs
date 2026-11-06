@@ -14,6 +14,11 @@ pub enum CoreError {
     #[error("invalid frontmatter: {0}")]
     InvalidFrontmatter(String),
 
+    #[error(
+        "{path} is reached through a symlink that points outside the web and its allowed projects (the projects dir in config.toml); move the symlink or its target inside an allowed project, or copy the file inside the site"
+    )]
+    MountRefused { path: PathBuf },
+
     #[error("{path}: {source}")]
     Io {
         path: PathBuf,

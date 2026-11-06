@@ -1,10 +1,12 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use notify::{RecursiveMode, Watcher};
 use tokio::sync::mpsc;
+
+use crate::server::is_watched;
 
 use crate::error::{Result, ServerError};
 use crate::server::Server;
@@ -25,18 +27,32 @@ const SITES_MAX_DELAY: Duration = Duration::from_secs(1);
 /// long as watching should last.
 pub fn watch(server: &Arc<Server>) -> Result<notify::RecommendedWatcher> {
     let (tx, mut rx) = mpsc::unbounded_channel();
-    let mut watcher = notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
-        // Reads (inotify access/close-nowrite) are not changes; we read pages all the time.
-        if let Ok(event) = event.as_ref()
-            && !event.kind.is_access()
-        {
-            let created = event.kind.is_create();
-            for path in &event.paths {
-                let _ = tx.send((path.clone(), created));
-            }
-        }
-    })
-    .map_err(|e| ServerError::Invalid(format!("file watcher: {e}")))?;
+    let make = |tx: mpsc::UnboundedSender<(PathBuf, bool)>, follow_symlinks: bool| {
+        let config = notify::Config::default().with_follow_symlinks(follow_symlinks);
+        notify::RecommendedWatcher::new(
+            move |event: notify::Result<notify::Event>| {
+                match event.as_ref() {
+                    // Reads (inotify access/close-nowrite) are not changes; we read pages all the time.
+                    Ok(event) if !event.kind.is_access() => {
+                        let created = event.kind.is_create();
+                        for path in &event.paths {
+                            let _ = tx.send((path.clone(), created));
+                        }
+                    }
+                    Ok(_) => {}
+                    // Errors reach here when the backend cannot watch something, e.g. the
+                    // inotify watch budget ran out (MaxFilesWatch): report, do not drop.
+                    Err(e) => tracing::warn!("file watch: {e}"),
+                }
+            },
+            config,
+        )
+    };
+    // The root watcher follows no symlinks: a refused mount is not walked or watched at all,
+    // and every mount is watched through the mount watcher below (its own walk does follow,
+    // starting at the mount point, so events still carry the web's address for the file).
+    let mut watcher =
+        make(tx.clone(), false).map_err(|e| ServerError::Invalid(format!("file watcher: {e}")))?;
     let root = server.workspace.root().to_path_buf();
     watcher
         .watch(&root, RecursiveMode::Recursive)
@@ -65,6 +81,28 @@ pub fn watch(server: &Arc<Server>) -> Result<notify::RecommendedWatcher> {
 
     let server = Arc::downgrade(server);
     tokio::spawn(async move {
+        // Mounts get their own watcher (mounted), with follow on so its walk descends into
+        // the mount itself: the root watcher leaves symlinks alone, and the inotify backend
+        // never attaches to a symlinked folder created while running (it reports the link as
+        // a file, so the dynamic attach only fires for ISDIR). Watching the mount point keeps
+        // the paths as they hang off the web root, which is how the web names them.
+        let mut mounted = match make(tx.clone(), true) {
+            Ok(watcher) => Some(watcher),
+            Err(e) => {
+                tracing::warn!("mount watcher: {e}; mounted folders will not sync");
+                None
+            }
+        };
+        let Some(server) = server.upgrade() else {
+            return;
+        };
+        let root = server.workspace.root().to_path_buf();
+        for path in server.workspace.mount_points() {
+            if is_watched(&root, &path) {
+                watch_mount(&mut mounted, &path);
+            }
+        }
+        let server = Arc::downgrade(&server);
         // Each path once, and whether it was created within the burst.
         let mut burst: HashMap<PathBuf, bool> = HashMap::new();
         let mut started = Instant::now();
@@ -96,6 +134,11 @@ pub fn watch(server: &Arc<Server>) -> Result<notify::RecommendedWatcher> {
                         return;
                     };
                     for (path, created) in burst.drain() {
+                        // A mount made while running: attach to it, or changes made on the
+                        // project side would never light up (ticket 0122).
+                        if created && server.mount_created(&path) {
+                            watch_mount(&mut mounted, &path);
+                        }
                         // Born and gone within the burst (a temp file): nothing happened.
                         if !created || path.exists() {
                             server.sync_path(&path);
@@ -106,4 +149,14 @@ pub fn watch(server: &Arc<Server>) -> Result<notify::RecommendedWatcher> {
         }
     });
     Ok(watcher)
+}
+
+/// Attach the mount watcher to a mount folder (recursive, so its whole tree is reported).
+fn watch_mount(mounted: &mut Option<notify::RecommendedWatcher>, path: &Path) {
+    let Some(watcher) = mounted else {
+        return;
+    };
+    if let Err(e) = watcher.watch(path, RecursiveMode::Recursive) {
+        tracing::warn!("watching mount {}: {e}", path.display());
+    }
 }
