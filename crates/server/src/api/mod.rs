@@ -10,6 +10,7 @@ mod event_scope;
 pub(crate) mod glob;
 mod http_routes;
 mod launcher_routes;
+mod library_commands;
 mod pair_routes;
 mod ws_routes;
 

@@ -112,6 +112,14 @@ enum Command {
         #[arg(long)]
         yes: bool,
     },
+    /// The site library (~/.composer/sites): list it, install a site into this workspace, or
+    /// bring the installed sites up to it (needs a running server).
+    ///
+    /// `composer library install cad --as my-cad`; `composer library update --dry-run`.
+    Library {
+        #[command(subcommand)]
+        action: LibraryCommand,
+    },
     /// Run a worker on a ticket (started by the server for `spawn_worker`).
     #[command(hide = true)]
     Worker {
@@ -144,6 +152,26 @@ enum Command {
         out: PathBuf,
         #[arg(long)]
         new: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum LibraryCommand {
+    /// The library's sites, and which this workspace installed.
+    List,
+    /// Copy a library site into this workspace.
+    Install {
+        site: String,
+        /// Install it under another name.
+        #[arg(long = "as")]
+        name: Option<String>,
+    },
+    /// Bring this workspace's installed sites up to the library (your changes are merged; what
+    /// can't be is left for you in state/updates/).
+    Update {
+        /// Only list what would change.
+        #[arg(long)]
+        dry_run: bool,
     },
 }
 
@@ -251,6 +279,16 @@ async fn main() -> anyhow::Result<()> {
             let change = state.map(|s| (entry, s == "on"));
             composer_server::client::harness(&server_url, &token, project, change).await?;
         }
+        Some(Command::Library { action }) => {
+            use composer_server::client::LibraryAction;
+            let action = match action {
+                LibraryCommand::List => LibraryAction::List,
+                LibraryCommand::Install { site, name } => LibraryAction::Install { site, name },
+                LibraryCommand::Update { dry_run } => LibraryAction::Update { dry_run },
+            };
+            let (server_url, token) = remote::client(&workspace)?;
+            composer_server::client::library(&server_url, &token, action).await?;
+        }
         Some(Command::Ticket {
             action,
             ticket,
@@ -339,6 +377,7 @@ async fn update(home: &Home, dry_run: bool) -> anyhow::Result<()> {
         let (what, path) = match &item.outcome {
             UpdateOutcome::Added => ("added", None),
             UpdateOutcome::Replaced => ("updated", None),
+            UpdateOutcome::Removed => ("removed (gone from the library)", None),
             UpdateOutcome::Merged => ("merged with your changes", None),
             UpdateOutcome::Conflict { review } => {
                 ("conflicts with your changes, kept yours", Some(review))

@@ -107,6 +107,28 @@ pub enum ClientCommand {
     #[serde(rename = "mcp.list")]
     McpList,
 
+    /// The library's sites and this workspace's copies of them; the reply is `library`.
+    #[serde(rename = "library.list")]
+    LibraryList,
+
+    /// Copies library site `site` into this workspace (as `name`, default the same); the reply is
+    /// `library_installed`. Refused when the workspace has a site of that name.
+    #[serde(rename = "library.install")]
+    LibraryInstall {
+        site: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        name: Option<String>,
+    },
+
+    /// Brings this workspace's installed sites up to the library (three-way per file; conflicts
+    /// are left in `state/updates/`); with `dry_run`, only says what would change. The reply is
+    /// `library_updated`.
+    #[serde(rename = "library.update")]
+    LibraryUpdate {
+        #[serde(default)]
+        dry_run: bool,
+    },
+
     /// Reads `config.toml` again now (the server also does when the file changes); the reply is
     /// `config_reloaded`. A file that doesn't parse is an error and the running config stays.
     #[serde(rename = "config.reload")]
