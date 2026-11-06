@@ -100,11 +100,7 @@ pub async fn run(
         })?;
     }
 
-    let env = RecipeEnv {
-        site: site.clone(),
-        session: request.session.clone().unwrap_or_default(),
-        project: session.as_ref().and_then(|s| s.info().project),
-    };
+    let env = RecipeEnv::new(&server, &site, session.as_deref());
     let timeout = Duration::from_secs(server.config().agent.recipe_timeout_secs);
     let output = run_recipe(
         &justfile,

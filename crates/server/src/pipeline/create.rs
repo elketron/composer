@@ -312,10 +312,7 @@ pub fn prepare_board(server: &std::sync::Arc<Server>, site: &str) {
         if !server.config().pipelines.build_board {
             return;
         }
-        let env = crate::actions::RecipeEnv {
-            site: site.clone(),
-            ..Default::default()
-        };
+        let env = crate::actions::RecipeEnv::new(&server, &site, None);
         let ran = crate::actions::run_recipe(
             &justfile,
             "ui-build",

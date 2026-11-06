@@ -67,7 +67,7 @@ impl Host {
             server.share_ownership(ownership.clone())?;
         }
         for (name, server) in &workspaces {
-            claim_configured_projects(name, server, &ownership)?;
+            claim_configured_projects(name, server)?;
         }
         Ok(Self { home, workspaces })
     }
@@ -174,18 +174,14 @@ fn not_found() -> Response {
 }
 
 /// Claims the projects `server`'s config names for its workspace.
-fn claim_configured_projects(
-    name: &WorkspaceName,
-    server: &Server,
-    ownership: &ProjectOwnership,
-) -> Result<()> {
+fn claim_configured_projects(name: &WorkspaceName, server: &Server) -> Result<()> {
     let config = server.config();
     for key in config.projects.settings.keys() {
-        let Ok(project) = ProjectPath::resolve(key, &config.projects.dir) else {
+        if ProjectPath::resolve(key, &config.projects.dir).is_err() {
             tracing::warn!("workspace {name}: [projects.\"{key}\"] is not a folder; skipped");
             continue;
-        };
-        ownership.claim(&project, name).map_err(|e| {
+        }
+        server.use_project(key).map_err(|e| {
             ServerError::Invalid(format!(
                 "workspace {name}'s config.toml names [projects.\"{key}\"], but {e}"
             ))

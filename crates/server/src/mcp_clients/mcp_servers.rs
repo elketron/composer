@@ -23,10 +23,16 @@ pub struct McpServers {
     configs: BTreeMap<String, McpServerConfig>,
     /// Shared with the next config's `McpServers` while the server's config is unchanged.
     slots: BTreeMap<String, Arc<tokio::sync::Mutex<Slot>>>,
+    /// The workspace's environment ([`crate::WorkspaceHome::env`]): set for every stdio server it
+    /// starts, and what `${COMPOSER_WORKSPACE}` in a config expands to.
+    workspace: BTreeMap<String, String>,
 }
 
 impl McpServers {
-    pub fn new(configs: &BTreeMap<String, McpServerConfig>) -> Self {
+    pub fn new(
+        configs: &BTreeMap<String, McpServerConfig>,
+        workspace: BTreeMap<String, String>,
+    ) -> Self {
         let mut usable = BTreeMap::new();
         for (name, config) in configs {
             let valid = !name.is_empty()
@@ -47,13 +53,14 @@ impl McpServers {
                 .map(|(name, _)| (name.clone(), Arc::default()))
                 .collect(),
             configs: usable,
+            workspace,
         }
     }
 
     /// The servers of a new config: an unchanged server keeps its connection, a changed or
     /// removed one is dropped (its process stops once no call is using it).
     pub fn reconfigured(&self, configs: &BTreeMap<String, McpServerConfig>) -> Self {
-        let mut next = Self::new(configs);
+        let mut next = Self::new(configs, self.workspace.clone());
         for (name, slot) in &mut next.slots {
             if let Some(kept) = self.slots.get(name)
                 && self.configs.get(name) == next.configs.get(name)
@@ -83,7 +90,7 @@ impl McpServers {
         {
             return Err(error.clone());
         }
-        match McpClient::connect(name, &self.configs[name]).await {
+        match McpClient::connect(name, &self.configs[name], &self.workspace).await {
             Ok(client) => {
                 let client = Arc::new(client);
                 tracing::info!(

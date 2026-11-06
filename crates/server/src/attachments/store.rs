@@ -2,15 +2,10 @@ use std::path::{Path, PathBuf};
 
 use composer_protocol::Attachment;
 
-use crate::attachments::{AttachmentKind, classify, prepare_image};
+use crate::attachments::{AttachmentFolder, AttachmentKind, classify, prepare_image};
 use crate::config_sections::AttachmentsConfig;
 use crate::hash::content_hash;
 use crate::workspace_home::WorkspaceHome;
-
-/// A session's attachments: `state/sessions/<id>/attachments`.
-pub fn folder(home: &WorkspaceHome, session: &str) -> PathBuf {
-    home.sessions().join(session).join("attachments")
-}
 
 /// A file name that is safe to store: no folders, only `A-Z a-z 0-9 . _ -`, no leading dot,
 /// at most 80 characters. Empty becomes `file`.
@@ -81,7 +76,7 @@ pub fn save(
         _ => (bytes.to_vec(), mime),
     };
     let file = format!("{}-{name}", &content_hash(&bytes)[..12]);
-    let dir = folder(home, session);
+    let dir = AttachmentFolder::of(home, session)?.path();
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let path = dir.join(&file);
     if !path.exists() {
@@ -107,7 +102,9 @@ pub fn resolve(
     if file.is_empty() || sanitize_name(file) != *file {
         return Err(refused());
     }
-    let dir = folder(home, session)
+    let dir = AttachmentFolder::of(home, session)
+        .map_err(|_| refused())?
+        .path()
         .canonicalize()
         .map_err(|_| refused())?;
     let path = dir.join(file).canonicalize().map_err(|_| refused())?;

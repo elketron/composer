@@ -10,7 +10,6 @@ use composer_protocol::{
 use tokio::sync::broadcast::error::RecvError;
 
 use crate::attachments::{ForModel, for_model};
-use crate::config::Config;
 use crate::error::{Result, ServerError};
 use crate::init::local_token;
 use crate::provider::{ModelMessage, OpenAiProvider};
@@ -40,7 +39,7 @@ pub struct WorkerOptions {
 
 /// Works the ticket until the agent calls `finish` (or gives up), then returns.
 pub async fn run_worker(home: WorkspaceHome, options: WorkerOptions) -> Result<()> {
-    let config = Config::load(&home.config_file())?;
+    let config = home.load_config()?;
     let provider = OpenAiProvider::connect(&config.provider)
         .await
         .map_err(ServerError::Provider)?;
@@ -266,6 +265,7 @@ fn belongs_to(event: &ServerMessage, session: &str) -> bool {
 mod tests {
     use super::*;
     use crate::attachments::save;
+    use crate::config::Config;
 
     #[test]
     fn ticket_files_join_the_first_message() {

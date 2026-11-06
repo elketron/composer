@@ -5,7 +5,8 @@
 //! (the projects directory, from config); a symlink that lands elsewhere is refused, not
 //! followed. The check walks the path from the web's root and judges the symlinks *below a
 //! site's top folder*: the web's root itself, and a site folder itself, stay whatever the
-//! web chose to put there. Without an allowed list the web is lenient, as before mounts.
+//! web chose to put there, except that the guard (another workspace's folders) refuses a site
+//! folder too. Without an allowed list the web is lenient, as before mounts.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -98,7 +99,7 @@ impl Mounts {
         let mut resolved = root.clone();
         for (depth, part) in rel.iter().enumerate() {
             resolved.push(part);
-            if depth == 0 || !is_symlink(&resolved) {
+            if !is_symlink(&resolved) {
                 continue;
             }
             let target = resolved.canonicalize().map_err(|e| CoreError::Io {
@@ -111,7 +112,10 @@ impl Mounts {
                 .expect("mounts lock")
                 .as_ref()
                 .is_some_and(|refuse| refuse(&target));
-            if refused || !lands_inside(&target, &root, allowed) {
+            // A site folder that is a symlink may land anywhere (the web chose to put it
+            // there), but never where the guard refuses.
+            let outside = depth > 0 && !lands_inside(&target, &root, allowed);
+            if refused || outside {
                 return Err(CoreError::MountRefused {
                     path: path.to_path_buf(),
                 });

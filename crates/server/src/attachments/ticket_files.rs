@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use composer_protocol::{Attachment, SessionInfo};
 use serde_json::Value;
 
-use crate::attachments::resolve;
+use crate::attachments::{AttachmentFolder, resolve};
 use crate::workspace_home::WorkspaceHome;
 
 /// A file a ticket refers to, checked.
@@ -31,8 +31,10 @@ pub fn ticket_files(
     refs.into_iter()
         .filter_map(|reference| {
             let (session, file) = reference.trim().split_once('/')?;
-            let meta =
-                std::fs::read_to_string(home.sessions().join(session).join("meta.json")).ok()?;
+            let folder = AttachmentFolder::of(home, session)
+                .inspect_err(|e| tracing::warn!("ticket attachment {reference}: {e}"))
+                .ok()?;
+            let meta = std::fs::read_to_string(folder.session_meta()).ok()?;
             let info: SessionInfo = serde_json::from_str(&meta).ok()?;
             if info.project.as_deref() != project {
                 tracing::warn!("ticket attachment {reference}: from another project, left out");

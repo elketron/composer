@@ -131,7 +131,7 @@ fn bash_verdict(server: &Server, folder: &str, project: Option<&str>, command: &
     let mut read_roots = vec![folder.clone(), std::path::PathBuf::from("/tmp")];
     read_roots.extend(project.map(crate::tools::expand_home));
     read_roots.extend(
-        read_dirs(&config.claude_code.read_dirs)
+        read_dirs(&config.claude_code.read_dirs, |p| server.foreign_path(p))
             .into_iter()
             .map(|(dir, _)| dir),
     );
