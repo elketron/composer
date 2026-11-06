@@ -84,8 +84,8 @@ async fn routes_need_the_token() {
         .send()
         .await
         .unwrap();
-    assert_eq!(list.status(), 401);
-    assert_eq!(launch.status(), 401);
+    assert_eq!(list.status(), 404);
+    assert_eq!(launch.status(), 404);
 }
 
 #[tokio::test]

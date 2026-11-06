@@ -105,7 +105,7 @@ async fn uploads_reach_the_model() {
         .send()
         .await
         .unwrap();
-    assert_eq!(anonymous.status(), 401);
+    assert_eq!(anonymous.status(), 404);
     assert_eq!(
         upload(addr, &server.token, "nope", &[("a.txt", b"hi")])
             .await

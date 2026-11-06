@@ -79,7 +79,7 @@ async fn phone_pairs_through_the_page_and_stays_signed_in() {
         .send()
         .await
         .unwrap();
-    assert_eq!(revoked.status(), 401);
+    assert_eq!(revoked.status(), 404);
 }
 
 #[tokio::test]

@@ -112,7 +112,9 @@ async fn migrates_into_the_default_workspace() {
     assert!(ws.sites().join("memory/zebra.md").is_file());
     assert_eq!(std::fs::read_to_string(ws.token_file()).unwrap(), old_token);
     assert!(!root.join("config.toml").exists());
-    assert!(!root.join("state/token").exists());
+    // The root's token is now the master token: new, not the moved workspace token.
+    let master = std::fs::read_to_string(home.master_token_file()).unwrap();
+    assert_ne!(master, old_token);
     // The library and templates are the home's; template bases stayed with them.
     assert!(home.library().join("home/index.md").is_file());
     assert!(

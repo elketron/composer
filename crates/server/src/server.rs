@@ -267,12 +267,16 @@ impl Server {
         self.worker_finished.store(true, Ordering::SeqCst);
     }
 
+    /// Where this workspace's routes are mounted: `/w/<name>`, or `""` when it is served alone.
+    pub fn route_base(&self) -> &str {
+        self.route_base.get().map(String::as_str).unwrap_or("")
+    }
+
     /// The URL this workspace's API answers at (`http://<addr>/w/<name>`): what its workers and
     /// MCP bridges connect back to. `None` until it is listening.
     pub fn parent_url(&self) -> Option<String> {
         let addr = self.listen_addr()?;
-        let base = self.route_base.get().map(String::as_str).unwrap_or("");
-        Some(format!("http://{addr}{base}"))
+        Some(format!("http://{addr}{}", self.route_base()))
     }
 
     /// Starts what runs whether or not anyone is connected: the file watcher, reminders, pipeline

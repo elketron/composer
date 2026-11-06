@@ -92,6 +92,16 @@ impl WorkspaceHome {
         self.home == self.root
     }
 
+    /// Where the host mounts this workspace's API: `/w/<name>`, or `""` when standalone (served
+    /// alone, as tests do).
+    pub fn route_base(&self) -> String {
+        if self.is_standalone() {
+            String::new()
+        } else {
+            format!("/w/{}", self.name)
+        }
+    }
+
     pub fn config_file(&self) -> PathBuf {
         self.root.join("config.toml")
     }

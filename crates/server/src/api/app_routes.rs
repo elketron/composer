@@ -14,10 +14,11 @@ use composer_protocol::http::PutPageResponse;
 use crate::api::ApiError;
 use crate::server::Server;
 
-/// `/<site>` → `/<site>/` (relative asset paths need the slash), keeping the query.
+/// `<base>/<site>` → `<base>/<site>/` (relative asset paths need the slash), keeping the query.
+/// The target is relative (`<site>/`), so it lands under whichever workspace served it.
 pub async fn app_redirect(Path(site): Path<String>, uri: Uri) -> Redirect {
     let query = uri.query().map(|q| format!("?{q}")).unwrap_or_default();
-    Redirect::permanent(&format!("/{site}/{query}"))
+    Redirect::permanent(&format!("{site}/{query}"))
 }
 
 pub async fn app_index(State(server): State<Arc<Server>>, Path(site): Path<String>) -> Response {
