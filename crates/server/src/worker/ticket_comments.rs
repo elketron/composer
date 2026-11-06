@@ -26,10 +26,7 @@ pub fn ticket_comments(
 ) -> Result<Vec<String>, String> {
     let url = ticket_url(ticket).map_err(|e| e.to_string())?;
     let _sending = SEND.lock().unwrap_or_else(|e| e.into_inner());
-    let page = server
-        .workspace
-        .read_page(&url)
-        .map_err(|e| e.to_string())?;
+    let page = server.web.read_page(&url).map_err(|e| e.to_string())?;
     let raw = if comments.is_empty() {
         page.raw
     } else {

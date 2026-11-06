@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use composer_protocol::{ClientCommand, ClientRequest, ServerMessage};
 use composer_server::provider::{ModelEvent, ModelToolCall};
-use composer_server::{Config, Home, Server, init_home};
+use composer_server::{Config, Server, WorkspaceHome, init_workspace};
 use futures::{SinkExt, StreamExt};
 use tokio::net::TcpStream;
 use tokio_tungstenite::tungstenite::Message;
@@ -39,8 +39,8 @@ pub async fn start_with(
     SocketAddr,
 ) {
     let dir = tempfile::tempdir().unwrap();
-    let home = Home::new(dir.path());
-    init_home(&home).await.unwrap();
+    let home = WorkspaceHome::new(dir.path());
+    init_workspace(&home).await.unwrap();
     let provider = Arc::new(MockProvider::new(scripts));
     let server = Server::new(home, config, provider.clone()).unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();

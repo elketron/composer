@@ -165,7 +165,7 @@ pub struct BusyWorker {
 /// Needs `just` (the ticket recipe): `None` without it.
 pub async fn busy_worker(after: &'static str, git_project: bool) -> Option<BusyWorker> {
     use composer_protocol::{CommandResult, WorkerState};
-    use composer_server::{Home, Server, init_home};
+    use composer_server::{Server, WorkspaceHome, init_workspace};
 
     std::process::Command::new("just")
         .arg("--version")
@@ -184,8 +184,8 @@ pub async fn busy_worker(after: &'static str, git_project: bool) -> Option<BusyW
     .await;
 
     let dir = tempfile::tempdir().unwrap();
-    let home = Home::new(dir.path());
-    init_home(&home).await.unwrap();
+    let home = WorkspaceHome::new(dir.path());
+    init_workspace(&home).await.unwrap();
     std::fs::write(
         home.config_file(),
         format!("[provider]\nbase_url = \"{base_url}\"\n"),

@@ -21,7 +21,7 @@ const RESERVED: [&str; 4] = ["_config", "stages", "ui", "index"];
 
 /// The pipeline sites, by name.
 pub fn pipelines(server: &Server) -> Vec<Pipeline> {
-    let root = server.workspace.root();
+    let root = server.web.root();
     let mut found: Vec<Pipeline> = std::fs::read_dir(root)
         .into_iter()
         .flatten()
@@ -42,7 +42,7 @@ pub fn pipeline(server: &Server, site: &str) -> Result<Pipeline, String> {
         .trim_start_matches("site://")
         .trim_end_matches('/');
     SiteUrl::new(site, "").map_err(|e| e.to_string())?;
-    Pipeline::from_dir(site, &server.workspace.root().join(site)).ok_or_else(|| {
+    Pipeline::from_dir(site, &server.web.root().join(site)).ok_or_else(|| {
         let names: Vec<String> = pipelines(server).into_iter().map(|p| p.name).collect();
         format!(
             "site://{site} is not a pipeline (pipelines: {})",
@@ -72,7 +72,7 @@ pub fn templates(server: &Server) -> Vec<Pipeline> {
 }
 
 /// Makes the site `name` (default: the kind) from `templates/pipelines/<kind>/` and lists it on
-/// Home. Never touches an existing site.
+/// WorkspaceHome. Never touches an existing site.
 pub fn new_pipeline(
     server: &Server,
     kind: &str,
@@ -96,7 +96,7 @@ pub fn new_pipeline(
         .unwrap_or(kind);
     check_name(name)?;
     SiteUrl::new(name, "").map_err(|e| e.to_string())?;
-    let dir = server.workspace.root().join(name);
+    let dir = server.web.root().join(name);
     if dir.exists() {
         return Err(format!("site://{name} already exists"));
     }
@@ -114,7 +114,7 @@ pub fn new_pipeline(
         .map_err(|e| format!("writing the justfile: {e}"))?;
     }
     let pipeline = Pipeline::from_dir(name, &dir).ok_or("the template has no pipeline index")?;
-    // Not listed on Home is no reason to fail: the site is there.
+    // Not listed on WorkspaceHome is no reason to fail: the site is there.
     let _ = add_to_home(server, name, &pipeline.about, by);
     Ok(pipeline)
 }
@@ -248,7 +248,7 @@ pub fn new_work(server: &Server, new: NewWork, by: ChangedBy) -> Result<Work, St
 
     // The pipeline's list of works, when it keeps one.
     let index_url = SiteUrl::new(&site, "").expect("valid");
-    if let Ok(page) = server.workspace.read_page(&index_url) {
+    if let Ok(page) = server.web.read_page(&index_url) {
         let item = match &project {
             Some(p) => format!("[{title}]({name}/index.md) · `{p}`"),
             None => format!("[{title}]({name}/index.md)"),
@@ -267,7 +267,7 @@ pub fn work_summary(server: &Server, url: &SiteUrl) -> Option<WorkSummary> {
         return None;
     }
     // Without stage contracts there is nothing to say where it is: its own `status:` does.
-    let pipeline = Pipeline::from_dir(url.site(), &server.workspace.root().join(url.site()))
+    let pipeline = Pipeline::from_dir(url.site(), &server.web.root().join(url.site()))
         .filter(|p| !p.stages.is_empty())?;
     Work::load(pipeline, name).map(|w| w.summary())
 }
@@ -299,7 +299,7 @@ pub fn prepare_board(server: &std::sync::Arc<Server>, site: &str) {
     let server = server.clone();
     let site = site.to_string();
     tokio::spawn(async move {
-        let dir = server.workspace.root().join(&site);
+        let dir = server.web.root().join(&site);
         let Ok(justfile) = crate::actions::Justfile::load(&dir).await else {
             return;
         };

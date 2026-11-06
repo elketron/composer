@@ -1,7 +1,7 @@
 //! The scoped context a stage worker gets instead of the usual prompt: the pipeline, the work,
 //! the stage contract, then its reference and working files, each labelled.
 
-use composer_core::{SiteUrl, Workspace};
+use composer_core::{SiteUrl, Web};
 
 use crate::pipeline::run::find_work;
 use crate::pipeline::types::InputKind;
@@ -10,7 +10,7 @@ use crate::pipeline::types::InputKind;
 const FILE_MAX: usize = 40_000;
 
 /// The stage context for ticket `id`, when it is a stage's (`work:` and `stage:`).
-pub fn stage_context(workspace: &Workspace, id: &str, project: Option<&str>) -> Option<String> {
+pub fn stage_context(workspace: &Web, id: &str, project: Option<&str>) -> Option<String> {
     let ticket = workspace
         .read_page(&SiteUrl::new("orchestration", &format!("tickets/{id}.md")).ok()?)
         .ok()?;

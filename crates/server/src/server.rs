@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
 
-use composer_core::{Index, Page, SiteUrl, Workspace};
+use composer_core::{Index, Page, SiteUrl, Web};
 use composer_protocol::{
     ApprovalDecision, ApprovalKind, ChangedBy, PageChangeKind, ServerMessage, TurnState,
 };
@@ -17,7 +17,6 @@ use crate::devices::Devices;
 use crate::error::{Result, ServerError};
 use crate::harness::{HarnessSwitches, ToolRules};
 use crate::hash::content_hash;
-use crate::home::Home;
 use crate::hub::EventHub;
 use crate::init::local_token;
 use crate::mcp_clients::McpServers;
@@ -27,13 +26,14 @@ use crate::slot_pool::SlotPool;
 use crate::tools::{ToolRegistry, expand_home};
 use crate::watches::{WRITER, WatchRegistry};
 use crate::worker::{ParentLink, Verdict, WorkerApprovals, WorkerRegistry};
+use crate::workspace_home::WorkspaceHome;
 
 /// The running harness. Shared as `Arc<Server>` by the API, turns and tools.
 pub struct Server {
-    pub home: Home,
+    pub home: WorkspaceHome,
     /// `config.toml`, swapped when it changes ([`Server::reload_config`]); read it with [`Server::config`].
     config: RwLock<Arc<Config>>,
-    pub workspace: Workspace,
+    pub web: Web,
     pub index: RwLock<Index>,
     pub provider: Arc<dyn Provider>,
     pub slots: Arc<SlotPool>,
@@ -65,6 +65,8 @@ pub struct Server {
     /// Worker processes: the agent called `finish`.
     worker_finished: AtomicBool,
     listen_addr: OnceLock<SocketAddr>,
+    /// Where this workspace's routes are mounted (`/w/<name>`, or empty when served alone).
+    route_base: OnceLock<String>,
     /// Hash of each file as we last saw or wrote it; tells the watcher which changes are ours.
     known_hashes: Mutex<HashMap<PathBuf, String>>,
     watcher: Mutex<Option<notify::RecommendedWatcher>>,
@@ -72,8 +74,8 @@ pub struct Server {
 
 impl Server {
     /// Loads config from the home folder and connects to the configured provider.
-    pub async fn start(home: Home) -> Result<Arc<Self>> {
-        let config = Config::load(&home.config_file())?;
+    pub async fn start(home: WorkspaceHome) -> Result<Arc<Self>> {
+        let config = home.load_config()?;
         let provider = OpenAiProvider::connect(&config.provider)
             .await
             .map_err(ServerError::Provider)?;
@@ -81,14 +83,18 @@ impl Server {
         Self::new(home, config, Arc::new(provider))
     }
 
-    pub fn new(home: Home, config: Config, provider: Arc<dyn Provider>) -> Result<Arc<Self>> {
+    pub fn new(
+        home: WorkspaceHome,
+        config: Config,
+        provider: Arc<dyn Provider>,
+    ) -> Result<Arc<Self>> {
         Self::build(home, config, provider, None)
     }
 
     /// The server inside a worker process: no API, slots and approvals come from the
     /// parent, and its sessions live in `state/workers/sessions` (the parent keeps the real transcript).
     pub fn new_worker(
-        home: Home,
+        home: WorkspaceHome,
         config: Config,
         provider: Arc<dyn Provider>,
         parent: Arc<ParentLink>,
@@ -97,7 +103,7 @@ impl Server {
     }
 
     fn build(
-        home: Home,
+        home: WorkspaceHome,
         config: Config,
         provider: Arc<dyn Provider>,
         parent: Option<Arc<ParentLink>>,
@@ -105,15 +111,14 @@ impl Server {
         // Scoped mounts (ticket 0122): a symlink inside a site may point into the projects
         // directory; one that lands elsewhere is refused, not followed. Same allowance as
         // the launcher scope keys off.
-        let workspace =
-            Workspace::with_allowed(home.sites(), vec![expand_home(&config.projects.dir)]);
-        if !workspace.root().is_dir() {
+        let web = Web::with_allowed(home.sites(), vec![expand_home(&config.projects.dir)]);
+        if !web.root().is_dir() {
             return Err(ServerError::Invalid(format!(
                 "{} does not exist; run `composer init` first",
-                workspace.root().display()
+                web.root().display()
             )));
         }
-        let index = Index::build(&workspace)?;
+        let index = Index::build(&web)?;
         tracing::info!("indexed {} pages", index.len());
         let hub = EventHub::new(4096);
         let (sessions_dir, slots, approvals) = match &parent {
@@ -153,10 +158,11 @@ impl Server {
             parent,
             worker_finished: AtomicBool::new(false),
             listen_addr: OnceLock::new(),
+            route_base: OnceLock::new(),
             index: RwLock::new(index),
             known_hashes: Mutex::new(HashMap::new()),
             watcher: Mutex::new(None),
-            workspace,
+            web,
             provider,
             hub,
             config: RwLock::new(Arc::new(config)),
@@ -178,7 +184,7 @@ impl Server {
     /// changed, else the changed settings that still need a restart. A file that doesn't parse
     /// is an error and the old config stays. Running turns and workers keep what they started with.
     pub fn reload_config(&self) -> Result<Option<Vec<String>>> {
-        let next = Config::load(&self.home.config_file())?;
+        let next = self.home.load_config()?;
         let mut current = self.config.write().expect("config lock");
         if **current == next {
             return Ok(None);
@@ -203,8 +209,7 @@ impl Server {
         if current.projects.dir != next.projects.dir {
             // Mounted folders start following the new scope from now on; pages under a mount
             // the new scope drops stay indexed until something changes them.
-            self.workspace
-                .set_allowed(vec![expand_home(&next.projects.dir)]);
+            self.web.set_allowed(vec![expand_home(&next.projects.dir)]);
         }
         *current = Arc::new(next);
         tracing::info!("config.toml reloaded");
@@ -262,17 +267,36 @@ impl Server {
         self.worker_finished.store(true, Ordering::SeqCst);
     }
 
-    /// Watches the workspace and serves the API until the listener fails.
-    pub async fn serve(self: &Arc<Self>, listener: TcpListener) -> Result<()> {
-        if let Ok(addr) = listener.local_addr() {
-            let _ = self.listen_addr.set(addr);
-        }
+    /// The URL this workspace's API answers at (`http://<addr>/w/<name>`): what its workers and
+    /// MCP bridges connect back to. `None` until it is listening.
+    pub fn parent_url(&self) -> Option<String> {
+        let addr = self.listen_addr()?;
+        let base = self.route_base.get().map(String::as_str).unwrap_or("");
+        Some(format!("http://{addr}{base}"))
+    }
+
+    /// Starts what runs whether or not anyone is connected: the file watcher, reminders, pipeline
+    /// gates, watches, and picking up workers from before a restart. `listen` and `route_base` are
+    /// where its API is served (see [`Server::parent_url`]).
+    pub fn start_background(self: &Arc<Self>, listen: SocketAddr, route_base: &str) -> Result<()> {
+        let _ = self.listen_addr.set(listen);
+        let _ = self.route_base.set(route_base.to_string());
         *self.watcher.lock().expect("watcher lock") = Some(crate::watcher::watch(self)?);
         tokio::spawn(crate::reminders::run_reminders(self.clone()));
         tokio::spawn(crate::pipeline::run_gates(self.clone()));
         tokio::spawn(crate::watches::run_watches(self.clone()));
         self.workers.recover_orphans(self);
         self.workers.schedule_paused(self);
+        Ok(())
+    }
+
+    /// Watches the workspace and serves its API alone (no `/w/<name>` prefix) until the listener
+    /// fails. The real server serves every workspace through [`crate::Host`]; tests use this.
+    pub async fn serve(self: &Arc<Self>, listener: TcpListener) -> Result<()> {
+        let addr = listener
+            .local_addr()
+            .map_err(|e| ServerError::Invalid(format!("listener address: {e}")))?;
+        self.start_background(addr, "")?;
         let router = crate::api::router(self.clone());
         let serving = axum::serve(listener, router);
         tokio::select! {
@@ -306,9 +330,9 @@ impl Server {
         content: &[u8],
         by: ChangedBy,
     ) -> Result<(SiteUrl, bool)> {
-        let created = self.workspace.locate(url).is_err();
-        let written = self.workspace.write_file(url, content)?;
-        let path = self.workspace.locate(&written)?;
+        let created = self.web.locate(url).is_err();
+        let written = self.web.write_file(url, content)?;
+        let path = self.web.locate(&written)?;
         self.known_hashes
             .lock()
             .expect("hashes lock")
@@ -332,7 +356,7 @@ impl Server {
 
     /// Syncs one path after a filesystem event. Ignores changes we made ourselves.
     pub fn sync_path(&self, path: &Path) {
-        if !is_watched(self.workspace.root(), path) || !self.workspace.allows(path) {
+        if !is_watched(self.web.root(), path) || !self.web.allows(path) {
             return;
         }
         if path.is_dir() {
@@ -342,7 +366,7 @@ impl Server {
             self.rescan_dir(path);
             return;
         }
-        let Some(url) = self.workspace.url_for_path(path) else {
+        let Some(url) = self.web.url_for_path(path) else {
             return;
         };
         let is_page = path.extension().is_some_and(|e| e == "md");
@@ -564,13 +588,13 @@ impl Server {
     /// not report it as a directory when it appears (its own walk would follow it, but the
     /// dynamic attach only fires for `ISDIR` events), so the watcher asks us before syncing.
     pub fn mount_created(&self, path: &Path) -> bool {
-        let Ok(rel) = path.strip_prefix(self.workspace.root()) else {
+        let Ok(rel) = path.strip_prefix(self.web.root()) else {
             return false;
         };
         rel.components().count() >= 2
             && std::fs::symlink_metadata(path).is_ok_and(|m| m.file_type().is_symlink())
             && path.is_dir()
-            && self.workspace.allows(path)
+            && self.web.allows(path)
     }
 
     /// Hash of a page as last seen by the server, reading it if unknown.
@@ -601,7 +625,7 @@ pub(crate) fn is_watched(root: &Path, path: &Path) -> bool {
 }
 
 /// Ctrl-C, or SIGTERM (systemd, `kill`).
-async fn shutdown_signal() {
+pub(crate) async fn shutdown_signal() {
     #[cfg(unix)]
     {
         let mut term =

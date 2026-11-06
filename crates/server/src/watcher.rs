@@ -53,17 +53,21 @@ pub fn watch(server: &Arc<Server>) -> Result<notify::RecommendedWatcher> {
     // starting at the mount point, so events still carry the web's address for the file).
     let mut watcher =
         make(tx.clone(), false).map_err(|e| ServerError::Invalid(format!("file watcher: {e}")))?;
-    let root = server.workspace.root().to_path_buf();
+    let root = server.web.root().to_path_buf();
     watcher
         .watch(&root, RecursiveMode::Recursive)
         .map_err(|e| ServerError::Invalid(format!("watching {}: {e}", root.display())))?;
 
-    // Its folder, not the file: saving by rename replaces the file the watch would be on.
-    let config_file = server.home.config_file();
-    if let Some(home) = config_file.parent() {
+    // Their folders, not the files: saving by rename replaces the file the watch would be on.
+    // The workspace's config and the global one it sits on top of both reload the config.
+    let config_files = [server.home.config_file(), server.home.global_config_file()];
+    let mut folders: Vec<&std::path::Path> =
+        config_files.iter().filter_map(|f| f.parent()).collect();
+    folders.dedup();
+    for folder in folders.into_iter().filter(|f| f.is_dir()) {
         watcher
-            .watch(home, RecursiveMode::NonRecursive)
-            .map_err(|e| ServerError::Invalid(format!("watching {}: {e}", home.display())))?;
+            .watch(folder, RecursiveMode::NonRecursive)
+            .map_err(|e| ServerError::Invalid(format!("watching {}: {e}", folder.display())))?;
     }
 
     let (config_tx, mut config_rx) = mpsc::unbounded_channel::<()>();
@@ -96,8 +100,8 @@ pub fn watch(server: &Arc<Server>) -> Result<notify::RecommendedWatcher> {
         let Some(server) = server.upgrade() else {
             return;
         };
-        let root = server.workspace.root().to_path_buf();
-        for path in server.workspace.mount_points() {
+        let root = server.web.root().to_path_buf();
+        for path in server.web.mount_points() {
             if is_watched(&root, &path) {
                 watch_mount(&mut mounted, &path);
             }
@@ -119,7 +123,7 @@ pub fn watch(server: &Arc<Server>) -> Result<notify::RecommendedWatcher> {
             };
             match next {
                 None => return,
-                Some(Some((path, _))) if path == config_file => {
+                Some(Some((path, _))) if config_files.contains(&path) => {
                     let _ = config_tx.send(());
                 }
                 Some(Some((path, created))) => {

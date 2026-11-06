@@ -20,11 +20,7 @@ impl Tool for ListSitesTool {
     }
 
     async fn call(&self, context: &ToolContext, _args: Value) -> Result<String, String> {
-        let sites = context
-            .server
-            .workspace
-            .sites()
-            .map_err(|e| e.to_string())?;
+        let sites = context.server.web.sites().map_err(|e| e.to_string())?;
         let lines: Vec<String> = sites
             .iter()
             .filter(|s| context.agent.sites.can_read(&s.name))

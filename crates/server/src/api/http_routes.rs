@@ -30,7 +30,7 @@ pub async fn info(State(server): State<Arc<Server>>) -> Json<ServerInfo> {
 pub async fn agents(State(server): State<Arc<Server>>) -> Json<Vec<AgentSummary>> {
     let index = server.index.read().expect("index lock");
     Json(
-        AgentDefinition::all(&server.workspace, &index)
+        AgentDefinition::all(&server.web, &index)
             .into_iter()
             .map(|a| AgentSummary {
                 worker: a.is_worker(),
@@ -57,7 +57,7 @@ pub async fn projects(
 }
 
 pub async fn sites(State(server): State<Arc<Server>>) -> Result<Json<Vec<SiteSummary>>, ApiError> {
-    let sites = server.workspace.sites()?;
+    let sites = server.web.sites()?;
     let index = server.index.read().expect("index lock");
     let mut pages: HashMap<&str, u32> = HashMap::new();
     for entry in index.entries() {
@@ -155,7 +155,7 @@ pub async fn post_message(
 }
 
 fn read(server: &Server, url: SiteUrl) -> Result<Json<PageResponse>, ApiError> {
-    let page = server.workspace.read_page(&url)?;
+    let page = server.web.read_page(&url)?;
     let backlinks = server
         .index
         .read()
@@ -179,7 +179,7 @@ fn write(
 ) -> Result<Json<PutPageResponse>, ApiError> {
     if let Some(expected) = &body.if_match {
         let current = server
-            .workspace
+            .web
             .locate(&url)
             .ok()
             .and_then(|path| server.page_hash(&path));

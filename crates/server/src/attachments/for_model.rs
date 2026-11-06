@@ -2,7 +2,7 @@ use base64::Engine;
 use composer_protocol::Attachment;
 
 use crate::attachments::{AttachmentKind, classify, resolve};
-use crate::home::Home;
+use crate::workspace_home::WorkspaceHome;
 
 /// How a session's image attachment is referred to in model history until it is sent:
 /// `attachment://<session>/<file>` (like site URLs, replaced by a data URL at send time).
@@ -17,7 +17,7 @@ pub enum ForModel {
 /// `attachment` of `session` for the model: images by reference; text and PDFs (their text,
 /// via `pdftotext`) inline, cut at `max_inline` bytes and marked as file content.
 pub fn for_model(
-    home: &Home,
+    home: &WorkspaceHome,
     session: &str,
     attachment: &Attachment,
     max_inline: usize,
@@ -52,7 +52,7 @@ pub fn for_model(
 }
 
 /// A data URL for an `attachment://<session>/<file>` reference, or `None` for anything else.
-pub fn attachment_data_url(home: &Home, reference: &str) -> Option<String> {
+pub fn attachment_data_url(home: &WorkspaceHome, reference: &str) -> Option<String> {
     let rest = reference.strip_prefix(ATTACHMENT_SCHEME)?;
     let (session, file) = rest.split_once('/')?;
     let probe = Attachment {

@@ -116,7 +116,7 @@ async fn new_site_writes_a_homepage_and_lists_it_on_home() {
     );
 
     assert!(
-        !results[0].1 && results[0].0.contains("listed it on Home"),
+        !results[0].1 && results[0].0.contains("listed it on WorkspaceHome"),
         "{:?}",
         results[0]
     );

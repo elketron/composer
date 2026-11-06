@@ -47,7 +47,7 @@ fn deliver(server: &Arc<Server>, reminder: &DueReminder, now: NaiveDateTime) -> 
     let stamp = now.format("%Y-%m-%d %H:%M").to_string();
     let mut next = None;
     let marked = server
-        .workspace
+        .web
         .read_page(url)
         .map_err(|e| e.to_string())
         .and_then(|page| {
@@ -179,7 +179,7 @@ fn resolve_agent(server: &Arc<Server>, wanted: &str) -> Option<String> {
     if wanted == "default" {
         return Some(wanted.to_string());
     }
-    AgentDefinition::load(&server.workspace, wanted)
+    AgentDefinition::load(&server.web, wanted)
         .ok()
         .map(|def| def.name)
 }

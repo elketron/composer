@@ -17,7 +17,7 @@ use composer_server::actions::{Approvals, Caller, Justfile, ensure_approved};
 use composer_server::provider::ModelEvent;
 use composer_server::session::Session;
 use composer_server::worker::Verdict;
-use composer_server::{Config, Home, init_home, update_home};
+use composer_server::{Config, update_home};
 use serde_json::{Value, json};
 use support::*;
 
@@ -935,8 +935,9 @@ async fn stock_recipes_stay_preapproved_for_apps_also_on_a_home_from_before_call
         return;
     }
     let dir = tempfile::tempdir().unwrap();
-    let home = Home::new(dir.path());
-    init_home(&home).await.unwrap();
+    let root = composer_server::Home::new(dir.path());
+    composer_server::init_home(&root).await.unwrap();
+    let home = root.workspace(&composer_server::WorkspaceName::default_workspace());
     let approved = |site: &'static str, recipe: &'static str, caller| {
         let approvals = Approvals::load(&home.approvals_file()).unwrap();
         let dir = home.root().join("sites").join(site);
@@ -963,7 +964,7 @@ async fn stock_recipes_stay_preapproved_for_apps_also_on_a_home_from_before_call
     assert!(!approved("chat", "ui-build", Caller::App).await);
 
     // `update` catches up the stock justfiles, even ones with nothing new to install.
-    update_home(&home, false).await.unwrap();
+    update_home(&root, false).await.unwrap();
     assert!(approved("chat", "ui-build", Caller::App).await);
     assert!(approved("orchestration", "new-ticket", Caller::App).await);
 
@@ -975,7 +976,7 @@ async fn stock_recipes_stay_preapproved_for_apps_also_on_a_home_from_before_call
         .await
         .unwrap()
         .hash("extra");
-    update_home(&home, false).await.unwrap();
+    update_home(&root, false).await.unwrap();
     let approvals = Approvals::load(&home.approvals_file()).unwrap();
     assert!(!approvals.is_approved("chat", "extra", &hash, Caller::App));
 }

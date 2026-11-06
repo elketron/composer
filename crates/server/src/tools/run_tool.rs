@@ -43,7 +43,7 @@ impl Tool for RunTool {
             .to_string();
         context.check_write(&context.url(&format!("site://{site}"))?)?;
         let server = &context.server;
-        let site_dir = server.workspace.root().join(&site);
+        let site_dir = server.web.root().join(&site);
 
         let justfile = Justfile::load(&site_dir).await?;
         let recipe = justfile.recipe(&args.recipe).ok_or_else(|| {
@@ -132,13 +132,8 @@ async fn forgiving(context: &ToolContext, mut args: Value) -> Result<Value, Stri
         && let Some(recipe) = call.get("recipe").and_then(Value::as_str)
     {
         let mut having = Vec::new();
-        for site in context
-            .server
-            .workspace
-            .sites()
-            .map_err(|e| e.to_string())?
-        {
-            let dir = context.server.workspace.root().join(&site.name);
+        for site in context.server.web.sites().map_err(|e| e.to_string())? {
+            let dir = context.server.web.root().join(&site.name);
             if site.has_justfile
                 && let Ok(justfile) = Justfile::load(&dir).await
                 && justfile.recipe(recipe).is_some()

@@ -114,8 +114,8 @@ impl WorkerRegistry {
             return Err(format!("#{worker} is not a running worker"));
         }
         let session = server.sessions.get(worker).map_err(|e| e.to_string())?;
-        let agent = AgentDefinition::load(&server.workspace, &session.info().agent)
-            .map_err(|e| e.to_string())?;
+        let agent =
+            AgentDefinition::load(&server.web, &session.info().agent).map_err(|e| e.to_string())?;
         Ok(ToolContext {
             server: server.clone(),
             session,
@@ -964,7 +964,7 @@ impl WorkerRegistry {
         {
             if let Some(note) = note
                 && let Ok(parent) = server.sessions.get(&handle.parent)
-                && AgentDefinition::load(&server.workspace, &parent.info().agent)
+                && AgentDefinition::load(&server.web, &parent.info().agent)
                     .is_ok_and(|a| a.allows_tool("run_stage"))
             {
                 let message = user_message(
@@ -1011,7 +1011,7 @@ fn decided_by_parent(server: &Server, handle: &WorkerHandle) -> bool {
             .sessions
             .get(&handle.parent)
             .ok()
-            .and_then(|parent| AgentDefinition::load(&server.workspace, &parent.info().agent).ok())
+            .and_then(|parent| AgentDefinition::load(&server.web, &parent.info().agent).ok())
             .is_some_and(|agent| agent.allows_tool("continue_worker"))
 }
 
@@ -1211,13 +1211,13 @@ fn page_project(server: &Server, page: &Page, worker: &Session) -> Option<String
 
 fn ticket_page(server: &Server, id: &str) -> Result<Page, String> {
     let url = ticket_url(id).map_err(|e| e.to_string())?;
-    server.workspace.read_page(&url).map_err(|_| {
+    server.web.read_page(&url).map_err(|_| {
         format!("no ticket {id}; create it with `run orchestration new-ticket <title>`")
     })
 }
 
 fn check_worker_agent(server: &Server, agent: &str, stage: bool) -> Result<(), String> {
-    let definition = AgentDefinition::load(&server.workspace, agent).map_err(|e| e.to_string())?;
+    let definition = AgentDefinition::load(&server.web, agent).map_err(|e| e.to_string())?;
     if definition.is_stage() && !stage {
         return Err(format!(
             "`{agent}` runs pipeline stages only (`run_stage`), not other tickets"
@@ -1227,7 +1227,7 @@ fn check_worker_agent(server: &Server, agent: &str, stage: bool) -> Result<(), S
         return Ok(());
     }
     let index = server.index.read().expect("index lock");
-    let workers: Vec<String> = AgentDefinition::workers(&server.workspace, &index)
+    let workers: Vec<String> = AgentDefinition::workers(&server.web, &index)
         .into_iter()
         .map(|w| w.name)
         .collect();

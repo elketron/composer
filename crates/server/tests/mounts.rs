@@ -94,7 +94,7 @@ async fn a_mount_created_while_running_carries_events_and_search() {
 
     // And readable through the web's own address for it.
     let page = server
-        .workspace
+        .web
         .read_page(&SiteUrl::parse("site://plans/toolbox/landing").unwrap())
         .unwrap();
     assert_eq!(page.url.to_string(), "site://plans/toolbox/landing.md");
@@ -106,8 +106,8 @@ async fn a_mount_existing_at_server_start_is_scanned() {
     // (the test builds its home before starting the server, unlike `listen`).
     let projects = tempfile::tempdir().unwrap();
     let home_dir = tempfile::tempdir().unwrap();
-    let home = composer_server::Home::new(home_dir.path());
-    composer_server::init_home(&home).await.unwrap();
+    let home = composer_server::WorkspaceHome::new(home_dir.path());
+    composer_server::init_workspace(&home).await.unwrap();
     let mounted = projects.path().join("ref2img");
     std::fs::create_dir_all(&mounted).unwrap();
     std::os::unix::fs::symlink(&mounted, home.sites().join("plans/mounted")).unwrap();
@@ -171,7 +171,7 @@ async fn a_mount_outside_the_allowed_scope_is_refused() {
 
     // Reading through a refused mount errors, with an error that names what to do.
     let err = server
-        .workspace
+        .web
         .read_page(&SiteUrl::parse("site://plans/elsewhere/stray").unwrap())
         .unwrap_err();
     assert!(

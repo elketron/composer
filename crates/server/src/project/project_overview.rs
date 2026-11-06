@@ -92,7 +92,7 @@ fn branches(server: &Server, top: &Path) -> Vec<TicketBranchSummary> {
             }
             let page = ticket_url(&ticket)
                 .ok()
-                .and_then(|url| server.workspace.read_page(&url).ok());
+                .and_then(|url| server.web.read_page(&url).ok());
             Some(TicketBranchSummary {
                 title: page
                     .as_ref()
@@ -112,7 +112,7 @@ fn branches(server: &Server, top: &Path) -> Vec<TicketBranchSummary> {
 /// `site://memory/projects/<name>`: its first paragraphs, without headings and frontmatter.
 fn memory(server: &Server, name: &str) -> Option<PageExcerpt> {
     let url = SiteUrl::new("memory", &format!("projects/{name}.md")).ok()?;
-    let page = server.workspace.read_page(&url).ok()?;
+    let page = server.web.read_page(&url).ok()?;
     let body = page.body();
     let text: Vec<&str> = body
         .lines()

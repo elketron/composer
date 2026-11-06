@@ -150,8 +150,7 @@ async fn run_turn(
     cancel: &CancellationToken,
 ) -> Result<(), String> {
     let agent = Arc::new(
-        AgentDefinition::load(&server.workspace, &session.info().agent)
-            .map_err(|e| e.to_string())?,
+        AgentDefinition::load(&server.web, &session.info().agent).map_err(|e| e.to_string())?,
     );
     let tools = server
         .tools
@@ -190,7 +189,7 @@ async fn run_turn(
         let mut messages = vec![ModelMessage::System {
             content: system_prompt(
                 &agent,
-                &server.workspace,
+                &server.web,
                 &server.index.read().expect("index lock"),
                 &session.info(),
             ),

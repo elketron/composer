@@ -99,7 +99,7 @@ pub async fn run_stage(
     stage: Option<&str>,
     note: Option<&str>,
 ) -> Result<StageStarted, String> {
-    let work = find_work(server.workspace.root(), work)?;
+    let work = find_work(server.web.root(), work)?;
     // Running is what has a worker now (a `running` left by a stopped server is not).
     let tickets: Vec<String> = server
         .workers
@@ -238,7 +238,7 @@ fn new_ticket(
             outputs.join("\n")
         }
     );
-    let tickets = server.workspace.root().join("orchestration/tickets");
+    let tickets = server.web.root().join("orchestration/tickets");
     std::fs::create_dir_all(&tickets).map_err(|e| e.to_string())?;
     let last = std::fs::read_dir(&tickets)
         .map_err(|e| e.to_string())?
@@ -274,7 +274,7 @@ pub(crate) fn set_stage_fields(server: &Server, work: &Work, stage: &str, fields
         return;
     };
     let raw = server
-        .workspace
+        .web
         .read_page(&url)
         .map(|p| p.raw)
         .unwrap_or_else(|_| {
@@ -300,7 +300,7 @@ pub fn stage_ended(
 ) -> Option<Option<String>> {
     let work = ticket.frontmatter.get_str("work")?;
     let stage = ticket.frontmatter.get_str("stage")?;
-    let work = match find_work(server.workspace.root(), &work) {
+    let work = match find_work(server.web.root(), &work) {
         Ok(work) => work,
         Err(e) => return Some(Some(format!("[stage {stage}: {e}]"))),
     };
@@ -433,7 +433,7 @@ async fn gate_changed(server: &Arc<Server>, url: &str) -> Result<(), String> {
     else {
         return Ok(());
     };
-    let Ok(work) = find_work(server.workspace.root(), &format!("{}/{name}", url.site())) else {
+    let Ok(work) = find_work(server.web.root(), &format!("{}/{name}", url.site())) else {
         return Ok(());
     };
     match work.stage_status(stage).as_str() {

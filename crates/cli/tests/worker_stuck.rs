@@ -7,7 +7,7 @@ mod support;
 use std::collections::VecDeque;
 
 use composer_protocol::{ClientCommand, CommandResult, ServerMessage, WorkerState};
-use composer_server::{Home, Server, init_home};
+use composer_server::{Server, WorkspaceHome, init_workspace};
 use serde_json::json;
 use support::{Reply, Scripts, fake_model_logged, send, until};
 
@@ -36,8 +36,8 @@ async fn the_orchestrator_continues_a_worker_at_its_turn_limit() {
     .await;
 
     let dir = tempfile::tempdir().unwrap();
-    let home = Home::new(dir.path());
-    init_home(&home).await.unwrap();
+    let home = WorkspaceHome::new(dir.path());
+    init_workspace(&home).await.unwrap();
     std::fs::create_dir_all(dir.path().join("sites/orchestration/tickets")).unwrap();
     std::fs::write(
         dir.path().join("sites/orchestration/tickets/0001.md"),

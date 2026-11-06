@@ -12,12 +12,12 @@ use tokio::sync::broadcast::error::RecvError;
 use crate::attachments::{ForModel, for_model};
 use crate::config::Config;
 use crate::error::{Result, ServerError};
-use crate::home::Home;
 use crate::init::local_token;
 use crate::provider::{ModelMessage, OpenAiProvider};
 use crate::server::Server;
 use crate::session::{Session, TURN_LIMIT, compact_and_wait, submit};
 use crate::worker::ParentLink;
+use crate::workspace_home::WorkspaceHome;
 
 const NUDGE: &str = "You ended your turn without calling `finish`. If the ticket is done, make sure its \
 Result section is written, then call finish(done, summary). If you cannot complete it, write why in \
@@ -39,7 +39,7 @@ pub struct WorkerOptions {
 }
 
 /// Works the ticket until the agent calls `finish` (or gives up), then returns.
-pub async fn run_worker(home: Home, options: WorkerOptions) -> Result<()> {
+pub async fn run_worker(home: WorkspaceHome, options: WorkerOptions) -> Result<()> {
     let config = Config::load(&home.config_file())?;
     let provider = OpenAiProvider::connect(&config.provider)
         .await
@@ -195,7 +195,7 @@ fn recent_steps(session: &Session) -> String {
 
 /// The ticket's files in the first message: images as images, text and PDFs as marked text.
 fn with_attachments(
-    home: &Home,
+    home: &WorkspaceHome,
     max_inline: usize,
     mut message: ChatMessage,
     refs: &[String],
@@ -270,7 +270,7 @@ mod tests {
     #[test]
     fn ticket_files_join_the_first_message() {
         let tmp = tempfile::tempdir().unwrap();
-        let home = Home::new(tmp.path());
+        let home = WorkspaceHome::new(tmp.path());
         let config = Config::defaults().attachments;
         let notes = save(&home, &config, "orch", "notes.md", b"# notes").unwrap();
         let png = {

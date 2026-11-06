@@ -8,7 +8,7 @@ mod support;
 use std::collections::VecDeque;
 
 use composer_protocol::{ClientCommand, CommandResult, ServerMessage};
-use composer_server::{Home, Server, init_home};
+use composer_server::{Server, WorkspaceHome, init_workspace};
 use serde_json::json;
 use support::{Reply, Scripts, fake_model_logged, send, until};
 
@@ -79,8 +79,8 @@ async fn a_worker_process_calls_an_mcp_tool_through_the_parent() {
     let dir = tempfile::tempdir().unwrap();
     let script = dir.path().join("fake_mcp.py");
     std::fs::write(&script, FAKE_SERVER).unwrap();
-    let home = Home::new(dir.path());
-    init_home(&home).await.unwrap();
+    let home = WorkspaceHome::new(dir.path());
+    init_workspace(&home).await.unwrap();
     let worker = std::fs::read_to_string(dir.path().join("sites/agents/worker.md")).unwrap();
     std::fs::write(
         dir.path().join("sites/agents/mcpworker.md"),

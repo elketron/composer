@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use composer_core::{Index, SiteUrl, Workspace};
+use composer_core::{Index, SiteUrl, Web};
 use composer_protocol::SessionInfo;
 
 use crate::agent::AgentDefinition;
@@ -11,7 +11,7 @@ const MEMORY_LIST_MAX: usize = 60;
 /// The system prompt: agent body → `site://home` → environment → relevant memory.
 pub fn system_prompt(
     agent: &AgentDefinition,
-    workspace: &Workspace,
+    workspace: &Web,
     index: &Index,
     session: &SessionInfo,
 ) -> String {
@@ -106,7 +106,7 @@ fn memory_pages(index: &Index) -> String {
     pages.join("\n")
 }
 
-fn page_body(workspace: &Workspace, url: &str) -> Option<String> {
+fn page_body(workspace: &Web, url: &str) -> Option<String> {
     let url = SiteUrl::parse(url).ok()?;
     workspace
         .read_page(&url)

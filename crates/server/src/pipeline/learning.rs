@@ -227,15 +227,12 @@ async fn propose(
 
 /// Asks the user to approve an open proposal; applies or dismisses it.
 async fn ask(server: &Arc<Server>, url: SiteUrl, work: Option<&Work>) -> Result<(), String> {
-    let page = server
-        .workspace
-        .read_page(&url)
-        .map_err(|e| e.to_string())?;
+    let page = server.web.read_page(&url).map_err(|e| e.to_string())?;
     let fm = &page.frontmatter;
     let target = fm.get_str("target").ok_or("the proposal names no target")?;
     let stage = fm.get_str("stage").unwrap_or_default();
     let site = url.site().to_string();
-    let pipeline_dir = server.workspace.root().join(&site);
+    let pipeline_dir = server.web.root().join(&site);
     let id = url
         .path()
         .rsplit('/')

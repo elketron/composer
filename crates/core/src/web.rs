@@ -11,12 +11,12 @@ use crate::types::SiteInfo;
 
 /// The folder holding all sites (`~/.composer/sites`).
 #[derive(Debug, Clone)]
-pub struct Workspace {
+pub struct Web {
     root: PathBuf,
     mounts: Mounts,
 }
 
-impl Workspace {
+impl Web {
     pub fn new(root: impl Into<PathBuf>) -> Self {
         let root = root.into();
         Self {
@@ -117,7 +117,7 @@ impl Workspace {
         self.write_file(url, content.as_bytes())
     }
 
-    /// Like [`Workspace::write_page`], for any file (JSON, images, ...).
+    /// Like [`Web::write_page`], for any file (JSON, images, ...).
     pub fn write_file(&self, url: &SiteUrl, content: &[u8]) -> Result<SiteUrl> {
         let path = match self.locate(url) {
             Ok(path) => path,

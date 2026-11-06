@@ -44,7 +44,7 @@ impl WorkerApprovals {
         }
         let info = worker.info();
         let parent = server.sessions.get(info.parent.as_deref()?).ok()?;
-        AgentDefinition::load(&server.workspace, &parent.info().agent)
+        AgentDefinition::load(&server.web, &parent.info().agent)
             .is_ok_and(|agent| agent.allows_tool("answer_approval"))
             .then_some(parent)
     }

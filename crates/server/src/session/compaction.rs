@@ -51,12 +51,12 @@ pub async fn compact(
         return Ok(0);
     }
     let older = prepare_history(server, history[..cut].to_vec(), thinking_budget(server));
-    let agent = AgentDefinition::load(&server.workspace, &session.info().agent)
-        .map_err(|e| e.to_string())?;
+    let agent =
+        AgentDefinition::load(&server.web, &session.info().agent).map_err(|e| e.to_string())?;
     let system = ModelMessage::System {
         content: system_prompt(
             &agent,
-            &server.workspace,
+            &server.web,
             &server.index.read().expect("index lock"),
             &session.info(),
         ),

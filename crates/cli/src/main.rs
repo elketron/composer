@@ -7,7 +7,8 @@ use composer_server::client::{AskOptions, ask};
 use composer_server::mcp::{McpOptions, run_mcp};
 use composer_server::worker::{WorkerOptions, run_worker};
 use composer_server::{
-    Config, Home, Server, UpdateOutcome, init_home, pending_updates, update_home,
+    Config, Home, Host, UpdateOutcome, WorkspaceHome, WorkspaceName, init_home, init_workspace,
+    migrate_home, pending_updates, update_home,
 };
 use composer_tui::{Startup, TuiOptions};
 
@@ -30,12 +31,19 @@ struct Cli {
     /// default ~/Projects), `.` for this directory, or a path.
     #[arg(long, short, global = true)]
     project: Option<String>,
+    /// Workspace to work in (default: $COMPOSER_WORKSPACE, else `default`).
+    #[arg(long, short = 'w', global = true)]
+    workspace: Option<String>,
 }
 
 #[derive(Subcommand)]
 enum Command {
-    /// Create ~/.composer (or $COMPOSER_HOME): seed sites, config, token. Never overwrites.
+    /// Create ~/.composer (or $COMPOSER_HOME): global config, the site library, templates and
+    /// the `default` workspace; with `--workspace <name>`, that workspace too. Never overwrites.
     Init,
+    /// Move a home from before workspaces into workspaces/default/ (backs it up first). Stop the
+    /// server first.
+    Migrate,
     /// Bring the stock sites and templates up to this version. Your changes are kept: files
     /// you changed are merged, and what can't be merged is left for you in state/updates/.
     /// Stop the server first.
@@ -150,6 +158,7 @@ async fn main() -> anyhow::Result<()> {
     let mut cli = Cli::parse();
     let home = Home::from_env();
     cli.project = cli.project.map(project_arg);
+    let workspace = workspace_home(&home, cli.workspace.as_deref())?;
     let tui_command = cli.command.is_none();
     if !tui_command {
         // Logging would garble the TUI, so only the other commands log to stderr.
@@ -164,17 +173,37 @@ async fn main() -> anyhow::Result<()> {
 
     match cli.command {
         None => {
-            let options = tui_options(&home, &cli.agent, cli.session, cli.new, cli.project)?;
+            let options = tui_options(&workspace, &cli.agent, cli.session, cli.new, cli.project)?;
             composer_tui::run(options).await?
         }
         Some(Command::Init) => {
-            let created = init_home(&home).await?;
+            let mut created = init_home(&home).await?;
+            // `init --workspace <name>`: that workspace too (the home's first one is `default`).
+            if cli.workspace.is_some() && !home.is_single_workspace() {
+                created.extend(init_workspace(&workspace).await?);
+            }
             println!("composer home: {}", home.root().display());
             if created.is_empty() {
                 println!("already initialized, nothing created");
             }
             for path in created {
                 println!("  created {path}");
+            }
+        }
+        Some(Command::Migrate) => {
+            let report = migrate_home(&home).await?;
+            println!("backed up to {}", report.backup.display());
+            println!("moved into {}", report.workspace.display());
+            for (path, repaired) in &report.worktrees {
+                let state = if *repaired {
+                    "repaired"
+                } else {
+                    "NOT repaired"
+                };
+                println!("  worktree {} {state}", path.display());
+            }
+            for warning in &report.warnings {
+                println!("warning: {warning}");
             }
         }
         Some(Command::Update { dry_run }) => update(&home, dry_run).await?,
@@ -185,18 +214,18 @@ async fn main() -> anyhow::Result<()> {
                     "{pending} stock files have newer versions: stop the server and run `composer update`"
                 );
             }
-            let server = Server::start(home.clone()).await?;
-            let bind = bind.unwrap_or_else(|| server.config().server.bind.clone());
+            let host = Host::start(home.clone()).await?;
+            let bind = bind.unwrap_or_else(|| host.bind());
             let listener = tokio::net::TcpListener::bind(&bind).await?;
             tracing::info!("listening on http://{bind}");
-            server.serve(listener).await?;
+            host.serve(listener).await?;
         }
         Some(Command::Ask { text, thinking }) => {
             let text = text.join(" ");
             if text.trim().is_empty() {
                 anyhow::bail!("nothing to ask");
             }
-            let (server_url, token) = remote::client(&home)?;
+            let (server_url, token) = remote::client(&workspace)?;
             let options = AskOptions {
                 text,
                 agent: cli.agent,
@@ -218,7 +247,7 @@ async fn main() -> anyhow::Result<()> {
             } else {
                 project
             };
-            let (server_url, token) = remote::client(&home)?;
+            let (server_url, token) = remote::client(&workspace)?;
             let change = state.map(|s| (entry, s == "on"));
             composer_server::client::harness(&server_url, &token, project, change).await?;
         }
@@ -233,18 +262,18 @@ async fn main() -> anyhow::Result<()> {
                 "discard" => TicketAction::Discard,
                 _ => TicketAction::Changes,
             };
-            let (server_url, token) = remote::client(&home)?;
+            let (server_url, token) = remote::client(&workspace)?;
             composer_server::client::ticket(&server_url, &token, action, ticket, yes).await?;
         }
-        Some(Command::Pair { name }) => remote::pair(&home, &name)?,
+        Some(Command::Pair { name }) => remote::pair(&workspace, &name)?,
         Some(Command::Devices { action }) => {
             let revoke = action.map(|DevicesAction::Revoke { name }| name);
-            remote::devices(&home, revoke)?;
+            remote::devices(&workspace, revoke)?;
         }
         Some(Command::Login { server, code, name }) => {
-            remote::login(&home, &server, &code, name).await?
+            remote::login(&workspace, &server, &code, name).await?
         }
-        Some(Command::Logout) => remote::logout(&home)?,
+        Some(Command::Logout) => remote::logout(&workspace)?,
         Some(Command::Worker {
             session,
             ticket,
@@ -262,18 +291,18 @@ async fn main() -> anyhow::Result<()> {
                 attachments,
                 resume,
             };
-            run_worker(home, options).await?;
+            run_worker(workspace, options).await?;
         }
         Some(Command::Mcp { session, parent }) => {
             let options = McpOptions {
                 session,
                 parent_url: parent,
             };
-            run_mcp(home, options).await?;
+            run_mcp(workspace, options).await?;
         }
         Some(Command::Script { file, out, new }) => {
             let script = std::fs::read_to_string(&file)?;
-            let options = tui_options(&home, &cli.agent, cli.session, new, cli.project)?;
+            let options = tui_options(&workspace, &cli.agent, cli.session, new, cli.project)?;
             for snapshot in composer_tui::run_script(options, &script, &out).await? {
                 println!("{}", snapshot.display());
             }
@@ -283,13 +312,19 @@ async fn main() -> anyhow::Result<()> {
 }
 
 async fn update(home: &Home, dry_run: bool) -> anyhow::Result<()> {
-    if !home.config_file().exists() {
+    if home.is_single_workspace() {
+        anyhow::bail!(
+            "{} is from before workspaces: run `composer migrate` first",
+            home.root().display()
+        );
+    }
+    if !home.global_config_file().exists() {
         anyhow::bail!(
             "{} is not set up yet: run `composer init`",
             home.root().display()
         );
     }
-    let bind = Config::load(&home.config_file())?.server.bind;
+    let bind = Config::load(&home.global_config_file())?.server.bind;
     if !dry_run && std::net::TcpStream::connect(&bind).is_ok() {
         // It keeps recipe approvals in memory and would write over the ones added here.
         anyhow::bail!("a server is running on {bind}: stop it, update, then start it again");
@@ -316,16 +351,33 @@ async fn update(home: &Home, dry_run: bool) -> anyhow::Result<()> {
     if dry_run {
         println!("(dry run: nothing changed)");
     } else if !review.is_empty() {
-        println!(
-            "\nThe new versions of the files kept as yours are in {}:",
-            home.updates().display()
-        );
+        println!("\nThe new versions of the files kept as yours:");
         for (yours, new) in review {
             println!("  diff {} {}", yours.display(), new.display());
         }
         println!("Take what you want from them, then delete them; they are not reported again.");
     }
     Ok(())
+}
+
+/// The workspace the client commands (and a server-started worker) act in: the one a parent
+/// process passed down, else `--workspace`, `$COMPOSER_WORKSPACE`, then `default`. A home from
+/// before workspaces is its own (only) workspace until it is migrated.
+fn workspace_home(home: &Home, flag: Option<&str>) -> anyhow::Result<WorkspaceHome> {
+    if let Some(workspace) = WorkspaceHome::from_env()? {
+        return Ok(workspace);
+    }
+    if home.is_single_workspace() {
+        return Ok(WorkspaceHome::new(home.root()));
+    }
+    let name = flag
+        .map(str::to_string)
+        .or_else(|| std::env::var(WorkspaceHome::ENV_NAME).ok());
+    let name = match name {
+        Some(name) => WorkspaceName::new(&name)?,
+        None => WorkspaceName::default_workspace(),
+    };
+    Ok(home.workspace(&name))
 }
 
 /// `.`, `./x` and `../x` are this machine's current directory: made absolute here. Names and
@@ -343,13 +395,13 @@ fn project_arg(project: String) -> String {
 
 /// Connects to the remote server from `composer login`, or the local one.
 fn tui_options(
-    home: &Home,
+    home: &WorkspaceHome,
     agent: &str,
     session: Option<String>,
     new: bool,
     project: Option<String>,
 ) -> anyhow::Result<TuiOptions> {
-    let config = Config::load(&home.config_file())?;
+    let config = home.load_config()?;
     let (server_url, token) = remote::client(home)?;
     Ok(TuiOptions {
         server_url,

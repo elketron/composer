@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use composer_core::{Page, SiteUrl, Workspace};
+use composer_core::{Page, SiteUrl, Web};
 use composer_protocol::http::{StageState, WorkSummary};
 
 use crate::content_hash;
@@ -98,7 +98,7 @@ impl Work {
 
     /// What a stage reads now, by page, with each page's hash (empty: not there).
     pub fn input_hashes(&self, contract: &StageContract) -> BTreeMap<String, String> {
-        let root = self.pipeline.dir.parent().map(Workspace::new);
+        let root = self.pipeline.dir.parent().map(Web::new);
         contract
             .inputs
             .iter()

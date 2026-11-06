@@ -59,7 +59,7 @@ async fn pipelines_and_works() {
         .collect();
     assert_eq!(stages, ["01_spec", "02_plan", "03_implement", "04_review"]);
 
-    // A pipeline from a template, listed on Home; a second one of a kind under another name.
+    // A pipeline from a template, listed on WorkspaceHome; a second one of a kind under another name.
     let new_pipeline = |kind: &str, name: Option<&str>| ClientCommand::PipelineNew {
         kind: kind.into(),
         name: name.map(Into::into),

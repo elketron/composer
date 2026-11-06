@@ -11,7 +11,7 @@ use std::time::Duration;
 
 use composer_protocol::WorkerState;
 use composer_server::session::Session;
-use composer_server::{Home, Server, init_home};
+use composer_server::{Server, WorkspaceHome, init_workspace};
 use support::{Reply, Scripts, fake_model};
 
 const FAKE_CLAUDE: &str = r#"#!/usr/bin/env bash
@@ -135,8 +135,8 @@ async fn claude_code_works_tickets() {
     .await;
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path().canonicalize().unwrap();
-    let home = Home::new(&root);
-    init_home(&home).await.unwrap();
+    let home = WorkspaceHome::new(&root);
+    init_workspace(&home).await.unwrap();
     assert!(
         root.join("templates/harness/claude-code/.claude-plugin/plugin.json")
             .is_file(),
@@ -228,7 +228,7 @@ async fn claude_code_works_tickets() {
 
     // Ticket attachments: files from this project's sessions reach it; another project's don't.
     let mine = composer_server::attachments::save(
-        &Home::new(&root),
+        &WorkspaceHome::new(&root),
         &server.config().attachments,
         orchestrator.id(),
         "spec.md",
@@ -240,7 +240,7 @@ async fn claude_code_works_tickets() {
         .create("default", Some(other.display().to_string()))
         .unwrap();
     let theirs = composer_server::attachments::save(
-        &Home::new(&root),
+        &WorkspaceHome::new(&root),
         &server.config().attachments,
         elsewhere.id(),
         "secret.md",

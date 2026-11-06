@@ -41,7 +41,7 @@ impl Tool for EditTool {
         }
         let page = context
             .server
-            .workspace
+            .web
             .read_page(&url)
             .map_err(|e| e.to_string())?;
         let count = page.raw.matches(&args.old_text).count();
