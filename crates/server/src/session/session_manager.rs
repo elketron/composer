@@ -5,7 +5,7 @@ use std::sync::{Arc, RwLock};
 use composer_protocol::{SessionId, SessionInfo, TurnState};
 
 use crate::error::{Result, ServerError};
-use crate::session::Session;
+use crate::session::{Session, SessionFolder};
 
 /// All sessions, loaded from `state/sessions/` at startup.
 #[derive(Debug)]
@@ -60,7 +60,8 @@ impl SessionManager {
             preview: None,
             updated: chrono::Utc::now().to_rfc3339(),
         };
-        let session = Session::create(&self.dir.join(&id), info)?;
+        let folder = SessionFolder::of(&self.dir, &id).map_err(ServerError::Invalid)?;
+        let session = Session::create(folder.path(), info)?;
         sessions.insert(id, session.clone());
         Ok(session)
     }
@@ -68,7 +69,8 @@ impl SessionManager {
     /// Creates a session with a given id and info (a worker mirrors its parent's session id).
     pub fn create_with_info(&self, info: SessionInfo) -> Result<Arc<Session>> {
         let mut sessions = self.sessions.write().expect("sessions lock");
-        let session = Session::create(&self.dir.join(&info.id), info)?;
+        let folder = SessionFolder::of(&self.dir, &info.id).map_err(ServerError::Invalid)?;
+        let session = Session::create(folder.path(), info)?;
         sessions.insert(session.id().to_string(), session.clone());
         Ok(session)
     }

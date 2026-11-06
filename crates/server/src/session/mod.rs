@@ -5,6 +5,7 @@ mod history;
 mod model_call;
 #[allow(clippy::module_inception)]
 mod session;
+mod session_folder;
 mod session_manager;
 mod transcript;
 mod turn;
@@ -13,6 +14,7 @@ mod types;
 
 pub use history::History;
 pub use session::Session;
+pub use session_folder::SessionFolder;
 pub use session_manager::SessionManager;
 pub use transcript::{FULL_PARSES, Transcript, is_ephemeral};
 pub use turn::{TURN_LIMIT, compact_and_wait, compact_now, submit};
