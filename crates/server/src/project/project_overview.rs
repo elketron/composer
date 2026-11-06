@@ -10,6 +10,7 @@ use crate::project::TicketBranch;
 use crate::project::git::git;
 use crate::server::Server;
 use crate::tools::tilde;
+use crate::worker::ticket::TicketId;
 use crate::worker::ticket::ticket_url;
 
 /// Memory excerpts stop after this many characters.
@@ -85,7 +86,8 @@ fn branches(server: &Server, top: &Path) -> Vec<TicketBranchSummary> {
         .flatten()
         .flatten()
         .filter_map(|entry| {
-            let ticket = entry.file_name().into_string().ok()?;
+            // A folder whose name isn't a ticket id is no ticket's worktree.
+            let ticket = TicketId::parse(&entry.file_name().into_string().ok()?).ok()?;
             let branch = TicketBranch::find(&root, &ticket).ok()??;
             if branch.main.canonicalize().ok()? != top {
                 return None;
@@ -97,11 +99,11 @@ fn branches(server: &Server, top: &Path) -> Vec<TicketBranchSummary> {
                 title: page
                     .as_ref()
                     .map(|p| p.title())
-                    .unwrap_or_else(|| ticket.clone()),
+                    .unwrap_or_else(|| ticket.to_string()),
                 status: page.as_ref().and_then(|p| p.frontmatter.get_str("status")),
                 commits: branch.commit_count().unwrap_or(0),
                 branch: branch.branch,
-                ticket,
+                ticket: ticket.to_string(),
             })
         })
         .collect();

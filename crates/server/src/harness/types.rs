@@ -14,7 +14,7 @@ use crate::server::Server;
 pub struct StartRequest {
     /// The worker session: the run's events go there.
     pub session: String,
-    pub ticket: String,
+    pub ticket: crate::worker::ticket::TicketId,
     pub agent: String,
     /// The folder to work in (the ticket's worktree, or its project folder).
     pub project: Option<String>,

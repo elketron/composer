@@ -15,6 +15,7 @@ use crate::agent::AgentDefinition;
 use crate::api::ApiError;
 use crate::server::Server;
 use crate::session::submit;
+use crate::worker::ticket::TicketId;
 
 /// `GET /api/info`: what this server is.
 pub async fn info(State(server): State<Arc<Server>>) -> Json<ServerInfo> {
@@ -204,8 +205,13 @@ pub async fn project_diff(
 ) -> Result<Json<ProjectDiff>, ApiError> {
     let session = server.sessions.get(&id)?;
     // A ticket's worker: its changes against the project's branch, while it still has them.
-    if let Some(ticket) = session.info().ticket
-        && (server.home.state().join("worktrees").join(&ticket).exists()
+    if let Some(ticket) = session.info().ticket.and_then(|t| TicketId::parse(&t).ok())
+        && (server
+            .home
+            .state()
+            .join("worktrees")
+            .join(ticket.as_str())
+            .exists()
             || crate::worker::ticket_closed(&server, &ticket).is_some())
     {
         let diff = crate::worker::ticket_changes(&server, &ticket, None)
@@ -219,6 +225,10 @@ pub async fn project_diff(
             "no active project; set one with :project <path>".into(),
         ));
     };
+    // Checked again: a session from before ownership may sit in another workspace's project.
+    let project = server
+        .see_project(&project)
+        .map_err(|e| ApiError(StatusCode::FORBIDDEN, e))?;
     let diff = crate::project::project_diff(std::path::Path::new(&project), None)
         .await
         .map_err(|e| ApiError(StatusCode::UNPROCESSABLE_ENTITY, e))?;

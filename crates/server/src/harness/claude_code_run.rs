@@ -13,7 +13,7 @@ use tokio_util::sync::CancellationToken;
 use crate::harness::stream_json::{StreamEvent, parse_line};
 use crate::harness::{ChildProcess, HarnessRun, Pause, StartRequest, WorkerSink};
 use crate::server::Server;
-use crate::worker::ticket::set_ticket_fields;
+use crate::worker::ticket::{TicketId, set_ticket_fields};
 
 /// Tool output beyond this is cut in the worker's chat (the log keeps all of it).
 const RESULT_MAX_CHARS: usize = 4000;
@@ -26,7 +26,7 @@ pub struct ClaudeCodeRun {
     /// Cancelled once the process has ended (stops the timeout).
     ended: CancellationToken,
     server: Arc<Server>,
-    ticket: String,
+    ticket: TicketId,
 }
 
 /// What the stream said that matters after the run.
@@ -141,7 +141,7 @@ async fn read(
     sink: WorkerSink,
     seen: Arc<Mutex<Seen>>,
     server: Arc<Server>,
-    ticket: String,
+    ticket: TicketId,
 ) {
     let session = sink.session().to_string();
     let mut lines = BufReader::new(stdout).lines();
@@ -158,7 +158,7 @@ fn apply(
     sink: &WorkerSink,
     seen: &Mutex<Seen>,
     server: &Server,
-    ticket: &str,
+    ticket: &TicketId,
     session: &str,
 ) {
     let session = session.to_string();

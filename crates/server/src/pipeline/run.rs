@@ -13,7 +13,7 @@ use crate::pipeline::types::FINISHED;
 use crate::pipeline::work::Work;
 use crate::server::Server;
 use crate::session::Session;
-use crate::worker::ticket::{set_field, ticket_url};
+use crate::worker::ticket::{TicketId, set_field, ticket_url};
 
 /// The agent a stage runs as unless its contract names another.
 const STAGE_AGENT: &str = "stage";
@@ -147,7 +147,7 @@ pub async fn run_stage(
     set_stage_fields(server, &work, &contract.name, &fields);
     let worker = match server
         .workers
-        .spawn(server, parent, &ticket, None, None)
+        .spawn(server, parent, &TicketId::parse(&ticket)?, None, None)
         .await
     {
         Ok((worker, _)) => worker,
@@ -253,7 +253,7 @@ fn new_ticket(
         .max()
         .unwrap_or(0);
     let id = format!("{:04}", last + 1);
-    let url = ticket_url(&id).map_err(|e| e.to_string())?;
+    let url = ticket_url(&TicketId::parse(&id)?).map_err(|e| e.to_string())?;
     let text = fm.replacen(
         "type: ticket\n",
         &format!("type: ticket\nid: \"{id}\"\n"),
@@ -477,5 +477,26 @@ async fn gate_changed(server: &Arc<Server>, url: &str) -> Result<(), String> {
                 .map(|_| ())
         }
         _ => Ok(()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_work_spec_never_leaves_the_web() {
+        // The workspace folder above the web holds a pipeline-looking page and a work: `..` must
+        // not reach it (0149 F6: `Pipeline::from_dir` and `Work::load` build site URLs, which
+        // refuse it).
+        let dir = tempfile::tempdir().unwrap();
+        let web = dir.path().join("sites");
+        std::fs::create_dir_all(dir.path().join("w")).unwrap();
+        std::fs::create_dir_all(&web).unwrap();
+        std::fs::write(dir.path().join("index.md"), "---\ntype: pipeline\n---\n").unwrap();
+        std::fs::write(dir.path().join("w/index.md"), "---\ntype: work\n---\n").unwrap();
+        for spec in ["../w", "site://../w", "./w"] {
+            assert!(find_work(&web, spec).is_err(), "{spec}");
+        }
     }
 }

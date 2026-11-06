@@ -71,7 +71,7 @@ impl Harness for ClaudeCodeHarness {
                  Result section, then call finish again.",
                 request.ticket, resume.message
             ),
-            None => first_prompt(&request.ticket, in_worktree),
+            None => first_prompt(request.ticket.as_str(), in_worktree),
         };
         // Attached files: the ticket's, and those sent with the message it resumes with.
         let files: Vec<&Path> = request
@@ -117,11 +117,14 @@ impl Harness for ClaudeCodeHarness {
             .collect();
 
         // A pipeline stage: its scoped context too.
-        let appended =
-            match crate::pipeline::stage_context(&server.web, &request.ticket, Some(&folder)) {
-                Some(stage) => format!("{}\n\n---\n\n{stage}", system_prompt(&request.agent)),
-                None => system_prompt(&request.agent),
-            };
+        let appended = match crate::pipeline::stage_context(
+            &server.web,
+            request.ticket.as_str(),
+            Some(&folder),
+        ) {
+            Some(stage) => format!("{}\n\n---\n\n{stage}", system_prompt(&request.agent)),
+            None => system_prompt(&request.agent),
+        };
         let appended = if read_dirs.is_empty() {
             appended
         } else {

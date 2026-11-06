@@ -4,7 +4,7 @@ use serde_json::{Value, json};
 use crate::tools::args::AnswerApprovalArgs;
 use crate::tools::{Tool, ToolContext};
 use crate::worker::Verdict;
-use crate::worker::ticket::normalize_id;
+use crate::worker::ticket::TicketId;
 
 pub struct AnswerApprovalTool;
 
@@ -50,7 +50,7 @@ impl Tool for AnswerApprovalTool {
         };
         server.worker_approvals.answer(
             context.session.id(),
-            &normalize_id(&args.ticket),
+            TicketId::parse(&args.ticket)?.as_str(),
             args.request.as_deref(),
             verdict,
         )

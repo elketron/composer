@@ -18,7 +18,7 @@ use crate::harness::{PERMISSION_TOOL, WorkerSink, answer_permission, permission_
 use crate::server::Server;
 use crate::session::{compact_now, submit};
 use crate::slot_guard::SlotGuard;
-use crate::worker::ticket::normalize_id;
+use crate::worker::ticket::TicketId;
 
 /// One client's WebSocket: what it attached to and subscribed to.
 pub struct Connection {
@@ -190,10 +190,12 @@ impl Connection {
             ClientCommand::TicketChanges { ticket } => {
                 let (connection, server) = (self.clone(), server.clone());
                 tokio::spawn(async move {
-                    let ticket = normalize_id(&ticket);
-                    let result = crate::worker::ticket_changes(&server, &ticket, None)
-                        .await
-                        .map(|changes| CommandResult::Changes { changes });
+                    let result = match TicketId::parse(&ticket) {
+                        Ok(ticket) => crate::worker::ticket_changes(&server, &ticket, None)
+                            .await
+                            .map(|changes| CommandResult::Changes { changes }),
+                        Err(e) => Err(e),
+                    };
                     connection.reply(id, result);
                 });
                 None
@@ -213,8 +215,8 @@ impl Connection {
             ClientCommand::TicketMerge { ticket } => {
                 let (connection, server) = (self.clone(), server.clone());
                 tokio::task::spawn_blocking(move || {
-                    let ticket = normalize_id(&ticket);
-                    let result = crate::worker::merge_ticket(&server, &ticket, None)
+                    let result = TicketId::parse(&ticket)
+                        .and_then(|ticket| crate::worker::merge_ticket(&server, &ticket, None))
                         .map(|commit| CommandResult::Merged { commit });
                     connection.reply(id, result);
                 });
@@ -223,8 +225,10 @@ impl Connection {
             ClientCommand::TicketComment { ticket, comments } => {
                 let (connection, server) = (self.clone(), server.clone());
                 tokio::task::spawn_blocking(move || {
-                    let ticket = normalize_id(&ticket);
-                    let result = crate::worker::ticket_comments(&server, &ticket, &comments)
+                    let result = TicketId::parse(&ticket)
+                        .and_then(|ticket| {
+                            crate::worker::ticket_comments(&server, &ticket, &comments)
+                        })
                         .map(|lines| CommandResult::Comments { lines });
                     connection.reply(id, result);
                 });
@@ -233,8 +237,8 @@ impl Connection {
             ClientCommand::TicketDiscard { ticket } => {
                 let (connection, server) = (self.clone(), server.clone());
                 tokio::task::spawn_blocking(move || {
-                    let ticket = normalize_id(&ticket);
-                    let result = crate::worker::discard_ticket(&server, &ticket)
+                    let result = TicketId::parse(&ticket)
+                        .and_then(|ticket| crate::worker::discard_ticket(&server, &ticket))
                         .map(|()| CommandResult::Done);
                     connection.reply(id, result);
                 });

@@ -6,7 +6,7 @@ use composer_protocol::ChangedBy;
 use composer_protocol::http::DiffComment;
 
 use crate::server::Server;
-use crate::worker::ticket::ticket_url;
+use crate::worker::ticket::{TicketId, ticket_url};
 
 const HEADING: &str = "## Comments";
 /// A quote longer than this isn't repeated in the comment line.
@@ -21,7 +21,7 @@ static SEND: Mutex<()> = Mutex::new(());
 /// that section as the page has it now.
 pub fn ticket_comments(
     server: &Server,
-    ticket: &str,
+    ticket: &TicketId,
     comments: &[DiffComment],
 ) -> Result<Vec<String>, String> {
     let url = ticket_url(ticket).map_err(|e| e.to_string())?;
