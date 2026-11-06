@@ -24,7 +24,7 @@ use crate::mcp_clients::McpServers;
 use crate::provider::{OpenAiProvider, Provider};
 use crate::session::{Session, SessionManager};
 use crate::slot_pool::SlotPool;
-use crate::tools::ToolRegistry;
+use crate::tools::{ToolRegistry, expand_home};
 use crate::watches::{WRITER, WatchRegistry};
 use crate::worker::{ParentLink, Verdict, WorkerApprovals, WorkerRegistry};
 
@@ -102,7 +102,11 @@ impl Server {
         provider: Arc<dyn Provider>,
         parent: Option<Arc<ParentLink>>,
     ) -> Result<Arc<Self>> {
-        let workspace = Workspace::new(home.sites());
+        // Scoped mounts (ticket 0122): a symlink inside a site may point into the projects
+        // directory; one that lands elsewhere is refused, not followed. Same allowance as
+        // the launcher scope keys off.
+        let workspace =
+            Workspace::with_allowed(home.sites(), vec![expand_home(&config.projects.dir)]);
         if !workspace.root().is_dir() {
             return Err(ServerError::Invalid(format!(
                 "{} does not exist; run `composer init` first",
@@ -195,6 +199,12 @@ impl Server {
         if current.mcp != next.mcp {
             let mut mcp = self.mcp.write().expect("mcp lock");
             *mcp = Arc::new(mcp.reconfigured(&next.mcp));
+        }
+        if current.projects.dir != next.projects.dir {
+            // Mounted folders start following the new scope from now on; pages under a mount
+            // the new scope drops stay indexed until something changes them.
+            self.workspace
+                .set_allowed(vec![expand_home(&next.projects.dir)]);
         }
         *current = Arc::new(next);
         tracing::info!("config.toml reloaded");
@@ -322,7 +332,7 @@ impl Server {
 
     /// Syncs one path after a filesystem event. Ignores changes we made ourselves.
     pub fn sync_path(&self, path: &Path) {
-        if !is_watched(self.workspace.root(), path) {
+        if !is_watched(self.workspace.root(), path) || !self.workspace.allows(path) {
             return;
         }
         if path.is_dir() {
@@ -549,6 +559,20 @@ impl Server {
         }
     }
 
+    /// A folder inside a site, made since the watch started, that is a symlink into an
+    /// allowed root: the watcher should watch it (ticket 0122). The inotify backend does
+    /// not report it as a directory when it appears (its own walk would follow it, but the
+    /// dynamic attach only fires for `ISDIR` events), so the watcher asks us before syncing.
+    pub fn mount_created(&self, path: &Path) -> bool {
+        let Ok(rel) = path.strip_prefix(self.workspace.root()) else {
+            return false;
+        };
+        rel.components().count() >= 2
+            && std::fs::symlink_metadata(path).is_ok_and(|m| m.file_type().is_symlink())
+            && path.is_dir()
+            && self.workspace.allows(path)
+    }
+
     /// Hash of a page as last seen by the server, reading it if unknown.
     pub fn page_hash(&self, path: &Path) -> Option<String> {
         let bytes = std::fs::read(path).ok()?;
@@ -564,7 +588,7 @@ impl Server {
 }
 
 /// Inside a site, not in a hidden folder, `node_modules` or a site's `ui/`.
-fn is_watched(root: &Path, path: &Path) -> bool {
+pub(crate) fn is_watched(root: &Path, path: &Path) -> bool {
     let Ok(rel) = path.strip_prefix(root) else {
         return false;
     };
