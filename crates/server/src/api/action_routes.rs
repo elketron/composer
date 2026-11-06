@@ -7,7 +7,7 @@ use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use composer_core::SiteUrl;
-use serde::{Deserialize, Serialize};
+use composer_protocol::http::{ActionSummary, RunActionRequest, RunActionResponse};
 use tokio_util::sync::CancellationToken;
 
 use crate::actions::{
@@ -16,38 +16,11 @@ use crate::actions::{
 use crate::api::ApiError;
 use crate::server::Server;
 
-#[derive(Serialize)]
-pub struct ActionInfo {
-    name: String,
-    doc: Option<String>,
-    /// `name`, `name=default` or `*name`, as in `actions`.
-    parameters: Vec<String>,
-    approved: bool,
-}
-
-#[derive(Deserialize, Default)]
-pub struct RunRequest {
-    /// Recipe arguments, in order.
-    #[serde(default)]
-    args: Vec<String>,
-    /// The session whose clients are asked when the recipe needs approval (an app's URL carries
-    /// `session=<id>`). Without one, a recipe that needs approval is not run.
-    session: Option<String>,
-}
-
-#[derive(Serialize)]
-pub struct RunResponse {
-    /// `ok`, `failed`, `timed out` or `killed`.
-    status: String,
-    exit_code: Option<i32>,
-    output: String,
-}
-
 /// `GET /api/actions/<site>`: the site's public recipes, with whether apps may run them unasked.
 pub async fn list(
     State(server): State<Arc<Server>>,
     Path(site): Path<String>,
-) -> Result<Json<Vec<ActionInfo>>, ApiError> {
+) -> Result<Json<Vec<ActionSummary>>, ApiError> {
     let justfile = load(&server, &site).await?;
     let site = SiteUrl::new(&site, "")?.site().to_string();
     Ok(Json(
@@ -55,7 +28,7 @@ pub async fn list(
             .recipes()
             .into_iter()
             .filter(|r| !r.private)
-            .map(|r| ActionInfo {
+            .map(|r| ActionSummary {
                 approved: server
                     .approvals
                     .may_run(&site, &r, &justfile.hash(&r.name), Caller::App),
@@ -74,8 +47,8 @@ pub async fn list(
 pub async fn run(
     State(server): State<Arc<Server>>,
     Path((site, recipe)): Path<(String, String)>,
-    body: Option<Json<RunRequest>>,
-) -> Result<Json<RunResponse>, ApiError> {
+    body: Option<Json<RunActionRequest>>,
+) -> Result<Json<RunActionResponse>, ApiError> {
     let Json(request) = body.unwrap_or_default();
     let justfile = load(&server, &site).await?;
     let site = SiteUrl::new(&site, "")?.site().to_string();
@@ -149,7 +122,7 @@ pub async fn run(
         (Some(_), _) => "failed",
         (None, _) => "killed",
     };
-    Ok(Json(RunResponse {
+    Ok(Json(RunActionResponse {
         status: status.into(),
         exit_code: output.exit_code,
         output: output.output,

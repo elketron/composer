@@ -122,5 +122,24 @@
       }
     ],
     "tool_rules": 2
+  },
+  {
+    "name": "greet",
+    "doc": "Greets someone.",
+    "parameters": [
+      "name"
+    ],
+    "approved": true
+  },
+  {
+    "args": [
+      "world"
+    ],
+    "session": "a3f1"
+  },
+  {
+    "status": "ok",
+    "exit_code": 0,
+    "output": "hi world\n"
   }
 ]

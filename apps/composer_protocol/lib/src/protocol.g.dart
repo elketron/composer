@@ -2,6 +2,40 @@
 // Source of truth: crates/protocol (Rust).
 // ignore_for_file: annotate_overrides, prefer_const_constructors, unnecessary_this
 
+/// `GET /api/actions/{site}`: one public recipe in a site's action registry.
+class ActionSummary {
+  const ActionSummary({
+    required this.name,
+    this.doc,
+    required this.parameters,
+    required this.approved,
+  });
+
+  final String name;
+
+  final String? doc;
+
+  /// `name`, `name=default` or `*name`, as in `actions`.
+  final List<String> parameters;
+
+  /// Whether this version may run unasked; otherwise the caller's session is asked.
+  final bool approved;
+
+  factory ActionSummary.fromJson(Map<String, Object?> json) => ActionSummary(
+        name: json['name'] as String,
+        doc: json['doc'] == null ? null : json['doc'] as String,
+        parameters: (json['parameters'] as List).map((e) => e as String).toList(),
+        approved: json['approved'] as bool,
+      );
+
+  Map<String, Object?> toJson() => {
+        'name': name,
+        if (doc != null) 'doc': doc,
+        'parameters': parameters,
+        'approved': approved,
+      };
+}
+
 /// `GET /api/agents`: the agent definitions (`site://agents`).
 class AgentSummary {
   const AgentSummary({
@@ -2121,6 +2155,59 @@ enum Role {
       values.firstWhere((v) => v.wire == json, orElse: () => throw FormatException('unknown Role: $json'));
 
   String toJson() => wire;
+}
+
+/// `POST /api/actions/{site}/{recipe}`: run one public recipe of a site's justfile.
+class RunActionRequest {
+  const RunActionRequest({
+    this.args = const [],
+    this.session,
+  });
+
+  /// Recipe arguments, in order.
+  final List<String> args;
+
+  /// The session whose clients are asked when the recipe needs approval (an app's URL carries
+  /// `session=<id>`). Without one, a recipe that needs approval is not run.
+  final String? session;
+
+  factory RunActionRequest.fromJson(Map<String, Object?> json) => RunActionRequest(
+        args: json['args'] == null ? const [] : (json['args'] as List).map((e) => e as String).toList(),
+        session: json['session'] == null ? null : json['session'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        if (args.isNotEmpty) 'args': args,
+        if (session != null) 'session': session,
+      };
+}
+
+/// The answer to `POST /api/actions/{site}/{recipe}`.
+class RunActionResponse {
+  const RunActionResponse({
+    required this.status,
+    this.exitCode,
+    required this.output,
+  });
+
+  /// `ok`, `failed`, `timed out` or `killed`.
+  final String status;
+
+  final int? exitCode;
+
+  final String output;
+
+  factory RunActionResponse.fromJson(Map<String, Object?> json) => RunActionResponse(
+        status: json['status'] as String,
+        exitCode: json['exit_code'] == null ? null : (json['exit_code'] as num).toInt(),
+        output: json['output'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'status': status,
+        if (exitCode != null) 'exit_code': exitCode,
+        'output': output,
+      };
 }
 
 /// `GET /api/search?q=`

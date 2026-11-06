@@ -92,6 +92,49 @@ export async function putFile(url: string, body: Blob | string): Promise<void> {
   if (!response.ok) throw new Error(`${url}: ${response.status}`);
 }
 
+// ---- site actions: the justfile recipes the server will run ----
+
+/** Mirrors crates/protocol (`ActionSummary`): one public recipe of a site's justfile. */
+export interface Action {
+  name: string;
+  doc: string | null;
+  /** `name`, `name=default` or `*name`, as in the agent `actions` tool. */
+  parameters: string[];
+  /** Whether this version runs unasked; otherwise the session's clients are asked. */
+  approved: boolean;
+}
+
+/** The result of `runAction`; mirrors crates/protocol (`RunActionResponse`). */
+export interface ActionResult {
+  status: 'ok' | 'failed' | 'timed out' | 'killed';
+  exit_code: number | null;
+  output: string;
+}
+
+/** A site's runnable actions (its justfile's public recipes). Defaults to this app's site. */
+export async function listActions(siteName: string = site): Promise<Action[]> {
+  return json(await fetch(`/api/actions/${siteName}`));
+}
+
+/**
+ * Runs one of a site's actions through the server, e.g. `await runAction('ui-build')`.
+ * A recipe version not yet approved asks the session that opened this app (or `options.session`)
+ * and waits; if the answer is no, this throws. Pass the args in the order the recipe declares.
+ */
+export async function runAction(
+  recipe: string,
+  args: string[] = [],
+  options: { site?: string; session?: string } = {},
+): Promise<ActionResult> {
+  return json(
+    await fetch(`/api/actions/${options.site ?? site}/${recipe}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ args, session: options.session ?? session }),
+    }),
+  );
+}
+
 /** Full text and frontmatter search: `type:ticket status:open`, `site:design words`. */
 export async function search(query: string): Promise<SearchHit[]> {
   return json(await fetch(`/api/search?q=${encodeURIComponent(query)}`));

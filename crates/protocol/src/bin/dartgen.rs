@@ -12,10 +12,10 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use composer_protocol::http::{
-    AgentSummary, AppMessage, ChangedFile, DiffComment, PageExcerpt, PageResponse, PipelineSummary,
-    ProjectDiff, ProjectOverview, ProjectSummary, PutPageRequest, PutPageResponse, SearchHit,
-    ServerInfo, SiteSummary, StageState, StageSummary, TicketBranchSummary, TicketReview,
-    WorkSummary,
+    ActionSummary, AgentSummary, AppMessage, ChangedFile, DiffComment, PageExcerpt, PageResponse,
+    PipelineSummary, ProjectDiff, ProjectOverview, ProjectSummary, PutPageRequest, PutPageResponse,
+    RunActionRequest, RunActionResponse, SearchHit, ServerInfo, SiteSummary, StageState,
+    StageSummary, TicketBranchSummary, TicketReview, WorkSummary,
 };
 use composer_protocol::*;
 use serde_json::{Map, Value, json};
@@ -76,6 +76,9 @@ fn definitions() -> Map<String, Value> {
     let _ = generator.subschema_for::<DiffComment>();
     let _ = generator.subschema_for::<AgentSummary>();
     let _ = generator.subschema_for::<ProjectSummary>();
+    let _ = generator.subschema_for::<ActionSummary>();
+    let _ = generator.subschema_for::<RunActionRequest>();
+    let _ = generator.subschema_for::<RunActionResponse>();
     let defs = generator.take_definitions(true);
     defs.into_iter().collect()
 }
@@ -1115,6 +1118,21 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
                 on: true,
             }],
             tool_rules: 2,
+        }),
+        serde_json::to_value(ActionSummary {
+            name: "greet".into(),
+            doc: Some("Greets someone.".into()),
+            parameters: vec!["name".into()],
+            approved: true,
+        }),
+        serde_json::to_value(RunActionRequest {
+            args: vec!["world".into()],
+            session: Some("a3f1".into()),
+        }),
+        serde_json::to_value(RunActionResponse {
+            status: "ok".into(),
+            exit_code: Some(0),
+            output: "hi world\n".into(),
         }),
     ]
     .into_iter()
