@@ -55,7 +55,7 @@ impl Keymap {
             (
                 vec![space, key('a')],
                 Action::AttachClipboard,
-                "attach the image on the clipboard (or paste a file's path while writing)",
+                "attach the image on the clipboard (or paste or drop a file's path)",
             ),
             (
                 vec![space, key('w')],
