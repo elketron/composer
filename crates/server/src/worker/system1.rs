@@ -12,6 +12,7 @@ use crate::provider::{ModelEvent, ModelMessage, ModelRequest, OpenAiProvider, Pr
 use crate::server::Server;
 use crate::session::Session;
 use crate::worker::Verdict;
+use crate::worker::ticket::TicketId;
 use crate::worker::ticket::ticket_url;
 
 /// The longest request body shown to the model.
@@ -98,8 +99,9 @@ pub async fn decide(
 fn question(server: &Server, worker: &Session, what: &str, body: &str) -> String {
     let info = worker.info();
     let ticket = info.ticket.unwrap_or_default();
-    let title = ticket_url(&ticket)
+    let title = TicketId::parse(&ticket)
         .ok()
+        .and_then(|ticket| ticket_url(&ticket).ok())
         .and_then(|url| server.web.read_page(&url).ok())
         .map(|page| page.title())
         .unwrap_or_default();

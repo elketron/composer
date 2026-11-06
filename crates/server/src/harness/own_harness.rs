@@ -55,7 +55,7 @@ impl Harness for OwnHarness {
                 "--session",
                 &request.session,
                 "--ticket",
-                &request.ticket,
+                request.ticket.as_str(),
                 "--agent",
                 &request.agent,
             ])

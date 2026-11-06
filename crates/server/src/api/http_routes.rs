@@ -15,6 +15,7 @@ use crate::agent::AgentDefinition;
 use crate::api::ApiError;
 use crate::server::Server;
 use crate::session::submit;
+use crate::worker::ticket::TicketId;
 
 /// `GET /api/info`: what this server is.
 pub async fn info(State(server): State<Arc<Server>>) -> Json<ServerInfo> {
@@ -204,8 +205,13 @@ pub async fn project_diff(
 ) -> Result<Json<ProjectDiff>, ApiError> {
     let session = server.sessions.get(&id)?;
     // A ticket's worker: its changes against the project's branch, while it still has them.
-    if let Some(ticket) = session.info().ticket
-        && (server.home.state().join("worktrees").join(&ticket).exists()
+    if let Some(ticket) = session.info().ticket.and_then(|t| TicketId::parse(&t).ok())
+        && (server
+            .home
+            .state()
+            .join("worktrees")
+            .join(ticket.as_str())
+            .exists()
             || crate::worker::ticket_closed(&server, &ticket).is_some())
     {
         let diff = crate::worker::ticket_changes(&server, &ticket, None)

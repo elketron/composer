@@ -3,7 +3,7 @@ use serde_json::{Value, json};
 
 use crate::tools::args::SpawnWorkerArgs;
 use crate::tools::{Tool, ToolContext};
-use crate::worker::ticket::normalize_id;
+use crate::worker::ticket::TicketId;
 
 pub struct SpawnWorkerTool;
 
@@ -36,7 +36,7 @@ impl Tool for SpawnWorkerTool {
 
     async fn call(&self, context: &ToolContext, args: Value) -> Result<String, String> {
         let args: SpawnWorkerArgs = serde_json::from_value(args).map_err(|e| e.to_string())?;
-        let ticket = normalize_id(&args.ticket);
+        let ticket = TicketId::parse(&args.ticket)?;
         if context.server.parent.is_some() || context.session.info().ticket.is_some() {
             return Err("workers cannot start workers".into());
         }

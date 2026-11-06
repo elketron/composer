@@ -3,7 +3,7 @@ use serde_json::{Value, json};
 
 use crate::tools::args::SteerWorkerArgs;
 use crate::tools::{Tool, ToolContext};
-use crate::worker::ticket::normalize_id;
+use crate::worker::ticket::TicketId;
 
 pub struct StopWorkerTool;
 
@@ -35,8 +35,10 @@ impl Tool for StopWorkerTool {
         if server.parent.is_some() || context.session.info().ticket.is_some() {
             return Err("workers cannot stop workers".into());
         }
-        server
-            .workers
-            .stop_stuck(server, &normalize_id(&args.ticket), &args.message)
+        server.workers.stop_stuck(
+            server,
+            TicketId::parse(&args.ticket)?.as_str(),
+            &args.message,
+        )
     }
 }

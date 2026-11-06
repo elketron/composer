@@ -611,7 +611,6 @@ fn climbing_ticket(b: &Side) -> String {
 }
 
 #[tokio::test]
-#[ignore = "finding F1 of ticket 0149: open until ticket 0150 makes ticket ids value objects"]
 async fn ticket_ids_never_climb_into_the_other_workspaces_worktrees() {
     let f = fixture().await;
     let mut a = socket(&f, &f.a).await;

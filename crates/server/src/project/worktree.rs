@@ -1,5 +1,6 @@
 //! Per-ticket git worktrees, so workers on the same project don't collide.
 
+use crate::worker::ticket::TicketId;
 use std::path::{Path, PathBuf};
 
 use crate::project::git::git;
@@ -22,7 +23,7 @@ pub struct Worktree {
 pub fn ticket_worktree(
     project: &Path,
     root: &Path,
-    ticket: &str,
+    ticket: &TicketId,
 ) -> Result<Option<Worktree>, String> {
     let Ok(top) = git(project, &["rev-parse", "--show-toplevel"]) else {
         return Ok(None);
@@ -40,8 +41,8 @@ pub fn ticket_worktree(
                 .map(Path::to_path_buf)
         })
         .unwrap_or_default();
-    let branch = format!("ticket/{ticket}");
-    let dir = root.join(ticket);
+    let branch = ticket.branch();
+    let dir = root.join(ticket.as_str());
     // (`join("")` would add a trailing slash.)
     let folder = |dir: &Path| {
         if inside.as_os_str().is_empty() {
@@ -110,6 +111,10 @@ pub fn ticket_worktree(
 mod tests {
     use super::*;
 
+    fn id(raw: &str) -> TicketId {
+        TicketId::parse(raw).unwrap()
+    }
+
     fn repo(dir: &Path) {
         std::fs::create_dir_all(dir.join("app")).unwrap();
         std::fs::write(dir.join("app/main.rs"), "fn main() {}\n").unwrap();
@@ -136,7 +141,9 @@ mod tests {
         let (project, root) = (tmp.path().join("p"), tmp.path().join("state/worktrees"));
         repo(&project);
 
-        let made = ticket_worktree(&project, &root, "0003").unwrap().unwrap();
+        let made = ticket_worktree(&project, &root, &id("0003"))
+            .unwrap()
+            .unwrap();
         assert_eq!(made.branch, "ticket/0003");
         assert_eq!(made.path, root.join("0003"));
         assert!(made.base.is_some());
@@ -144,7 +151,9 @@ mod tests {
 
         // Again (a retried ticket): the same worktree, kept as it is.
         std::fs::write(made.path.join("wip.txt"), "x").unwrap();
-        let again = ticket_worktree(&project, &root, "0003").unwrap().unwrap();
+        let again = ticket_worktree(&project, &root, &id("0003"))
+            .unwrap()
+            .unwrap();
         assert_eq!((again.path.clone(), again.base), (made.path.clone(), None));
         assert!(again.path.join("wip.txt").is_file());
 
@@ -154,7 +163,9 @@ mod tests {
             &["worktree", "remove", "--force", made.path.to_str().unwrap()],
         )
         .unwrap();
-        let back = ticket_worktree(&project, &root, "0003").unwrap().unwrap();
+        let back = ticket_worktree(&project, &root, &id("0003"))
+            .unwrap()
+            .unwrap();
         assert_eq!(back.base, None);
         assert_eq!(
             git(&back.path, &["rev-parse", "--abbrev-ref", "HEAD"]).unwrap(),
@@ -167,7 +178,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let (project, root) = (tmp.path().join("p"), tmp.path().join("wt"));
         repo(&project);
-        let made = ticket_worktree(&project.join("app"), &root, "0004")
+        let made = ticket_worktree(&project.join("app"), &root, &id("0004"))
             .unwrap()
             .unwrap();
         assert_eq!(made.path, root.join("0004/app"));
@@ -180,14 +191,14 @@ mod tests {
         let plain = tmp.path().join("plain");
         std::fs::create_dir_all(&plain).unwrap();
         assert_eq!(
-            ticket_worktree(&plain, &tmp.path().join("wt"), "1").unwrap(),
+            ticket_worktree(&plain, &tmp.path().join("wt"), &id("1")).unwrap(),
             None
         );
         let empty = tmp.path().join("empty");
         std::fs::create_dir_all(&empty).unwrap();
         git(&empty, &["init", "-q"]).unwrap();
         assert_eq!(
-            ticket_worktree(&empty, &tmp.path().join("wt"), "1").unwrap(),
+            ticket_worktree(&empty, &tmp.path().join("wt"), &id("1")).unwrap(),
             None
         );
     }
@@ -199,7 +210,7 @@ mod tests {
         repo(&project);
         std::fs::create_dir_all(root.join("0005")).unwrap();
         assert!(
-            ticket_worktree(&project, &root, "0005")
+            ticket_worktree(&project, &root, &id("0005"))
                 .unwrap_err()
                 .contains("not a worktree")
         );

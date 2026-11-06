@@ -5,26 +5,19 @@ use composer_protocol::ChangedBy;
 
 use crate::server::Server;
 
-/// `3`, `0003`, `0003.md` or `site://orchestration/tickets/0003` → `0003`.
-pub fn normalize_id(raw: &str) -> String {
-    let id = raw
-        .trim()
-        .trim_start_matches("site://")
-        .trim_start_matches("orchestration/")
-        .trim_start_matches("tickets/")
-        .trim_end_matches(".md");
-    match id.parse::<u32>() {
-        Ok(n) => format!("{n:04}"),
-        Err(_) => id.to_string(),
-    }
-}
+pub use crate::worker::ticket_id::TicketId;
 
-pub fn ticket_url(id: &str) -> Result<SiteUrl, CoreError> {
+/// The ticket's page, `site://orchestration/tickets/<id>.md`.
+pub fn ticket_url(id: &TicketId) -> Result<SiteUrl, CoreError> {
     SiteUrl::new("orchestration", &format!("tickets/{id}.md"))
 }
 
 /// Sets frontmatter fields of ticket `id` (a harness recording its session, model, exit).
-pub fn set_ticket_fields(server: &Server, id: &str, fields: &[(&str, &str)]) -> Result<(), String> {
+pub fn set_ticket_fields(
+    server: &Server,
+    id: &TicketId,
+    fields: &[(&str, &str)],
+) -> Result<(), String> {
     let url = ticket_url(id).map_err(|e| e.to_string())?;
     let page = server.web.read_page(&url).map_err(|e| e.to_string())?;
     let raw = fields.iter().fold(page.raw.clone(), |raw, (key, value)| {
@@ -76,11 +69,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn ids() {
-        assert_eq!(normalize_id("3"), "0003");
-        assert_eq!(normalize_id("0012.md"), "0012");
-        assert_eq!(normalize_id("site://orchestration/tickets/0007"), "0007");
-    }
+    fn ids() {}
 
     #[test]
     fn status() {

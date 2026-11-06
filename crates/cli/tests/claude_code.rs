@@ -120,7 +120,13 @@ async fn until_field(dir: &Path, id: &str, needle: &str, last: &str) -> String {
 async fn spawn(server: &Arc<Server>, parent: &Arc<Session>, id: &str) -> Result<String, String> {
     server
         .workers
-        .spawn(server, parent, id, None, Some("claude-code"))
+        .spawn(
+            server,
+            parent,
+            &composer_server::worker::ticket::TicketId::parse(id).unwrap(),
+            None,
+            Some("claude-code"),
+        )
         .await
         .map(|(worker, _)| worker)
 }

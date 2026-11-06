@@ -1,6 +1,7 @@
 //! A ticket's worktree and branch, seen from the project it goes back into: review, merge,
 //! discard.
 
+use crate::worker::ticket::TicketId;
 use std::path::{Path, PathBuf};
 
 use composer_protocol::http::TicketReview;
@@ -33,8 +34,8 @@ struct Tip {
 
 impl TicketBranch {
     /// The ticket's worktree under `root` (`state/worktrees`); `None` when there is none.
-    pub fn find(root: &Path, ticket: &str) -> Result<Option<Self>, String> {
-        let worktree = root.join(ticket);
+    pub fn find(root: &Path, ticket: &TicketId) -> Result<Option<Self>, String> {
+        let worktree = root.join(ticket.as_str());
         if !worktree.join(".git").exists() {
             return Ok(None);
         }
@@ -379,8 +380,9 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let (project, root) = (tmp.path().join("p"), tmp.path().join("wt"));
         repo(&project);
-        ticket_worktree(&project, &root, ticket).unwrap().unwrap();
-        let branch = TicketBranch::find(&root, ticket).unwrap().unwrap();
+        let ticket = TicketId::parse(ticket).unwrap();
+        ticket_worktree(&project, &root, &ticket).unwrap().unwrap();
+        let branch = TicketBranch::find(&root, &ticket).unwrap().unwrap();
         (tmp, project, branch)
     }
 

@@ -24,7 +24,7 @@ use crate::server::Server;
 use crate::session::{Session, submit};
 use crate::tools::ToolContext;
 use crate::worker::ending::Ending;
-use crate::worker::ticket::{set_field, set_status, set_ticket_fields, ticket_url};
+use crate::worker::ticket::{TicketId, set_field, set_status, set_ticket_fields, ticket_url};
 use crate::worker::{StopReason, WorkerHandle, ticket_closed};
 
 /// How long a worker that called `finish` has to exit before it is stopped.
@@ -143,12 +143,12 @@ impl WorkerRegistry {
         &self,
         server: &Arc<Server>,
         parent: &Arc<Session>,
-        id: &str,
+        id: &TicketId,
         agent: Option<&str>,
         harness: Option<&str>,
     ) -> Result<(String, Option<Worktree>), String> {
-        self.check_capacity(server, id)?;
-        let page = ticket_page(server, id)?;
+        self.check_capacity(server, id.as_str())?;
+        let page = ticket_page(server, id.as_str())?;
         match page.frontmatter.get_str("status").as_deref() {
             Some("claimed") => return Err(format!("ticket {id} is already claimed")),
             Some("done") => {
@@ -200,7 +200,7 @@ impl WorkerRegistry {
 
         let request = StartRequest {
             session: sid.clone(),
-            ticket: id.to_string(),
+            ticket: id.clone(),
             agent,
             project: place.folder,
             settings: place.settings,
@@ -253,13 +253,13 @@ impl WorkerRegistry {
         attachments: Vec<Attachment>,
     ) -> Result<(), String> {
         let info = session.info();
-        let id = info.ticket.clone().ok_or("not a worker session")?;
+        let id = TicketId::parse(info.ticket.as_deref().ok_or("not a worker session")?)?;
         let parent = info
             .parent
             .clone()
             .ok_or("the worker has no orchestrator")?;
-        self.check_capacity(server, &id)?;
-        let page = ticket_page(server, &id)?;
+        self.check_capacity(server, id.as_str())?;
+        let page = ticket_page(server, id.as_str())?;
         if page.frontmatter.get_str("status").as_deref() == Some("claimed") {
             return Err(format!("ticket {id} is claimed by another worker"));
         }
@@ -541,7 +541,7 @@ impl WorkerRegistry {
         server: &Server,
         harness: &Arc<dyn Harness>,
         page: &Page,
-        id: &str,
+        id: &TicketId,
         parent_project: Option<String>,
     ) -> Result<Place, String> {
         if server.listen_addr().is_none() {
@@ -676,7 +676,7 @@ impl WorkerRegistry {
             }
         };
         let handle = WorkerHandle {
-            ticket: ticket.clone(),
+            ticket: ticket.to_string(),
             parent: parent.clone(),
             harness: harness.name(),
             run: run.clone(),
@@ -695,7 +695,7 @@ impl WorkerRegistry {
         // as long as it ran).
         server.hub.send(ServerMessage::WorkerStatus {
             worker: sid.clone(),
-            ticket,
+            ticket: ticket.to_string(),
             parent,
             state: WorkerState::Starting,
         });
@@ -813,8 +813,9 @@ impl WorkerRegistry {
         compact: bool,
     ) -> Result<String, String> {
         let message = format!("From your orchestrator, after your turn limit: {message}");
+        let id = TicketId::parse(ticket)?;
         if let Some((worker, reply)) = self.take_waiting(ticket) {
-            count_continue(server, ticket);
+            count_continue(server, &id);
             set_running(server, &worker, ticket);
             let _ = reply.send(Ok((message, compact)));
             let first = if compact {
@@ -850,7 +851,7 @@ impl WorkerRegistry {
                     .into(),
             );
         }
-        count_continue(server, ticket);
+        count_continue(server, &id);
         self.resume(server, &session, message, vec![]).await?;
         Ok(format!(
             "worker #{} goes on with ticket {ticket}",
@@ -1088,8 +1089,8 @@ fn continued(server: &Server, ticket: &str) -> u32 {
         .unwrap_or(0)
 }
 
-fn count_continue(server: &Server, ticket: &str) {
-    let next = (continued(server, ticket) + 1).to_string();
+fn count_continue(server: &Server, ticket: &TicketId) {
+    let next = (continued(server, ticket.as_str()) + 1).to_string();
     if let Err(e) = set_ticket_fields(server, ticket, &[("continued", &next)]) {
         tracing::warn!("counting a continue of ticket {ticket}: {e}");
     }
@@ -1210,6 +1211,7 @@ fn page_project(server: &Server, page: &Page, worker: &Session) -> Option<String
 }
 
 fn ticket_page(server: &Server, id: &str) -> Result<Page, String> {
+    let id = &TicketId::parse(id)?;
     let url = ticket_url(id).map_err(|e| e.to_string())?;
     server.web.read_page(&url).map_err(|_| {
         format!("no ticket {id}; create it with `run orchestration new-ticket <title>`")

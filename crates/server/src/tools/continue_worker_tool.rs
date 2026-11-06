@@ -3,7 +3,7 @@ use serde_json::{Value, json};
 
 use crate::tools::args::SteerWorkerArgs;
 use crate::tools::{Tool, ToolContext};
-use crate::worker::ticket::normalize_id;
+use crate::worker::ticket::TicketId;
 
 pub struct ContinueWorkerTool;
 
@@ -47,7 +47,7 @@ impl Tool for ContinueWorkerTool {
             .workers
             .go_on(
                 server,
-                &normalize_id(&args.ticket),
+                TicketId::parse(&args.ticket)?.as_str(),
                 args.message,
                 args.compact,
             )

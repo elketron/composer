@@ -6,14 +6,14 @@ use composer_protocol::http::ProjectDiff;
 
 use crate::project::{TicketBranch, project_diff};
 use crate::server::Server;
-use crate::worker::ticket::{set_ticket_fields, ticket_url};
+use crate::worker::ticket::{TicketId, set_ticket_fields, ticket_url};
 
 /// The ticket's changes against where its branch left the target branch (`into`, default: the
 /// project's checked-out branch; the ticket's `merge_into:` frontmatter counts as an `into`),
 /// with what merging it would do.
 pub async fn ticket_changes(
     server: &Server,
-    ticket: &str,
+    ticket: &TicketId,
     into: Option<&str>,
 ) -> Result<ProjectDiff, String> {
     let branch = ticket_branch(server, ticket)?;
@@ -27,7 +27,12 @@ pub async fn ticket_changes(
 /// Merges the ticket's branch into the target branch (`into`, default: the ticket's
 /// `merge_into:` frontmatter, else the project's checked-out branch) and removes its worktree
 /// and branch. Returns the merge commit.
-pub fn merge_ticket(server: &Server, ticket: &str, into: Option<&str>) -> Result<String, String> {
+pub fn merge_ticket(
+    server: &Server,
+    ticket: &TicketId,
+    into: Option<&str>,
+) -> Result<String, String> {
+    has_page(server, ticket)?;
     let branch = ticket_branch(server, ticket)?;
     not_running(server, ticket)?;
     let title = ticket_title(server, ticket);
@@ -38,7 +43,8 @@ pub fn merge_ticket(server: &Server, ticket: &str, into: Option<&str>) -> Result
 }
 
 /// Throws the ticket's branch and worktree away.
-pub fn discard_ticket(server: &Server, ticket: &str) -> Result<(), String> {
+pub fn discard_ticket(server: &Server, ticket: &TicketId) -> Result<(), String> {
+    has_page(server, ticket)?;
     let branch = ticket_branch(server, ticket)?;
     not_running(server, ticket)?;
     branch.discard()?;
@@ -46,7 +52,7 @@ pub fn discard_ticket(server: &Server, ticket: &str) -> Result<(), String> {
 }
 
 /// Whether the ticket's branch is gone already (merged or discarded): it can't be resumed.
-pub fn ticket_closed(server: &Server, ticket: &str) -> Option<String> {
+pub fn ticket_closed(server: &Server, ticket: &TicketId) -> Option<String> {
     let page = server.web.read_page(&ticket_url(ticket).ok()?).ok()?;
     if let Some(commit) = page.frontmatter.get_str("merged").filter(|c| !c.is_empty()) {
         return Some(format!("ticket {ticket} was merged ({commit})"));
@@ -56,7 +62,7 @@ pub fn ticket_closed(server: &Server, ticket: &str) -> Option<String> {
 }
 
 /// Where this ticket's work lands: the explicit `into`, else its `merge_into:` frontmatter.
-pub fn merge_target(server: &Server, ticket: &str, into: Option<&str>) -> Option<String> {
+pub fn merge_target(server: &Server, ticket: &TicketId, into: Option<&str>) -> Option<String> {
     into.map(|s| s.to_string()).or_else(|| {
         ticket_url(ticket)
             .ok()
@@ -66,7 +72,7 @@ pub fn merge_target(server: &Server, ticket: &str, into: Option<&str>) -> Option
     })
 }
 
-fn ticket_branch(server: &Server, ticket: &str) -> Result<TicketBranch, String> {
+fn ticket_branch(server: &Server, ticket: &TicketId) -> Result<TicketBranch, String> {
     let root = server.home.state().join("worktrees");
     match TicketBranch::find(&root, ticket)? {
         Some(branch) => Ok(branch),
@@ -80,12 +86,21 @@ fn ticket_branch(server: &Server, ticket: &str) -> Result<TicketBranch, String> 
     }
 }
 
-fn not_running(server: &Server, ticket: &str) -> Result<(), String> {
+/// The ticket's page must be there before git touches its branch: merging or discarding records
+/// itself on the page, and a ticket without one isn't this workspace's to merge.
+fn has_page(server: &Server, ticket: &TicketId) -> Result<(), String> {
+    let url = ticket_url(ticket).map_err(|e| e.to_string())?;
+    server.web.read_page(&url).map(|_| ()).map_err(|_| {
+        format!("there is no ticket {ticket} ({url}): nothing was merged or discarded")
+    })
+}
+
+fn not_running(server: &Server, ticket: &TicketId) -> Result<(), String> {
     if server
         .workers
         .running()
         .iter()
-        .any(|(_, handle)| handle.ticket == ticket)
+        .any(|(_, handle)| handle.ticket == ticket.as_str())
     {
         return Err(format!(
             "ticket {ticket}'s worker is still running; wait for it or cancel it first"
@@ -94,7 +109,7 @@ fn not_running(server: &Server, ticket: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn ticket_title(server: &Server, ticket: &str) -> String {
+fn ticket_title(server: &Server, ticket: &TicketId) -> String {
     ticket_url(ticket)
         .ok()
         .and_then(|url| server.web.read_page(&url).ok())

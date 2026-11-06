@@ -13,6 +13,7 @@ use crate::pipeline::types::FINISHED;
 use crate::pipeline::work::Work;
 use crate::server::Server;
 use crate::session::Session;
+use crate::worker::ticket::TicketId;
 use crate::worker::ticket::{set_field, ticket_url};
 
 /// The agent a stage runs as unless its contract names another.
@@ -147,7 +148,7 @@ pub async fn run_stage(
     set_stage_fields(server, &work, &contract.name, &fields);
     let worker = match server
         .workers
-        .spawn(server, parent, &ticket, None, None)
+        .spawn(server, parent, &TicketId::parse(&ticket)?, None, None)
         .await
     {
         Ok((worker, _)) => worker,
@@ -253,7 +254,7 @@ fn new_ticket(
         .max()
         .unwrap_or(0);
     let id = format!("{:04}", last + 1);
-    let url = ticket_url(&id).map_err(|e| e.to_string())?;
+    let url = ticket_url(&TicketId::parse(&id)?).map_err(|e| e.to_string())?;
     let text = fm.replacen(
         "type: ticket\n",
         &format!("type: ticket\nid: \"{id}\"\n"),

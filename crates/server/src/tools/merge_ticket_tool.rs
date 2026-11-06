@@ -11,7 +11,7 @@ use crate::server::Server;
 use crate::session::{Session, submit};
 use crate::tools::args::MergeTicketArgs;
 use crate::tools::{Tool, ToolContext};
-use crate::worker::ticket::normalize_id;
+use crate::worker::ticket::TicketId;
 use crate::worker::{merge_ticket, ticket_changes};
 
 pub struct MergeTicketTool;
@@ -45,7 +45,7 @@ impl Tool for MergeTicketTool {
 
     async fn call(&self, context: &ToolContext, args: Value) -> Result<String, String> {
         let args: MergeTicketArgs = serde_json::from_value(args).map_err(|e| e.to_string())?;
-        let ticket = normalize_id(&args.ticket);
+        let ticket = TicketId::parse(&args.ticket)?;
         let server = &context.server;
         if server.parent.is_some() || context.session.info().ticket.is_some() {
             return Err("workers cannot merge tickets".into());
@@ -106,7 +106,7 @@ impl Tool for MergeTicketTool {
 async fn ask_and_merge(
     server: Arc<Server>,
     orchestrator: Arc<Session>,
-    ticket: String,
+    ticket: TicketId,
     target: String,
     title: String,
     body: String,
