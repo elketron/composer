@@ -76,13 +76,13 @@ impl Two {
         two
     }
 
-    fn a(&self) -> &Arc<Server> {
+    fn a(&self) -> Arc<Server> {
         self.host
             .workspace(&WorkspaceName::default_workspace())
             .unwrap()
     }
 
-    fn b(&self) -> &Arc<Server> {
+    fn b(&self) -> Arc<Server> {
         self.host
             .workspace(&WorkspaceName::new("b").unwrap())
             .unwrap()
@@ -188,7 +188,7 @@ async fn search_never_shows_pages_of_another_workspaces_project() {
     let (a, b) = (two.a(), two.b());
     a.use_project(&two.project("y")).unwrap();
 
-    let found = two.search(a, "okapi").await;
+    let found = two.search(&a, "okapi").await;
     assert!(found.iter().any(|u| u.contains("mnt-y")), "{found:?}");
     assert!(found.iter().any(|u| u.contains("mnt-z")), "{found:?}");
     assert!(
@@ -198,7 +198,7 @@ async fn search_never_shows_pages_of_another_workspaces_project() {
 
     // Once b claims z, a's index lets go of it too.
     b.use_project(&two.project("z")).unwrap();
-    let found = two.search(a, "okapi").await;
+    let found = two.search(&a, "okapi").await;
     assert!(
         !found.iter().any(|u| u.contains("mnt-z")),
         "z is b's now: {found:?}"

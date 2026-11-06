@@ -43,7 +43,7 @@ async fn two_workspaces() -> (tempfile::TempDir, Arc<Host>, SocketAddr) {
     (dir, host, addr)
 }
 
-fn server<'a>(host: &'a Host, name: &str) -> &'a Arc<Server> {
+fn server(host: &Host, name: &str) -> Arc<Server> {
     host.workspace(&WorkspaceName::new(name).unwrap()).unwrap()
 }
 
