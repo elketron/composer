@@ -20,6 +20,7 @@ use crate::tools::new_project_tool::NewProjectTool;
 use crate::tools::new_site_tool::NewSiteTool;
 use crate::tools::new_work_tool::NewWorkTool;
 use crate::tools::open_tool::OpenTool;
+use crate::tools::publish_site_tool::PublishSiteTool;
 use crate::tools::run_stage_tool::RunStageTool;
 use crate::tools::run_tool::RunTool;
 use crate::tools::search_tool::SearchTool;
@@ -56,6 +57,7 @@ impl ToolRegistry {
                 Arc::new(RunStageTool),
                 Arc::new(SpawnWorkerTool),
                 Arc::new(MergeTicketTool),
+                Arc::new(PublishSiteTool),
                 Arc::new(ContinueWorkerTool),
                 Arc::new(StopWorkerTool),
                 Arc::new(AnswerApprovalTool),

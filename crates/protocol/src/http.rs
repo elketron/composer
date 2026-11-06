@@ -438,3 +438,24 @@ pub struct LibraryChange {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub review: Option<String>,
 }
+
+/// `library.publish`'s plan: what publishing a workspace site to the library would do.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct LibraryPublishPlan {
+    /// The workspace's site.
+    pub site: String,
+    /// Its name in the library.
+    pub name: String,
+    /// The library has no such site yet.
+    pub new_site: bool,
+    /// The files that differ from the library (`outcome`: `added`, `changed`, `removed`).
+    pub changes: Vec<LibraryChange>,
+    /// Top-level entries of the site that are not published (works, tickets, pages).
+    pub left_out: Vec<String>,
+    /// The whole plan as text, diff included: what to show before asking.
+    pub text: String,
+    /// Pass back as `approved` to publish exactly this.
+    pub digest: String,
+}

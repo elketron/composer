@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use crate::actions::Approvals;
 use crate::home::Home;
 use crate::init::{approve_recipes_in, stock_file, write_creating_dirs};
-use crate::library::{Installed, InstalledSites, Library, LibraryCommit, SiteName};
+use crate::library::{Installed, InstalledSites, Library, LibraryCommit, PublishPlan, SiteName};
 use crate::update::{Merge, UpdateItem, UpdateOutcome, merge_three};
 use crate::workspace_home::WorkspaceHome;
 
@@ -135,6 +135,73 @@ impl WorkspaceLibrary {
             files: files.len(),
             has_ui: files.iter().any(|f| f.starts_with("ui")),
         })
+    }
+
+    /// What publishing workspace site `site` to the library (as `name`, default the same) would
+    /// do: see [`PublishPlan`]. Reads only.
+    pub fn plan_publish(
+        &self,
+        site: &SiteName,
+        name: Option<&SiteName>,
+    ) -> Result<PublishPlan, String> {
+        let dir = self.workspace.sites().join(site.as_str());
+        let installed = self.installed()?;
+        PublishPlan::make(&self.library, &installed, site, &dir, name.unwrap_or(site))
+    }
+
+    /// Publishes workspace site `site` to the library (as `name`): its definition only, and only
+    /// when it is still exactly what was approved (`approved` is the plan's digest). The library's
+    /// copy is replaced by the definition, committed, and this workspace's copy is recorded as
+    /// installed at that commit. The one write that leaves a workspace: callers ask the user.
+    pub fn publish(
+        &self,
+        site: &SiteName,
+        name: Option<&SiteName>,
+        approved: &str,
+    ) -> Result<PublishPlan, String> {
+        let plan = self.plan_publish(site, name)?;
+        if plan.digest != approved {
+            return Err(format!(
+                "site://{site} changed since the publish was approved: look at it again and \
+                 approve what it is now"
+            ));
+        }
+        if plan.changes.is_empty() {
+            return Err(format!(
+                "nothing to publish: the library's `{}` is the same as site://{site}",
+                plan.name
+            ));
+        }
+        // Whatever was edited in the library by hand goes in a commit of its own.
+        self.library
+            .record("library: changes made before a publish")?;
+        let dest = self.library.root().join(plan.name.as_str());
+        if dest.exists() {
+            std::fs::remove_dir_all(&dest).map_err(|e| format!("{}: {e}", dest.display()))?;
+        }
+        let source = self.workspace.sites().join(site.as_str());
+        for rel in &plan.files {
+            let bytes = std::fs::read(source.join(rel))
+                .map_err(|e| format!("{site}/{}: {e}", rel.display()))?;
+            write_creating_dirs(&dest.join(rel), &bytes).map_err(|e| e.to_string())?;
+        }
+        let message = format!(
+            "publish: {} from workspace {} (site {site})",
+            plan.name,
+            self.workspace.name()
+        );
+        let commit = self
+            .library
+            .record(&message)?
+            .ok_or("nothing changed in the library")?;
+        self.installed()?.set(
+            site.clone(),
+            Installed {
+                from: plan.name.clone(),
+                commit,
+            },
+        )?;
+        Ok(plan)
     }
 
     /// Records `sites` (already in the workspace) as installed from the same library sites at

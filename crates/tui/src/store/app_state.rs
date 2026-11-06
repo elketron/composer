@@ -587,6 +587,7 @@ impl AppState {
                         ApprovalKind::Tool => format!("tool-{}.txt", a.request),
                         ApprovalKind::Mcp => format!("mcp-{}.json", a.request),
                         ApprovalKind::Amendment => format!("amendment-{}.diff", a.request),
+                        ApprovalKind::Publish => format!("publish-{}.diff", a.request),
                     },
                     text: a.body.clone(),
                 }],

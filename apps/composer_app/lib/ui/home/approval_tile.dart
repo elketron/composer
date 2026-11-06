@@ -27,6 +27,7 @@ class ApprovalTile extends StatelessWidget {
       ApprovalKind.tool => ' wants to use a tool',
       ApprovalKind.mcp => ' wants to use an MCP tool',
       ApprovalKind.amendment => ' proposes a change from your edits',
+      ApprovalKind.publish => ' asks to publish a site to the library',
     };
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),

@@ -197,6 +197,9 @@ pub enum ApprovalKind {
     Amendment,
     /// A call to an MCP server's tool (`rule`: the tool, for `always`; it holds everywhere).
     Mcp,
+    /// Publishing a workspace site to the library (the only write that leaves a workspace).
+    /// Asked every time: `always` counts as one yes and is never remembered.
+    Publish,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
