@@ -10,6 +10,7 @@ use tokio::net::TcpListener;
 
 use crate::error::{Result, ServerError};
 use crate::home::Home;
+use crate::project::{ProjectOwnership, ProjectPath};
 use crate::server::{Server, shutdown_signal};
 use crate::workspace_name::WorkspaceName;
 
@@ -48,16 +49,27 @@ impl Host {
             let server = Server::start(home.workspace(&name)).await?;
             workspaces.insert(name, server);
         }
-        Ok(Self::new(home, workspaces))
+        Self::new(home, workspaces)
     }
 
-    /// A host over servers already started (each one's [`Server::home`] is its workspace).
-    pub fn new(home: Home, workspaces: BTreeMap<WorkspaceName, Arc<Server>>) -> Self {
-        assert!(
-            !workspaces.is_empty(),
-            "a host serves at least one workspace"
-        );
-        Self { home, workspaces }
+    /// A host over servers already started (each one's [`Server::home`] is its workspace). They
+    /// share one project ownership index (`state/projects.json`), and each workspace claims the
+    /// projects its config names (`[projects."<path>"]`): two workspaces naming the same project,
+    /// or nested ones, is an error that names both.
+    pub fn new(home: Home, workspaces: BTreeMap<WorkspaceName, Arc<Server>>) -> Result<Self> {
+        if workspaces.is_empty() {
+            return Err(ServerError::Invalid(
+                "a host serves at least one workspace".into(),
+            ));
+        }
+        let ownership = Arc::new(ProjectOwnership::load(home.projects_file()));
+        for server in workspaces.values() {
+            server.share_ownership(ownership.clone())?;
+        }
+        for (name, server) in &workspaces {
+            claim_configured_projects(name, server, &ownership)?;
+        }
+        Ok(Self { home, workspaces })
     }
 
     pub fn home(&self) -> &Home {
@@ -159,4 +171,25 @@ fn presented_token(headers: &HeaderMap, uri: &Uri) -> Option<String> {
 
 fn not_found() -> Response {
     (StatusCode::NOT_FOUND, "not found").into_response()
+}
+
+/// Claims the projects `server`'s config names for its workspace.
+fn claim_configured_projects(
+    name: &WorkspaceName,
+    server: &Server,
+    ownership: &ProjectOwnership,
+) -> Result<()> {
+    let config = server.config();
+    for key in config.projects.settings.keys() {
+        let Ok(project) = ProjectPath::resolve(key, &config.projects.dir) else {
+            tracing::warn!("workspace {name}: [projects.\"{key}\"] is not a folder; skipped");
+            continue;
+        };
+        ownership.claim(&project, name).map_err(|e| {
+            ServerError::Invalid(format!(
+                "workspace {name}'s config.toml names [projects.\"{key}\"], but {e}"
+            ))
+        })?;
+    }
+    Ok(())
 }

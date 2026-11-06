@@ -27,7 +27,7 @@ async fn two_workspaces() -> (tempfile::TempDir, Arc<Host>, SocketAddr) {
         let provider = Arc::new(MockProvider::new(vec![]));
         servers.insert(name, Server::new(workspace, config, provider).unwrap());
     }
-    let host = Arc::new(Host::new(home, servers));
+    let host = Arc::new(Host::new(home, servers).unwrap());
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let serving = host.clone();

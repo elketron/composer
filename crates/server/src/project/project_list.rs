@@ -8,6 +8,7 @@ use std::time::SystemTime;
 use composer_protocol::http::ProjectSummary;
 use composer_protocol::{ServerMessage, SessionInfo, TurnState, WorkerState};
 
+use crate::project::ProjectPath;
 use crate::server::Server;
 use crate::tools::{expand_home, tilde};
 
@@ -35,6 +36,10 @@ pub fn project_list(server: &Server, query: &str) -> Vec<ProjectSummary> {
             continue;
         };
         if name.starts_with('.') || !entry.file_type().is_ok_and(|t| t.is_dir()) {
+            continue;
+        }
+        // Another workspace's project isn't this workspace's to list.
+        if ProjectPath::existing(&entry.path()).is_ok_and(|p| server.owned_elsewhere(&p)) {
             continue;
         }
         let folder = canonical(&entry.path());

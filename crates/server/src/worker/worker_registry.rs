@@ -22,7 +22,7 @@ use crate::harness::{
 use crate::project::{Worktree, ticket_worktree};
 use crate::server::Server;
 use crate::session::{Session, submit};
-use crate::tools::{ToolContext, resolve_project};
+use crate::tools::ToolContext;
 use crate::worker::ending::Ending;
 use crate::worker::ticket::{set_field, set_status, set_ticket_fields, ticket_url};
 use crate::worker::{StopReason, WorkerHandle, ticket_closed};
@@ -1195,7 +1195,7 @@ fn ticket_project(server: &Server, page: &Page, parent_project: Option<String>) 
     page.frontmatter
         .get_str("project")
         .filter(|p| !p.is_empty())
-        .and_then(|p| resolve_project(&p, &server.config().projects.dir).ok())
+        .and_then(|p| server.use_project(&p).ok())
         .or(parent_project)
 }
 

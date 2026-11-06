@@ -11,7 +11,7 @@ use crate::pipeline::pipeline::Pipeline;
 use crate::pipeline::work::Work;
 use crate::server::Server;
 use crate::tools::scaffold::copy_template;
-use crate::tools::{add_to_home, resolve_project, tilde};
+use crate::tools::{add_to_home, tilde};
 
 /// Replaced by the pipeline site's name in every template file.
 const PLACEHOLDER: &str = "__PIPELINE__";
@@ -172,10 +172,7 @@ pub fn new_work(server: &Server, new: NewWork, by: ChangedBy) -> Result<Work, St
         return Err(format!("site://{site}/{name}/ already exists"));
     }
     let project = match new.project.map(str::trim).filter(|p| !p.is_empty()) {
-        Some(p) => Some(tilde(Path::new(&resolve_project(
-            p,
-            &server.config().projects.dir,
-        )?))),
+        Some(p) => Some(tilde(Path::new(&server.use_project(p)?))),
         None if pipeline.needs_project => {
             return Err(format!(
                 "a {site} work links a project: give `project` (a name in the projects directory or a path)"

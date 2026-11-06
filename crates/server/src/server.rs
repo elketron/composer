@@ -20,6 +20,7 @@ use crate::hash::content_hash;
 use crate::hub::EventHub;
 use crate::init::local_token;
 use crate::mcp_clients::McpServers;
+use crate::project::{ProjectOwnership, ProjectPath};
 use crate::provider::{OpenAiProvider, Provider};
 use crate::session::{Session, SessionManager};
 use crate::slot_pool::SlotPool;
@@ -67,6 +68,8 @@ pub struct Server {
     listen_addr: OnceLock<SocketAddr>,
     /// Where this workspace's routes are mounted (`/w/<name>`, or empty when served alone).
     route_base: OnceLock<String>,
+    /// Which workspace owns which project: the host's index, shared by all its workspaces.
+    ownership: OnceLock<Arc<ProjectOwnership>>,
     /// Hash of each file as we last saw or wrote it; tells the watcher which changes are ours.
     known_hashes: Mutex<HashMap<PathBuf, String>>,
     watcher: Mutex<Option<notify::RecommendedWatcher>>,
@@ -159,6 +162,7 @@ impl Server {
             worker_finished: AtomicBool::new(false),
             listen_addr: OnceLock::new(),
             route_base: OnceLock::new(),
+            ownership: OnceLock::new(),
             index: RwLock::new(index),
             known_hashes: Mutex::new(HashMap::new()),
             watcher: Mutex::new(None),
@@ -265,6 +269,46 @@ impl Server {
 
     pub fn mark_worker_finished(&self) {
         self.worker_finished.store(true, Ordering::SeqCst);
+    }
+
+    /// Joins the host's project ownership index (before serving). Fails if this server already
+    /// started using an index of its own.
+    pub fn share_ownership(&self, shared: Arc<ProjectOwnership>) -> Result<()> {
+        self.ownership.set(shared.clone()).map_err(|_| {
+            ServerError::Invalid("project ownership was set up before joining the host".into())
+        })?;
+        // A mount in this web may not point into another workspace's project.
+        let workspace = self.home.name().clone();
+        self.web
+            .set_mount_guard(Arc::new(move |target| shared.refuses(target, &workspace)));
+        Ok(())
+    }
+
+    fn ownership(&self) -> &Arc<ProjectOwnership> {
+        self.ownership
+            .get_or_init(|| Arc::new(ProjectOwnership::in_memory()))
+    }
+
+    /// The project `path` names (a name in the projects directory, `~/...` or absolute), for
+    /// working in it: claimed for this workspace if no workspace owns it yet, refused if another
+    /// one does (or owns a folder it is nested in or contains).
+    pub fn use_project(&self, path: &str) -> std::result::Result<String, String> {
+        let project = ProjectPath::resolve(path, &self.config().projects.dir)?;
+        self.ownership().claim(&project, self.home.name())?;
+        Ok(project.to_string())
+    }
+
+    /// Like [`Server::use_project`] for looking only: refused if another workspace owns it,
+    /// nothing claimed.
+    pub fn see_project(&self, path: &str) -> std::result::Result<String, String> {
+        let project = ProjectPath::resolve(path, &self.config().projects.dir)?;
+        self.ownership().check(&project, self.home.name())?;
+        Ok(project.to_string())
+    }
+
+    /// Whether another workspace owns `project` (for leaving it out of listings).
+    pub fn owned_elsewhere(&self, project: &ProjectPath) -> bool {
+        self.ownership().check(project, self.home.name()).is_err()
     }
 
     /// Where this workspace's routes are mounted: `/w/<name>`, or `""` when it is served alone.

@@ -18,7 +18,6 @@ use crate::harness::{PERMISSION_TOOL, WorkerSink, answer_permission, permission_
 use crate::server::Server;
 use crate::session::{compact_now, submit};
 use crate::slot_guard::SlotGuard;
-use crate::tools::resolve_project;
 use crate::worker::ticket::normalize_id;
 
 /// One client's WebSocket: what it attached to and subscribed to.
@@ -167,7 +166,7 @@ impl Connection {
             ClientCommand::HarnessSet { project, entry, on } => {
                 let (connection, server) = (self.clone(), server.clone());
                 tokio::spawn(async move {
-                    let result = match resolve_project(&project, &server.config().projects.dir) {
+                    let result = match server.use_project(&project) {
                         Ok(folder) => server
                             .workers
                             .switch(&server, &folder, &entry, on)
@@ -455,7 +454,7 @@ impl Connection {
                 AgentDefinition::load(&server.web, &agent).map_err(|e| e.to_string())?;
                 let project = project
                     .as_deref()
-                    .map(|p| resolve_project(p, &server.config().projects.dir))
+                    .map(|p| server.use_project(p))
                     .transpose()?;
                 let session = server
                     .sessions
@@ -563,7 +562,7 @@ impl Connection {
                 let project = path
                     .as_deref()
                     .filter(|p| !p.trim().is_empty())
-                    .map(|p| resolve_project(p, &server.config().projects.dir))
+                    .map(|p| server.use_project(p))
                     .transpose()?;
                 s.update_info(&server.hub, |info| info.project = project);
                 Ok(CommandResult::Session { session: s.info() })
@@ -641,7 +640,7 @@ impl Connection {
             )
             .map(|w| CommandResult::Work { work: w.summary() }),
             ClientCommand::HarnessList { project } => {
-                let folder = resolve_project(&project, &server.config().projects.dir)?;
+                let folder = server.see_project(&project)?;
                 Ok(CommandResult::Harnesses {
                     harnesses: server.workers.switches(server, &folder),
                     project: folder,

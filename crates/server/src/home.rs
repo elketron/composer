@@ -64,6 +64,11 @@ impl Home {
         self.state().join("token")
     }
 
+    /// Which workspace owns which project folder.
+    pub fn projects_file(&self) -> PathBuf {
+        self.state().join("projects.json")
+    }
+
     pub fn workspaces_dir(&self) -> PathBuf {
         self.root.join("workspaces")
     }
