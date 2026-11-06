@@ -64,7 +64,7 @@ pub const COMMANDS: [(&str, &str); 23] = [
     ),
     (
         ":file <path>|clear",
-        "attach a file to the message (or paste its path while writing); clear removes them",
+        "attach a file to the message (or paste or drop its path); clear removes them",
     ),
     (":open <url>", "open a page, e.g. :open memory/user"),
     (

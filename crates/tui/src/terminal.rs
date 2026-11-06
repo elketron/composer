@@ -6,8 +6,8 @@ use crossterm::event::{
 };
 use ratatui::DefaultTerminal;
 
-/// Raw mode, alternate screen, bracketed paste (a pasted path arrives in one piece, so it can
-/// become an attachment) and the mouse (selecting within a pane, the wheel). Shift-drag still
+/// Raw mode, alternate screen, bracketed paste (a pasted or dropped path arrives in one
+/// piece, so it can become an attachment) and the mouse (selecting within a pane, the wheel). Shift-drag still
 /// selects the terminal's way in most terminals.
 pub fn init() -> DefaultTerminal {
     let terminal = ratatui::init();

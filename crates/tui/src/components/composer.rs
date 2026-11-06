@@ -12,7 +12,7 @@ use crate::action::Action;
 use crate::components::Component;
 use crate::row::Row;
 use crate::store::AppState;
-use crate::store::types::{Mode, UploadState};
+use crate::store::types::{FlashLevel, Mode, UploadState};
 use crate::theme;
 
 /// The message input. The text being typed is local state until it is sent.
@@ -42,11 +42,18 @@ impl Composer {
         lines.max(2) + 2 + files
     }
 
-    /// Pasted text (bracketed paste): paths of existing files become attachments, anything
-    /// else is typed in.
-    pub fn paste(&mut self, text: &str) -> Vec<Action> {
-        if let Some(paths) = pasted_paths(text) {
-            return paths.into_iter().map(Action::AttachPath).collect();
+    /// Pasted text (bracketed paste — a terminal also hands a dropped file over this way,
+    /// even when nothing is being typed): paths of existing files become attachments, a
+    /// path that cannot be read flashes an error and attaches nothing, anything else is
+    /// typed in while writing.
+    pub fn paste(&mut self, text: &str, writing: bool) -> Vec<Action> {
+        match pasted_paths(text) {
+            Ok(Some(paths)) => return paths.into_iter().map(Action::AttachPath).collect(),
+            Err(why) => return vec![Action::Flash(why, FlashLevel::Warn)],
+            Ok(None) => {}
+        }
+        if !writing {
+            return vec![];
         }
         for c in text.replace("\r\n", "\n").replace('\r', "\n").chars() {
             self.insert(c);
@@ -233,36 +240,50 @@ fn file_chips(state: &AppState) -> Line<'static> {
     Line::from(spans)
 }
 
-/// Pasted text that is only paths of existing files (one per line; quoted, `file://` or
-/// `~/` and shell-escaped spaces as terminals and file managers paste them), as paths.
-pub fn pasted_paths(text: &str) -> Option<Vec<String>> {
+/// Pasted text that is only paths of existing readable files (one per line; quoted,
+/// `file://` or `~/` and shell-escaped spaces as terminals and file managers paste them,
+/// and as a terminal hands a dropped file to the program), as paths. A path of a file
+/// that is there but cannot be read is an `Err` (a clear error, nothing attached); text
+/// that is not all paths is `Ok(None)`.
+pub fn pasted_paths(text: &str) -> Result<Option<Vec<String>>, String> {
     let lines: Vec<&str> = text
         .lines()
         .map(str::trim)
         .filter(|l| !l.is_empty())
         .collect();
     if lines.is_empty() || lines.len() > 20 {
-        return None;
+        return Ok(None);
     }
-    lines
-        .into_iter()
-        .map(|line| {
-            let line = line
-                .strip_prefix(['\'', '"'])
-                .and_then(|l| l.strip_suffix(['\'', '"']))
-                .unwrap_or(line);
-            let path = match line.strip_prefix("file://") {
-                Some(rest) => percent_decode(rest),
-                None => line.replace("\\ ", " "),
-            };
-            let path = match path.strip_prefix("~/") {
-                Some(rest) => format!("{}/{rest}", std::env::var("HOME").ok()?),
-                None => path,
-            };
-            let candidate = std::path::Path::new(&path);
-            (candidate.is_absolute() && candidate.is_file()).then_some(path)
-        })
-        .collect()
+    let mut paths = Vec::new();
+    for line in lines {
+        let path = one_path(line);
+        let Some(path) = path else {
+            return Ok(None);
+        };
+        if let Err(e) = std::fs::File::open(&path) {
+            return Err(format!("cannot read {path}: {e}"));
+        }
+        paths.push(path);
+    }
+    Ok(Some(paths))
+}
+
+/// One line as the path of an existing file, or `None`.
+fn one_path(line: &str) -> Option<String> {
+    let line = line
+        .strip_prefix(['\'', '"'])
+        .and_then(|l| l.strip_suffix(['\'', '"']))
+        .unwrap_or(line);
+    let path = match line.strip_prefix("file://") {
+        Some(rest) => percent_decode(rest),
+        None => line.replace("\\ ", " "),
+    };
+    let path = match path.strip_prefix("~/") {
+        Some(rest) => format!("{}/{rest}", std::env::var("HOME").ok()?),
+        None => path,
+    };
+    let candidate = std::path::Path::new(&path);
+    (candidate.is_absolute() && candidate.is_file()).then_some(path)
 }
 
 /// `%20` and friends in a `file://` URL.
@@ -435,21 +456,69 @@ mod tests {
         let file = tmp.path().join("my notes.md");
         std::fs::write(&file, "x").unwrap();
         let plain = file.display().to_string();
-        assert_eq!(pasted_paths(&plain), Some(vec![plain.clone()]));
+        assert_eq!(pasted_paths(&plain), Ok(Some(vec![plain.clone()])));
         assert_eq!(
             pasted_paths(&format!("'{plain}'\n")),
-            Some(vec![plain.clone()])
+            Ok(Some(vec![plain.clone()]))
         );
         assert_eq!(
             pasted_paths(&plain.replace(' ', "\\ ")),
-            Some(vec![plain.clone()])
+            Ok(Some(vec![plain.clone()]))
         );
         let url = format!("file://{}", plain.replace(' ', "%20"));
-        assert_eq!(pasted_paths(&url), Some(vec![plain.clone()]));
+        assert_eq!(pasted_paths(&url), Ok(Some(vec![plain.clone()])));
+        // A drop of several files arrives as one paste with a path per line.
+        let second = tmp.path().join("b.png");
+        std::fs::write(&second, "x").unwrap();
+        assert_eq!(
+            pasted_paths(&format!("{plain}\n{}", second.display())),
+            Ok(Some(vec![plain.clone(), second.display().to_string()]))
+        );
         // Text, a folder, a missing file, or a mix: typed in as text.
-        assert_eq!(pasted_paths("hello world"), None);
-        assert_eq!(pasted_paths(&tmp.path().display().to_string()), None);
-        assert_eq!(pasted_paths(&format!("{plain}\nand more")), None);
-        assert_eq!(pasted_paths("relative/path.md"), None);
+        assert_eq!(pasted_paths("hello world"), Ok(None));
+        assert_eq!(pasted_paths(&tmp.path().display().to_string()), Ok(None));
+        assert_eq!(pasted_paths(&format!("{plain}\nand more")), Ok(None));
+        assert_eq!(pasted_paths("relative/path.md"), Ok(None));
+    }
+
+    #[test]
+    fn a_dropped_path_attaches_even_while_not_typing() {
+        // A terminal hands a file drop over as a bracketed paste, whether or not the
+        // composer was writing when it landed.
+        let tmp = tempfile::tempdir().unwrap();
+        let file = tmp.path().join("photo.png");
+        std::fs::write(&file, "x").unwrap();
+        let plain = file.display().to_string();
+        let mut composer = Composer::new();
+        assert_eq!(
+            composer.paste(&format!("file://{plain}"), false),
+            vec![Action::AttachPath(plain.clone())]
+        );
+        assert_eq!(composer.text, "", "the path is not typed into the draft");
+        // Plain text while not writing: still ignored.
+        assert_eq!(composer.paste("hello", false), vec![]);
+        assert_eq!(composer.text, "");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn an_unreadable_path_errors_and_attaches_nothing() {
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = tempfile::tempdir().unwrap();
+        let file = tmp.path().join("secret.png");
+        std::fs::write(&file, "x").unwrap();
+        std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o000)).unwrap();
+        let plain = file.display().to_string();
+        let error = pasted_paths(&plain).unwrap_err();
+        assert!(error.starts_with("cannot read "), "{error}");
+        let mut composer = Composer::new();
+        let actions = composer.paste(&plain, true);
+        match actions.as_slice() {
+            [Action::Flash(why, FlashLevel::Warn)] => {
+                assert!(why.starts_with("cannot read "), "{why}")
+            }
+            other => panic!("expected one flash, got {other:?}"),
+        }
+        assert_eq!(composer.text, "", "the path is not typed in either");
     }
 }

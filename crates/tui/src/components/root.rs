@@ -150,13 +150,10 @@ impl Root {
         }
     }
 
-    /// Pasted text (bracketed paste): into the message while writing; otherwise ignored.
+    /// Pasted text (bracketed paste, and what a terminal hands a file drop over as):
+    /// paths attach in any mode; other text is typed in while writing.
     pub fn handle_paste(&mut self, text: &str, state: &AppState) -> Vec<Action> {
-        if state.mode() == Mode::Insert {
-            self.chat.composer.paste(text)
-        } else {
-            vec![]
-        }
+        self.chat.composer.paste(text, state.mode() == Mode::Insert)
     }
 }
 

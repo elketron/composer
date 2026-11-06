@@ -8,7 +8,7 @@
 //! snap chat              # writes chat.html + chat.txt
 //! keys <Space>p
 //! wait text pages
-//! paste /tmp/photo.jpg   # a bracketed paste (a file's path becomes an attachment)
+//! paste /tmp/photo.jpg   # a bracketed paste (a drop arrives as one; a path becomes an attachment)
 //! ```
 //!
 //! Keys use vim notation: `<Enter> <Esc> <Space> <Tab> <BS> <Up> <Down> <C-w> <A-Enter> <lt>`.
