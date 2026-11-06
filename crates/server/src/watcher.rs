@@ -27,21 +27,32 @@ const SITES_MAX_DELAY: Duration = Duration::from_secs(1);
 /// long as watching should last.
 pub fn watch(server: &Arc<Server>) -> Result<notify::RecommendedWatcher> {
     let (tx, mut rx) = mpsc::unbounded_channel();
-    let make = |tx: mpsc::UnboundedSender<(PathBuf, bool)>| {
-        notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
-            // Reads (inotify access/close-nowrite) are not changes; we read pages all the time.
-            if let Ok(event) = event.as_ref()
-                && !event.kind.is_access()
-            {
-                let created = event.kind.is_create();
-                for path in &event.paths {
-                    let _ = tx.send((path.clone(), created));
+    let make = |tx: mpsc::UnboundedSender<(PathBuf, bool)>, follow_symlinks: bool| {
+        let config = notify::Config::default().with_follow_symlinks(follow_symlinks);
+        notify::RecommendedWatcher::new(
+            move |event: notify::Result<notify::Event>| {
+                match event.as_ref() {
+                    // Reads (inotify access/close-nowrite) are not changes; we read pages all the time.
+                    Ok(event) if !event.kind.is_access() => {
+                        let created = event.kind.is_create();
+                        for path in &event.paths {
+                            let _ = tx.send((path.clone(), created));
+                        }
+                    }
+                    Ok(_) => {}
+                    // Errors reach here when the backend cannot watch something, e.g. the
+                    // inotify watch budget ran out (MaxFilesWatch): report, do not drop.
+                    Err(e) => tracing::warn!("file watch: {e}"),
                 }
-            }
-        })
+            },
+            config,
+        )
     };
+    // The root watcher follows no symlinks: a refused mount is not walked or watched at all,
+    // and every mount is watched through the mount watcher below (its own walk does follow,
+    // starting at the mount point, so events still carry the web's address for the file).
     let mut watcher =
-        make(tx.clone()).map_err(|e| ServerError::Invalid(format!("file watcher: {e}")))?;
+        make(tx.clone(), false).map_err(|e| ServerError::Invalid(format!("file watcher: {e}")))?;
     let root = server.workspace.root().to_path_buf();
     watcher
         .watch(&root, RecursiveMode::Recursive)
@@ -70,13 +81,12 @@ pub fn watch(server: &Arc<Server>) -> Result<notify::RecommendedWatcher> {
 
     let server = Arc::downgrade(server);
     tokio::spawn(async move {
-        // Mounts get their own watcher (mounted): the inotify backend does follow symlinks
-        // while walking at startup, but never attaches to a symlinked folder created while
-        // running (inotify reports the link, not the directory it leads to). Watching the
-        // mount path itself keeps the paths as they hang off the web root, which is how the
-        // web names them. The startup walk may already watch them; a double event lands on
-        // the same path and the hash check drops the copy.
-        let mut mounted = match make(tx.clone()) {
+        // Mounts get their own watcher (mounted), with follow on so its walk descends into
+        // the mount itself: the root watcher leaves symlinks alone, and the inotify backend
+        // never attaches to a symlinked folder created while running (it reports the link as
+        // a file, so the dynamic attach only fires for ISDIR). Watching the mount point keeps
+        // the paths as they hang off the web root, which is how the web names them.
+        let mut mounted = match make(tx.clone(), true) {
             Ok(watcher) => Some(watcher),
             Err(e) => {
                 tracing::warn!("mount watcher: {e}; mounted folders will not sync");

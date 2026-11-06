@@ -51,7 +51,8 @@ impl Workspace {
     }
 
     /// The same check as an error, naming the mount when a symlink is refused.
-    fn check(&self, path: &Path) -> Result<()> {
+    /// Public so the server's file routes guard their own reads the same way.
+    pub fn check(&self, path: &Path) -> Result<()> {
         self.mounts.check(path)
     }
 
@@ -145,12 +146,14 @@ impl Workspace {
 
     /// Every markdown page in the workspace.
     /// Skips hidden folders, `node_modules`, and each site's `ui/` folder.
-    /// Follows symlinks that land inside the web or an allowed root (scoped mounts);
-    /// a mount pointing elsewhere contributes no pages.
+    /// With an allowed list set, follows symlinks that land inside the web or an allowed
+    /// root (scoped mounts); a mount pointing elsewhere contributes no pages. Without an
+    /// allowed list, walks do not descend into symlinks, as before the feature.
     pub fn all_pages(&self) -> impl Iterator<Item = PathBuf> + '_ {
+        let follow = self.mounts.follows_links();
         WalkDir::new(&self.root)
             .min_depth(1)
-            .follow_links(true)
+            .follow_links(follow)
             .into_iter()
             .filter_entry(|e| {
                 let name = e.file_name().to_string_lossy();

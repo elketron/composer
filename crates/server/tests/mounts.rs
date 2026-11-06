@@ -183,3 +183,135 @@ async fn a_mount_outside_the_allowed_scope_is_refused() {
         "a refused mount contributes nothing to the index"
     );
 }
+// --- Review 0141: the HTTP file routes guard the mount gate too (R1, M1) ---
+
+#[tokio::test]
+async fn http_routes_refuse_a_mount_outside_the_allowed_scope() {
+    let projects = tempfile::tempdir().unwrap();
+    let config = Config::parse(&format!(
+        "[projects]\ndir = \"{}\"\n",
+        projects.path().display()
+    ))
+    .unwrap();
+    let (home, server, _p, addr) = start_with(config, vec![]).await;
+    let outside = tempfile::tempdir().unwrap();
+    std::fs::write(outside.path().join("secret.txt"), "top secret").unwrap();
+    std::os::unix::fs::symlink(outside.path(), home.path().join("sites/plans/elsewhere")).unwrap();
+
+    let client = reqwest::Client::new();
+    let base = format!("http://{addr}/api/files/plans/elsewhere");
+
+    let get = client
+        .get(format!("{base}/secret.txt"))
+        .bearer_auth(&server.token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        get.status(),
+        reqwest::StatusCode::FORBIDDEN,
+        "GET through a refused mount"
+    );
+    let body: serde_json::Value = get.json().await.unwrap();
+    assert!(
+        body["error"]
+            .as_str()
+            .unwrap_or("")
+            .contains("symlink that points outside"),
+        "{body}"
+    );
+
+    let put = client
+        .put(format!("{base}/planted.txt"))
+        .bearer_auth(&server.token)
+        .body("planted")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        put.status(),
+        reqwest::StatusCode::FORBIDDEN,
+        "PUT through a refused mount"
+    );
+    assert!(
+        !outside.path().join("planted.txt").exists(),
+        "a refused PUT wrote through the mount"
+    );
+
+    // serve_app (`/<site>/<path>`) answers 404 for an unbuilt site, and serves nothing
+    // through a refused mount either: a built app whose dist folder is a real folder is
+    // unaffected, a symlink inside dist that escapes is refused.
+    let dist = home.path().join("sites/plans/ui/dist");
+    std::fs::create_dir_all(&dist).unwrap();
+    std::fs::write(dist.join("index.html"), "<html>app</html>").unwrap();
+    std::fs::create_dir_all(outside.path().join("deep")).unwrap();
+    std::fs::write(outside.path().join("deep/blob.txt"), "blobbed").unwrap();
+    // plans/ui/dist/link -> the refused mount's tree (plans/elsewhere is the refused link,
+    // so a link to it from dist reaches the same refused path through the gate).
+    std::os::unix::fs::symlink(
+        home.path().join("sites/plans/elsewhere/deep"),
+        dist.join("link"),
+    )
+    .unwrap();
+    // The dist link itself points into plans/elsewhere, which is refused: serve_app must refuse too.
+    let resp = client
+        .get(format!(
+            "http://{addr}/plans/link/blob.txt?token={}",
+            server.token
+        ))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        resp.status(),
+        reqwest::StatusCode::FORBIDDEN,
+        "serve_app served through a refused mount"
+    );
+}
+
+#[tokio::test]
+async fn http_routes_read_and_write_through_an_allowed_mount() {
+    let projects = tempfile::tempdir().unwrap();
+    let config = Config::parse(&format!(
+        "[projects]\ndir = \"{}\"\n",
+        projects.path().display()
+    ))
+    .unwrap();
+    let (home, server, _p, addr) = start_with(config, vec![]).await;
+    let mounted = projects.path().join("ref2img");
+    std::fs::create_dir_all(&mounted).unwrap();
+    std::fs::write(mounted.join("view.json"), "{\"n\": 1}").unwrap();
+    std::os::unix::fs::symlink(&mounted, home.path().join("sites/plans/toolbox")).unwrap();
+
+    let client = reqwest::Client::new();
+    let base = format!("http://{addr}/api/files/plans/toolbox");
+    let get = client
+        .get(format!("{base}/view.json"))
+        .bearer_auth(&server.token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        get.status(),
+        reqwest::StatusCode::OK,
+        "GET through an allowed mount"
+    );
+    assert_eq!(get.text().await.unwrap(), "{\"n\": 1}");
+
+    let put = client
+        .put(format!("{base}/out.json"))
+        .bearer_auth(&server.token)
+        .body("{}")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        put.status(),
+        reqwest::StatusCode::OK,
+        "PUT through an allowed mount"
+    );
+    assert!(
+        mounted.join("out.json").exists(),
+        "the PUT did not land on the project side"
+    );
+}

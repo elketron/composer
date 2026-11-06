@@ -28,6 +28,10 @@ fn web_with_mounts(
     let outside = tempfile::tempdir().unwrap();
     fs::create_dir_all(web.path().join("widget")).unwrap();
     fs::write(web.path().join("widget/index.md"), "# Widget\n").unwrap();
+    // A real subfolder (not a mount): it belongs to the watched tree and must not be
+    // listed as a mount point, or the watcher would watch the web to itself twice (R2).
+    fs::create_dir_all(web.path().join("widget/notes/deep")).unwrap();
+    fs::write(web.path().join("widget/notes/deep/page.md"), "# Plain\n").unwrap();
     std::os::unix::fs::symlink(allowed_root.path(), web.path().join("widget/build")).unwrap();
     std::os::unix::fs::symlink(outside.path(), web.path().join("widget/outside")).unwrap();
     let mut allowed = allowed;
@@ -102,8 +106,13 @@ fn a_mount_outside_the_allowed_scope_is_refused_not_followed() {
     );
     let index = Index::build(&ws).unwrap();
     assert!(index.search(&Query::parse("type:mount-refused")).is_empty());
-    // Only the allowed mount is listed; the refused one is not a mount point.
+    // Only symlinks are mount points: the web's own folders are already on the watched tree.
     assert_eq!(ws.mount_points(), [web.path().join("widget/build")]);
+    // And the real subfolder's page is still listed (through the walk, not as a mount).
+    assert!(
+        ws.all_pages()
+            .any(|p| ws.url_for_path(&p).unwrap().to_string() == "site://widget/notes/deep/page.md")
+    );
 }
 
 #[test]
@@ -121,11 +130,12 @@ fn without_an_allowed_list_the_web_stays_lenient() {
             .title(),
         "Outside"
     );
+    // Walks do not descend into symlinks without an allowed list — as before the feature.
     assert!(
-        ws.all_pages()
+        !ws.all_pages()
             .filter_map(|p| ws.url_for_path(&p))
             .any(|u| u.to_string() == "site://widget/outside/page.md"),
-        "lenient mode follows any mount, as before the feature"
+        "lenient mode must not index through mounts (decision: gating on an allowed list)"
     );
     assert!(ws.mount_points().is_empty());
 }
@@ -157,4 +167,55 @@ fn widening_the_allowed_list_opens_the_mount() {
     // Narrowing it closes it again.
     ws.set_allowed(vec![allowed_root.path().to_path_buf()]);
     assert!(!ws.allows(&ws.root().join("widget/outside")));
+}
+
+#[test]
+fn a_link_inside_an_allowed_mount_that_escapes_is_refused() {
+    let (web, allowed_root, outside, ws) = web_with_mounts(vec![]);
+    // widget/build -> allowed_root (fine); allowed_root/escape -> outside (not fine).
+    fs::create_dir_all(allowed_root.path().join("escape")).unwrap();
+    std::os::unix::fs::symlink(outside.path(), allowed_root.path().join("escape/deeper")).unwrap();
+    fs::write(outside.path().join("secret.md"), "# Secret\n").unwrap();
+
+    let err = ws
+        .read_page(&url("site://widget/build/escape/deeper/secret"))
+        .unwrap_err();
+    assert!(
+        err.to_string().contains("symlink that points outside"),
+        "{err}"
+    );
+
+    let err = ws
+        .write_page(&url("site://widget/build/escape/deeper/new"), "# x\n")
+        .unwrap_err();
+    assert!(
+        err.to_string().contains("symlink that points outside"),
+        "{err}"
+    );
+    assert!(
+        !outside.path().join("new.md").exists(),
+        "a refused write writes nothing"
+    );
+
+    // A link straight through to an outside file is refused too.
+    std::os::unix::fs::symlink(
+        outside.path().join("secret.md"),
+        web.path().join("widget/leak.md"),
+    )
+    .unwrap();
+    let err = ws.read_page(&url("site://widget/leak")).unwrap_err();
+    assert!(
+        err.to_string().contains("symlink that points outside"),
+        "{err}"
+    );
+
+    // Nothing leaked into the listings either.
+    let index = Index::build(&ws).unwrap();
+    assert!(
+        index
+            .search(&Query::parse("Secret"))
+            .into_iter()
+            .all(|h| !h.url.to_string().contains("leak")),
+        "a refused link contributes no pages"
+    );
 }

@@ -25,6 +25,7 @@ impl From<ServerError> for ApiError {
             ServerError::Core(CoreError::InvalidUrl { .. }) | ServerError::Invalid(_) => {
                 StatusCode::BAD_REQUEST
             }
+            ServerError::Core(CoreError::MountRefused { .. }) => StatusCode::FORBIDDEN,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
         Self(status, error.to_string())

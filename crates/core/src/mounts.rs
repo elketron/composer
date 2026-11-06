@@ -94,9 +94,17 @@ impl Mounts {
         self.check(path).is_ok()
     }
 
+    /// Whether walks should follow symlinks here: only once an allowed list is set —
+    /// without one the web behaves as it did before mounts (listings do not descend).
+    pub fn follows_links(&self) -> bool {
+        self.allowed.read().expect("mounts lock").is_some()
+    }
+
     /// The mount points there are now, as web paths (a symlink at a site's top level, or
-    /// deeper, that lands in the web or an allowed root). Only when an allowed list is set:
-    /// without one there are no mounts, as before the feature.
+    /// deeper, that lands in the web or an allowed root). Only symlinks count: a real
+    /// folder is already on the watched tree, and listing it as a mount would make the
+    /// watcher watch the web to itself twice. Only when an allowed list is set: without
+    /// one there are no mounts, as before the feature.
     pub fn current(&self) -> Vec<PathBuf> {
         if self.allowed.read().expect("mounts lock").is_none() {
             return Vec::new();
@@ -106,17 +114,25 @@ impl Mounts {
         };
         let mut found = Vec::new();
         for entry in entries.flatten() {
-            if !entry.path().is_dir() {
+            let path = entry.path();
+            if !path.is_dir() {
                 continue;
             }
-            for e in WalkDir::new(entry.path())
+            if is_symlink(&path) {
+                // A site folder that is itself a symlink into an allowed root is a mount
+                // too: judged lenient as ever (the web chose to put it there), listed here
+                // so the mount watcher covers it.
+                found.push(path);
+                continue;
+            }
+            for e in WalkDir::new(path)
                 .min_depth(1)
                 .follow_links(false)
                 .into_iter()
                 .filter_entry(|e| e.file_type().is_dir() || e.file_type().is_symlink())
                 .filter_map(|e| e.ok())
             {
-                if e.path().is_dir() && self.allows(e.path()) {
+                if e.path_is_symlink() && self.allows(e.path()) {
                     found.push(e.path().to_path_buf());
                 }
             }
