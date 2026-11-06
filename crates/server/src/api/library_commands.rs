@@ -2,9 +2,11 @@
 //! by the server so recipe approvals land in its own (in-memory) approvals.
 
 use composer_protocol::CommandResult;
-use composer_protocol::http::{InstalledSiteInfo, LibraryChange, LibrarySiteInfo};
+use composer_protocol::http::{
+    InstalledSiteInfo, LibraryChange, LibraryPublishPlan, LibrarySiteInfo,
+};
 
-use crate::library::{SiteName, WorkspaceLibrary};
+use crate::library::{PublishPlan, SiteName, WorkspaceLibrary};
 use crate::server::Server;
 use crate::update::{UpdateItem, UpdateOutcome};
 
@@ -69,5 +71,58 @@ fn change(item: UpdateItem) -> LibraryChange {
         path: item.path,
         outcome: outcome.into(),
         review: review.map(|p| p.display().to_string()),
+    }
+}
+
+/// Without `approved`: the plan. With it (the plan's digest): the publish, of exactly that.
+pub fn publish(
+    server: &Server,
+    site: &str,
+    name: Option<&str>,
+    approved: Option<&str>,
+) -> Result<CommandResult, String> {
+    let site = SiteName::new(site)?;
+    let name = name.map(SiteName::new).transpose()?;
+    let library = WorkspaceLibrary::of(&server.home)?;
+    let Some(approved) = approved else {
+        let plan = library.plan_publish(&site, name.as_ref())?;
+        return Ok(CommandResult::LibraryPublishPlan {
+            plan: plan_info(&plan),
+        });
+    };
+    let plan = library.publish(&site, name.as_ref(), approved)?;
+    let commit = library
+        .installed()?
+        .get(&site)
+        .map(|from| from.commit.short().to_string())
+        .unwrap_or_default();
+    Ok(CommandResult::LibraryPublished {
+        site: plan.site.to_string(),
+        name: plan.name.to_string(),
+        commit,
+    })
+}
+
+pub fn plan_info(plan: &PublishPlan) -> LibraryPublishPlan {
+    LibraryPublishPlan {
+        site: plan.site.to_string(),
+        name: plan.name.to_string(),
+        new_site: plan.new_site,
+        changes: plan
+            .changes
+            .iter()
+            .map(|(path, kind)| LibraryChange {
+                path: path.display().to_string(),
+                outcome: (*kind).into(),
+                review: None,
+            })
+            .collect(),
+        left_out: plan
+            .left_out
+            .iter()
+            .map(|p| p.display().to_string())
+            .collect(),
+        text: plan.describe(),
+        digest: plan.digest.clone(),
     }
 }

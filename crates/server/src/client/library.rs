@@ -9,8 +9,19 @@ use crate::client::ask::next_reply;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LibraryAction {
     List,
-    Install { site: String, name: Option<String> },
-    Update { dry_run: bool },
+    Install {
+        site: String,
+        name: Option<String>,
+    },
+    Update {
+        dry_run: bool,
+    },
+    /// Without `yes`, shows what would be published; with it, publishes exactly that.
+    Publish {
+        site: String,
+        name: Option<String>,
+        yes: bool,
+    },
 }
 
 /// `composer library list|install|update`, through the running server of the workspace.
@@ -20,14 +31,37 @@ pub async fn library(server_url: &str, token: &str, action: LibraryAction) -> an
     let (mut socket, _) = tokio_tungstenite::connect_async(&url)
         .await
         .with_context(|| format!("connecting to {base} (is `composer serve` running?)"))?;
+    let mut send = async |id, command| -> anyhow::Result<CommandResult> {
+        let json = serde_json::to_string(&ClientRequest { id, command }).expect("serializes");
+        socket.send(Message::Text(json.into())).await?;
+        next_reply(&mut socket).await
+    };
     let command = match action {
         LibraryAction::List => ClientCommand::LibraryList,
         LibraryAction::Install { site, name } => ClientCommand::LibraryInstall { site, name },
         LibraryAction::Update { dry_run } => ClientCommand::LibraryUpdate { dry_run },
+        LibraryAction::Publish { site, name, yes } => {
+            let plan = ClientCommand::LibraryPublish {
+                site: site.clone(),
+                name: name.clone(),
+                approved: None,
+            };
+            let CommandResult::LibraryPublishPlan { plan } = send(1, plan).await? else {
+                bail!("unexpected reply");
+            };
+            print!("{}", plan.text);
+            if !yes {
+                println!("\nNothing was published. Run again with --yes to publish this.");
+                return Ok(());
+            }
+            ClientCommand::LibraryPublish {
+                site,
+                name,
+                approved: Some(plan.digest),
+            }
+        }
     };
-    let json = serde_json::to_string(&ClientRequest { id: 1, command }).expect("serializes");
-    socket.send(Message::Text(json.into())).await?;
-    match next_reply(&mut socket).await? {
+    match send(2, command).await? {
         CommandResult::Library { sites } => {
             if sites.is_empty() {
                 println!("The library is empty.");
@@ -77,6 +111,9 @@ pub async fn library(server_url: &str, token: &str, action: LibraryAction) -> an
                 }
                 println!("Take what you want from them, then delete them.");
             }
+        }
+        CommandResult::LibraryPublished { site, name, commit } => {
+            println!("\npublished site://{site} to the library as `{name}` @ {commit}");
         }
         _ => bail!("unexpected reply"),
     }

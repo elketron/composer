@@ -5,6 +5,7 @@
 mod installed_sites;
 mod library_commit;
 mod library_repo;
+mod publish_plan;
 mod site_definition;
 mod site_name;
 mod workspace_library;
@@ -12,6 +13,7 @@ mod workspace_library;
 pub use installed_sites::{Installed, InstalledSites};
 pub use library_commit::LibraryCommit;
 pub use library_repo::Library;
+pub use publish_plan::PublishPlan;
 pub use site_definition::SiteDefinition;
 pub use site_name::SiteName;
 pub use workspace_library::{Installation, LibrarySiteState, WorkspaceLibrary};

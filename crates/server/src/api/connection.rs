@@ -306,6 +306,23 @@ impl Connection {
                 });
                 None
             }
+            ClientCommand::LibraryPublish {
+                site,
+                name,
+                approved,
+            } => {
+                let (connection, server) = (self.clone(), server.clone());
+                tokio::task::spawn_blocking(move || {
+                    let result = crate::api::library_commands::publish(
+                        &server,
+                        &site,
+                        name.as_deref(),
+                        approved.as_deref(),
+                    );
+                    connection.reply(id, result);
+                });
+                None
+            }
             ClientCommand::McpList => {
                 let (connection, server) = (self.clone(), server.clone());
                 tokio::spawn(async move {
@@ -703,6 +720,7 @@ impl Connection {
             | ClientCommand::LibraryList
             | ClientCommand::LibraryInstall { .. }
             | ClientCommand::LibraryUpdate { .. }
+            | ClientCommand::LibraryPublish { .. }
             | ClientCommand::SlotAcquire
             | ClientCommand::SlotRelease { .. }
             | ClientCommand::WorkerStuck { .. }

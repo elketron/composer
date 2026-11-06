@@ -129,6 +129,19 @@ pub enum ClientCommand {
         dry_run: bool,
     },
 
+    /// Publishes this workspace's site `site` to the library (as `name`, default the same).
+    /// Without `approved`, nothing is written: the reply is `library_publish_plan`, what it would
+    /// do. With `approved` (that plan's `digest`), it publishes, but only if the site is still
+    /// exactly what the plan showed; the reply is `library_published`.
+    #[serde(rename = "library.publish")]
+    LibraryPublish {
+        site: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        name: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        approved: Option<String>,
+    },
+
     /// Reads `config.toml` again now (the server also does when the file changes); the reply is
     /// `config_reloaded`. A file that doesn't parse is an error and the running config stays.
     #[serde(rename = "config.reload")]

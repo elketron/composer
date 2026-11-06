@@ -125,7 +125,10 @@ enum ApprovalKind {
   /// A change to a pipeline's stage contract or `_config` page, learned from your edits.
   amendment('amendment'),
   /// A call to an MCP server's tool (`rule`: the tool, for `always`; it holds everywhere).
-  mcp('mcp');
+  mcp('mcp'),
+  /// Publishing a workspace site to the library (the only write that leaves a workspace).
+  /// Asked every time: `always` counts as one yes and is never remembered.
+  publish('publish');
 
   const ApprovalKind(this.wire);
   final String wire;
@@ -300,6 +303,10 @@ sealed class ClientCommand {
         'harness.set' => ClientCommandHarnessSet.fromJson(json),
         'project.overview' => ClientCommandProjectOverview.fromJson(json),
         'mcp.list' => ClientCommandMcpList.fromJson(json),
+        'library.list' => ClientCommandLibraryList.fromJson(json),
+        'library.install' => ClientCommandLibraryInstall.fromJson(json),
+        'library.update' => ClientCommandLibraryUpdate.fromJson(json),
+        'library.publish' => ClientCommandLibraryPublish.fromJson(json),
         'config.reload' => ClientCommandConfigReload.fromJson(json),
         'pipeline.list' => ClientCommandPipelineList.fromJson(json),
         'pipeline.new' => ClientCommandPipelineNew.fromJson(json),
@@ -636,6 +643,93 @@ final class ClientCommandMcpList extends ClientCommand {
 
   Map<String, Object?> toJson() => {
         'type': 'mcp.list',
+      };
+}
+
+/// The library's sites and this workspace's copies of them; the reply is `library`.
+final class ClientCommandLibraryList extends ClientCommand {
+  const ClientCommandLibraryList();
+
+  factory ClientCommandLibraryList.fromJson(Map<String, Object?> json) => ClientCommandLibraryList(
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'library.list',
+      };
+}
+
+/// Copies library site `site` into this workspace (as `name`, default the same); the reply is
+/// `library_installed`. Refused when the workspace has a site of that name.
+final class ClientCommandLibraryInstall extends ClientCommand {
+  const ClientCommandLibraryInstall({
+    required this.site,
+    this.name,
+  });
+
+  final String site;
+
+  final String? name;
+
+  factory ClientCommandLibraryInstall.fromJson(Map<String, Object?> json) => ClientCommandLibraryInstall(
+        site: json['site'] as String,
+        name: json['name'] == null ? null : json['name'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'library.install',
+        'site': site,
+        if (name != null) 'name': name,
+      };
+}
+
+/// Brings this workspace's installed sites up to the library (three-way per file; conflicts
+/// are left in `state/updates/`); with `dry_run`, only says what would change. The reply is
+/// `library_updated`.
+final class ClientCommandLibraryUpdate extends ClientCommand {
+  const ClientCommandLibraryUpdate({
+    this.dryRun = false,
+  });
+
+  final bool dryRun;
+
+  factory ClientCommandLibraryUpdate.fromJson(Map<String, Object?> json) => ClientCommandLibraryUpdate(
+        dryRun: json['dry_run'] == null ? false : json['dry_run'] as bool,
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'library.update',
+        'dry_run': dryRun,
+      };
+}
+
+/// Publishes this workspace's site `site` to the library (as `name`, default the same).
+/// Without `approved`, nothing is written: the reply is `library_publish_plan`, what it would
+/// do. With `approved` (that plan's `digest`), it publishes, but only if the site is still
+/// exactly what the plan showed; the reply is `library_published`.
+final class ClientCommandLibraryPublish extends ClientCommand {
+  const ClientCommandLibraryPublish({
+    required this.site,
+    this.name,
+    this.approved,
+  });
+
+  final String site;
+
+  final String? name;
+
+  final String? approved;
+
+  factory ClientCommandLibraryPublish.fromJson(Map<String, Object?> json) => ClientCommandLibraryPublish(
+        site: json['site'] as String,
+        name: json['name'] == null ? null : json['name'] as String,
+        approved: json['approved'] == null ? null : json['approved'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'library.publish',
+        'site': site,
+        if (name != null) 'name': name,
+        if (approved != null) 'approved': approved,
       };
 }
 
@@ -1117,6 +1211,11 @@ sealed class CommandResult {
         'history' => CommandResultHistory.fromJson(json),
         'project' => CommandResultProject.fromJson(json),
         'mcp_servers' => CommandResultMcpServers.fromJson(json),
+        'library' => CommandResultLibrary.fromJson(json),
+        'library_installed' => CommandResultLibraryInstalled.fromJson(json),
+        'library_updated' => CommandResultLibraryUpdated.fromJson(json),
+        'library_publish_plan' => CommandResultLibraryPublishPlan.fromJson(json),
+        'library_published' => CommandResultLibraryPublished.fromJson(json),
         'config_reloaded' => CommandResultConfigReloaded.fromJson(json),
         'pipelines' => CommandResultPipelines.fromJson(json),
         'pipeline' => CommandResultPipeline.fromJson(json),
@@ -1435,6 +1534,127 @@ final class CommandResultMcpServers extends CommandResult {
       };
 }
 
+/// `library.list`.
+final class CommandResultLibrary extends CommandResult {
+  const CommandResultLibrary({
+    required this.sites,
+  });
+
+  final List<LibrarySiteInfo> sites;
+
+  factory CommandResultLibrary.fromJson(Map<String, Object?> json) => CommandResultLibrary(
+        sites: (json['sites'] as List).map((e) => LibrarySiteInfo.fromJson(e as Map<String, Object?>)).toList(),
+      );
+
+  Map<String, Object?> toJson() => {
+        'kind': 'library',
+        'sites': sites.map((e) => e.toJson()).toList(),
+      };
+}
+
+/// `library.install`: the site as installed, from which library site and commit (12 digits),
+/// how many files; `has_ui`: build it with its `ui-build` action.
+final class CommandResultLibraryInstalled extends CommandResult {
+  const CommandResultLibraryInstalled({
+    required this.site,
+    required this.from,
+    required this.commit,
+    required this.files,
+    required this.hasUi,
+  });
+
+  final String site;
+
+  final String from;
+
+  final String commit;
+
+  final int files;
+
+  final bool hasUi;
+
+  factory CommandResultLibraryInstalled.fromJson(Map<String, Object?> json) => CommandResultLibraryInstalled(
+        site: json['site'] as String,
+        from: json['from'] as String,
+        commit: json['commit'] as String,
+        files: (json['files'] as num).toInt(),
+        hasUi: json['has_ui'] as bool,
+      );
+
+  Map<String, Object?> toJson() => {
+        'kind': 'library_installed',
+        'site': site,
+        'from': from,
+        'commit': commit,
+        'files': files,
+        'has_ui': hasUi,
+      };
+}
+
+/// `library.update`: the files that changed (or would, for a dry run).
+final class CommandResultLibraryUpdated extends CommandResult {
+  const CommandResultLibraryUpdated({
+    required this.changes,
+  });
+
+  final List<LibraryChange> changes;
+
+  factory CommandResultLibraryUpdated.fromJson(Map<String, Object?> json) => CommandResultLibraryUpdated(
+        changes: (json['changes'] as List).map((e) => LibraryChange.fromJson(e as Map<String, Object?>)).toList(),
+      );
+
+  Map<String, Object?> toJson() => {
+        'kind': 'library_updated',
+        'changes': changes.map((e) => e.toJson()).toList(),
+      };
+}
+
+/// `library.publish` without `approved`: what publishing would do.
+final class CommandResultLibraryPublishPlan extends CommandResult {
+  const CommandResultLibraryPublishPlan({
+    required this.plan,
+  });
+
+  final LibraryPublishPlan plan;
+
+  factory CommandResultLibraryPublishPlan.fromJson(Map<String, Object?> json) => CommandResultLibraryPublishPlan(
+        plan: LibraryPublishPlan.fromJson(json['plan'] as Map<String, Object?>),
+      );
+
+  Map<String, Object?> toJson() => {
+        'kind': 'library_publish_plan',
+        'plan': plan.toJson(),
+      };
+}
+
+/// `library.publish` with `approved`: the library site and its new commit (12 digits).
+final class CommandResultLibraryPublished extends CommandResult {
+  const CommandResultLibraryPublished({
+    required this.site,
+    required this.name,
+    required this.commit,
+  });
+
+  final String site;
+
+  final String name;
+
+  final String commit;
+
+  factory CommandResultLibraryPublished.fromJson(Map<String, Object?> json) => CommandResultLibraryPublished(
+        site: json['site'] as String,
+        name: json['name'] as String,
+        commit: json['commit'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'kind': 'library_published',
+        'site': site,
+        'name': name,
+        'commit': commit,
+      };
+}
+
 final class CommandResultConfigReloaded extends CommandResult {
   const CommandResultConfigReloaded({
     required this.changed,
@@ -1596,6 +1816,142 @@ class HarnessSwitch {
         'entry': entry,
         'allowed': allowed,
         'on': on,
+      };
+}
+
+/// A workspace site installed from the library.
+class InstalledSiteInfo {
+  const InstalledSiteInfo({
+    required this.site,
+    required this.behind,
+  });
+
+  final String site;
+
+  /// The library changed it since: `library.update` brings it in.
+  final bool behind;
+
+  factory InstalledSiteInfo.fromJson(Map<String, Object?> json) => InstalledSiteInfo(
+        site: json['site'] as String,
+        behind: json['behind'] as bool,
+      );
+
+  Map<String, Object?> toJson() => {
+        'site': site,
+        'behind': behind,
+      };
+}
+
+/// `library.update`: what happened to one file of an installed site.
+class LibraryChange {
+  const LibraryChange({
+    required this.path,
+    required this.outcome,
+    this.review,
+  });
+
+  /// `workspaces/<ws>/sites/<site>/<file>`.
+  final String path;
+
+  /// `added`, `replaced`, `removed`, `merged`, `conflict` or `review`.
+  final String outcome;
+
+  /// For `conflict` and `review`: the library's version (with conflict markers) to look at.
+  final String? review;
+
+  factory LibraryChange.fromJson(Map<String, Object?> json) => LibraryChange(
+        path: json['path'] as String,
+        outcome: json['outcome'] as String,
+        review: json['review'] == null ? null : json['review'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'path': path,
+        'outcome': outcome,
+        if (review != null) 'review': review,
+      };
+}
+
+/// `library.publish`'s plan: what publishing a workspace site to the library would do.
+class LibraryPublishPlan {
+  const LibraryPublishPlan({
+    required this.site,
+    required this.name,
+    required this.newSite,
+    required this.changes,
+    required this.leftOut,
+    required this.text,
+    required this.digest,
+  });
+
+  /// The workspace's site.
+  final String site;
+
+  /// Its name in the library.
+  final String name;
+
+  /// The library has no such site yet.
+  final bool newSite;
+
+  /// The files that differ from the library (`outcome`: `added`, `changed`, `removed`).
+  final List<LibraryChange> changes;
+
+  /// Top-level entries of the site that are not published (works, tickets, pages).
+  final List<String> leftOut;
+
+  /// The whole plan as text, diff included: what to show before asking.
+  final String text;
+
+  /// Pass back as `approved` to publish exactly this.
+  final String digest;
+
+  factory LibraryPublishPlan.fromJson(Map<String, Object?> json) => LibraryPublishPlan(
+        site: json['site'] as String,
+        name: json['name'] as String,
+        newSite: json['new_site'] as bool,
+        changes: (json['changes'] as List).map((e) => LibraryChange.fromJson(e as Map<String, Object?>)).toList(),
+        leftOut: (json['left_out'] as List).map((e) => e as String).toList(),
+        text: json['text'] as String,
+        digest: json['digest'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'site': site,
+        'name': name,
+        'new_site': newSite,
+        'changes': changes.map((e) => e.toJson()).toList(),
+        'left_out': leftOut,
+        'text': text,
+        'digest': digest,
+      };
+}
+
+/// `library.list`: one site of the library, and this workspace's copies of it.
+class LibrarySiteInfo {
+  const LibrarySiteInfo({
+    required this.site,
+    required this.commit,
+    required this.installed,
+  });
+
+  final String site;
+
+  /// The last library commit that changed it (12 digits).
+  final String commit;
+
+  /// This workspace's sites installed from it.
+  final List<InstalledSiteInfo> installed;
+
+  factory LibrarySiteInfo.fromJson(Map<String, Object?> json) => LibrarySiteInfo(
+        site: json['site'] as String,
+        commit: json['commit'] as String,
+        installed: (json['installed'] as List).map((e) => InstalledSiteInfo.fromJson(e as Map<String, Object?>)).toList(),
+      );
+
+  Map<String, Object?> toJson() => {
+        'site': site,
+        'commit': commit,
+        'installed': installed.map((e) => e.toJson()).toList(),
       };
 }
 

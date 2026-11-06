@@ -57,6 +57,7 @@ impl Component for ApprovalPopup {
             ApprovalKind::Tool => "allow tool?",
             ApprovalKind::Mcp => "allow MCP tool?",
             ApprovalKind::Amendment => "amend the pipeline?",
+            ApprovalKind::Publish => "publish to the library?",
         };
         let title = if more > 0 {
             format!(" {question} (+{more} more) ")
@@ -129,6 +130,9 @@ impl Component for ApprovalPopup {
             }
             ApprovalKind::Amendment => {
                 "learned from your edits: every work reads it from then on".to_string()
+            }
+            ApprovalKind::Publish => {
+                "every workspace can install or update from it then · asked each time".to_string()
             }
             ApprovalKind::Tool => match &approval.rule {
                 Some(rule) => format!("a always: allow {rule} in this project from now on"),

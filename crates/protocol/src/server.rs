@@ -276,6 +276,16 @@ pub enum CommandResult {
     LibraryUpdated {
         changes: Vec<crate::http::LibraryChange>,
     },
+    /// `library.publish` without `approved`: what publishing would do.
+    LibraryPublishPlan {
+        plan: crate::http::LibraryPublishPlan,
+    },
+    /// `library.publish` with `approved`: the library site and its new commit (12 digits).
+    LibraryPublished {
+        site: String,
+        name: String,
+        commit: String,
+    },
     ConfigReloaded {
         /// False: the file says what the server already runs with.
         changed: bool,

@@ -173,6 +173,17 @@ enum LibraryCommand {
         #[arg(long)]
         dry_run: bool,
     },
+    /// Publish a site of this workspace to the library: its definition only (never works,
+    /// tickets or other pages). Shows what would go; `--yes` publishes it.
+    Publish {
+        site: String,
+        /// Its name in the library.
+        #[arg(long = "as")]
+        name: Option<String>,
+        /// Publish what was shown.
+        #[arg(long)]
+        yes: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -285,6 +296,9 @@ async fn main() -> anyhow::Result<()> {
                 LibraryCommand::List => LibraryAction::List,
                 LibraryCommand::Install { site, name } => LibraryAction::Install { site, name },
                 LibraryCommand::Update { dry_run } => LibraryAction::Update { dry_run },
+                LibraryCommand::Publish { site, name, yes } => {
+                    LibraryAction::Publish { site, name, yes }
+                }
             };
             let (server_url, token) = remote::client(&workspace)?;
             composer_server::client::library(&server_url, &token, action).await?;
