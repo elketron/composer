@@ -348,6 +348,44 @@ pub struct ChangedFile {
     pub semantic: Option<String>,
 }
 
+/// `GET /api/actions/{site}`: one public recipe in a site's action registry.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct ActionSummary {
+    pub name: String,
+    pub doc: Option<String>,
+    /// `name`, `name=default` or `*name`, as in `actions`.
+    pub parameters: Vec<String>,
+    /// Whether this version may run unasked; otherwise the caller's session is asked.
+    pub approved: bool,
+}
+
+/// `POST /api/actions/{site}/{recipe}`: run one public recipe of a site's justfile.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct RunActionRequest {
+    /// Recipe arguments, in order.
+    #[serde(default)]
+    pub args: Vec<String>,
+    /// The session whose clients are asked when the recipe needs approval (an app's URL carries
+    /// `session=<id>`). Without one, a recipe that needs approval is not run.
+    #[serde(default)]
+    pub session: Option<String>,
+}
+
+/// The answer to `POST /api/actions/{site}/{recipe}`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct RunActionResponse {
+    /// `ok`, `failed`, `timed out` or `killed`.
+    pub status: String,
+    pub exit_code: Option<i32>,
+    pub output: String,
+}
+
 /// A review comment on a changed line, appended to the ticket page as
 /// `- file:line — message`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

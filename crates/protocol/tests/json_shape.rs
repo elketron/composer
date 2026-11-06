@@ -1,5 +1,6 @@
 //! Pins the wire format: the TUI, apps and workers depend on these exact shapes.
 
+use composer_protocol::http::{RunActionRequest, RunActionResponse};
 use composer_protocol::{
     ClientCommand, ClientRequest, CommandResult, MessageSource, ServerMessage,
 };
@@ -83,5 +84,21 @@ fn server_events() {
             result: CommandResult::Done,
         },
         json!({ "type": "ok", "id": 9, "result": { "kind": "done" } }),
+    );
+}
+
+#[test]
+fn action_run_bodies() {
+    // The route accepts an empty body, so every field must survive its default.
+    let req: RunActionRequest = serde_json::from_value(json!({})).unwrap();
+    assert_eq!(req, RunActionRequest::default());
+    round_trip(&req, json!({ "args": [], "session": null }));
+    round_trip(
+        &RunActionResponse {
+            status: "ok".into(),
+            exit_code: Some(0),
+            output: "hi\n".into(),
+        },
+        json!({ "status": "ok", "exit_code": 0, "output": "hi\n" }),
     );
 }
