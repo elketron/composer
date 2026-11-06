@@ -48,7 +48,7 @@ impl Tool for NewProjectTool {
         let page_url =
             SiteUrl::new("memory", &format!("projects/{name}.md")).map_err(|e| e.to_string())?;
         context.check_write(&page_url)?;
-        if server.workspace.locate(&page_url).is_ok() {
+        if server.web.locate(&page_url).is_ok() {
             return Err(format!(
                 "{page_url} already exists; open it, the project may exist"
             ));
@@ -65,7 +65,7 @@ impl Tool for NewProjectTool {
                 let site = site.trim_start_matches("site://").trim_end_matches('/');
                 let site_url = SiteUrl::new(site, "").map_err(|e| e.to_string())?;
                 context.check_read(&site_url)?;
-                let dir = server.workspace.root().join(site).join("templates/project");
+                let dir = server.web.root().join(site).join("templates/project");
                 if !dir.is_dir() {
                     return Err(format!("site://{site} has no templates/project/ folder"));
                 }
@@ -157,7 +157,7 @@ fn memory_page(name: &str, about: &str, path: &str, workflow: Option<&str>) -> S
 fn register(context: &ToolContext, name: &str, about: &str, path: &str) -> String {
     let index_url = SiteUrl::new("memory", "").expect("valid");
     let server = &context.server;
-    let Ok(page) = server.workspace.read_page(&index_url) else {
+    let Ok(page) = server.web.read_page(&index_url) else {
         return "; there is no memory index to register it in".into();
     };
     let link = format!("[{name}](projects/{name}.md)");

@@ -89,7 +89,7 @@ async fn recurring_edits_propose_an_amendment() {
         }
         let url = SiteUrl::new("flow", &format!("{name}/01_draft/_stage.md")).unwrap();
         let raw = server
-            .workspace
+            .web
             .read_page(&url)
             .unwrap()
             .raw

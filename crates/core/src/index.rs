@@ -6,7 +6,7 @@ use crate::page::Page;
 use crate::query::Query;
 use crate::site_url::SiteUrl;
 use crate::types::{IndexEntry, SearchHit};
-use crate::workspace::Workspace;
+use crate::web::Web;
 
 /// In-memory index of all pages: frontmatter, titles, text and links.
 ///
@@ -19,7 +19,7 @@ pub struct Index {
 
 impl Index {
     /// Reads every page in the workspace. Unreadable files are skipped.
-    pub fn build(workspace: &Workspace) -> Result<Self> {
+    pub fn build(workspace: &Web) -> Result<Self> {
         let mut index = Self::default();
         for path in workspace.all_pages() {
             let Some(url) = workspace.url_for_path(&path) else {

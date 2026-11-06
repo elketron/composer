@@ -119,7 +119,7 @@ pub async fn tool_step(
 /// How much the session's agent thinks: its `reasoning:`, else `[agent] reasoning_effort`;
 /// `None` (not sent) when neither says.
 fn reasoning_effort(server: &Server, session: &Session) -> Option<String> {
-    let agent = AgentDefinition::load(&server.workspace, &session.info().agent).ok();
+    let agent = AgentDefinition::load(&server.web, &session.info().agent).ok();
     agent
         .and_then(|a| a.reasoning)
         .or_else(|| Some(server.config().agent.reasoning_effort.trim().to_string()))
@@ -257,7 +257,7 @@ fn data_url(server: &Server, url: &str) -> Option<String> {
     if url.starts_with(ATTACHMENT_SCHEME) {
         return attachment_data_url(&server.home, url);
     }
-    let path = server.workspace.locate(&SiteUrl::parse(url).ok()?).ok()?;
+    let path = server.web.locate(&SiteUrl::parse(url).ok()?).ok()?;
     let mime = match path.extension()?.to_str()?.to_ascii_lowercase().as_str() {
         "png" => "image/png",
         "jpg" | "jpeg" => "image/jpeg",

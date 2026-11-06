@@ -58,7 +58,7 @@ impl Tool for OpenTool {
         context.check_read(&url)?;
         let server = &context.server;
         let page = server
-            .workspace
+            .web
             .read_page(&url)
             .map_err(|e| format!("{e}. Use `search` to find pages, or `list_sites`."))?;
 
@@ -118,7 +118,7 @@ fn image_path(context: &ToolContext, raw: &str) -> Option<Result<PathBuf, String
     Some(context.check_read(&url).and_then(|()| {
         context
             .server
-            .workspace
+            .web
             .locate(&url)
             .map_err(|e| format!("{e}. Use `search` to find pages, or `list_sites`."))
     }))

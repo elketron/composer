@@ -94,7 +94,7 @@ async fn a_mount_created_while_running_carries_events_and_search() {
 
     // And readable through the web's own address for it.
     let page = server
-        .workspace
+        .web
         .read_page(&SiteUrl::parse("site://plans/toolbox/landing").unwrap())
         .unwrap();
     assert_eq!(page.url.to_string(), "site://plans/toolbox/landing.md");
@@ -171,7 +171,7 @@ async fn a_mount_outside_the_allowed_scope_is_refused() {
 
     // Reading through a refused mount errors, with an error that names what to do.
     let err = server
-        .workspace
+        .web
         .read_page(&SiteUrl::parse("site://plans/elsewhere/stray").unwrap())
         .unwrap_err();
     assert!(

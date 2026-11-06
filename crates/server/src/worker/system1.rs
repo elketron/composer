@@ -100,7 +100,7 @@ fn question(server: &Server, worker: &Session, what: &str, body: &str) -> String
     let ticket = info.ticket.unwrap_or_default();
     let title = ticket_url(&ticket)
         .ok()
-        .and_then(|url| server.workspace.read_page(&url).ok())
+        .and_then(|url| server.web.read_page(&url).ok())
         .map(|page| page.title())
         .unwrap_or_default();
     let mut shown: String = body.chars().take(BODY_CHARS).collect();

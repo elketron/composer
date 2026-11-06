@@ -37,9 +37,9 @@ pub async fn get_file(
     Path((site, path)): Path<(String, String)>,
 ) -> Result<Response, ApiError> {
     let url = SiteUrl::new(&site, &path)?;
-    let file = server.workspace.root().join(url.site()).join(url.path());
+    let file = server.web.root().join(url.site()).join(url.path());
     // A refused mount gives its own error; the route must not read through it.
-    server.workspace.check(&file)?;
+    server.web.check(&file)?;
     let bytes = std::fs::read(&file)
         .map_err(|_| ApiError(StatusCode::NOT_FOUND, format!("{url} not found")))?;
     Ok(([(header::CONTENT_TYPE, content_type(url.path()))], bytes).into_response())
@@ -69,12 +69,7 @@ fn serve_app(server: &Server, site: &str, path: &str) -> Response {
     let Ok(url) = SiteUrl::new(site, path) else {
         return StatusCode::BAD_REQUEST.into_response();
     };
-    let dist = server
-        .workspace
-        .root()
-        .join(url.site())
-        .join("ui")
-        .join("dist");
+    let dist = server.web.root().join(url.site()).join("ui").join("dist");
     if !dist.join("index.html").is_file() {
         let site = url.site();
         let message = if dist.parent().is_some_and(|ui| ui.is_dir()) {
@@ -106,7 +101,7 @@ fn serve_app(server: &Server, site: &str, path: &str) -> Response {
     if requested.is_empty() || !file.is_file() && !has_extension {
         file = dist.join("index.html"); // client-side routes fall back to the app
     }
-    if let Err(e) = server.workspace.check(&file) {
+    if let Err(e) = server.web.check(&file) {
         return ApiError::from(e).into_response();
     }
     match std::fs::read(&file) {

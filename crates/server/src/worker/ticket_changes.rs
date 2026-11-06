@@ -47,7 +47,7 @@ pub fn discard_ticket(server: &Server, ticket: &str) -> Result<(), String> {
 
 /// Whether the ticket's branch is gone already (merged or discarded): it can't be resumed.
 pub fn ticket_closed(server: &Server, ticket: &str) -> Option<String> {
-    let page = server.workspace.read_page(&ticket_url(ticket).ok()?).ok()?;
+    let page = server.web.read_page(&ticket_url(ticket).ok()?).ok()?;
     if let Some(commit) = page.frontmatter.get_str("merged").filter(|c| !c.is_empty()) {
         return Some(format!("ticket {ticket} was merged ({commit})"));
     }
@@ -60,7 +60,7 @@ pub fn merge_target(server: &Server, ticket: &str, into: Option<&str>) -> Option
     into.map(|s| s.to_string()).or_else(|| {
         ticket_url(ticket)
             .ok()
-            .and_then(|url| server.workspace.read_page(&url).ok())
+            .and_then(|url| server.web.read_page(&url).ok())
             .and_then(|page| page.frontmatter.get_str("merge_into"))
             .filter(|branch| !branch.is_empty())
     })
@@ -97,7 +97,7 @@ fn not_running(server: &Server, ticket: &str) -> Result<(), String> {
 fn ticket_title(server: &Server, ticket: &str) -> String {
     ticket_url(ticket)
         .ok()
-        .and_then(|url| server.workspace.read_page(&url).ok())
+        .and_then(|url| server.web.read_page(&url).ok())
         .map(|page| page.title())
         .unwrap_or_else(|| ticket.to_string())
 }

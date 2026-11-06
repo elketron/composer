@@ -41,7 +41,7 @@ impl Tool for WriteTool {
         context.check_write(&url)?;
         // Claim on create only: a replace writes the content as given, so a reminder
         // left with a blank `session:` on purpose stays unclaimed.
-        let created = context.server.workspace.read_page(&url).is_err();
+        let created = context.server.web.read_page(&url).is_err();
         let claimed = created
             .then(|| claim_reminder(&args.content, context.session.id()))
             .flatten();

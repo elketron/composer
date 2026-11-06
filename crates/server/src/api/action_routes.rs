@@ -131,7 +131,7 @@ pub async fn run(
 
 async fn load(server: &Server, site: &str) -> Result<Justfile, ApiError> {
     let url = SiteUrl::new(site, "")?;
-    Justfile::load(&server.workspace.root().join(url.site()))
+    Justfile::load(&server.web.root().join(url.site()))
         .await
         .map_err(|e| ApiError(StatusCode::NOT_FOUND, e))
 }

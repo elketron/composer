@@ -45,7 +45,7 @@ impl Tool for NewSiteTool {
         let url = SiteUrl::new(name, "").map_err(|e| e.to_string())?;
         context.check_write(&url)?;
         let server = &context.server;
-        let dir = server.workspace.root().join(name);
+        let dir = server.web.root().join(name);
         if dir.exists() {
             return Err(format!("site://{name} already exists"));
         }
@@ -114,7 +114,7 @@ pub(crate) fn add_to_home(
     by: ChangedBy,
 ) -> Result<(), String> {
     let home = SiteUrl::new("home", "").expect("valid");
-    let Ok(page) = server.workspace.read_page(&home) else {
+    let Ok(page) = server.web.read_page(&home) else {
         return Err("there is no site://home".into());
     };
     let row = format!("| [{name}](site://{name}) | {} |", one_line(about));

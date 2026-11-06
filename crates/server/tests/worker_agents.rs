@@ -32,7 +32,7 @@ async fn orchestrators_see_the_worker_agents() {
             .unwrap();
     }
     let index = server.index.read().unwrap();
-    let workers: Vec<(String, String)> = AgentDefinition::workers(&server.workspace, &index)
+    let workers: Vec<(String, String)> = AgentDefinition::workers(&server.web, &index)
         .into_iter()
         .map(|w| (w.name, w.description))
         .collect();
@@ -63,8 +63,8 @@ async fn orchestrators_see_the_worker_agents() {
         updated: String::new(),
     };
     let prompt = |agent: &str| {
-        let definition = AgentDefinition::load(&server.workspace, agent).unwrap();
-        system_prompt(&definition, &server.workspace, &index, &session)
+        let definition = AgentDefinition::load(&server.web, agent).unwrap();
+        system_prompt(&definition, &server.web, &index, &session)
     };
     let orchestrator = prompt("orchestrator");
     assert!(

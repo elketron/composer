@@ -34,7 +34,7 @@ impl Tool for ActionsTool {
             .trim_end_matches('/')
             .to_string();
         context.check_read(&context.url(&format!("site://{site}"))?)?;
-        let justfile = Justfile::load(&context.server.workspace.root().join(&site)).await?;
+        let justfile = Justfile::load(&context.server.web.root().join(&site)).await?;
         let mut lines = vec![format!("site://{site} actions (run with `run`):")];
         for recipe in justfile.recipes().into_iter().filter(|r| !r.private) {
             let approved = context.server.approvals.is_approved(

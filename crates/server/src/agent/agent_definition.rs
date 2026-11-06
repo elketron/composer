@@ -1,4 +1,4 @@
-use composer_core::{Index, SiteUrl, Workspace};
+use composer_core::{Index, SiteUrl, Web};
 use serde_json::Value;
 
 use crate::agent::SiteAccess;
@@ -24,7 +24,7 @@ pub struct AgentDefinition {
 }
 
 impl AgentDefinition {
-    pub fn load(workspace: &Workspace, name: &str) -> Result<Self> {
+    pub fn load(workspace: &Web, name: &str) -> Result<Self> {
         let valid = !name.is_empty()
             && name
                 .chars()
@@ -92,7 +92,7 @@ impl AgentDefinition {
 
     /// Every worker agent in `site://agents` `spawn_worker` can start, by name (not the
     /// stage ones).
-    pub fn workers(workspace: &Workspace, index: &Index) -> Vec<Self> {
+    pub fn workers(workspace: &Web, index: &Index) -> Vec<Self> {
         Self::all(workspace, index)
             .into_iter()
             .filter(|a| a.is_worker() && !a.is_stage())
@@ -100,7 +100,7 @@ impl AgentDefinition {
     }
 
     /// Every agent in `site://agents` (`type: agent` pages), by name.
-    pub fn all(workspace: &Workspace, index: &Index) -> Vec<Self> {
+    pub fn all(workspace: &Web, index: &Index) -> Vec<Self> {
         let mut names: Vec<String> = index
             .entries()
             .filter(|e| e.url.site() == "agents" && e.frontmatter.matches("type", "agent"))

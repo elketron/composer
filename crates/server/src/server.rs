@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
 
-use composer_core::{Index, Page, SiteUrl, Workspace};
+use composer_core::{Index, Page, SiteUrl, Web};
 use composer_protocol::{
     ApprovalDecision, ApprovalKind, ChangedBy, PageChangeKind, ServerMessage, TurnState,
 };
@@ -33,7 +33,7 @@ pub struct Server {
     pub home: Home,
     /// `config.toml`, swapped when it changes ([`Server::reload_config`]); read it with [`Server::config`].
     config: RwLock<Arc<Config>>,
-    pub workspace: Workspace,
+    pub web: Web,
     pub index: RwLock<Index>,
     pub provider: Arc<dyn Provider>,
     pub slots: Arc<SlotPool>,
@@ -105,15 +105,14 @@ impl Server {
         // Scoped mounts (ticket 0122): a symlink inside a site may point into the projects
         // directory; one that lands elsewhere is refused, not followed. Same allowance as
         // the launcher scope keys off.
-        let workspace =
-            Workspace::with_allowed(home.sites(), vec![expand_home(&config.projects.dir)]);
-        if !workspace.root().is_dir() {
+        let web = Web::with_allowed(home.sites(), vec![expand_home(&config.projects.dir)]);
+        if !web.root().is_dir() {
             return Err(ServerError::Invalid(format!(
                 "{} does not exist; run `composer init` first",
-                workspace.root().display()
+                web.root().display()
             )));
         }
-        let index = Index::build(&workspace)?;
+        let index = Index::build(&web)?;
         tracing::info!("indexed {} pages", index.len());
         let hub = EventHub::new(4096);
         let (sessions_dir, slots, approvals) = match &parent {
@@ -156,7 +155,7 @@ impl Server {
             index: RwLock::new(index),
             known_hashes: Mutex::new(HashMap::new()),
             watcher: Mutex::new(None),
-            workspace,
+            web,
             provider,
             hub,
             config: RwLock::new(Arc::new(config)),
@@ -203,8 +202,7 @@ impl Server {
         if current.projects.dir != next.projects.dir {
             // Mounted folders start following the new scope from now on; pages under a mount
             // the new scope drops stay indexed until something changes them.
-            self.workspace
-                .set_allowed(vec![expand_home(&next.projects.dir)]);
+            self.web.set_allowed(vec![expand_home(&next.projects.dir)]);
         }
         *current = Arc::new(next);
         tracing::info!("config.toml reloaded");
@@ -306,9 +304,9 @@ impl Server {
         content: &[u8],
         by: ChangedBy,
     ) -> Result<(SiteUrl, bool)> {
-        let created = self.workspace.locate(url).is_err();
-        let written = self.workspace.write_file(url, content)?;
-        let path = self.workspace.locate(&written)?;
+        let created = self.web.locate(url).is_err();
+        let written = self.web.write_file(url, content)?;
+        let path = self.web.locate(&written)?;
         self.known_hashes
             .lock()
             .expect("hashes lock")
@@ -332,7 +330,7 @@ impl Server {
 
     /// Syncs one path after a filesystem event. Ignores changes we made ourselves.
     pub fn sync_path(&self, path: &Path) {
-        if !is_watched(self.workspace.root(), path) || !self.workspace.allows(path) {
+        if !is_watched(self.web.root(), path) || !self.web.allows(path) {
             return;
         }
         if path.is_dir() {
@@ -342,7 +340,7 @@ impl Server {
             self.rescan_dir(path);
             return;
         }
-        let Some(url) = self.workspace.url_for_path(path) else {
+        let Some(url) = self.web.url_for_path(path) else {
             return;
         };
         let is_page = path.extension().is_some_and(|e| e == "md");
@@ -564,13 +562,13 @@ impl Server {
     /// not report it as a directory when it appears (its own walk would follow it, but the
     /// dynamic attach only fires for `ISDIR` events), so the watcher asks us before syncing.
     pub fn mount_created(&self, path: &Path) -> bool {
-        let Ok(rel) = path.strip_prefix(self.workspace.root()) else {
+        let Ok(rel) = path.strip_prefix(self.web.root()) else {
             return false;
         };
         rel.components().count() >= 2
             && std::fs::symlink_metadata(path).is_ok_and(|m| m.file_type().is_symlink())
             && path.is_dir()
-            && self.workspace.allows(path)
+            && self.web.allows(path)
     }
 
     /// Hash of a page as last seen by the server, reading it if unknown.

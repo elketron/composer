@@ -3,7 +3,7 @@
 use std::fs;
 use std::path::Path;
 
-use composer_core::{Index, Query, SiteUrl, Workspace};
+use composer_core::{Index, Query, SiteUrl, Web};
 
 fn copy_dir(from: &Path, to: &Path) {
     fs::create_dir_all(to).unwrap();
@@ -18,11 +18,11 @@ fn copy_dir(from: &Path, to: &Path) {
     }
 }
 
-fn seed() -> (tempfile::TempDir, Workspace) {
+fn seed() -> (tempfile::TempDir, Web) {
     let dir = tempfile::tempdir().unwrap();
     let seed = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../seed/sites");
     copy_dir(&seed, dir.path());
-    let ws = Workspace::new(dir.path());
+    let ws = Web::new(dir.path());
     (dir, ws)
 }
 

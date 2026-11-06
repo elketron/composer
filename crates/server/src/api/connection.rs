@@ -283,7 +283,7 @@ impl Connection {
                 tokio::spawn(async move {
                     let agents = {
                         let index = server.index.read().expect("index lock");
-                        AgentDefinition::all(&server.workspace, &index)
+                        AgentDefinition::all(&server.web, &index)
                     };
                     let servers = server.mcp().list(&agents).await;
                     connection.reply(id, Ok(CommandResult::McpServers { servers }));
@@ -452,7 +452,7 @@ impl Connection {
     fn run(&self, server: &Arc<Server>, command: ClientCommand) -> Result<CommandResult, String> {
         match command {
             ClientCommand::SessionCreate { agent, project } => {
-                AgentDefinition::load(&server.workspace, &agent).map_err(|e| e.to_string())?;
+                AgentDefinition::load(&server.web, &agent).map_err(|e| e.to_string())?;
                 let project = project
                     .as_deref()
                     .map(|p| resolve_project(p, &server.config().projects.dir))
@@ -707,7 +707,7 @@ async fn run_work(
     let parent = match session {
         Some(id) => server.sessions.get(&id).map_err(|e| e.to_string())?,
         None => {
-            let found = crate::pipeline::find_work(server.workspace.root(), work)?;
+            let found = crate::pipeline::find_work(server.web.root(), work)?;
             crate::pipeline::work_session(server, &found, None)?
         }
     };

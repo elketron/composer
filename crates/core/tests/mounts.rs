@@ -7,7 +7,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use composer_core::{Index, Query, SiteUrl, Workspace};
+use composer_core::{Index, Query, SiteUrl, Web};
 
 fn url(s: &str) -> SiteUrl {
     SiteUrl::parse(s).unwrap()
@@ -17,12 +17,7 @@ fn url(s: &str) -> SiteUrl {
 /// Returns (web, allowed root, outside root, workspace with `allowed` set).
 fn web_with_mounts(
     allowed: Vec<PathBuf>,
-) -> (
-    tempfile::TempDir,
-    tempfile::TempDir,
-    tempfile::TempDir,
-    Workspace,
-) {
+) -> (tempfile::TempDir, tempfile::TempDir, tempfile::TempDir, Web) {
     let web = tempfile::tempdir().unwrap();
     let allowed_root = tempfile::tempdir().unwrap();
     let outside = tempfile::tempdir().unwrap();
@@ -36,7 +31,7 @@ fn web_with_mounts(
     std::os::unix::fs::symlink(outside.path(), web.path().join("widget/outside")).unwrap();
     let mut allowed = allowed;
     allowed.insert(0, allowed_root.path().to_path_buf());
-    let ws = Workspace::with_allowed(web.path(), allowed);
+    let ws = Web::with_allowed(web.path(), allowed);
     (web, allowed_root, outside, ws)
 }
 
@@ -123,7 +118,7 @@ fn without_an_allowed_list_the_web_stays_lenient() {
     std::os::unix::fs::symlink(outside.path(), web.path().join("widget/outside")).unwrap();
     fs::write(outside.path().join("page.md"), "# Outside\n").unwrap();
 
-    let ws = Workspace::new(web.path());
+    let ws = Web::new(web.path());
     assert_eq!(
         ws.read_page(&url("site://widget/outside/page"))
             .unwrap()

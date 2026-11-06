@@ -118,8 +118,7 @@ impl Harness for ClaudeCodeHarness {
 
         // A pipeline stage: its scoped context too.
         let appended =
-            match crate::pipeline::stage_context(&server.workspace, &request.ticket, Some(&folder))
-            {
+            match crate::pipeline::stage_context(&server.web, &request.ticket, Some(&folder)) {
                 Some(stage) => format!("{}\n\n---\n\n{stage}", system_prompt(&request.agent)),
                 None => system_prompt(&request.agent),
             };

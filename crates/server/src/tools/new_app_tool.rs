@@ -41,7 +41,7 @@ impl Tool for NewAppTool {
             .to_string();
         context.check_write(&context.url(&format!("site://{site}"))?)?;
         let server = &context.server;
-        let site_dir = server.workspace.root().join(&site);
+        let site_dir = server.web.root().join(&site);
         if !site_dir.is_dir() {
             return Err(format!(
                 "site://{site} does not exist; write its index.md first"
