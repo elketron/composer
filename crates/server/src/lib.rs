@@ -16,6 +16,7 @@ mod host;
 mod hub;
 mod init;
 mod launcher;
+pub mod library;
 pub mod mcp;
 pub mod mcp_clients;
 mod migrate;

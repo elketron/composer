@@ -122,6 +122,11 @@ async fn migrates_into_the_default_workspace() {
         "the library is stock only"
     );
     assert!(home.templates().join("app").is_dir());
+    // The library is a git repo whose first commit is the stock.
+    let library = composer_server::library::Library::of(&home);
+    assert!(library.head().unwrap().is_some());
+    let log = git(home.library().as_path(), &["log", "--format=%s"]);
+    assert!(log.trim().starts_with("stock: composer "), "{log}");
     assert!(root.join("state/seed/templates").is_dir());
     assert!(ws.seed_base().join("sites").is_dir());
     assert!(!ws.seed_base().join("templates").exists());
