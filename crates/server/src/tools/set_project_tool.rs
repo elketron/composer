@@ -39,10 +39,7 @@ impl Tool for SetProjectTool {
             .filter(|p| !p.is_empty())
         {
             None => None,
-            Some(path) => Some(resolve_project(
-                path,
-                &context.server.config().projects.dir,
-            )?),
+            Some(path) => Some(context.server.use_project(path)?),
         };
         let message = match &project {
             Some(path) => format!("active project: {path}"),
@@ -58,19 +55,7 @@ impl Tool for SetProjectTool {
 /// A project directory: absolute, `~/...`, or a name (or relative path) inside
 /// `projects_dir`. Requires an existing directory, returns the canonical path.
 pub fn resolve_project(path: &str, projects_dir: &str) -> Result<String, String> {
-    let expanded = expand_home(path);
-    let expanded = if expanded.is_relative() {
-        expand_home(projects_dir).join(expanded)
-    } else {
-        expanded
-    };
-    let canonical = expanded
-        .canonicalize()
-        .map_err(|e| format!("{}: {e}", tilde(&expanded)))?;
-    if !canonical.is_dir() {
-        return Err(format!("{path} is not a directory"));
-    }
-    Ok(canonical.display().to_string())
+    crate::project::ProjectPath::resolve(path, projects_dir).map(|p| p.to_string())
 }
 
 /// `~` and `~/x` → under `$HOME`.

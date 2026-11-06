@@ -33,6 +33,9 @@ pub async fn launch(
     };
     let folder =
         launcher::scoped_folder(&config, entry).map_err(|e| ApiError(StatusCode::FORBIDDEN, e))?;
+    server
+        .see_project(&folder.display().to_string())
+        .map_err(|e| ApiError(StatusCode::FORBIDDEN, e))?;
     let result = launcher::spawn(entry, &folder)
         .await
         .map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, e))?;

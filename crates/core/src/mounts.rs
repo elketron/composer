@@ -9,18 +9,23 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::RwLock;
+use std::sync::{Arc, RwLock};
 
 use walkdir::WalkDir;
 
 use crate::error::{CoreError, Result};
 
+/// Says whether a mount's (canonical) target must be refused even inside an allowed root: the
+/// server uses it for folders another workspace owns.
+pub type MountGuard = Arc<dyn Fn(&Path) -> bool + Send + Sync>;
+
 /// The web's root, plus the roots a mount under a site may point into. Without an
 /// allowed list the web is lenient, as it was before scoped mounts existed.
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct Mounts {
     root: PathBuf,
     allowed: RwLock<Option<Vec<PathBuf>>>,
+    refuse: RwLock<Option<MountGuard>>,
 }
 
 impl Clone for Mounts {
@@ -28,7 +33,21 @@ impl Clone for Mounts {
         Self {
             root: self.root.clone(),
             allowed: RwLock::new(self.allowed.read().expect("mounts lock").clone()),
+            refuse: RwLock::new(self.refuse.read().expect("mounts lock").clone()),
         }
+    }
+}
+
+impl std::fmt::Debug for Mounts {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Mounts")
+            .field("root", &self.root)
+            .field("allowed", &self.allowed.read().expect("mounts lock"))
+            .field(
+                "guarded",
+                &self.refuse.read().expect("mounts lock").is_some(),
+            )
+            .finish()
     }
 }
 
@@ -38,6 +57,7 @@ impl Mounts {
         Self {
             root: root.into(),
             allowed: RwLock::new(None),
+            refuse: RwLock::new(None),
         }
     }
 
@@ -47,12 +67,18 @@ impl Mounts {
         Self {
             root: root.into(),
             allowed: RwLock::new(Some(allowed)),
+            refuse: RwLock::new(None),
         }
     }
 
     /// Swap the allowed list (config reload); pass `None` to go back to lenient.
     pub fn set_allowed(&self, allowed: Option<Vec<PathBuf>>) {
         *self.allowed.write().expect("mounts lock") = allowed;
+    }
+
+    /// Refuse mounts whose target `refuse` says no to, even inside an allowed root.
+    pub fn set_guard(&self, refuse: MountGuard) {
+        *self.refuse.write().expect("mounts lock") = Some(refuse);
     }
 
     /// Whether the web may read, list, write or watch `path` (its own address for it):
@@ -79,7 +105,13 @@ impl Mounts {
                 path: resolved.clone(),
                 source: e,
             })?;
-            if !lands_inside(&target, &root, allowed) {
+            let refused = self
+                .refuse
+                .read()
+                .expect("mounts lock")
+                .as_ref()
+                .is_some_and(|refuse| refuse(&target));
+            if refused || !lands_inside(&target, &root, allowed) {
                 return Err(CoreError::MountRefused {
                     path: path.to_path_buf(),
                 });

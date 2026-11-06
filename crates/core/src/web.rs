@@ -46,6 +46,11 @@ impl Web {
     }
 
     /// Whether the web may read, list, write or watch `path` (its own address for it).
+    /// Refuse mounts whose target `refuse` says no to (another workspace's project).
+    pub fn set_mount_guard(&self, refuse: crate::MountGuard) {
+        self.mounts.set_guard(refuse);
+    }
+
     pub fn allows(&self, path: &Path) -> bool {
         self.mounts.allows(path)
     }

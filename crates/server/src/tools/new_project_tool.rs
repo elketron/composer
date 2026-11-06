@@ -89,6 +89,11 @@ impl Tool for NewProjectTool {
             None => std::fs::write(folder.join("README.md"), format!("# {name}\n\n{about}\n")),
         };
         filled.map_err(|e| format!("filling {}: {e}", tilde(&folder)))?;
+        // A new folder is this workspace's project, unless it lands inside another workspace's.
+        if let Err(e) = server.use_project(&folder.display().to_string()) {
+            let _ = std::fs::remove_dir_all(&folder);
+            return Err(e);
+        }
 
         let path = tilde(&folder);
         let workflow = template.as_ref().map(|(site, _)| site.as_str());
