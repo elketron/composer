@@ -10,9 +10,19 @@ use crate::api::ApiError;
 use crate::launcher::{self, LaunchResult, LauncherInfo};
 use crate::server::Server;
 
-/// `GET /api/launcher`: the declared entries, for the apps to offer one button per entry.
+/// `GET /api/launcher`: the declared entries, for the apps to offer one button per entry. An
+/// entry on a folder another workspace owns is left out, as it would refuse to launch.
 pub async fn list(State(server): State<Arc<Server>>) -> Json<Vec<LauncherInfo>> {
-    Json(launcher::entries(&server.config()))
+    let config = server.config();
+    let entries = launcher::entries(&config)
+        .into_iter()
+        .filter(|info| {
+            let folder = launcher::entry(&config, &info.name)
+                .and_then(|entry| launcher::scoped_folder(&config, entry).ok());
+            folder.is_none_or(|folder| server.see_project(&folder.display().to_string()).is_ok())
+        })
+        .collect();
+    Json(entries)
 }
 
 /// `POST /api/launcher/<name>`: spawn that entry on the desktop and answer with its pid.

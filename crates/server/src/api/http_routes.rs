@@ -225,6 +225,10 @@ pub async fn project_diff(
             "no active project; set one with :project <path>".into(),
         ));
     };
+    // Checked again: a session from before ownership may sit in another workspace's project.
+    let project = server
+        .see_project(&project)
+        .map_err(|e| ApiError(StatusCode::FORBIDDEN, e))?;
     let diff = crate::project::project_diff(std::path::Path::new(&project), None)
         .await
         .map_err(|e| ApiError(StatusCode::UNPROCESSABLE_ENTITY, e))?;
