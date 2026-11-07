@@ -44,10 +44,25 @@ const SWITCHES: [&str; 7] = [
     "disable-default-apps",
 ];
 
+wrap_browser_process_handler! {
+    struct PumpRequests;
+
+    impl BrowserProcessHandler {
+        // CEF asks for its work to run in `delay_ms` (any thread): the pump wakes for it.
+        fn on_schedule_message_pump_work(&self, delay_ms: i64) {
+            crate::browser_pump::schedule(delay_ms);
+        }
+    }
+}
+
 wrap_app! {
     pub struct ComposerApp;
 
     impl App {
+        fn browser_process_handler(&self) -> Option<BrowserProcessHandler> {
+            Some(PumpRequests::new())
+        }
+
         fn on_before_command_line_processing(
             &self,
             _process_type: Option<&CefString>,
@@ -103,7 +118,10 @@ pub fn start() -> Result<PathBuf, String> {
     let settings = Settings {
         windowless_rendering_enabled: 1,
         external_message_pump: 1,
-        no_sandbox: 1,
+        // Chromium's own sandbox for the renderers (apps are agent-built JavaScript): on Linux
+        // through unprivileged user namespaces. `COMPOSER_CEF_NO_SANDBOX=1` turns it off where
+        // the system doesn't allow them.
+        no_sandbox: std::env::var_os("COMPOSER_CEF_NO_SANDBOX").is_some() as _,
         root_cache_path: cache.to_string_lossy().as_ref().into(),
         resources_dir_path: dir.as_str().into(),
         locales_dir_path: format!("{dir}/locales").as_str().into(),

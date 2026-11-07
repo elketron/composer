@@ -1104,6 +1104,7 @@ dependencies = [
  "cef",
  "composer-client",
  "composer-protocol",
+ "futures",
  "gpui-pre",
  "gpui-pre-platform",
  "image",

@@ -19,6 +19,7 @@ mod pick_lists;
 mod picker;
 mod shell;
 mod stage_tabs;
+mod term_config;
 mod term_pane;
 mod terminal_link;
 mod view_urls;

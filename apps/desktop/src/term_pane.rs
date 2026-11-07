@@ -8,7 +8,7 @@
 //! clipboard; reads aren't answered (a program can't read your clipboard behind your back; pastes
 //! come in as bracketed pastes).
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use gpui::{
     App, ClipboardItem, Context, EventEmitter, FocusHandle, Focusable, FontStyle, FontWeight,
@@ -22,6 +22,7 @@ use wt::{KeyCode, KeyModifiers, Terminal, TerminalSize, color::ColorPalette};
 
 use crate::grid::{Geometry, Scrollback, Selection};
 use crate::key_map::{Held, terminal_key};
+use crate::term_config::{Config, Osc52};
 use crate::terminal_link::{LinkWriter, TerminalLink};
 
 /// The bundled grid font (assets/fonts).
@@ -30,36 +31,6 @@ const FONT_SIZE: f32 = 14.0;
 const LINE_H: f32 = 18.0;
 /// The pane's padding around the grid.
 const PAD: f32 = 4.0;
-/// Lines kept in the pane's own history.
-const HISTORY: usize = 5000;
-
-#[derive(Debug)]
-struct Config;
-impl wt::TerminalConfiguration for Config {
-    fn color_palette(&self) -> ColorPalette {
-        ColorPalette::default()
-    }
-    fn enable_kitty_keyboard(&self) -> bool {
-        true
-    }
-    fn scrollback_size(&self) -> usize {
-        HISTORY
-    }
-}
-
-/// OSC 52 from the program (nvim yanking) lands here; the pane moves it to the OS clipboard.
-#[derive(Default)]
-struct Osc52(Mutex<Option<String>>);
-impl wt::Clipboard for Osc52 {
-    fn set_contents(
-        &self,
-        _sel: wt::ClipboardSelection,
-        data: Option<String>,
-    ) -> anyhow::Result<()> {
-        *self.0.lock().expect("osc52 lock") = data;
-        Ok(())
-    }
-}
 
 /// What a pane asks of its window.
 pub enum PaneEvent {
