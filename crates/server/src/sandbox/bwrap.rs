@@ -33,6 +33,10 @@ fn probe(program: &Path) -> Result<(), String> {
             "/",
             "--tmpfs",
             "/tmp",
+            // Whatever PATH composer has, `true` is found.
+            "--setenv",
+            "PATH",
+            "/usr/bin:/bin",
             "--",
             "true",
         ])

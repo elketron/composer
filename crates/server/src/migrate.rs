@@ -207,7 +207,7 @@ fn table_name(header: &str) -> &str {
 /// `git worktree repair` in each moved worktree, so its repository points at the new place.
 #[allow(
     clippy::disallowed_methods,
-    reason = "git worktree repair during a migration, composer's own paths"
+    reason = "git worktree repair during a migration: one-off, server stopped; it repairs the back-pointers the git jail checks"
 )]
 fn repair_worktrees(dir: &Path) -> Vec<(PathBuf, bool)> {
     let Ok(entries) = std::fs::read_dir(dir) else {
