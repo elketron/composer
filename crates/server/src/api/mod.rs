@@ -2,6 +2,8 @@
 
 mod action_routes;
 mod api_error;
+mod app_api;
+mod app_commands;
 mod app_routes;
 mod attachment_routes;
 mod auth;
@@ -35,6 +37,14 @@ pub fn router(server: Arc<Server>) -> Router {
         .route("/api/projects", get(http_routes::projects))
         .route("/api/apps", get(http_routes::home_apps))
         .route("/api/projects/{name}/apps", get(http_routes::project_apps))
+        .route(
+            "/api/projects/{name}/apps/{site}/open",
+            axum::routing::post(http_routes::open_app),
+        )
+        .route(
+            "/api/projects/{name}/apps/{site}/tokens",
+            axum::routing::delete(http_routes::revoke_app),
+        )
         .route("/api/search", get(http_routes::search))
         .route(
             "/api/pages/{site}",
@@ -80,6 +90,8 @@ pub fn router(server: Arc<Server>) -> Router {
             server.clone(),
             auth::require_token,
         ))
+        // A project app's routes: its own token, never the workspace's.
+        .merge(app_api::router(server.clone()))
         // Pairing needs no token: the one-time code is the credential.
         .merge(
             Router::new()

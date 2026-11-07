@@ -8,18 +8,23 @@ use futures::{SinkExt, StreamExt};
 use tokio::sync::{broadcast, mpsc};
 
 use crate::api::Connection;
+use crate::apps::AppGrant;
 use crate::server::Server;
 
 pub async fn upgrade(State(server): State<Arc<Server>>, ws: WebSocketUpgrade) -> Response {
-    ws.on_upgrade(move |socket| run(server, socket))
+    ws.on_upgrade(move |socket| run(server, socket, None))
 }
 
 /// Three tasks per socket: writer (outgoing queue → socket), forwarder
 /// (broadcast → filter → queue) and the reader loop (commands → replies).
-async fn run(server: Arc<Server>, socket: WebSocket) {
+/// With `app`, an app's socket: only what its token allows ([`Connection::for_app`]).
+pub(crate) async fn run(server: Arc<Server>, socket: WebSocket, app: Option<AppGrant>) {
     let (mut sink, mut stream) = socket.split();
     let (out_tx, mut out_rx) = mpsc::unbounded_channel::<Arc<ServerMessage>>();
-    let connection = Arc::new(Connection::new(out_tx));
+    let connection = Arc::new(match app {
+        Some(grant) => Connection::for_app(out_tx, grant),
+        None => Connection::new(out_tx),
+    });
 
     let writer = tokio::spawn(async move {
         while let Some(message) = out_rx.recv().await {

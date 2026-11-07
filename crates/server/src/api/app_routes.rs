@@ -66,7 +66,7 @@ pub async fn put_file(
     }))
 }
 
-fn serve_app(server: &Server, site: &str, path: &str) -> Response {
+pub(crate) fn serve_app(server: &Server, site: &str, path: &str) -> Response {
     let Ok(url) = SiteUrl::new(site, path) else {
         return StatusCode::BAD_REQUEST.into_response();
     };

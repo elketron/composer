@@ -3,9 +3,11 @@
 //! Home) gets: matched, pinned or hidden by the project's `[projects."<path>"]` entry.
 
 mod app_condition;
+mod app_grant;
 mod app_manifest;
 mod app_rail;
 mod app_scope;
+mod app_tokens;
 mod attach_reason;
 mod attached_app;
 mod file_glob;
@@ -14,9 +16,11 @@ mod project_name;
 mod workspace_apps;
 
 pub use app_condition::AppCondition;
+pub use app_grant::AppGrant;
 pub use app_manifest::AppManifest;
 pub use app_rail::AppRail;
 pub use app_scope::AppScope;
+pub use app_tokens::AppTokens;
 pub use attach_reason::AttachReason;
 pub use attached_app::AttachedApp;
 pub use file_glob::FileGlob;

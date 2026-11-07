@@ -50,6 +50,17 @@ pub async fn run(
     body: Option<Json<RunActionRequest>>,
 ) -> Result<Json<RunActionResponse>, ApiError> {
     let Json(request) = body.unwrap_or_default();
+    run_action(server, site, recipe, request, None).await
+}
+
+/// Runs `recipe` of `site` for an app; with `app`, the app's grant (its site, its project).
+pub(crate) async fn run_action(
+    server: Arc<Server>,
+    site: String,
+    recipe: String,
+    request: RunActionRequest,
+    app: Option<crate::apps::AppGrant>,
+) -> Result<Json<RunActionResponse>, ApiError> {
     let justfile = load(&server, &site).await?;
     let site = SiteUrl::new(&site, "")?.site().to_string();
     let found = justfile
@@ -100,7 +111,10 @@ pub async fn run(
         })?;
     }
 
-    let env = RecipeEnv::new(&server, &site, session.as_deref());
+    let env = match &app {
+        Some(grant) => RecipeEnv::for_app(&server, grant),
+        None => RecipeEnv::new(&server, &site, session.as_deref()),
+    };
     let timeout = Duration::from_secs(server.config().agent.recipe_timeout_secs);
     let output = run_recipe(
         &justfile,

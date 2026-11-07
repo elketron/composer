@@ -30,15 +30,26 @@ const params = new URLSearchParams(location.search);
 
 const segments = location.pathname.split('/').filter(Boolean);
 const inWorkspace = segments[0] === 'w' && segments.length >= 2;
-
-/** Where this workspace's API lives: `/w/<workspace>` (apps are served under it), else `''`. */
-export const base: string = inWorkspace ? `/w/${segments[1]}` : '';
+/** Where the workspace's own segments end: after `/w/<workspace>`, or at the start. */
+const at = inWorkspace ? 2 : 0;
+/** Opened on a project: `<workspace>/p/<project>/<app>/` (its own token and API). */
+const onProject = segments[at] === 'p' && segments.length >= at + 3;
+const workspaceBase = inWorkspace ? `/w/${segments[1]}` : '';
 
 /** This app's workspace (`default`, ...), or `null` when served without one. */
 export const workspace: string | null = inWorkspace ? segments[1] : null;
 
-/** This app's site: the segment after the workspace (`/w/default/design/` → `design`). */
-export const site: string = segments[inWorkspace ? 2 : 0] ?? '';
+/** The project the app was opened on (its name), or `null` on Home. */
+export const project: string | null = onProject ? decodeURIComponent(segments[at + 1]) : null;
+
+/** This app's site: `/w/default/design/` → `design`; `/w/default/p/game/cad/` → `cad`. */
+export const site: string = (onProject ? segments[at + 2] : segments[at]) ?? '';
+
+/** Where this app's API lives: the workspace's (`/w/<workspace>`), or on a project the app's own
+ * (`/w/<workspace>/p/<project>/<app>`), which its token allows. */
+export const base: string = onProject
+  ? `${workspaceBase}/p/${segments[at + 1]}/${segments[at + 2]}`
+  : workspaceBase;
 
 /** The session that opened the app; messages from `send` go there. Survives reloads. */
 export const session: string | null = (() => {
@@ -53,8 +64,9 @@ export const session: string | null = (() => {
 })();
 
 // Drop the token from the address bar once the cookie is set.
-if (params.has('token')) {
+if (params.has('token') || params.has('app_token')) {
   params.delete('token');
+  params.delete('app_token');
   const query = params.toString();
   history.replaceState(null, '', location.pathname + (query ? `?${query}` : '') + location.hash);
 }
