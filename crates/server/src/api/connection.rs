@@ -450,11 +450,20 @@ impl Connection {
                 });
                 None
             }
-            ClientCommand::AppOpen { site, project } => {
+            ClientCommand::AppOpen {
+                site,
+                project,
+                session,
+            } => {
                 let (connection, server) = (self.clone(), server.clone());
                 tokio::spawn(async move {
                     let opened = tokio::task::spawn_blocking(move || {
-                        crate::apps::open_app(&server, &site, project.as_deref())
+                        crate::apps::open_app(
+                            &server,
+                            &site,
+                            project.as_deref(),
+                            session.as_deref(),
+                        )
                     })
                     .await
                     .map_err(|e| e.to_string())

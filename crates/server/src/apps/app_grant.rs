@@ -13,6 +13,9 @@ pub struct AppGrant {
     /// A project-local app: its folder (`<project>/.composer/apps/<name>`); `None` for the
     /// workspace's site of that name.
     pub local: Option<PathBuf>,
+    /// The session it was opened from: the one it may message (ticket 0172). `None`: opened
+    /// outside a chat, it messages none.
+    pub session: Option<String>,
 }
 
 impl AppGrant {
