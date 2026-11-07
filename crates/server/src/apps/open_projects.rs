@@ -8,6 +8,7 @@ use composer_protocol::http::OpenProject;
 use tokio_util::sync::CancellationToken;
 
 use crate::actions::{Caller, Justfile, RecipeEnv, run_recipe};
+use crate::apps::opened_project::Opened;
 use crate::apps::{
     AppGrant, AttachReason, GrantedProject, ProjectName, ProjectWatch, attached_apps,
 };
@@ -22,12 +23,6 @@ const MAX_OUTPUT: usize = 4 * 1024;
 #[derive(Default)]
 pub struct OpenProjects {
     open: Mutex<HashMap<ProjectName, Opened>>,
-}
-
-struct Opened {
-    clients: u32,
-    /// `None` when the watch couldn't start (reported; the project is open all the same).
-    _watch: Option<ProjectWatch>,
 }
 
 impl OpenProjects {
