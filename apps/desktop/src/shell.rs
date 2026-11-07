@@ -18,6 +18,7 @@ use crate::browser_tabs::BrowserTabs;
 use crate::chat_width::ChatWidth;
 use crate::desktop::{self, Desktop};
 use crate::link_state::LinkState;
+use crate::pick_lists;
 use crate::picker::{Item, Pick, Picker, PickerEvent};
 use crate::stage_tabs;
 use crate::term_pane::{FONT, PaneEvent, TermPane};
@@ -468,96 +469,25 @@ impl Shell {
         cx.notify();
     }
 
-    fn workspace_items(&self, cx: &gpui::App) -> Vec<Item> {
-        cx.global::<Desktop>()
-            .workspaces()
-            .into_iter()
-            .enumerate()
-            .map(|(i, name)| Item {
-                detail: if i < 9 {
-                    format!("ctrl+alt+{}", i + 1)
-                } else {
-                    String::new()
-                },
-                label: if name == self.workspace {
-                    format!("{name}  (this window)")
-                } else {
-                    name.clone()
-                },
-                pick: Pick::Workspace(name),
-            })
-            .collect()
-    }
-
-    /// The sessions, most recent first: what each is about, its project and state.
-    fn session_items(&self) -> Vec<Item> {
-        let mut sessions = self.store.sessions.clone();
-        sessions.sort_by(|a, b| b.updated.cmp(&a.updated));
-        sessions
-            .into_iter()
-            .filter(|s| s.worker.is_none())
-            .map(|s| {
-                let about = s.preview.clone().unwrap_or_else(|| s.agent.clone());
-                let shown = if self.store.attached.as_ref() == Some(&s.id) {
-                    "  ◂ shown"
-                } else {
-                    ""
-                };
-                Item {
-                    label: format!("#{} {}{shown}", s.id, short(&about, 44)),
-                    detail: format!(
-                        "{} · {:?}",
-                        s.project
-                            .as_deref()
-                            .map(project_name)
-                            .unwrap_or("no project"),
-                        s.state
-                    )
-                    .to_lowercase(),
-                    pick: Pick::Session(s.id),
-                }
-            })
-            .collect()
-    }
-
     fn open_workspaces(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let items = self.workspace_items(cx);
+        let items = pick_lists::workspaces(cx.global::<Desktop>().workspaces(), &self.workspace);
         let picker = cx.new(|cx| Picker::new("workspace", items, cx));
         self.show_picker(picker, window, cx);
     }
 
     fn open_sessions(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let items = self.session_items();
+        let items = pick_lists::sessions(&self.store.sessions, self.store.attached.as_deref());
         let picker = cx.new(|cx| Picker::new("session", items, cx));
         self.show_picker(picker, window, cx);
     }
 
     /// Commands, then sessions; the workspace's sites and Home apps join when fetched.
     fn open_palette(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let follow = if self.follow { "off" } else { "on" };
-        let mut items = vec![
-            Item {
-                label: "New terminal".into(),
-                detail: "+".into(),
-                pick: Pick::NewTerminal,
-            },
-            Item {
-                label: format!("Follow agent: turn {follow}"),
-                detail: String::new(),
-                pick: Pick::ToggleFollow,
-            },
-            Item {
-                label: "Switch workspace…".into(),
-                detail: "ctrl+shift+w".into(),
-                pick: Pick::Workspaces,
-            },
-            Item {
-                label: "Switch session…".into(),
-                detail: "ctrl+shift+s".into(),
-                pick: Pick::Sessions,
-            },
-        ];
-        items.extend(self.session_items());
+        let mut items = pick_lists::commands(self.follow);
+        items.extend(pick_lists::sessions(
+            &self.store.sessions,
+            self.store.attached.as_deref(),
+        ));
         let picker = cx.new(|cx| Picker::new("palette", items, cx));
         let endpoint = self.endpoint.clone();
         let fetched = cx.global::<Desktop>().spawn(async move {
@@ -920,23 +850,6 @@ fn workers_label(running: u64) -> String {
         1 => "1 worker running".into(),
         n => format!("{n} workers running"),
     }
-}
-
-/// At most `max` characters, an ellipsis when cut.
-fn short(text: &str, max: usize) -> String {
-    match text.char_indices().nth(max) {
-        Some((at, _)) => format!("{}…", &text[..at]),
-        None => text.to_string(),
-    }
-}
-
-/// A project's name from its folder.
-fn project_name(folder: &str) -> &str {
-    folder
-        .trim_end_matches('/')
-        .rsplit('/')
-        .next()
-        .unwrap_or(folder)
 }
 
 fn placeholder(text: &'static str) -> impl IntoElement {

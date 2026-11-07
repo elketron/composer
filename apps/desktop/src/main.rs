@@ -14,6 +14,7 @@ mod grid;
 mod key_map;
 mod link_state;
 mod matcher;
+mod pick_lists;
 mod picker;
 mod shell;
 mod stage_tabs;
