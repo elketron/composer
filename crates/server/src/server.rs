@@ -57,6 +57,8 @@ pub struct Server {
     pub workers: WorkerRegistry,
     /// The tokens apps were opened on projects with (ticket 0163).
     pub app_tokens: crate::apps::AppTokens,
+    /// The projects clients have open (ticket 0165).
+    pub open_projects: crate::apps::OpenProjects,
     /// Sessions' watches on site files (`state/watches.json`).
     pub watches: WatchRegistry,
     /// Harnesses turned off per project at runtime (`state/projects.json`).
@@ -170,6 +172,7 @@ impl Server {
             worker_approvals: WorkerApprovals::default(),
             workers: WorkerRegistry::default(),
             app_tokens: crate::apps::AppTokens::default(),
+            open_projects: crate::apps::OpenProjects::default(),
             watches: match &parent {
                 None => WatchRegistry::load(home.state().join("watches.json")),
                 Some(_) => WatchRegistry::in_memory(),

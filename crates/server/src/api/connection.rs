@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -14,7 +14,7 @@ use crate::agent::AgentDefinition;
 use crate::api::app_commands::app_may;
 use crate::api::event_scope::{EventScope, scope};
 use crate::api::glob::url_matches;
-use crate::apps::AppGrant;
+use crate::apps::{AppGrant, ProjectName};
 use crate::attachments::resolve;
 use crate::harness::{PERMISSION_TOOL, WorkerSink, answer_permission, permission_tool_info};
 use crate::server::Server;
@@ -35,6 +35,8 @@ pub struct Connection {
     next_grant: AtomicU64,
     /// An app's socket: only the commands its token allows.
     app: Option<AppGrant>,
+    /// The projects this client opened (`project.open`); closed when it goes.
+    opened: Mutex<HashSet<ProjectName>>,
 }
 
 impl Connection {
@@ -47,6 +49,7 @@ impl Connection {
             grants: Mutex::new(HashMap::new()),
             next_grant: AtomicU64::new(0),
             app: None,
+            opened: Mutex::new(HashSet::new()),
         }
     }
 
@@ -56,6 +59,43 @@ impl Connection {
         Self {
             app: Some(grant),
             ..Self::new(out)
+        }
+    }
+
+    /// Opens `project` (a name or a folder) for this client, once.
+    async fn open_project(
+        self: &Arc<Self>,
+        server: &Arc<Server>,
+        project: &str,
+    ) -> Result<CommandResult, String> {
+        let (server2, project) = (server.clone(), project.to_string());
+        let (name, folder) =
+            tokio::task::spawn_blocking(move || crate::apps::find_project_by(&server2, &project))
+                .await
+                .map_err(|e| e.to_string())??;
+        Ok(CommandResult::ProjectOpened {
+            project: name.to_string(),
+            first: self.open(server, &name, &folder),
+        })
+    }
+
+    /// This client has `name` open (`true`: the first in the workspace); again does nothing.
+    pub fn open(&self, server: &Arc<Server>, name: &ProjectName, folder: &std::path::Path) -> bool {
+        if !self
+            .opened
+            .lock()
+            .expect("opened lock")
+            .insert(name.clone())
+        {
+            return false;
+        }
+        server.open_projects.open(server, name, folder)
+    }
+
+    /// The client is gone: what it opened, it closes.
+    pub fn close_all(&self, server: &Server) {
+        for name in self.opened.lock().expect("opened lock").drain() {
+            server.open_projects.close(&name);
         }
     }
 
@@ -78,6 +118,17 @@ impl Connection {
     pub fn wants(&self, message: &ServerMessage) -> bool {
         match scope(message) {
             EventScope::Global => true,
+            EventScope::Project(name) => {
+                self.app
+                    .as_ref()
+                    .is_some_and(|g| g.project.as_str() == name)
+                    || self
+                        .opened
+                        .lock()
+                        .expect("opened lock")
+                        .iter()
+                        .any(|p| p.as_str() == name)
+            }
             EventScope::Reply => false,
             EventScope::Page(url) => self
                 .subscriptions
@@ -346,6 +397,42 @@ impl Connection {
                 });
                 None
             }
+            ClientCommand::ProjectOpen { project } => {
+                let (connection, server) = (self.clone(), server.clone());
+                tokio::spawn(async move {
+                    let reply = connection.open_project(&server, &project).await;
+                    connection.reply(id, reply);
+                });
+                None
+            }
+            ClientCommand::ProjectClose { project } => {
+                let (connection, server) = (self.clone(), server.clone());
+                tokio::spawn(async move {
+                    let found = {
+                        let server = server.clone();
+                        tokio::task::spawn_blocking(move || {
+                            crate::apps::find_project_by(&server, &project)
+                        })
+                        .await
+                        .map_err(|e| e.to_string())
+                        .and_then(|r| r)
+                    };
+                    let reply = found.map(|(name, _)| {
+                        if connection.opened.lock().expect("opened lock").remove(&name) {
+                            server.open_projects.close(&name);
+                        }
+                        CommandResult::Done
+                    });
+                    connection.reply(id, reply);
+                });
+                None
+            }
+            ClientCommand::ProjectsOpen => Some(ServerMessage::Ok {
+                id,
+                result: CommandResult::OpenProjects {
+                    projects: server.open_projects.list(),
+                },
+            }),
             ClientCommand::AppsList { project } => {
                 let (connection, server) = (self.clone(), server.clone());
                 tokio::spawn(async move {
@@ -755,6 +842,9 @@ impl Connection {
             | ClientCommand::ToolList { .. }
             | ClientCommand::McpList
             | ClientCommand::AppsList { .. }
+            | ClientCommand::ProjectOpen { .. }
+            | ClientCommand::ProjectClose { .. }
+            | ClientCommand::ProjectsOpen
             | ClientCommand::LibraryList
             | ClientCommand::LibraryInstall { .. }
             | ClientCommand::LibraryUpdate { .. }

@@ -150,6 +150,20 @@ pub enum ServerMessage {
         state: WorkerState,
     },
 
+    /// Files changed in an open project (paths relative to it, a settled burst at a time; at most
+    /// 200). To the clients that opened it and its apps' sockets.
+    #[serde(rename = "project.changed")]
+    ProjectChanged { project: String, paths: Vec<String> },
+    /// An app's `on_open` recipe ran when its project was first opened: `ok`, `failed`,
+    /// `timed out`, or `needs approval` (it didn't run).
+    #[serde(rename = "on_open.ran")]
+    OnOpenRan {
+        project: String,
+        app: String,
+        recipe: String,
+        status: String,
+        output: String,
+    },
     /// A pipeline stage's run ended: `review` (waits at its gate), `done`, `failed`, `paused`.
     #[serde(rename = "stage.ended")]
     StageEnded {
@@ -262,6 +276,16 @@ pub enum CommandResult {
     /// `apps.list`.
     Apps {
         list: crate::http::AppList,
+    },
+    /// `project.open`: its name, and whether this was the first open (watch started, `on_open`
+    /// running).
+    ProjectOpened {
+        project: String,
+        first: bool,
+    },
+    /// `projects.open`.
+    OpenProjects {
+        projects: Vec<crate::http::OpenProject>,
     },
     /// `library.list`.
     Library {

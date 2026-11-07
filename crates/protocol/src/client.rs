@@ -97,6 +97,21 @@ pub enum ClientCommand {
         on: bool,
     },
 
+    /// Opens a project (its name, or its folder) for this client: the first open in the workspace
+    /// starts its file watch and runs its apps' `on_open` recipes; the reply is `project_opened`.
+    /// Opening it again from the same client does nothing; a dropped connection closes it.
+    #[serde(rename = "project.open")]
+    ProjectOpen { project: String },
+
+    /// Closes a project this client opened; the last close stops its watch. The reply is `done`.
+    #[serde(rename = "project.close")]
+    ProjectClose { project: String },
+
+    /// The projects open in the workspace, with how many clients have each; the reply is
+    /// `open_projects`.
+    #[serde(rename = "projects.open")]
+    ProjectsOpen,
+
     /// What is going on in a project (a name in the projects directory, or a path); the reply is
     /// `project`.
     #[serde(rename = "project.overview")]

@@ -8,6 +8,8 @@ pub enum EventScope<'a> {
     Page(&'a str),
     /// Every client.
     Global,
+    /// Clients that opened the project (by name), and its apps' sockets.
+    Project(&'a str),
     /// A reply to one client's command; never broadcast.
     Reply,
 }
@@ -31,6 +33,7 @@ pub fn scope(message: &ServerMessage) -> EventScope<'_> {
         // Every client: a worker's recipe needs your answer wherever you are.
         ApprovalRequest { .. } | ApprovalResolved { .. } => EventScope::Global,
         PageChanged { url, .. } => EventScope::Page(url),
+        ProjectChanged { project, .. } | OnOpenRan { project, .. } => EventScope::Project(project),
         SessionUpdated { .. }
         | WorkerStatus { .. }
         | Slots { .. }
