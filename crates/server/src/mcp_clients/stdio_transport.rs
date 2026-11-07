@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -28,38 +28,39 @@ pub struct StdioTransport {
 }
 
 impl StdioTransport {
+    /// Starts `command` (`program`, wrapped by the sandbox or not) with its stdio piped.
     pub fn spawn(
         name: &str,
-        command: &str,
-        args: &[String],
-        env: &BTreeMap<String, String>,
+        program: &str,
+        mut command: Command,
         timeout: Duration,
     ) -> Result<Self, String> {
-        let mut child = Command::new(command)
-            .args(args)
-            .envs(env)
+        let mut child = command
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .kill_on_drop(true)
             .spawn()
-            .map_err(|e| format!("starting `{command}`: {e}"))?;
+            .map_err(|e| format!("starting `{program}`: {e}"))?;
         let stdin = child.stdin.take().ok_or("no stdin")?;
         let stdout = child.stdout.take().ok_or("no stdout")?;
         let stderr = child.stderr.take().ok_or("no stderr")?;
 
         let waiting: Waiting = Arc::default();
+        // Its last stderr line says why it exited (a sandboxed one that can't start says so here).
+        let last_error: Arc<Mutex<String>> = Arc::default();
         let alive = Arc::new(AtomicBool::new(true));
         let tools_changed = Arc::new(AtomicBool::new(false));
         // Replies to the server's own requests (`ping`, `roots/list`) go through this.
         let (replies, mut outbox) = tokio::sync::mpsc::unbounded_channel::<String>();
 
         {
-            let (waiting, alive, tools_changed, name) = (
+            let (waiting, alive, tools_changed, name, last_error) = (
                 waiting.clone(),
                 alive.clone(),
                 tools_changed.clone(),
                 name.to_string(),
+                last_error.clone(),
             );
             tokio::spawn(async move {
                 let mut lines = BufReader::new(stdout).lines();
@@ -71,8 +72,15 @@ impl StdioTransport {
                     handle_message(&message, &waiting, &tools_changed, &replies);
                 }
                 alive.store(false, Ordering::SeqCst);
+                // Give its stderr a moment to arrive.
+                tokio::time::sleep(Duration::from_millis(50)).await;
+                let said = last_error.lock().expect("stderr lock").clone();
+                let error = match said.is_empty() {
+                    true => format!("the MCP server `{name}` exited"),
+                    false => format!("the MCP server `{name}` exited: {said}"),
+                };
                 for (_, sender) in waiting.lock().expect("waiting lock").drain() {
-                    let _ = sender.send(Err(format!("the MCP server `{name}` exited")));
+                    let _ = sender.send(Err(error.clone()));
                 }
             });
         }
@@ -82,6 +90,7 @@ impl StdioTransport {
                 let mut lines = BufReader::new(stderr).lines();
                 while let Ok(Some(line)) = lines.next_line().await {
                     tracing::debug!("mcp {name}: {line}");
+                    *last_error.lock().expect("stderr lock") = line;
                 }
             });
         }

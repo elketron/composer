@@ -10,5 +10,5 @@ mod stdio_transport;
 mod types;
 
 pub use mcp_client::{McpClient, expand, output_text};
-pub use mcp_servers::McpServers;
+pub use mcp_servers::{McpServers, SandboxWorld};
 pub use types::{RemoteTool, Transport, glob_matches, tool_name};

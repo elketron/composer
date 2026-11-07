@@ -89,6 +89,11 @@ impl SandboxSpec {
         &self.user_home
     }
 
+    /// The workspace's sites (always mounted read-write).
+    pub fn sites(&self) -> &Path {
+        &self.sites
+    }
+
     /// Where the program starts.
     pub fn in_dir(mut self, dir: impl Into<PathBuf>) -> Self {
         self.chdir = Some(dir.into());
