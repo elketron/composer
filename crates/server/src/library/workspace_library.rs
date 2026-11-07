@@ -176,8 +176,11 @@ impl WorkspaceLibrary {
         self.library
             .record("library: changes made before a publish")?;
         let dest = self.library.root().join(plan.name.as_str());
-        if dest.exists() {
-            std::fs::remove_dir_all(&dest).map_err(|e| format!("{}: {e}", dest.display()))?;
+        // Only the definition's files: what it no longer has goes, anything else stays.
+        for (rel, kind) in &plan.changes {
+            if *kind == "removed" {
+                remove_with_empty_parents(&dest, rel)?;
+            }
         }
         let source = self.workspace.sites().join(site.as_str());
         for rel in &plan.files {
@@ -445,4 +448,18 @@ fn read_optional(path: &Path) -> Result<Option<Vec<u8>>, String> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(e) => Err(format!("{}: {e}", path.display())),
     }
+}
+
+/// Removes `site/rel`, then each folder above it up to `site` that is left empty.
+fn remove_with_empty_parents(site: &Path, rel: &Path) -> Result<(), String> {
+    let path = site.join(rel);
+    std::fs::remove_file(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let mut dir = path.parent();
+    while let Some(folder) = dir.filter(|d| *d != site && d.starts_with(site)) {
+        if std::fs::remove_dir(folder).is_err() {
+            break;
+        }
+        dir = folder.parent();
+    }
+    Ok(())
 }

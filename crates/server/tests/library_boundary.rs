@@ -171,7 +171,6 @@ async fn a_stock_update_reaches_each_workspace_without_crossing_between_them() {
 }
 
 #[tokio::test]
-#[ignore = "finding F1 of ticket 0155: open until ticket 0156"]
 async fn publishing_a_site_never_removes_library_files_outside_its_definition() {
     let f = fixture().await;
     // a adds an agent of its own and publishes `agents` (installed from the library's stock).
@@ -185,7 +184,7 @@ async fn publishing_a_site_never_removes_library_files_outside_its_definition() 
         std::fs::read_to_string(f.a.sites().join("agents/index.md")).unwrap() + "\nEdited.\n",
     )
     .unwrap();
-    let _ = publish(&f.a, "agents");
+    publish(&f.a, "agents").unwrap();
     // The stock agents stay in the library, and in b after its update.
     for agent in ["default.md", "orchestrator.md", "worker.md", "stage.md"] {
         assert!(
@@ -193,12 +192,40 @@ async fn publishing_a_site_never_removes_library_files_outside_its_definition() 
             "library lost {agent}"
         );
     }
+    // The stock `agents` lists `library: ["*.md"]`: a's new agent is part of the definition.
+    assert!(f.home.library().join("agents/printer.md").is_file());
     let b = WorkspaceLibrary::of(&f.b).unwrap();
     b.update(false, &b.approvals().unwrap()).await.unwrap();
     assert!(
         f.b.sites().join("agents/default.md").is_file(),
         "b lost its default agent"
     );
+    assert!(f.b.sites().join("agents/printer.md").is_file());
+}
+
+#[tokio::test]
+async fn a_definition_file_removed_in_the_workspace_leaves_the_library_on_publish() {
+    let f = fixture().await;
+    publish(&f.a, "cad").unwrap();
+    // A library file the definition doesn't cover, added by hand.
+    std::fs::write(f.home.library().join("cad/README.txt"), "by hand\n").unwrap();
+    Library::of(&f.home).record("by hand").unwrap();
+    let a = WorkspaceLibrary::of(&f.a).unwrap();
+    a.update(false, &a.approvals().unwrap()).await.unwrap();
+    std::fs::remove_file(f.a.sites().join("cad/tools/slice.py")).unwrap();
+    let library = WorkspaceLibrary::of(&f.a).unwrap();
+    let plan = library.plan_publish(&site("cad"), None).unwrap();
+    assert!(
+        plan.describe().contains("README.txt"),
+        "{}",
+        plan.describe()
+    );
+    library.publish(&site("cad"), None, &plan.digest).unwrap();
+    assert!(
+        !f.home.library().join("cad/tools").exists(),
+        "the emptied folder goes too"
+    );
+    assert!(f.home.library().join("cad/README.txt").is_file());
 }
 
 #[tokio::test]
