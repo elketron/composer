@@ -33,6 +33,11 @@ pub fn scope(message: &ServerMessage) -> EventScope<'_> {
         // Every client: a worker's recipe needs your answer wherever you are.
         ApprovalRequest { .. } | ApprovalResolved { .. } => EventScope::Global,
         PageChanged { url, .. } => EventScope::Page(url),
+        // Unsequenced: to the clients attached to the session.
+        DeskChanged { session, .. } => EventScope::Session {
+            id: session,
+            seq: None,
+        },
         ProjectChanged { project, .. } | OnOpenRan { project, .. } => EventScope::Project(project),
         SessionUpdated { .. }
         | WorkerStatus { .. }

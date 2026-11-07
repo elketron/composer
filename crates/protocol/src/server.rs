@@ -150,6 +150,13 @@ pub enum ServerMessage {
         state: WorkerState,
     },
 
+    /// A session's desk changed (`by` the user or the agent): to the clients attached to it.
+    #[serde(rename = "desk.changed")]
+    DeskChanged {
+        session: SessionId,
+        desk: crate::Desk,
+        by: crate::DeskBy,
+    },
     /// Files changed in an open project (paths relative to it, a settled burst at a time; at most
     /// 200). To the clients that opened it and its apps' sockets.
     #[serde(rename = "project.changed")]
@@ -280,6 +287,10 @@ pub enum CommandResult {
     },
     McpServers {
         servers: Vec<crate::http::McpServerInfo>,
+    },
+    /// `desk.*`: the session's desk now.
+    Desk {
+        desk: crate::Desk,
     },
     /// `apps.list`.
     Apps {

@@ -8,6 +8,7 @@ pub mod attachments;
 pub mod client;
 mod config;
 mod config_sections;
+pub mod desk;
 pub mod devices;
 mod error;
 pub mod harness;
