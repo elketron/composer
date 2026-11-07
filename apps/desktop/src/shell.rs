@@ -14,6 +14,7 @@ use gpui::{
 };
 use tokio::sync::mpsc;
 
+use crate::browser_tabs::BrowserTabs;
 use crate::chat_width::ChatWidth;
 use crate::link_state::LinkState;
 use crate::stage_tabs;
@@ -38,10 +39,8 @@ pub struct Shell {
     chat: Option<Entity<TermPane>>,
     /// Stage terminals, by terminal id.
     panes: HashMap<String, Entity<TermPane>>,
-    /// Browser panes of the other tabs, by tab id; made when a tab is first shown.
-    webs: HashMap<String, Entity<WebPane>>,
-    /// Tabs whose browser pane is on its way (`app.open` asked).
-    loading: HashSet<String>,
+    /// Browser panes of the other tabs; made when a tab is first shown.
+    webs: BrowserTabs<Entity<WebPane>>,
     subscriptions: Vec<Subscription>,
     chat_width: ChatWidth,
     dragging: bool,
@@ -76,8 +75,7 @@ impl Shell {
             link: LinkState::Connecting,
             chat: None,
             panes: HashMap::new(),
-            webs: HashMap::new(),
-            loading: HashSet::new(),
+            webs: BrowserTabs::default(),
             subscriptions: Vec::new(),
             chat_width: ChatWidth::DEFAULT,
             dragging: false,
@@ -93,7 +91,6 @@ impl Shell {
                 // Stage panes start over from the server's scrollback; apps get fresh tokens.
                 self.panes.clear();
                 self.webs.clear();
-                self.loading.clear();
                 if let Some(session) = self.store.attached.clone() {
                     self.ask(
                         ClientCommand::SessionAttach {
@@ -237,7 +234,7 @@ impl Shell {
             .collect();
         self.panes.retain(|id, _| on_desk.contains(id));
         let tabs: HashSet<&str> = self.store.desk.tabs.iter().map(|t| t.id.as_str()).collect();
-        self.webs.retain(|id, _| tabs.contains(id.as_str()));
+        self.webs.keep(&tabs);
         for id in on_desk {
             if self.panes.contains_key(&id) {
                 continue;
@@ -335,10 +332,7 @@ impl Shell {
         let Some(entry) = self.shown_entry().cloned() else {
             return;
         };
-        if matches!(entry.tab, DeskTab::Terminal { .. })
-            || self.webs.contains_key(&entry.id)
-            || !self.loading.insert(entry.id.clone())
-        {
+        if matches!(entry.tab, DeskTab::Terminal { .. }) || !self.webs.begin(&entry.id) {
             return;
         }
         if let Some(url) = view_url(&self.endpoint, &entry.tab) {
@@ -367,7 +361,7 @@ impl Shell {
                 }
                 Ok(_) => {}
                 Err(e) => {
-                    shell.loading.remove(&entry.id);
+                    shell.webs.failed(&entry.id);
                     shell.link = shell.link.refused(e);
                     cx.notify();
                 }
@@ -385,8 +379,7 @@ impl Shell {
                 WebEvent::OpenPage(url) => shell.open_page(url.clone(), cx),
             },
         ));
-        self.loading.remove(&tab);
-        self.webs.insert(tab, pane);
+        self.webs.arrived(tab, pane);
         cx.notify();
     }
 

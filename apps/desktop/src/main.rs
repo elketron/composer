@@ -5,6 +5,7 @@
 //!   composer-desktop [--workspace <name>]     (home: $COMPOSER_HOME, else ~/.composer)
 
 mod browser_pump;
+mod browser_tabs;
 mod cef_runtime;
 mod chat_width;
 mod dom_keys;
