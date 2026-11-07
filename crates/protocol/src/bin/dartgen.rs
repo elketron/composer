@@ -12,10 +12,11 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use composer_protocol::http::{
-    ActionSummary, AgentSummary, AppMessage, ChangedFile, DiffComment, PageExcerpt, PageResponse,
-    PipelineSummary, ProjectDiff, ProjectOverview, ProjectSummary, PutPageRequest, PutPageResponse,
-    RunActionRequest, RunActionResponse, SearchHit, ServerInfo, SiteSummary, StageState,
-    StageSummary, TicketBranchSummary, TicketReview, WorkSummary,
+    ActionSummary, AgentSummary, AppInfo, AppList, AppMessage, AppOpened, ChangedFile, DiffComment,
+    OpenProject, PageExcerpt, PageResponse, PipelineSummary, ProjectDiff, ProjectInfo,
+    ProjectOverview, ProjectSummary, PutPageRequest, PutPageResponse, RunActionRequest,
+    RunActionResponse, SearchHit, ServerInfo, SiteSummary, StageState, StageSummary,
+    TicketBranchSummary, TicketReview, WorkSummary,
 };
 use composer_protocol::*;
 use serde_json::{Map, Value, json};
@@ -79,6 +80,12 @@ fn definitions() -> Map<String, Value> {
     let _ = generator.subschema_for::<ActionSummary>();
     let _ = generator.subschema_for::<RunActionRequest>();
     let _ = generator.subschema_for::<RunActionResponse>();
+    // Phase 4: apps on projects (0162-0168).
+    let _ = generator.subschema_for::<AppList>();
+    let _ = generator.subschema_for::<AppInfo>();
+    let _ = generator.subschema_for::<AppOpened>();
+    let _ = generator.subschema_for::<ProjectInfo>();
+    let _ = generator.subschema_for::<OpenProject>();
     let defs = generator.take_definitions(true);
     defs.into_iter().collect()
 }
