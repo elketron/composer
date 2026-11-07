@@ -1,8 +1,7 @@
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-use serde::{Deserialize, Serialize};
-
+use crate::apps::local_allowance::Allowance;
 use crate::apps::{LocalApp, ProjectName};
 
 /// The project-local apps the user allowed (`composer app allow <project> <app>`), each for the
@@ -11,14 +10,6 @@ use crate::apps::{LocalApp, ProjectName};
 pub struct LocalAllowances {
     path: PathBuf,
     allowed: Mutex<Vec<Allowance>>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-struct Allowance {
-    project: String,
-    app: String,
-    hash: String,
-    allowed_at: String,
 }
 
 impl LocalAllowances {
