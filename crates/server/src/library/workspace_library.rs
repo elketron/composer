@@ -359,12 +359,7 @@ impl WorkspaceLibrary {
             .join("sites")
             .join(site.as_str())
             .join(rel);
-        let write = |path: &Path, bytes: &[u8]| -> Result<(), String> {
-            if dry_run {
-                return Ok(());
-            }
-            write_creating_dirs(path, bytes).map_err(|e| e.to_string())
-        };
+        let write = |path: &Path, bytes: &[u8]| write_unless(dry_run, path, bytes);
         let outcome = match (current, base, new) {
             // Deleted here: stays deleted.
             (None, Some(_), _) => return Ok(None),
@@ -385,21 +380,10 @@ impl WorkspaceLibrary {
                 UpdateOutcome::Replaced
             }
             (Some(current), Some(base), Some(new)) => {
-                let scratch = self.workspace.state().join("merge");
-                match merge_three(&scratch, &current, &base, &new).map_err(|e| e.to_string())? {
-                    Merge::Clean(merged) => {
-                        write(&target, &merged)?;
-                        UpdateOutcome::Merged
-                    }
-                    Merge::Conflict(marked) => {
-                        write(&review, &marked)?;
-                        UpdateOutcome::Conflict { review }
-                    }
-                    Merge::Impossible => {
-                        write(&review, &new)?;
-                        UpdateOutcome::Review { review }
-                    }
-                }
+                let merge =
+                    merge_three(&self.workspace.state().join("merge"), &current, &base, &new)
+                        .map_err(|e| e.to_string())?;
+                apply_merge(merge, &new, &target, review, dry_run)?
             }
             (Some(_), None, Some(new)) => {
                 write(&review, &new)?;
@@ -462,4 +446,38 @@ fn remove_with_empty_parents(site: &Path, rel: &Path) -> Result<(), String> {
         dir = folder.parent();
     }
     Ok(())
+}
+
+/// Writes `bytes` to `path` (creating its folders), unless this is a dry run.
+fn write_unless(dry_run: bool, path: &Path, bytes: &[u8]) -> Result<(), String> {
+    if dry_run {
+        return Ok(());
+    }
+    write_creating_dirs(path, bytes).map_err(|e| e.to_string())
+}
+
+/// Lands a three-way merge of a file changed both here and in the library: a clean merge on
+/// `target`; a conflict (marked) or the library's `new` version next to it under `review`.
+fn apply_merge(
+    merge: Merge,
+    new: &[u8],
+    target: &Path,
+    review: PathBuf,
+    dry_run: bool,
+) -> Result<UpdateOutcome, String> {
+    let outcome = match merge {
+        Merge::Clean(merged) => {
+            write_unless(dry_run, target, &merged)?;
+            UpdateOutcome::Merged
+        }
+        Merge::Conflict(marked) => {
+            write_unless(dry_run, &review, &marked)?;
+            UpdateOutcome::Conflict { review }
+        }
+        Merge::Impossible => {
+            write_unless(dry_run, &review, new)?;
+            UpdateOutcome::Review { review }
+        }
+    };
+    Ok(outcome)
 }

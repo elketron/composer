@@ -1,4 +1,5 @@
 use anyhow::{Context, bail};
+use composer_protocol::http::{InstalledSiteInfo, LibraryChange, LibrarySiteInfo};
 use composer_protocol::{ClientCommand, ClientRequest, CommandResult};
 use futures::SinkExt;
 use tokio_tungstenite::tungstenite::Message;
@@ -61,27 +62,13 @@ pub async fn library(server_url: &str, token: &str, action: LibraryAction) -> an
             }
         }
     };
-    match send(2, command).await? {
-        CommandResult::Library { sites } => {
-            if sites.is_empty() {
-                println!("The library is empty.");
-            }
-            for site in sites {
-                let installed: Vec<String> = site
-                    .installed
-                    .iter()
-                    .map(|i| match i.behind {
-                        true => format!("{} (update available)", i.site),
-                        false => i.site.clone(),
-                    })
-                    .collect();
-                let here = match installed.is_empty() {
-                    true => "not installed".to_string(),
-                    false => format!("installed as {}", installed.join(", ")),
-                };
-                println!("{:<20} {}  {here}", site.site, site.commit);
-            }
-        }
+    print_reply(send(2, command).await?)
+}
+
+/// Prints the server's answer to a `composer library` command.
+fn print_reply(reply: CommandResult) -> anyhow::Result<()> {
+    match reply {
+        CommandResult::Library { sites } => print_sites(&sites),
         CommandResult::LibraryInstalled {
             site,
             from,
@@ -96,26 +83,52 @@ pub async fn library(server_url: &str, token: &str, action: LibraryAction) -> an
                 println!("It has an app: build it with its `ui-build` action.");
             }
         }
-        CommandResult::LibraryUpdated { changes } => {
-            if changes.is_empty() {
-                println!("Every installed site is up to date.");
-            }
-            for change in &changes {
-                println!("  {}  {}", change.path, change.outcome);
-            }
-            let reviews: Vec<&String> = changes.iter().filter_map(|c| c.review.as_ref()).collect();
-            if !reviews.is_empty() {
-                println!("\nThe library's versions of the files kept as yours:");
-                for review in reviews {
-                    println!("  {review}");
-                }
-                println!("Take what you want from them, then delete them.");
-            }
-        }
+        CommandResult::LibraryUpdated { changes } => print_changes(&changes),
         CommandResult::LibraryPublished { site, name, commit } => {
             println!("\npublished site://{site} to the library as `{name}` @ {commit}");
         }
         _ => bail!("unexpected reply"),
     }
     Ok(())
+}
+
+/// `composer library list`: each library site, and where this workspace has it.
+fn print_sites(sites: &[LibrarySiteInfo]) {
+    if sites.is_empty() {
+        println!("The library is empty.");
+    }
+    for site in sites {
+        let installed: Vec<String> = site.installed.iter().map(installed_label).collect();
+        let here = match installed.is_empty() {
+            true => "not installed".to_string(),
+            false => format!("installed as {}", installed.join(", ")),
+        };
+        println!("{:<20} {}  {here}", site.site, site.commit);
+    }
+}
+
+fn installed_label(installed: &InstalledSiteInfo) -> String {
+    match installed.behind {
+        true => format!("{} (update available)", installed.site),
+        false => installed.site.clone(),
+    }
+}
+
+/// `composer library update`: what changed, and the files kept for the user to review.
+fn print_changes(changes: &[LibraryChange]) {
+    if changes.is_empty() {
+        println!("Every installed site is up to date.");
+    }
+    for change in changes {
+        println!("  {}  {}", change.path, change.outcome);
+    }
+    let reviews: Vec<&String> = changes.iter().filter_map(|c| c.review.as_ref()).collect();
+    if reviews.is_empty() {
+        return;
+    }
+    println!("\nThe library's versions of the files kept as yours:");
+    for review in reviews {
+        println!("  {review}");
+    }
+    println!("Take what you want from them, then delete them.");
 }
