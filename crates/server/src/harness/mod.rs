@@ -8,6 +8,8 @@
 mod child_process;
 mod claude_code_harness;
 mod claude_code_run;
+mod claude_code_world;
+mod claude_token;
 mod command_policy;
 mod harness_switches;
 mod own_harness;
@@ -25,6 +27,7 @@ pub use child_process::ChildProcess;
 pub use child_process::signal_group;
 pub use claude_code_harness::ClaudeCodeHarness;
 pub use claude_code_run::ClaudeCodeRun;
+pub use claude_token::ClaudeToken;
 pub use harness_switches::HarnessSwitches;
 pub use own_harness::OwnHarness;
 pub use project_policy::{check_harness_allowed, pick_model, project_settings};

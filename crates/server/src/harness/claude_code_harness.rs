@@ -5,7 +5,11 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use serde_json::json;
 
-use crate::harness::{ChildProcess, ClaudeCodeRun, Harness, HarnessRun, StartRequest, WorkerScope};
+use crate::harness::claude_code_world::claude_code_world;
+use crate::harness::{
+    ChildProcess, ClaudeCodeRun, ClaudeToken, Harness, HarnessRun, StartRequest, WorkerScope,
+};
+use crate::init::local_token;
 use crate::server::Server;
 use crate::worker::ticket::set_ticket_fields;
 
@@ -31,8 +35,10 @@ const KEEP_ENV: &[&str] = &[
     "CLAUDE_CONFIG_DIR",
 ];
 
-/// The official Claude Code CLI (`claude -p`), for personal use on this machine under its
-/// own login. Composer never reads or passes its credentials.
+/// The official Claude Code CLI (`claude -p`), for personal use on this machine. Sandboxed (the
+/// default), it runs in its workspace's world with its own `~/.claude` and logs in with the
+/// home's `claude setup-token` token; with the sandbox off, it runs on the machine's own login and
+/// composer never reads its credentials.
 pub struct ClaudeCodeHarness;
 
 #[async_trait]
@@ -58,7 +64,6 @@ impl Harness for ClaudeCodeHarness {
             .project
             .clone()
             .ok_or("claude-code works in a project folder")?;
-        check_login(&config.command).await?;
 
         let harness_session = match &request.resume {
             Some(resume) => resume.harness_session.clone(),
@@ -97,13 +102,27 @@ impl Harness for ClaudeCodeHarness {
         };
         let mut dirs: Vec<&Path> = files.iter().filter_map(|p| p.parent()).collect();
         dirs.dedup();
+        let read_dirs = read_dirs(&config.read_dirs, |p| server.foreign_path(p));
+        let read_paths: Vec<PathBuf> = read_dirs.iter().map(|(path, _)| path.clone()).collect();
+        let world = claude_code_world(server, Path::new(&folder), &dirs, &read_paths)?;
+        if world.is_none() {
+            check_login(&config.command).await?;
+        }
+        let mut mcp_env: std::collections::BTreeMap<&str, String> =
+            server.home.env().into_iter().collect();
+        if world.is_some() {
+            // The sandbox has no `state/`, so `composer mcp` can't read the token there.
+            mcp_env.insert(
+                "COMPOSER_TOKEN",
+                local_token(&server.home).map_err(|e| e.to_string())?,
+            );
+        }
         let mcp = json!({ "mcpServers": { "composer": {
             "type": "stdio",
             "command": server.worker_exe,
             "args": ["mcp", "--session", request.session, "--parent", parent],
-            "env": server.home.env().into_iter().collect::<std::collections::BTreeMap<_, _>>(),
+            "env": mcp_env,
         }}});
-        let read_dirs = read_dirs(&config.read_dirs, |p| server.foreign_path(p));
         let tools: Vec<String> = config
             .allowed_tools
             .iter()
@@ -139,12 +158,17 @@ impl Harness for ClaudeCodeHarness {
             )
         };
         // The prompt goes first: the list options after it take every following word.
+        let (program, sandbox_args) = match &world {
+            Some((spec, _)) => spec.wrap(&config.command)?,
+            None => (config.command.clone().into(), Vec::new()),
+        };
         let (mut command, scope) = WorkerScope::command(
-            config.command.as_ref(),
+            &program,
             &request.session,
             &server.config().agent.worker_memory_max,
         );
         command
+            .args(sandbox_args)
             .arg("-p")
             .arg(&prompt)
             .args(["--output-format", "stream-json", "--verbose"])
@@ -203,6 +227,12 @@ impl Harness for ClaudeCodeHarness {
             .stderr(log.try_clone().map_err(|e| e.to_string())?);
         if scope.is_some() {
             WorkerScope::keep_env(&mut command);
+        }
+        if let Some((_, token)) = &world {
+            // Its login is in the sandbox's own ~/.claude and this token, nowhere else.
+            command
+                .env_remove("CLAUDE_CONFIG_DIR")
+                .env(ClaudeToken::ENV, token.as_str());
         }
         if config.ask {
             // Its MCP calls (a question to the user) may wait as long as the run may.

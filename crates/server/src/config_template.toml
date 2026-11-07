@@ -83,7 +83,11 @@ learn_after = 3
 
 [claude_code]
 # The Claude Code CLI, for tickets with `harness: claude-code` in projects that allow it.
-# It runs under its own login (`claude auth login`); composer never reads its credentials.
+# In the sandbox (the default) each workspace has its own ~/.claude (your CLAUDE.md, settings,
+# skills, agents, commands and plugins are lent read-only) and runs log in with a token: run
+# `claude setup-token`, then `composer claude-token` and paste it. The run gets it as
+# CLAUDE_CODE_OAUTH_TOKEN (so its own tools can read it: it is the login it already uses).
+# With [sandbox] enabled = false it runs on this machine's `claude auth login` instead.
 command = "claude"
 # --model; empty: the CLI's default.
 model = ""

@@ -5,6 +5,7 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 use composer_server::client::{AskOptions, ask};
+use composer_server::harness::ClaudeToken;
 use composer_server::mcp::{McpOptions, run_mcp};
 use composer_server::worker::{WorkerOptions, run_worker};
 use composer_server::{
@@ -145,6 +146,9 @@ enum Command {
         #[arg(long)]
         resume: Option<String>,
     },
+    /// Store the Claude Code login sandboxed runs use: run `claude setup-token`, then this, and
+    /// paste the token it printed (read from stdin; kept in the home's state/, owner-only).
+    ClaudeToken,
     /// Serve a running worker's tools over MCP on stdin/stdout (started for external harnesses).
     #[command(hide = true)]
     Mcp {
@@ -270,6 +274,7 @@ async fn main() -> anyhow::Result<()> {
             }
         }
         Some(Command::Update { dry_run }) => update(&home, dry_run).await?,
+        Some(Command::ClaudeToken) => claude_token(&home)?,
         Some(Command::Serve { bind }) => {
             let pending = pending_updates(&home);
             if pending > 0 {
@@ -499,4 +504,21 @@ fn tui_options(
         },
         context_limit: config.agent.compaction_threshold,
     })
+}
+
+/// `composer claude-token`: reads a `claude setup-token` token from stdin and stores it.
+fn claude_token(home: &Home) -> anyhow::Result<()> {
+    use std::io::{IsTerminal, Read};
+    if std::io::stdin().is_terminal() {
+        eprintln!("Paste the token `claude setup-token` printed, then press Enter and Ctrl-D:");
+    }
+    let mut raw = String::new();
+    std::io::stdin().read_to_string(&mut raw)?;
+    let token = ClaudeToken::new(&raw).map_err(anyhow::Error::msg)?;
+    let file = token.save(home).map_err(anyhow::Error::msg)?;
+    println!(
+        "stored in {} (sandboxed Claude Code runs log in with it)",
+        file.display()
+    );
+    Ok(())
 }
