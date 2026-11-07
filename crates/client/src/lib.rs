@@ -8,8 +8,10 @@ mod connection;
 mod endpoint;
 mod store;
 mod terminal_view;
+mod window_binding;
 
 pub use connection::{Connection, Event};
 pub use endpoint::Endpoint;
 pub use store::Store;
 pub use terminal_view::TerminalView;
+pub use window_binding::WindowBinding;

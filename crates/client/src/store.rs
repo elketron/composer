@@ -5,7 +5,7 @@ use composer_protocol::{
     ClientCommand, CommandResult, Desk, Selection, ServerMessage, SessionInfo,
 };
 
-use crate::TerminalView;
+use crate::{TerminalView, WindowBinding};
 
 /// What the server said, reduced to what a client shows (no UI): the sessions, the attached
 /// session's desk and selection, terminals, and the window this client is.
@@ -20,7 +20,7 @@ pub struct Store {
     pub pointed: Option<String>,
     pub terminals: BTreeMap<String, TerminalView>,
     /// This client's desktop window, and its TUI's terminal.
-    pub window: Option<(String, String)>,
+    pub window: Option<WindowBinding>,
 }
 
 impl Store {
@@ -63,7 +63,7 @@ impl Store {
                 vec![]
             }
             ServerMessage::WindowChanged { window, session }
-                if self.window.as_ref().is_some_and(|(id, _)| id == window) =>
+                if self.window.as_ref().is_some_and(|w| w.is(window)) =>
             {
                 self.follow(session)
             }
@@ -114,7 +114,10 @@ impl Store {
                 self.terminals.insert(terminal.clone(), view);
             }
             CommandResult::Window { window, terminal } => {
-                self.window = Some((window.clone(), terminal.clone()));
+                self.window = Some(WindowBinding {
+                    window: window.clone(),
+                    terminal: terminal.clone(),
+                });
             }
             _ => {}
         }
