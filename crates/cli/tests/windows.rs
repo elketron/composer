@@ -145,6 +145,19 @@ async fn a_window_gets_its_tui_and_follows_its_session() {
         }
     }
 
+    // Joining the real window (as its TUI does) brings its session changes only: never its
+    // terminal's output, which would make a TUI redraw for ever.
+    let join = ClientRequest {
+        id: 6,
+        command: ClientCommand::WindowJoin {
+            window: id.clone().unwrap(),
+        },
+    };
+    bystander
+        .send(Message::Text(serde_json::to_string(&join).unwrap().into()))
+        .await
+        .unwrap();
+
     // The window picks another session (the desktop's switcher): its TUI shows it (ticket 0185).
     let other = server
         .sessions
@@ -179,6 +192,28 @@ async fn a_window_gets_its_tui_and_follows_its_session() {
             heard += 1;
         }
     }
+
+    let (mut joined_heard, mut joined_output) = (false, 0);
+    // Until quiet, or 3 s at most (a redraw loop is never quiet).
+    let until = tokio::time::Instant::now() + Duration::from_secs(3);
+    while tokio::time::Instant::now() < until
+        && let Ok(Some(Ok(Message::Text(text)))) =
+            tokio::time::timeout(Duration::from_millis(500), bystander.next()).await
+    {
+        match serde_json::from_str::<ServerMessage>(&text).unwrap() {
+            ServerMessage::WindowChanged { session, .. } if session == other => joined_heard = true,
+            ServerMessage::TerminalOutput { .. } => joined_output += 1,
+            _ => {}
+        }
+    }
+    assert!(
+        joined_heard,
+        "a joined connection hears the window's session change"
+    );
+    assert_eq!(
+        joined_output, 0,
+        "a joined connection got the window's terminal output"
+    );
 
     // Only the window types into its TUI (unsandboxed: its editor can run a shell).
     let typed = ClientRequest {

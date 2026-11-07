@@ -1107,10 +1107,13 @@ dependencies = [
  "gpui-pre",
  "gpui-pre-platform",
  "image",
+ "serde_json",
  "smallvec",
  "tattoy-wezterm-surface",
  "tattoy-wezterm-term",
+ "tempfile",
  "tokio",
+ "toml 1.2.1+spec-1.1.0",
 ]
 
 [[package]]

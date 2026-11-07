@@ -173,7 +173,10 @@ impl Connection {
                     .expect("window lock")
                     .as_ref()
                     .is_some_and(|(id, _)| id == window)
-                    || self.joined.lock().expect("joined lock").as_deref() == Some(window)
+                    // The window's TUI gets the window's session changes only: its own
+                    // terminal's output would make it redraw for ever.
+                    || (matches!(message, ServerMessage::WindowChanged { .. })
+                        && self.joined.lock().expect("joined lock").as_deref() == Some(window))
             }
             EventScope::Project(name) => {
                 self.app
