@@ -43,37 +43,17 @@ pub struct Connection {
 impl Connection {
     /// Connects to `endpoint` (and keeps reconnecting); its events.
     pub fn open(endpoint: Endpoint) -> (Self, mpsc::UnboundedReceiver<Event>) {
-        let (outgoing, mut requests) = mpsc::unbounded_channel::<ClientRequest>();
+        let (outgoing, requests) = mpsc::unbounded_channel::<ClientRequest>();
         let (events, received) = mpsc::unbounded_channel::<Event>();
         let waiting: Waiting = Arc::default();
         let connected = Arc::new(AtomicBool::new(false));
-        let (task_waiting, task_connected) = (waiting.clone(), connected.clone());
-        tokio::spawn(async move {
-            let mut backoff = BACKOFF_FIRST;
-            loop {
-                if let Ok((socket, _)) = tokio_tungstenite::connect_async(endpoint.ws_url()).await {
-                    backoff = BACKOFF_FIRST;
-                    task_connected.store(true, Ordering::SeqCst);
-                    while requests.try_recv().is_ok() {} // from before: stale
-                    if events.send(Event::Connected).is_err() {
-                        return;
-                    }
-                    let reason = pump(socket, &mut requests, &events, &task_waiting).await;
-                    task_connected.store(false, Ordering::SeqCst);
-                    fail_waiting(&task_waiting, &reason);
-                    if events.send(Event::Disconnected(reason)).is_err() {
-                        return;
-                    }
-                } else if events
-                    .send(Event::Disconnected("can't connect".into()))
-                    .is_err()
-                {
-                    return;
-                }
-                tokio::time::sleep(backoff).await;
-                backoff = (backoff * 2).min(BACKOFF_MAX);
-            }
-        });
+        tokio::spawn(keep_connected(
+            endpoint,
+            requests,
+            events,
+            waiting.clone(),
+            connected.clone(),
+        ));
         let connection = Self {
             outgoing,
             waiting,
@@ -133,17 +113,55 @@ async fn pump(
                 }
             }
             frame = stream.next() => match frame {
-                Some(Ok(Message::Text(text))) => {
-                    let Ok(message) = serde_json::from_str::<ServerMessage>(&text) else { continue };
-                    if let Some(message) = answer(waiting, message) {
-                        let _ = events.send(Event::Message(message));
-                    }
-                }
+                Some(Ok(Message::Text(text))) => incoming(&text, waiting, events),
                 Some(Ok(_)) => {}
                 Some(Err(e)) => return e.to_string(),
                 None => return "connection closed".into(),
             }
         }
+    }
+}
+
+/// Connects, moves messages, and reconnects with backoff, until the client drops its events.
+async fn keep_connected(
+    endpoint: Endpoint,
+    mut requests: mpsc::UnboundedReceiver<ClientRequest>,
+    events: mpsc::UnboundedSender<Event>,
+    waiting: Waiting,
+    connected: Arc<AtomicBool>,
+) {
+    let mut backoff = BACKOFF_FIRST;
+    loop {
+        let reason = match tokio_tungstenite::connect_async(endpoint.ws_url()).await {
+            Ok((socket, _)) => {
+                backoff = BACKOFF_FIRST;
+                connected.store(true, Ordering::SeqCst);
+                while requests.try_recv().is_ok() {} // from before: stale
+                if events.send(Event::Connected).is_err() {
+                    return;
+                }
+                let reason = pump(socket, &mut requests, &events, &waiting).await;
+                connected.store(false, Ordering::SeqCst);
+                fail_waiting(&waiting, &reason);
+                reason
+            }
+            Err(_) => "can't connect".to_string(),
+        };
+        if events.send(Event::Disconnected(reason)).is_err() {
+            return;
+        }
+        tokio::time::sleep(backoff).await;
+        backoff = (backoff * 2).min(BACKOFF_MAX);
+    }
+}
+
+/// A text frame: a reply to a waiting request, else an event (unparseable frames are dropped).
+fn incoming(text: &str, waiting: &Waiting, events: &mpsc::UnboundedSender<Event>) {
+    let Ok(message) = serde_json::from_str::<ServerMessage>(text) else {
+        return;
+    };
+    if let Some(message) = answer(waiting, message) {
+        let _ = events.send(Event::Message(message));
     }
 }
 
