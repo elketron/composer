@@ -245,6 +245,12 @@ async fn http_routes_refuse_a_mount_outside_the_allowed_scope() {
     // serve_app (`/<site>/<path>`) answers 404 for an unbuilt site, and serves nothing
     // through a refused mount either: a built app whose dist folder is a real folder is
     // unaffected, a symlink inside dist that escapes is refused.
+    // A client app, so the workspace's own route serves it (ticket 0168).
+    std::fs::write(
+        home.path().join("sites/plans/index.md"),
+        "---\ntitle: Plans\napp:\n  client: true\n---\n# Plans\n",
+    )
+    .unwrap();
     let dist = home.path().join("sites/plans/ui/dist");
     std::fs::create_dir_all(&dist).unwrap();
     std::fs::write(dist.join("index.html"), "<html>app</html>").unwrap();

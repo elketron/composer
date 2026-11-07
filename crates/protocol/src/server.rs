@@ -211,6 +211,10 @@ pub enum ServerMessage {
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum CommandResult {
     Done,
+    /// `app.open`.
+    AppOpened {
+        opened: crate::http::AppOpened,
+    },
     /// Done, with what the user should know (`app.allow`, `app.promote`).
     Note {
         text: String,

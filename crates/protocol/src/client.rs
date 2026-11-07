@@ -125,6 +125,15 @@ pub enum ClientCommand {
         project: Option<String>,
     },
 
+    /// Opens an app: on a project (by name), or on Home without one; the reply is `app_opened`
+    /// (the URL to load, with its token or one-time code in it once).
+    #[serde(rename = "app.open")]
+    AppOpen {
+        site: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        project: Option<String>,
+    },
+
     /// Allows a project-local app (`<project>/.composer/apps/<app>`) as it is now: it is served
     /// and its recipes run until its `index.md` or `justfile` changes. The reply is `note`.
     #[serde(rename = "app.allow")]

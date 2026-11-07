@@ -28,8 +28,10 @@ impl RecipeEnv {
     /// It also gets `PROJECT_ROOT`, `PROJECT_NAME` and `APP_DATA` (its data folder, made now and
     /// writable in the sandbox).
     pub fn for_app(server: &Server, grant: &crate::apps::AppGrant) -> Self {
-        let project = server
-            .see_project(&grant.folder.display().to_string())
+        let project = grant
+            .project
+            .as_ref()
+            .and_then(|p| server.see_project(&p.folder.display().to_string()).ok())
             .unwrap_or_default();
         let data = grant.data(&server.home);
         if let Err(e) = std::fs::create_dir_all(&data) {
@@ -38,7 +40,14 @@ impl RecipeEnv {
         let mut env = Self::with_project(server, &grant.site, None, project.clone());
         env.vars.extend([
             ("PROJECT_ROOT", project),
-            ("PROJECT_NAME", grant.project.to_string()),
+            (
+                "PROJECT_NAME",
+                grant
+                    .project
+                    .as_ref()
+                    .map(|p| p.name.to_string())
+                    .unwrap_or_default(),
+            ),
             ("APP_DATA", data.display().to_string()),
         ]);
         // Composer's own choice of a folder in the workspace's state: mounted, not a bind.

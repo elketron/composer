@@ -1,8 +1,8 @@
-//! A project app's own routes (ticket 0163): `<base>/p/<project>/<app>/` serves the app, and
-//! `<base>/p/<project>/<app>/api/...` is the API as its token allows (decision 2026-11-07): read any
-//! page of the workspace; write only its own site and its project; run only its own site's
-//! actions, on its project. These routes sit outside the workspace token's: an app page never
-//! needs (and never gets) the workspace token.
+//! An app's own routes: `<base>/p/<project>/<app>/` for an app opened on a project (ticket 0163),
+//! `<base>/h/<app>/` for one opened on Home (ticket 0168). They serve the app, and `.../api/...` is
+//! the API as its token allows (decision 2026-11-07): read any page of the workspace; write only
+//! its own site and its project (on Home: no project); run only its own site's actions. These
+//! routes sit outside the workspace token's: an app page never needs (and never gets) it.
 
 use std::collections::HashMap;
 use std::path::{Component, Path as FsPath, PathBuf};
@@ -30,10 +30,23 @@ use crate::server::Server;
 /// The cookie an app page's token rides in, scoped to the app's own path.
 pub const APP_COOKIE: &str = "composer_app";
 
+/// A route's named parameters (`project`, `app`, `site`, `path`, ...).
+type Params = HashMap<String, String>;
+
+fn arg(params: &Params, name: &str) -> String {
+    params.get(name).cloned().unwrap_or_default()
+}
+
 /// The routes, to merge into a workspace's router (outside its token layer).
 pub fn router(server: Arc<Server>) -> Router<Arc<Server>> {
-    let base = "/p/{project}/{app}";
-    Router::new()
+    let router = routes(Router::new(), "/p/{project}/{app}");
+    routes(router, "/h/{app}")
+        .route_layer(middleware::from_fn_with_state(server, require_app_token))
+}
+
+/// The app routes under `base`.
+fn routes(router: Router<Arc<Server>>, base: &str) -> Router<Arc<Server>> {
+    router
         .route(base, get(redirect))
         .route(&format!("{base}/"), get(index))
         .route(&format!("{base}/{{*path}}"), get(file))
@@ -70,7 +83,6 @@ pub fn router(server: Arc<Server>) -> Router<Arc<Server>> {
             &format!("{base}/api/sessions/{{id}}/messages"),
             post(post_message),
         )
-        .route_layer(middleware::from_fn_with_state(server, require_app_token))
 }
 
 /// Requires the token the app was opened with (`?app_token=` once, then its cookie; or
@@ -89,7 +101,9 @@ async fn require_app_token(
             .map(|(_, v)| v.to_string())
             .unwrap_or_default()
     };
+    // No `project`: an app opened on Home.
     let (project, app) = (param("project"), param("app"));
+    let project = (!project.is_empty()).then_some(project);
     let headers = request.headers();
     let bearer = headers
         .get(header::AUTHORIZATION)
@@ -112,16 +126,16 @@ async fn require_app_token(
         .filter_map(|pair| pair.trim().split_once('='))
         .filter(|(k, _)| *k == APP_COOKIE)
         .map(|(_, v)| v.to_string())
-        .find(|t| fits(&server, t, &project, &app));
+        .find(|t| fits(&server, t, project.as_deref(), &app));
     let token = [bearer, query.clone()]
         .into_iter()
         .flatten()
-        .find(|t| fits(&server, t, &project, &app))
+        .find(|t| fits(&server, t, project.as_deref(), &app))
         .or(cookie.clone());
     let Some(grant) = token.as_deref().and_then(|t| server.app_tokens.grant(t)) else {
         return (
             StatusCode::NOT_FOUND,
-            "not found (or not with this app's token: open the app from its project to get one)",
+            "not found (or not with this app's token: open the app to get one)",
         )
             .into_response();
     };
@@ -134,12 +148,15 @@ async fn require_app_token(
     request.extensions_mut().insert(grant);
     let mut response = next.run(request).await;
     if let Some(token) = query.filter(|q| cookie.as_deref() != Some(q.as_str())) {
-        let path = format!(
-            "{}/p/{}/{}/",
-            server.route_base(),
-            encode_segment(&project),
-            encode_segment(&app)
-        );
+        let path = match &project {
+            Some(project) => format!(
+                "{}/p/{}/{}/",
+                server.route_base(),
+                encode_segment(project),
+                encode_segment(&app)
+            ),
+            None => format!("{}/h/{}/", server.route_base(), encode_segment(&app)),
+        };
         let mut value = format!("{APP_COOKIE}={token}; Path={path}; HttpOnly; SameSite=Strict");
         if secure {
             value.push_str("; Secure");
@@ -151,12 +168,12 @@ async fn require_app_token(
     response
 }
 
-/// `token` is an app token for `app` on `project`.
-fn fits(server: &Server, token: &str, project: &str, app: &str) -> bool {
+/// `token` is an app token for `app` on `project` (`None`: on Home).
+fn fits(server: &Server, token: &str, project: Option<&str>, app: &str) -> bool {
     server
         .app_tokens
         .grant(token)
-        .is_some_and(|g| g.project.as_str() == project && g.site == app)
+        .is_some_and(|g| g.site == app && g.project.as_ref().map(|p| p.name.as_str()) == project)
 }
 
 /// `name` as one URL path segment.
@@ -176,9 +193,12 @@ fn refused(grant: &AppGrant, what: &str) -> ApiError {
     ApiError(
         StatusCode::FORBIDDEN,
         format!(
-            "the {} app (opened on project `{}`) can't {what}: an app reads any page but writes \
-             only site://{} and its project, and runs only site://{}'s actions",
-            grant.site, grant.project, grant.site, grant.site
+            "the {} app (opened on {}) can't {what}: an app reads any page but writes only \
+             site://{} and its project, and runs only site://{}'s actions",
+            grant.site,
+            grant.place(),
+            grant.site,
+            grant.site
         ),
     )
 }
@@ -202,9 +222,9 @@ fn own_site(grant: &AppGrant, site: &str, what: &str) -> Result<(), ApiError> {
     }
 }
 
-async fn redirect(Path((_, app)): Path<(String, String)>, uri: axum::http::Uri) -> Redirect {
+async fn redirect(Path(p): Path<Params>, uri: axum::http::Uri) -> Redirect {
     let query = uri.query().map(|q| format!("?{q}")).unwrap_or_default();
-    Redirect::permanent(&format!("{}/{query}", encode_segment(&app)))
+    Redirect::permanent(&format!("{}/{query}", encode_segment(&arg(&p, "app"))))
 }
 
 async fn index(
@@ -220,8 +240,9 @@ async fn index(
 async fn file(
     State(server): State<Arc<Server>>,
     Extension(grant): Extension<AppGrant>,
-    Path((_, _, path)): Path<(String, String, String)>,
+    Path(p): Path<Params>,
 ) -> Response {
+    let path = arg(&p, "path");
     match &grant.local {
         Some(dir) => app_routes::serve_local(&grant.site, dir, &path),
         None => app_routes::serve_app(&server, &grant.site, &path),
@@ -249,24 +270,28 @@ async fn search(
 
 async fn get_index(
     State(server): State<Arc<Server>>,
-    Path((_, _, site)): Path<(String, String, String)>,
+    Path(p): Path<Params>,
 ) -> Result<Json<PageResponse>, ApiError> {
+    let site = arg(&p, "site");
     http_routes::read(&server, SiteUrl::new(&site, "")?)
 }
 
 async fn get_page(
     State(server): State<Arc<Server>>,
-    Path((_, _, site, path)): Path<(String, String, String, String)>,
+    Path(p): Path<Params>,
 ) -> Result<Json<PageResponse>, ApiError> {
+    let site = arg(&p, "site");
+    let path = arg(&p, "path");
     http_routes::read(&server, SiteUrl::new(&site, &path)?)
 }
 
 async fn put_index(
     State(server): State<Arc<Server>>,
     Extension(grant): Extension<AppGrant>,
-    Path((_, _, site)): Path<(String, String, String)>,
+    Path(p): Path<Params>,
     Json(body): Json<PutPageRequest>,
 ) -> Result<Json<PutPageResponse>, ApiError> {
+    let site = arg(&p, "site");
     own_site(&grant, &site, "write to")?;
     http_routes::write(&server, SiteUrl::new(&site, "")?, body)
 }
@@ -274,9 +299,11 @@ async fn put_index(
 async fn put_page(
     State(server): State<Arc<Server>>,
     Extension(grant): Extension<AppGrant>,
-    Path((_, _, site, path)): Path<(String, String, String, String)>,
+    Path(p): Path<Params>,
     Json(body): Json<PutPageRequest>,
 ) -> Result<Json<PutPageResponse>, ApiError> {
+    let site = arg(&p, "site");
+    let path = arg(&p, "path");
     own_site(&grant, &site, "write to")?;
     http_routes::write(&server, SiteUrl::new(&site, &path)?, body)
 }
@@ -284,8 +311,10 @@ async fn put_page(
 async fn get_file(
     state: State<Arc<Server>>,
     Extension(grant): Extension<AppGrant>,
-    Path((_, _, site, path)): Path<(String, String, String, String)>,
+    Path(p): Path<Params>,
 ) -> Result<Response, ApiError> {
+    let site = arg(&p, "site");
+    let path = arg(&p, "path");
     own_site(&grant, &site, "read the files of")?;
     app_routes::get_file(state, Path((site, path))).await
 }
@@ -293,9 +322,11 @@ async fn get_file(
 async fn put_file(
     state: State<Arc<Server>>,
     Extension(grant): Extension<AppGrant>,
-    Path((_, _, site, path)): Path<(String, String, String, String)>,
+    Path(p): Path<Params>,
     body: Bytes,
 ) -> Result<Json<PutPageResponse>, ApiError> {
+    let site = arg(&p, "site");
+    let path = arg(&p, "path");
     own_site(&grant, &site, "write to")?;
     app_routes::put_file(state, Path((site, path)), body).await
 }
@@ -304,47 +335,69 @@ async fn put_file(
 async fn project(
     State(server): State<Arc<Server>>,
     Extension(grant): Extension<AppGrant>,
-) -> Json<ProjectInfo> {
-    let info = tokio::task::spawn_blocking(move || crate::apps::project_info(&server, &grant));
-    Json(info.await.expect("project info doesn't panic"))
+) -> Json<Option<ProjectInfo>> {
+    let Some(project) = grant.project else {
+        return Json(None);
+    };
+    let info = tokio::task::spawn_blocking(move || crate::apps::project_info(&server, &project));
+    Json(Some(info.await.expect("project info doesn't panic")))
+}
+
+/// The project of an app opened on one; on Home, the refusal.
+fn granted(grant: &AppGrant) -> Result<&crate::apps::GrantedProject, ApiError> {
+    grant.project.as_ref().ok_or_else(|| {
+        ApiError(
+            StatusCode::FORBIDDEN,
+            format!(
+                "the {} app is open on Home: it has no project files (open it from a project)",
+                grant.site
+            ),
+        )
+    })
 }
 
 async fn get_project_file(
     Extension(grant): Extension<AppGrant>,
-    Path((_, _, path)): Path<(String, String, String)>,
+    Path(p): Path<Params>,
 ) -> Result<Response, ApiError> {
-    let what = format!("project `{}`", grant.project);
-    read_in(&inside(&grant.folder, &path, &what)?, &path, &what)
+    let path = arg(&p, "path");
+    let project = granted(&grant)?;
+    let what = format!("project `{}`", project.name);
+    read_in(&inside(&project.folder, &path, &what)?, &path, &what)
 }
 
 async fn put_project_file(
     Extension(grant): Extension<AppGrant>,
-    Path((_, _, path)): Path<(String, String, String)>,
+    Path(p): Path<Params>,
     body: Bytes,
 ) -> Result<StatusCode, ApiError> {
-    let what = format!("project `{}`", grant.project);
-    write_in(&inside(&grant.folder, &path, &what)?, &path, &body)
+    let path = arg(&p, "path");
+    let project = granted(&grant)?;
+    let what = format!("project `{}`", project.name);
+    write_in(&inside(&project.folder, &path, &what)?, &path, &body)
 }
 
 /// The app's work data on its project (`APP_DATA` for its recipes): `GET <app>/api/data/<path>`.
 async fn get_data(
     State(server): State<Arc<Server>>,
     Extension(grant): Extension<AppGrant>,
-    Path((_, _, path)): Path<(String, String, String)>,
+    Path(p): Path<Params>,
 ) -> Result<Response, ApiError> {
+    let path = arg(&p, "path");
     let data = data_folder(&server, &grant)?;
-    let what = format!("the {} app's data on `{}`", grant.site, grant.project);
+    let what = format!("the {} app's data on {}", grant.site, grant.place());
     read_in(&inside(&data, &path, &what)?, &path, &what)
 }
 
 async fn put_data(
     State(server): State<Arc<Server>>,
     Extension(grant): Extension<AppGrant>,
-    Path((_, _, path)): Path<(String, String, String)>,
+    Path(p): Path<Params>,
     body: Bytes,
 ) -> Result<StatusCode, ApiError> {
+    let path = arg(&p, "path");
     let data = data_folder(&server, &grant)?;
-    let what = format!("the {} app's data on `{}`", grant.site, grant.project);
+    let what = format!("the {} app's data on {}", grant.site, grant.place());
     write_in(&inside(&data, &path, &what)?, &path, &body)
 }
 
@@ -413,8 +466,9 @@ fn inside(folder: &FsPath, path: &str, what: &str) -> Result<PathBuf, ApiError> 
 async fn list_actions(
     state: State<Arc<Server>>,
     Extension(grant): Extension<AppGrant>,
-    Path((_, _, site)): Path<(String, String, String)>,
+    Path(p): Path<Params>,
 ) -> Result<Json<Vec<ActionSummary>>, ApiError> {
+    let site = arg(&p, "site");
     if let Some(dir) = &grant.local {
         own_actions(&grant, &site)?;
         return local_actions(dir).await;
@@ -426,9 +480,11 @@ async fn list_actions(
 async fn run_action(
     State(server): State<Arc<Server>>,
     Extension(grant): Extension<AppGrant>,
-    Path((_, _, site, recipe)): Path<(String, String, String, String)>,
+    Path(p): Path<Params>,
     body: Option<Json<RunActionRequest>>,
 ) -> Result<Json<RunActionResponse>, ApiError> {
+    let site = arg(&p, "site");
+    let recipe = arg(&p, "recipe");
     let Json(request) = body.unwrap_or_default();
     if grant.local.is_some() {
         own_actions(&grant, &site)?;
@@ -524,9 +580,10 @@ async fn run_local(
 async fn post_message(
     state: State<Arc<Server>>,
     Extension(grant): Extension<AppGrant>,
-    Path((_, _, id)): Path<(String, String, String)>,
+    Path(p): Path<Params>,
     Json(mut body): Json<AppMessage>,
 ) -> Result<StatusCode, ApiError> {
+    let id = arg(&p, "id");
     body.site = Some(grant.site.clone());
     http_routes::post_message(state, Path(id), Json(body)).await
 }

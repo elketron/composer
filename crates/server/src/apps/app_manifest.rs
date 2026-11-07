@@ -3,7 +3,9 @@ use serde_json::{Map, Value};
 use crate::apps::{AppCondition, AppRail, AppScope, FileGlob};
 
 /// The keys an `app:` block may have.
-const KEYS: [&str; 6] = ["scope", "when", "rail", "tile", "opens", "on_open"];
+const KEYS: [&str; 7] = [
+    "scope", "when", "rail", "tile", "opens", "on_open", "client",
+];
 
 /// A site's `app:` block in its `index.md` (decision 2026-11-07): where the app shows, which
 /// projects it attaches to (`when`, any one), its rail entry, whether it has a Home tile, the file
@@ -16,6 +18,9 @@ pub struct AppManifest {
     pub tile: bool,
     pub opens: Vec<FileGlob>,
     pub on_open: Vec<String>,
+    /// A full client of the workspace (the chat app: sessions, approvals): it keeps the
+    /// workspace's access instead of an app token (ticket 0168).
+    pub client: bool,
 }
 
 impl AppManifest {
@@ -31,6 +36,7 @@ impl AppManifest {
             tile: false,
             opens: Vec::new(),
             on_open: Vec::new(),
+            client: false,
         }
     }
 
@@ -79,11 +85,12 @@ impl AppManifest {
                 "`on_open` lists recipes of the site's justfile; `{bad}` isn't a recipe name"
             ));
         }
-        let tile = match block.get("tile") {
-            None => false,
-            Some(Value::Bool(b)) => *b,
-            Some(_) => return Err("`tile` is `true` or `false`".into()),
+        let flag = |key: &str| match block.get(key) {
+            None => Ok(false),
+            Some(Value::Bool(b)) => Ok(*b),
+            Some(_) => Err(format!("`{key}` is `true` or `false`")),
         };
+        let (tile, client) = (flag("tile")?, flag("client")?);
         Ok(Self {
             scope,
             when,
@@ -91,6 +98,7 @@ impl AppManifest {
             tile,
             opens,
             on_open,
+            client,
         })
     }
 }
@@ -200,6 +208,7 @@ mod tests {
             ("app:\n  tile: maybe\n", "`tile` is"),
             ("app:\n  rail: cube\n", "`rail` is"),
             ("app:\n  rail: { colour: red }\n", "`rail` is"),
+            ("app:\n  client: sure\n", "`client` is"),
         ] {
             let error = parse(yaml).unwrap_err();
             assert!(error.contains(says), "{yaml}: {error}");

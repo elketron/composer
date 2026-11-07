@@ -10,7 +10,7 @@ pub fn app_may(grant: &AppGrant, command: &mut ClientCommand) -> Result<(), Stri
     let allowed = match command {
         ClientCommand::Subscribe { .. } | ClientCommand::PipelineList => true,
         ClientCommand::AppsList { project } => {
-            *project = Some(grant.project.to_string());
+            *project = grant.project.as_ref().map(|p| p.name.to_string());
             true
         }
         ClientCommand::WorkNew { pipeline, .. } => own(pipeline),
@@ -44,8 +44,10 @@ mod tests {
 
     fn grant() -> AppGrant {
         AppGrant {
-            project: ProjectName::new("game").unwrap(),
-            folder: "/p/game".into(),
+            project: Some(crate::apps::GrantedProject {
+                name: ProjectName::new("game").unwrap(),
+                folder: "/p/game".into(),
+            }),
             site: "cad".into(),
             local: None,
         }

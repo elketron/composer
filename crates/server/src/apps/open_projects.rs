@@ -8,7 +8,9 @@ use composer_protocol::http::OpenProject;
 use tokio_util::sync::CancellationToken;
 
 use crate::actions::{Caller, Justfile, RecipeEnv, run_recipe};
-use crate::apps::{AppGrant, AttachReason, ProjectName, ProjectWatch, attached_apps};
+use crate::apps::{
+    AppGrant, AttachReason, GrantedProject, ProjectName, ProjectWatch, attached_apps,
+};
 use crate::server::Server;
 
 /// Output of an `on_open` recipe beyond this is cut in its event.
@@ -94,8 +96,10 @@ async fn run_on_open(server: &Arc<Server>, name: &str) {
         .filter(|a| a.why != AttachReason::LocalNotAllowed && !a.manifest.on_open.is_empty());
     for app in runnable {
         let grant = AppGrant {
-            project: project.clone(),
-            folder: folder.clone(),
+            project: Some(GrantedProject {
+                name: project.clone(),
+                folder: folder.clone(),
+            }),
             site: app.site.clone(),
             local: app.local.clone(),
         };
@@ -151,9 +155,10 @@ async fn run_one(
         return (
             "needs approval".into(),
             format!(
-                "`{recipe}` runs when project `{}` opens once you approve it for apps (run it \
+                "`{recipe}` runs when {} opens once you approve it for apps (run it \
                  from the {} app once)",
-                grant.project, grant.site
+                grant.place(),
+                grant.site
             ),
         );
     }

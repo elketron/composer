@@ -139,22 +139,18 @@ pub fn home_apps(server: &Server) -> AppList {
 }
 
 /// What the sdk's `project()` returns for an app opened with `grant`.
-pub fn project_info(server: &Server, grant: &crate::apps::AppGrant) -> ProjectInfo {
+pub fn project_info(server: &Server, project: &crate::apps::GrantedProject) -> ProjectInfo {
     let config = server.config();
-    let settings = project_settings(&config, &grant.folder.display().to_string());
-    let pipelines = linking_pipelines(server, &grant.folder);
-    let branch = crate::project::git::git(&grant.folder, &["rev-parse", "--abbrev-ref", "HEAD"])
+    let folder = &project.folder;
+    let settings = project_settings(&config, &folder.display().to_string());
+    let pipelines = linking_pipelines(server, folder);
+    let branch = crate::project::git::git(folder, &["rev-parse", "--abbrev-ref", "HEAD"])
         .ok()
         .filter(|b| !b.is_empty() && b != "HEAD");
     ProjectInfo {
-        name: grant.project.to_string(),
-        root: grant.folder.display().to_string(),
-        branch: grant
-            .folder
-            .join(".git")
-            .exists()
-            .then_some(branch)
-            .flatten(),
+        name: project.name.to_string(),
+        root: folder.display().to_string(),
+        branch: folder.join(".git").exists().then_some(branch).flatten(),
         pipeline: pipelines.first().cloned(),
         pipelines,
         tags: settings.tags,
