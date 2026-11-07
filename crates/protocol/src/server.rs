@@ -156,13 +156,21 @@ pub enum ServerMessage {
         session: SessionId,
         terminal: String,
         data: String,
+        /// A window's TUI terminal: to that window only.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        window: Option<String>,
     },
     /// A terminal ended (its shell exited, it was closed, or it was idle too long).
     #[serde(rename = "terminal.exited")]
     TerminalExited {
         session: SessionId,
         terminal: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        window: Option<String>,
     },
+    /// The window's TUI shows another session: the stage shows its desk (to the window only).
+    #[serde(rename = "window.changed")]
+    WindowChanged { window: String, session: SessionId },
     /// What the user points at in an app of the session changed (`None`: nothing): the chip.
     #[serde(rename = "selection.changed")]
     SelectionChanged {
@@ -321,6 +329,11 @@ pub enum CommandResult {
     },
     McpServers {
         servers: Vec<crate::http::McpServerInfo>,
+    },
+    /// `window.hello`: the window's id and the terminal its TUI runs in.
+    Window {
+        window: String,
+        terminal: String,
     },
     /// `terminal.open` / `terminal.read`: the terminal and its scrollback (base64).
     Terminal {

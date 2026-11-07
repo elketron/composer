@@ -36,6 +36,10 @@ struct Cli {
     /// Workspace to work in (default: $COMPOSER_WORKSPACE, else `default`).
     #[arg(long, short = 'w', global = true)]
     workspace: Option<String>,
+    /// The desktop window this TUI is the chat of (the server starts it so): its stage follows
+    /// the session shown here.
+    #[arg(long)]
+    window: Option<String>,
 }
 
 #[derive(Subcommand)]
@@ -267,7 +271,14 @@ async fn main() -> anyhow::Result<()> {
 
     match cli.command {
         None => {
-            let options = tui_options(&workspace, &cli.agent, cli.session, cli.new, cli.project)?;
+            let options = tui_options(
+                &workspace,
+                &cli.agent,
+                cli.session,
+                cli.new,
+                cli.project,
+                cli.window,
+            )?;
             composer_tui::run(options).await?
         }
         Some(Command::Init) => {
@@ -429,7 +440,14 @@ async fn main() -> anyhow::Result<()> {
         }
         Some(Command::Script { file, out, new }) => {
             let script = std::fs::read_to_string(&file)?;
-            let options = tui_options(&workspace, &cli.agent, cli.session, new, cli.project)?;
+            let options = tui_options(
+                &workspace,
+                &cli.agent,
+                cli.session,
+                new,
+                cli.project,
+                cli.window.clone(),
+            )?;
             for snapshot in composer_tui::run_script(options, &script, &out).await? {
                 println!("{}", snapshot.display());
             }
@@ -528,6 +546,7 @@ fn tui_options(
     session: Option<String>,
     new: bool,
     project: Option<String>,
+    window: Option<String>,
 ) -> anyhow::Result<TuiOptions> {
     let config = home.load_config()?;
     let (server_url, token) = remote::client(home)?;
@@ -540,6 +559,7 @@ fn tui_options(
             agent: agent.to_string(),
             project,
             projects_dir: Some(config.projects.dir.clone()),
+            window,
         },
         context_limit: config.agent.compaction_threshold,
     })

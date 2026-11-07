@@ -62,6 +62,8 @@ pub enum Action {
     ToggleProjectView,
     /// `:mcp`: the MCP servers, their state and tools.
     McpServers,
+    /// `:unselect`: the next message goes without the app's selection.
+    Unselect,
     /// `:reload`: the server reads config.toml again.
     ReloadConfig,
     /// `:pipeline`: the pipelines and the templates new ones come from.

@@ -102,6 +102,22 @@ pub enum ClientCommand {
         on: bool,
     },
 
+    /// A desktop window says hello (ticket 0177): it gets an id, and the server starts the TUI for
+    /// it (`composer --window <id>`) in a terminal of its own, shown in the chat column. The reply
+    /// is `window`; the TUI's output comes as `terminal.output` with this `window`.
+    #[serde(rename = "window.hello")]
+    WindowHello {
+        #[serde(default = "default_cols")]
+        cols: u16,
+        #[serde(default = "default_rows")]
+        rows: u16,
+    },
+
+    /// The window's TUI shows this session now (the TUI sends it): the window's stage follows
+    /// (`window.changed` to the window). The reply is `done`.
+    #[serde(rename = "window.session")]
+    WindowSession { window: String, session: SessionId },
+
     /// Opens a terminal for a session (ticket 0176): a shell in the workspace's sandbox, in the
     /// session's project (or the sites); a tab on its desk. With the `id` of one that ended (idle),
     /// a fresh shell where it was. The reply is `terminal`.

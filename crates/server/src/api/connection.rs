@@ -38,6 +38,9 @@ pub struct Connection {
     app: Option<AppGrant>,
     /// The projects this client opened (`project.open`); closed when it goes.
     opened: Mutex<HashSet<ProjectName>>,
+    /// A desktop window's connection (ticket 0177): its id and its TUI's terminal; the TUI ends
+    /// when the window goes.
+    window: Mutex<Option<(String, String)>>,
 }
 
 impl Connection {
@@ -51,6 +54,7 @@ impl Connection {
             next_grant: AtomicU64::new(0),
             app: None,
             opened: Mutex::new(HashSet::new()),
+            window: Mutex::new(None),
         }
     }
 
@@ -115,10 +119,13 @@ impl Connection {
         server.open_projects.open(server, name, folder)
     }
 
-    /// The client is gone: what it opened, it closes.
+    /// The client is gone: what it opened, it closes (a window's TUI too).
     pub fn close_all(&self, server: &Server) {
         for name in self.opened.lock().expect("opened lock").drain() {
             server.open_projects.close(&name);
+        }
+        if let Some((_, terminal)) = self.window.lock().expect("window lock").take() {
+            let _ = server.terminals.close(server, &terminal);
         }
     }
 
@@ -141,6 +148,12 @@ impl Connection {
     pub fn wants(&self, message: &ServerMessage) -> bool {
         match scope(message) {
             EventScope::Global => true,
+            EventScope::Window(window) => self
+                .window
+                .lock()
+                .expect("window lock")
+                .as_ref()
+                .is_some_and(|(id, _)| id == window),
             EventScope::Project(name) => {
                 self.app
                     .as_ref()
@@ -921,6 +934,30 @@ impl Connection {
             | ClientCommand::ApprovalAsk { .. } => Err("handled asynchronously".into()),
             ClientCommand::Subscribe { urls } => {
                 *self.subscriptions.lock().expect("subs lock") = urls;
+                Ok(CommandResult::Done)
+            }
+            ClientCommand::WindowHello { cols, rows } => {
+                let mut window = self.window.lock().expect("window lock");
+                if let Some((id, terminal)) = window.as_ref() {
+                    return Ok(CommandResult::Window {
+                        window: id.clone(),
+                        terminal: terminal.clone(),
+                    });
+                }
+                let id = format!("w{:08x}", rand::random::<u32>());
+                let terminal = server.terminals.open_window(server, &id, cols, rows)?;
+                *window = Some((id.clone(), terminal.clone()));
+                Ok(CommandResult::Window {
+                    window: id,
+                    terminal,
+                })
+            }
+            ClientCommand::WindowSession { window, session } => {
+                let s = server.sessions.get(&session).map_err(|e| e.to_string())?;
+                server.hub.send(ServerMessage::WindowChanged {
+                    window,
+                    session: s.id().to_string(),
+                });
                 Ok(CommandResult::Done)
             }
             ClientCommand::TerminalOpen {

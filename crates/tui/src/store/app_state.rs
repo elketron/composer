@@ -35,6 +35,12 @@ pub struct AppState {
     pub projects_dir: Option<String>,
     /// The project this client has open on the server (`project.open`): the current session's.
     opened_project: Option<String>,
+    /// The desktop window this TUI is the chat of, and the session its stage was last told of.
+    window: Option<String>,
+    window_session: Option<String>,
+    /// What the user points at in an app of the current session (the chip): goes with the next
+    /// message unless `:unselect`.
+    pub selection: Option<composer_protocol::Selection>,
 }
 
 impl AppState {
@@ -53,6 +59,9 @@ impl AppState {
             default_agent: startup.agent.clone(),
             projects_dir: startup.projects_dir.clone(),
             opened_project: None,
+            window: startup.window.clone(),
+            window_session: None,
+            selection: None,
             startup: Some(startup),
         }
     }
@@ -632,6 +641,7 @@ impl AppState {
             Action::Connected => {
                 // A new connection: the server has nothing open for it yet.
                 self.opened_project = None;
+                self.window_session = None;
                 self.connected()
             }
             Action::Disconnected(reason) => {
@@ -641,8 +651,19 @@ impl AppState {
             Action::Server(message) => {
                 let mut effects = self.server_message(message);
                 effects.extend(self.follow_project());
+                effects.extend(self.follow_window());
                 effects
             }
+            Action::Unselect => match self.session.current.clone() {
+                Some(session) if self.selection.take().is_some() => {
+                    self.ui.flash("the selection is dropped", FlashLevel::Info);
+                    self.send(ClientCommand::SelectionClear { session }, Pending::Ignore)
+                }
+                _ => {
+                    self.ui.flash("nothing is selected", FlashLevel::Info);
+                    vec![]
+                }
+            },
             Action::PageLoaded(page) => {
                 self.page.loaded(page);
                 vec![]
@@ -792,6 +813,23 @@ impl AppState {
         )
     }
 
+    /// The window's stage shows this TUI's session (ticket 0177): tells the server when it changes.
+    fn follow_window(&mut self) -> Vec<Effect> {
+        let (Some(window), Some(session)) = (self.window.clone(), self.session.current.clone())
+        else {
+            return vec![];
+        };
+        if self.window_session.as_deref() == Some(session.as_str()) {
+            return vec![];
+        }
+        self.window_session = Some(session.clone());
+        self.selection = None;
+        self.send(
+            ClientCommand::WindowSession { window, session },
+            Pending::Ignore,
+        )
+    }
+
     /// Keeps the current session's project open on the server (its apps' watches, `on_open`),
     /// closing the one before when it changes.
     fn follow_project(&mut self) -> Vec<Effect> {
@@ -847,6 +885,21 @@ impl AppState {
                         vec![]
                     }
                 }
+            }
+            ServerMessage::SelectionChanged { session, selection }
+                if self.session.current.as_deref() == Some(session.as_str()) =>
+            {
+                if let Some(chosen) = &selection {
+                    self.ui.flash(
+                        format!(
+                            "◆ {} ({}): goes with your next message; :unselect drops it",
+                            chosen.label, chosen.app
+                        ),
+                        FlashLevel::Info,
+                    );
+                }
+                self.selection = selection;
+                vec![]
             }
             ServerMessage::StageEnded {
                 work,
@@ -1609,6 +1662,76 @@ mod tests {
             [(_, ClientCommand::SessionAttach { since: None, .. })]
         ));
         assert!(state.ui.flash.is_none());
+    }
+
+    /// A window's TUI tells the server which session its stage shows, once per change; without
+    /// a window it says nothing. An app's selection is the chip; `:unselect` drops it.
+    #[test]
+    fn a_windows_tui_moves_its_stage_and_shows_the_chip() {
+        let nudge = || {
+            Action::Server(ServerMessage::Error {
+                id: None,
+                message: "x".into(),
+            })
+        };
+        let windowed = |effects: &[Effect]| -> Vec<ClientCommand> {
+            sent(effects)
+                .into_iter()
+                .map(|(_, c)| c)
+                .filter(|c| matches!(c, ClientCommand::WindowSession { .. }))
+                .collect()
+        };
+        let mut state = AppState::new(
+            Startup {
+                agent: "default".into(),
+                window: Some("w1".into()),
+                ..Startup::default()
+            },
+            160_000,
+        );
+        state.reduce(Action::Connected);
+        state.session.upsert(info("a", None));
+        state.session.upsert(info("b", None));
+        state.reduce(Action::AttachSession("a".into()));
+        assert_eq!(
+            windowed(&state.reduce(nudge())),
+            [ClientCommand::WindowSession {
+                window: "w1".into(),
+                session: "a".into()
+            }]
+        );
+        assert!(windowed(&state.reduce(nudge())).is_empty(), "once");
+        state.reduce(Action::AttachSession("b".into()));
+        assert_eq!(windowed(&state.reduce(nudge())).len(), 1);
+
+        // The chip, for the current session only.
+        let chip = |session: &str| {
+            Action::Server(ServerMessage::SelectionChanged {
+                session: session.into(),
+                selection: Some(composer_protocol::Selection {
+                    app: "board".into(),
+                    label: "ticket 0042".into(),
+                    text: None,
+                    url: None,
+                    data: None,
+                }),
+            })
+        };
+        state.reduce(chip("a"));
+        assert!(state.selection.is_none(), "another session's");
+        state.reduce(chip("b"));
+        assert_eq!(state.selection.as_ref().unwrap().label, "ticket 0042");
+        let effects = state.reduce(Action::Unselect);
+        assert!(state.selection.is_none());
+        assert!(sent(&effects).iter().any(
+            |(_, c)| matches!(c, ClientCommand::SelectionClear { session } if session == "b")
+        ));
+
+        // Without a window: nothing about windows.
+        let (mut plain, _) = connected();
+        plain.session.upsert(info("a", None));
+        plain.reduce(Action::AttachSession("a".into()));
+        assert!(windowed(&plain.reduce(nudge())).is_empty());
     }
 
     /// The current session's project is open on the server; switching closes it and opens the
