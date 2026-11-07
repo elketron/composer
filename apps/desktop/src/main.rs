@@ -4,13 +4,19 @@
 //!
 //!   composer-desktop [--workspace <name>]     (home: $COMPOSER_HOME, else ~/.composer)
 
+mod browser_pump;
+mod browser_tabs;
+mod cef_runtime;
 mod chat_width;
+mod dom_keys;
 mod key_map;
 mod link_state;
 mod shell;
 mod stage_tabs;
 mod term_pane;
 mod terminal_link;
+mod view_urls;
+mod web_pane;
 
 use std::borrow::Cow;
 use std::path::PathBuf;
@@ -43,9 +49,19 @@ fn workspace() -> String {
 }
 
 fn main() {
+    // CEF re-runs this binary for its own processes: before anything else.
+    cef_runtime::run_helper_process();
     let workspace = workspace();
     let endpoint = match Endpoint::discover(&home(), &workspace) {
         Ok(endpoint) => endpoint,
+        Err(e) => {
+            eprintln!("composer-desktop: {e}");
+            std::process::exit(1);
+        }
+    };
+    // CEF before any other threads: its start-up owns the process's descriptors.
+    let cache = match cef_runtime::start() {
+        Ok(cache) => cache,
         Err(e) => {
             eprintln!("composer-desktop: {e}");
             std::process::exit(1);
@@ -65,7 +81,8 @@ fn main() {
             KeyBinding::new("ctrl-tab", NextTab, None),
             KeyBinding::new("ctrl-shift-tab", PrevTab, None),
         ]);
-        let (connection, events) = Connection::open(endpoint);
+        browser_pump::start(cx);
+        let (connection, events) = Connection::open(endpoint.clone());
         let bounds = Bounds::centered(None, size(px(1500.), px(950.)), cx);
         let title = format!("composer — {workspace}");
         cx.open_window(
@@ -78,9 +95,10 @@ fn main() {
                 }),
                 ..Default::default()
             },
-            move |_, cx| cx.new(|cx| Shell::new(workspace, connection, events, cx)),
+            move |_, cx| cx.new(|cx| Shell::new(workspace, endpoint, connection, events, cx)),
         )
         .expect("a window");
         cx.activate(true);
     });
+    cef_runtime::shutdown(cache);
 }

@@ -7,6 +7,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+pulldown-cmark = { workspace = true, features = ["html"] }
 composer-core.workspace = true
 composer-protocol.workspace = true
 serde.workspace = true
