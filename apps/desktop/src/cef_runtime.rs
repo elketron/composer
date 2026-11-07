@@ -5,9 +5,20 @@ use std::path::PathBuf;
 
 use cef::{args::Args, *};
 
-/// Where the runtime is: `$CEF_PATH`, else the one the build used (`.cef`, see fetch-cef.sh).
+/// Where the runtime is: `$CEF_PATH`; beside the binary (a package); else the one a development
+/// build used (`.cef`, see fetch-cef.sh).
 fn cef_dir() -> String {
-    std::env::var("CEF_PATH").unwrap_or_else(|_| env!("COMPOSER_CEF_DIR").to_string())
+    if let Ok(dir) = std::env::var("CEF_PATH") {
+        return dir;
+    }
+    let beside = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(std::path::Path::to_path_buf))
+        .filter(|dir| dir.join("libcef.so").is_file());
+    match beside {
+        Some(dir) => dir.display().to_string(),
+        None => env!("COMPOSER_CEF_DIR").to_string(),
+    }
 }
 
 fn cache_root() -> PathBuf {
