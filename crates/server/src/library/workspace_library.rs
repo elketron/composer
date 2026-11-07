@@ -4,7 +4,10 @@ use std::path::{Path, PathBuf};
 use crate::actions::Approvals;
 use crate::home::Home;
 use crate::init::{approve_recipes_in, stock_file, write_creating_dirs};
-use crate::library::{Installed, InstalledSites, Library, LibraryCommit, PublishPlan, SiteName};
+use crate::library::{
+    Installation, Installed, InstalledSites, Library, LibraryCommit, LibrarySiteState,
+    PublishChange, PublishPlan, SiteName,
+};
 use crate::update::{Merge, UpdateItem, UpdateOutcome, merge_three};
 use crate::workspace_home::WorkspaceHome;
 
@@ -14,27 +17,6 @@ use crate::workspace_home::WorkspaceHome;
 pub struct WorkspaceLibrary {
     library: Library,
     workspace: WorkspaceHome,
-}
-
-/// A library site, and how it stands in this workspace.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct LibrarySiteState {
-    pub site: SiteName,
-    /// The last commit that changed it.
-    pub commit: LibraryCommit,
-    /// This workspace's sites installed from it, each with whether the library is ahead of it.
-    pub installed: Vec<(SiteName, bool)>,
-}
-
-/// What an install did.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Installation {
-    pub site: SiteName,
-    pub from: SiteName,
-    pub commit: LibraryCommit,
-    pub files: usize,
-    /// It has a `ui/`: built with its `ui-build` action (asked for like any recipe), not here.
-    pub has_ui: bool,
 }
 
 impl WorkspaceLibrary {
@@ -176,8 +158,11 @@ impl WorkspaceLibrary {
         self.library
             .record("library: changes made before a publish")?;
         let dest = self.library.root().join(plan.name.as_str());
-        if dest.exists() {
-            std::fs::remove_dir_all(&dest).map_err(|e| format!("{}: {e}", dest.display()))?;
+        // Only the definition's files: what it no longer has goes, anything else stays.
+        for (rel, kind) in &plan.changes {
+            if *kind == PublishChange::Removed {
+                remove_with_empty_parents(&dest, rel)?;
+            }
         }
         let source = self.workspace.sites().join(site.as_str());
         for rel in &plan.files {
@@ -356,12 +341,7 @@ impl WorkspaceLibrary {
             .join("sites")
             .join(site.as_str())
             .join(rel);
-        let write = |path: &Path, bytes: &[u8]| -> Result<(), String> {
-            if dry_run {
-                return Ok(());
-            }
-            write_creating_dirs(path, bytes).map_err(|e| e.to_string())
-        };
+        let write = |path: &Path, bytes: &[u8]| write_unless(dry_run, path, bytes);
         let outcome = match (current, base, new) {
             // Deleted here: stays deleted.
             (None, Some(_), _) => return Ok(None),
@@ -382,21 +362,10 @@ impl WorkspaceLibrary {
                 UpdateOutcome::Replaced
             }
             (Some(current), Some(base), Some(new)) => {
-                let scratch = self.workspace.state().join("merge");
-                match merge_three(&scratch, &current, &base, &new).map_err(|e| e.to_string())? {
-                    Merge::Clean(merged) => {
-                        write(&target, &merged)?;
-                        UpdateOutcome::Merged
-                    }
-                    Merge::Conflict(marked) => {
-                        write(&review, &marked)?;
-                        UpdateOutcome::Conflict { review }
-                    }
-                    Merge::Impossible => {
-                        write(&review, &new)?;
-                        UpdateOutcome::Review { review }
-                    }
-                }
+                let merge =
+                    merge_three(&self.workspace.state().join("merge"), &current, &base, &new)
+                        .map_err(|e| e.to_string())?;
+                apply_merge(merge, &new, &target, review, dry_run)?
             }
             (Some(_), None, Some(new)) => {
                 write(&review, &new)?;
@@ -445,4 +414,52 @@ fn read_optional(path: &Path) -> Result<Option<Vec<u8>>, String> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(e) => Err(format!("{}: {e}", path.display())),
     }
+}
+
+/// Removes `site/rel`, then each folder above it up to `site` that is left empty.
+fn remove_with_empty_parents(site: &Path, rel: &Path) -> Result<(), String> {
+    let path = site.join(rel);
+    std::fs::remove_file(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let mut dir = path.parent();
+    while let Some(folder) = dir.filter(|d| *d != site && d.starts_with(site)) {
+        if std::fs::remove_dir(folder).is_err() {
+            break;
+        }
+        dir = folder.parent();
+    }
+    Ok(())
+}
+
+/// Writes `bytes` to `path` (creating its folders), unless this is a dry run.
+fn write_unless(dry_run: bool, path: &Path, bytes: &[u8]) -> Result<(), String> {
+    if dry_run {
+        return Ok(());
+    }
+    write_creating_dirs(path, bytes).map_err(|e| e.to_string())
+}
+
+/// Lands a three-way merge of a file changed both here and in the library: a clean merge on
+/// `target`; a conflict (marked) or the library's `new` version next to it under `review`.
+fn apply_merge(
+    merge: Merge,
+    new: &[u8],
+    target: &Path,
+    review: PathBuf,
+    dry_run: bool,
+) -> Result<UpdateOutcome, String> {
+    let outcome = match merge {
+        Merge::Clean(merged) => {
+            write_unless(dry_run, target, &merged)?;
+            UpdateOutcome::Merged
+        }
+        Merge::Conflict(marked) => {
+            write_unless(dry_run, &review, &marked)?;
+            UpdateOutcome::Conflict { review }
+        }
+        Merge::Impossible => {
+            write_unless(dry_run, &review, new)?;
+            UpdateOutcome::Review { review }
+        }
+    };
+    Ok(outcome)
 }

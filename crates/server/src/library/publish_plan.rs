@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::hash::content_hash;
-use crate::library::{InstalledSites, Library, SiteDefinition, SiteName};
+use crate::library::{InstalledSites, Library, PublishChange, SiteDefinition, SiteName};
 
 /// What publishing a workspace site to the library would do, for the user to approve: the
 /// definition's files, what changes in the library, what of the site stays out (works, tickets,
@@ -19,10 +19,12 @@ pub struct PublishPlan {
     pub new_site: bool,
     /// Every file of the definition, relative to the site.
     pub files: Vec<PathBuf>,
-    /// Per file that differs from the library: `added`, `changed` or `removed`.
-    pub changes: Vec<(PathBuf, &'static str)>,
+    /// Per file that differs from the library, how.
+    pub changes: Vec<(PathBuf, PublishChange)>,
     /// Top-level entries of the site that are not published.
     pub left_out: Vec<PathBuf>,
+    /// Library files of the site the definition doesn't cover: a publish leaves them as they are.
+    pub kept: Vec<PathBuf>,
     /// `library:` entries that don't exist.
     pub missing: Vec<PathBuf>,
     /// The changes as a unified diff (cut when long).
@@ -61,7 +63,11 @@ impl PublishPlan {
         }
         let mut changes = Vec::new();
         let mut diff = String::new();
-        let paths: BTreeSet<&PathBuf> = definition.files().iter().chain(&in_library).collect();
+        let (covered, kept): (Vec<PathBuf>, Vec<PathBuf>) = in_library
+            .iter()
+            .cloned()
+            .partition(|rel| definition.covers(rel));
+        let paths: BTreeSet<&PathBuf> = definition.files().iter().chain(&covered).collect();
         for rel in paths {
             let ours = definition
                 .files()
@@ -75,9 +81,9 @@ impl PublishPlan {
                 _ => None,
             };
             let kind = match (&theirs, &ours) {
-                (None, Some(_)) => "added",
-                (Some(_), None) => "removed",
-                (Some(a), Some(b)) if a != b => "changed",
+                (None, Some(_)) => PublishChange::Added,
+                (Some(_), None) => PublishChange::Removed,
+                (Some(a), Some(b)) if a != b => PublishChange::Changed,
                 _ => continue,
             };
             changes.push((rel.clone(), kind));
@@ -96,6 +102,7 @@ impl PublishPlan {
             files: definition.files().iter().cloned().collect(),
             changes,
             left_out: definition.left_out().to_vec(),
+            kept,
             missing: definition.missing().to_vec(),
             diff,
             digest: digest(dir, definition.files()),
@@ -132,6 +139,12 @@ impl PublishPlan {
             text.push_str(&format!(
                 "Not published (content, not definition): {}\n",
                 list(&self.left_out)
+            ));
+        }
+        if !self.kept.is_empty() {
+            text.push_str(&format!(
+                "Left in the library as they are (not part of the definition): {}\n",
+                list(&self.kept)
             ));
         }
         if !self.missing.is_empty() {

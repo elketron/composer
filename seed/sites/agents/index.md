@@ -1,6 +1,7 @@
 ---
 title: Agents
 type: index
+library: ["*.md"]
 ---
 # Agents
 

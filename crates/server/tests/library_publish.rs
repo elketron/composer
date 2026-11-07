@@ -131,7 +131,10 @@ async fn only_the_definition_is_published_and_others_can_install_it() {
     let plan = library_of(&f.a).plan_publish(&site("cad"), None).unwrap();
     assert_eq!(
         plan.changes,
-        [(std::path::PathBuf::from("stages/01_plan.md"), "changed")]
+        [(
+            std::path::PathBuf::from("stages/01_plan.md"),
+            composer_server::library::PublishChange::Changed
+        )]
     );
     assert!(plan.diff.contains("+# Plan v2"), "{}", plan.diff);
     publish(&f.a, "cad", None).unwrap();

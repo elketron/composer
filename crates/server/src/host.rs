@@ -7,6 +7,7 @@ use crate::error::{Result, ServerError};
 use crate::home::Home;
 use crate::host_state::{HostState, Starter};
 use crate::server::{Server, shutdown_signal};
+use crate::template_name::TemplateName;
 use crate::workspace_name::WorkspaceName;
 
 /// The process that serves every workspace of one composer home.
@@ -92,7 +93,7 @@ impl Host {
     pub async fn create(
         &self,
         name: &WorkspaceName,
-        template: Option<&str>,
+        template: Option<&TemplateName>,
     ) -> Result<Arc<Server>> {
         self.state.create(name, template).await
     }

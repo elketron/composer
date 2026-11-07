@@ -150,3 +150,10 @@ pub struct WatchArgs {
 fn yes() -> bool {
     true
 }
+
+#[derive(Debug, Deserialize)]
+pub struct PublishSiteArgs {
+    pub site: String,
+    #[serde(default, rename = "as")]
+    pub name: Option<String>,
+}

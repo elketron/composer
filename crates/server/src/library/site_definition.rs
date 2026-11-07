@@ -1,18 +1,22 @@
 use std::collections::BTreeSet;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 
 use composer_core::{Page, SiteUrl};
 use serde_json::Value;
 
+use crate::library::LibraryEntry;
+
 /// The part of a site that is its definition, and so what the library holds, installs and
 /// publishes: `index.md`, `justfile`, `ui/` (source only), `stages/`, `_config/`, `templates/`, and
-/// every path the index lists under `library:` (`library: [tools/, comfy-workflows/]`).
+/// every path the index lists under `library:` (`library: [tools/, comfy-workflows/, "*.md"]`).
 ///
 /// Never in it: pipeline works, tickets and other pages outside those paths; `node_modules/` and
 /// `dist/` anywhere; hidden files; symlinks (not followed, not copied). A `library:` entry that
 /// leaves the site is refused, so a definition can't carry anything from outside its folder.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SiteDefinition {
+    /// The paths it covers: the core and the `library:` entries.
+    entries: Vec<LibraryEntry>,
     /// Files, relative to the site folder.
     files: BTreeSet<PathBuf>,
     /// Top-level entries of the site that are not part of it (works, tickets, pages, ...).
@@ -31,28 +35,30 @@ const CORE: [&str; 6] = [
     "templates",
 ];
 /// Never part of one, at any depth.
-const NEVER: [&str; 2] = ["node_modules", "dist"];
+pub(crate) const NEVER: [&str; 2] = ["node_modules", "dist"];
 
 impl SiteDefinition {
     /// The definition of the site in `dir`.
     pub fn read(dir: &Path) -> Result<Self, String> {
-        let mut roots: BTreeSet<PathBuf> = CORE.iter().map(PathBuf::from).collect();
-        roots.extend(extras(dir)?);
+        let mut entries: Vec<LibraryEntry> = CORE.iter().map(LibraryEntry::path).collect();
+        let extras = extras(dir)?;
+        let missing = extras
+            .iter()
+            .filter(|e| !e.is_glob() && e.existing(dir).is_empty())
+            .map(LibraryEntry::display)
+            .collect();
+        entries.extend(extras);
         let mut files = BTreeSet::new();
-        let mut missing = Vec::new();
-        for root in &roots {
-            let path = dir.join(root);
-            match std::fs::symlink_metadata(&path) {
-                Ok(_) => collect(dir, &path, &mut files),
-                Err(_) if !CORE.iter().any(|c| Path::new(c) == root) => missing.push(root.clone()),
-                Err(_) => {}
-            }
+        for path in entries.iter().flat_map(|e| e.existing(dir)) {
+            collect(dir, &dir.join(path), &mut files);
         }
         let left_out = top_level(dir)
             .into_iter()
-            .filter(|name| !roots.iter().any(|root| root.starts_with(name)))
+            .filter(|(name, is_dir)| !entries.iter().any(|e| e.reaches(name, *is_dir)))
+            .map(|(name, _)| name)
             .collect();
         Ok(Self {
+            entries,
             files,
             left_out,
             missing,
@@ -70,10 +76,16 @@ impl SiteDefinition {
     pub fn missing(&self) -> &[PathBuf] {
         &self.missing
     }
+
+    /// Whether `rel` (a file path relative to the site) is one this definition is about, so a
+    /// publish may replace or remove it; anything else in a library site is left as it is.
+    pub fn covers(&self, rel: &Path) -> bool {
+        self.entries.iter().any(|e| e.covers(rel))
+    }
 }
 
-/// The index's `library:` entries, each a relative path inside the site.
-fn extras(dir: &Path) -> Result<Vec<PathBuf>, String> {
+/// The index's `library:` entries, each a path (or glob) inside the site.
+fn extras(dir: &Path) -> Result<Vec<LibraryEntry>, String> {
     let Ok(raw) = std::fs::read_to_string(dir.join("index.md")) else {
         return Ok(Vec::new());
     };
@@ -88,23 +100,10 @@ fn extras(dir: &Path) -> Result<Vec<PathBuf>, String> {
         Some(Value::String(one)) => vec![one.clone()],
         _ => return Ok(Vec::new()),
     };
-    entries.iter().map(|entry| inside(entry)).collect()
-}
-
-/// `entry` as a path inside the site; refused when it leaves it or names a hidden file.
-fn inside(entry: &str) -> Result<PathBuf, String> {
-    let path = PathBuf::from(entry.trim().trim_end_matches('/'));
-    let plain = path.components().all(|c| match c {
-        Component::Normal(part) => !part.to_string_lossy().starts_with('.'),
-        _ => false,
-    });
-    if path.as_os_str().is_empty() || !plain {
-        return Err(format!(
-            "`library: {entry}` is not a path inside the site: list folders or files of the site \
-             itself (`tools/`, `comfy-workflows/`), without `..`, `/` at the start or hidden names"
-        ));
-    }
-    Ok(path)
+    entries
+        .iter()
+        .map(|entry| LibraryEntry::parse(entry))
+        .collect()
 }
 
 /// Adds the files at `path` (a file, or a folder walked without following symlinks).
@@ -130,14 +129,14 @@ fn collect(site: &Path, path: &Path, files: &mut BTreeSet<PathBuf>) {
     }
 }
 
-/// The site's top-level entries (not hidden).
-fn top_level(dir: &Path) -> Vec<PathBuf> {
-    let mut names: Vec<PathBuf> = std::fs::read_dir(dir)
+/// The site's top-level entries (not hidden), each with whether it is a folder.
+fn top_level(dir: &Path) -> Vec<(PathBuf, bool)> {
+    let mut names: Vec<(PathBuf, bool)> = std::fs::read_dir(dir)
         .into_iter()
         .flatten()
         .flatten()
-        .map(|e| PathBuf::from(e.file_name()))
-        .filter(|n| !n.to_string_lossy().starts_with('.'))
+        .map(|e| (PathBuf::from(e.file_name()), e.path().is_dir()))
+        .filter(|(n, _)| !n.to_string_lossy().starts_with('.'))
         .collect();
     names.sort();
     names
@@ -221,5 +220,38 @@ mod tests {
         write(dir.path(), "index.md", "---\nlibrary: gone/\n---\n");
         let definition = SiteDefinition::read(dir.path()).unwrap();
         assert_eq!(definition.missing(), [PathBuf::from("gone")]);
+    }
+
+    #[test]
+    fn a_glob_takes_one_folders_matching_files_and_covers_only_them() {
+        let dir = tempfile::tempdir().unwrap();
+        let site = dir.path();
+        write(
+            site,
+            "index.md",
+            "---\nlibrary: [\"*.md\"]\n---\n# Agents\n",
+        );
+        write(site, "default.md", "# default");
+        write(site, "printer.md", "# printer");
+        write(site, "notes.txt", "x");
+        write(site, "drafts/old.md", "# old");
+        let definition = SiteDefinition::read(site).unwrap();
+        let files: Vec<String> = definition
+            .files()
+            .iter()
+            .map(|p| p.display().to_string())
+            .collect();
+        assert_eq!(files, ["default.md", "index.md", "printer.md"]);
+        let left_out: Vec<String> = definition
+            .left_out()
+            .iter()
+            .map(|p| p.display().to_string())
+            .collect();
+        assert_eq!(left_out, ["drafts", "notes.txt"]);
+        assert!(definition.missing().is_empty());
+        assert!(definition.covers(Path::new("gone.md")));
+        assert!(definition.covers(Path::new("ui/src/main.ts")));
+        assert!(!definition.covers(Path::new("drafts/old.md")));
+        assert!(!definition.covers(Path::new("notes.txt")));
     }
 }

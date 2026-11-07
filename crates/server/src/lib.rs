@@ -31,6 +31,7 @@ pub mod session;
 mod slot_guard;
 mod slot_pool;
 mod stock_root;
+mod template_name;
 pub mod tools;
 mod update;
 mod watcher;
@@ -40,6 +41,7 @@ mod workspace_create;
 mod workspace_home;
 mod workspace_name;
 mod workspace_template;
+mod workspace_template_file;
 
 pub use config::Config;
 pub use config_sections::{
@@ -59,6 +61,7 @@ pub use migrate::migrate_home;
 pub use server::Server;
 pub use slot_guard::SlotGuard;
 pub use slot_pool::SlotPool;
+pub use template_name::TemplateName;
 pub use update::{UpdateItem, UpdateOutcome, pending_updates, update_home};
 pub use workspace_create::create_workspace;
 pub use workspace_home::WorkspaceHome;
