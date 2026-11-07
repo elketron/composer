@@ -172,6 +172,7 @@ pub fn parse_command(line: &str) -> Result<Action, String> {
             }
         }
         "mcp" => Ok(Action::McpServers),
+        "unselect" => Ok(Action::Unselect),
         "reload" => Ok(Action::ReloadConfig),
         "merge" => Ok(Action::TicketMerge(arg)),
         "discard" => arg

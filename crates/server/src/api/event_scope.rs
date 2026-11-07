@@ -10,6 +10,8 @@ pub enum EventScope<'a> {
     Global,
     /// Clients that opened the project (by name), and its apps' sockets.
     Project(&'a str),
+    /// The connection of a desktop window (ticket 0177).
+    Window(&'a str),
     /// A reply to one client's command; never broadcast.
     Reply,
 }
@@ -34,6 +36,16 @@ pub fn scope(message: &ServerMessage) -> EventScope<'_> {
         ApprovalRequest { .. } | ApprovalResolved { .. } => EventScope::Global,
         PageChanged { url, .. } => EventScope::Page(url),
         // Unsequenced: to the clients attached to the session.
+        // A window's TUI: to the window.
+        TerminalOutput {
+            window: Some(window),
+            ..
+        }
+        | TerminalExited {
+            window: Some(window),
+            ..
+        }
+        | WindowChanged { window, .. } => EventScope::Window(window),
         DeskChanged { session, .. }
         | SelectionChanged { session, .. }
         | AppEvent { session, .. }

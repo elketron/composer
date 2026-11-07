@@ -185,6 +185,8 @@ pub struct Startup {
     pub project: Option<String>,
     /// `[projects] dir` from the config (`~/Projects`): `:project <name>` completes from it.
     pub projects_dir: Option<String>,
+    /// The desktop window it is the chat of (ticket 0177): its stage follows this TUI's session.
+    pub window: Option<String>,
 }
 
 /// A recipe waiting for your approval.
