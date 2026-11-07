@@ -33,6 +33,8 @@ pub struct AppState {
     default_agent: String,
     /// Where project names point (`:project composer`), when known.
     pub projects_dir: Option<String>,
+    /// The project this client has open on the server (`project.open`): the current session's.
+    opened_project: Option<String>,
 }
 
 impl AppState {
@@ -50,6 +52,7 @@ impl AppState {
             attachments: AttachmentStore::default(),
             default_agent: startup.agent.clone(),
             projects_dir: startup.projects_dir.clone(),
+            opened_project: None,
             startup: Some(startup),
         }
     }
@@ -624,12 +627,20 @@ impl AppState {
                 vec![]
             }
 
-            Action::Connected => self.connected(),
+            Action::Connected => {
+                // A new connection: the server has nothing open for it yet.
+                self.opened_project = None;
+                self.connected()
+            }
             Action::Disconnected(reason) => {
                 self.conn.state = ConnState::Disconnected(reason);
                 vec![]
             }
-            Action::Server(message) => self.server_message(message),
+            Action::Server(message) => {
+                let mut effects = self.server_message(message);
+                effects.extend(self.follow_project());
+                effects
+            }
             Action::PageLoaded(page) => {
                 self.page.loaded(page);
                 vec![]
@@ -760,6 +771,30 @@ impl AppState {
                 self.fetch_history(current, None)
             });
         }
+        effects
+    }
+
+    /// Keeps the current session's project open on the server (its apps' watches, `on_open`),
+    /// closing the one before when it changes.
+    fn follow_project(&mut self) -> Vec<Effect> {
+        let current = self
+            .session
+            .current_info()
+            .and_then(|s| self.session.project_of(s));
+        if current == self.opened_project {
+            return vec![];
+        }
+        let mut effects = Vec::new();
+        if let Some(old) = self.opened_project.take() {
+            effects.extend(self.send(
+                ClientCommand::ProjectClose { project: old },
+                Pending::Ignore,
+            ));
+        }
+        if let Some(project) = current.clone() {
+            effects.extend(self.send(ClientCommand::ProjectOpen { project }, Pending::Ignore));
+        }
+        self.opened_project = current;
         effects
     }
 
@@ -1532,6 +1567,66 @@ mod tests {
             [(_, ClientCommand::SessionAttach { since: None, .. })]
         ));
         assert!(state.ui.flash.is_none());
+    }
+
+    /// The current session's project is open on the server; switching closes it and opens the
+    /// next; a reconnect opens it again.
+    #[test]
+    fn the_current_sessions_project_is_kept_open() {
+        let (mut state, _) = connected();
+        state.session.upsert(SessionInfo {
+            project: Some("/p/game".into()),
+            ..info("a", None)
+        });
+        state.session.upsert(SessionInfo {
+            project: Some("/p/notes".into()),
+            ..info("b", None)
+        });
+        let nudge = || {
+            Action::Server(ServerMessage::Error {
+                id: None,
+                message: "x".into(),
+            })
+        };
+        let projects = |effects: &[Effect]| -> Vec<ClientCommand> {
+            sent(effects)
+                .into_iter()
+                .map(|(_, c)| c)
+                .filter(|c| {
+                    matches!(
+                        c,
+                        ClientCommand::ProjectOpen { .. } | ClientCommand::ProjectClose { .. }
+                    )
+                })
+                .collect()
+        };
+        state.reduce(Action::AttachSession("a".into()));
+        assert_eq!(
+            projects(&state.reduce(nudge())),
+            [ClientCommand::ProjectOpen {
+                project: "/p/game".into()
+            }]
+        );
+        assert!(projects(&state.reduce(nudge())).is_empty(), "once");
+        state.reduce(Action::AttachSession("b".into()));
+        assert_eq!(
+            projects(&state.reduce(nudge())),
+            [
+                ClientCommand::ProjectClose {
+                    project: "/p/game".into()
+                },
+                ClientCommand::ProjectOpen {
+                    project: "/p/notes".into()
+                },
+            ]
+        );
+        state.reduce(Action::Connected);
+        assert_eq!(
+            projects(&state.reduce(nudge())),
+            [ClientCommand::ProjectOpen {
+                project: "/p/notes".into()
+            }]
+        );
     }
 
     /// An orchestrator `o` with workers `w1` (idle) and `w2` (running); `x` is unrelated.
