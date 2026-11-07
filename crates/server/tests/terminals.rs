@@ -171,6 +171,24 @@ async fn a_sessions_terminal_runs_in_its_sandbox() {
         .await;
     assert!(read.text.contains("sum-42"), "{}", read.text);
 
+    // Another session's agent can't read or type into it.
+    let other = server.sessions.create("default", None).unwrap();
+    let elsewhere = ToolContext {
+        session: other,
+        ..context.clone()
+    };
+    for (tool, args) in [
+        ("terminal_read", json!({ "id": id })),
+        ("terminal_send", json!({ "id": id, "text": "echo nope" })),
+    ] {
+        let refused = server.tools.call_value(&elsewhere, tool, args).await;
+        assert!(
+            refused.is_error && refused.text.contains("isn't this session's"),
+            "{tool}: {}",
+            refused.text
+        );
+    }
+
     // Typing asks the user: denied, nothing typed; approved, typed.
     for (decision, typed) in [
         (ApprovalDecision::Deny, false),

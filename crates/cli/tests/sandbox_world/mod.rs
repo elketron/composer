@@ -60,13 +60,18 @@ if kind == "claude":
 lent = ["/usr/bin", "/etc", paths["home_templates"], paths["ws_templates"]] + [os.path.join(os.environ["HOME"], p) for p in [".cargo/bin", ".rustup", ".gitconfig"]]
 if kind == "claude":
     lent += [os.path.join(os.environ["HOME"], ".claude", n) for n in ["CLAUDE.md", "settings.json", "skills", "agents", "commands", "plugins"]]
+if kind == "terminal":
+    lent += [os.path.join(os.environ["HOME"], n) for n in paths["terminal_lent_paths"]]
 for path in lent:
     if os.path.exists(path):
         check("read-only: " + path, not os.access(path, os.W_OK))
 check("own sites writable", can_write(paths["sites"]))
 check("own /tmp writable", can_write("/tmp"))
 check("host /tmp hidden", not os.path.exists(paths["host_tmp"]))
+lent_to_terminals = paths["terminal_lent"] if kind == "terminal" else []
 for name in paths["home_entries"] + (paths["home_entries_no_claude"] if kind != "claude" else []):
+    if name in lent_to_terminals:
+        continue
     check("hidden: ~/" + name, not os.path.exists(os.path.join(os.environ["HOME"], name)))
 for ns in ["pid", "ipc", "uts", "cgroup"]:
     check("own " + ns + " namespace", os.readlink("/proc/self/ns/" + ns) != paths["ns"][ns])
@@ -76,6 +81,9 @@ if kind == "claude":
     check("cwd is the worktree", os.getcwd() == paths["worktree"])
     check("main checkout hidden", not os.path.exists(os.path.join(paths["project"], "README.md")))
     check("worktree writable", can_write(os.getcwd()))
+elif kind == "terminal":
+    # A session's terminal works in its project (0176).
+    check("own project visible", os.path.exists(os.path.join(paths["project"], "README.md")))
 else:
     check("project hidden", not os.path.exists(os.path.join(paths["project"], "README.md")))
 
@@ -253,6 +261,13 @@ pub async fn world() -> World {
         .filter(|n| !given.iter().any(|g| n.starts_with(g)))
         .take(40)
         .collect();
+    // What terminals are lent of the user's shell config (0176), relative to $HOME.
+    let terminal_lent: Vec<String> = config
+        .terminals
+        .lend
+        .iter()
+        .map(|p| p.trim_start_matches("~/").to_string())
+        .collect();
     let (home_entries_no_claude, home_entries): (Vec<String>, Vec<String>) =
         entries.into_iter().partition(|n| claude_only.contains(n));
     let unwritable = json!({
@@ -285,6 +300,8 @@ pub async fn world() -> World {
             "unwritable": unwritable,
             "home_entries": home_entries,
             "home_entries_no_claude": home_entries_no_claude,
+            "terminal_lent": terminal_lent.iter().map(|p| p.split('/').next().unwrap_or_default()).collect::<Vec<_>>(),
+            "terminal_lent_paths": terminal_lent,
             "sites": a.sites(),
             "a_state": a.state(),
             "home_templates": home.root().join("templates"),
@@ -408,9 +425,37 @@ impl World {
     pub fn leaked_writes(&self, kind: &str) -> Vec<PathBuf> {
         self.unwritable
             .iter()
+            // A session's terminal works in its project (0176): writing there is its job.
+            .filter(|f| !(kind == "terminal" && **f == self.project))
             .map(|f| f.join(format!("from-{kind}")))
             .filter(|f| f.exists())
             .collect()
+    }
+}
+
+impl World {
+    /// The probe typed into a terminal of a session in the project (0176): its report, once it
+    /// has written one (20 s), then the terminal closed.
+    pub async fn terminal(&self) -> Result<(), String> {
+        let session = self
+            .server
+            .sessions
+            .create("default", Some(self.project.display().to_string()))
+            .map_err(|e| e.to_string())?;
+        let (id, _) = self
+            .server
+            .terminals
+            .open(&self.server, &session, None, 120, 40)?;
+        let bin = self.out.parent().unwrap().join("bin");
+        let terminal = self.server.terminals.find(&id)?;
+        terminal.input(format!("python3 {}/probe.py terminal\r", bin.display()).as_bytes())?;
+        for _ in 0..200 {
+            if self.out.join("terminal.json").exists() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        self.server.terminals.close(&self.server, &id)
     }
 }
 

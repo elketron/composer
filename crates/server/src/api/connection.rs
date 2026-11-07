@@ -119,6 +119,22 @@ impl Connection {
         server.open_projects.open(server, name, folder)
     }
 
+    /// A window's TUI (unsandboxed: its editor can run a shell) takes input only from its own
+    /// window's connection (ticket 0178); a session's terminal from any client of the workspace.
+    fn may_drive(&self, terminal: &crate::terminals::Terminal) -> Result<(), String> {
+        let Some(window) = &terminal.window else {
+            return Ok(());
+        };
+        let own = self.window.lock().expect("window lock");
+        match own.as_ref().is_some_and(|(id, _)| id == window) {
+            true => Ok(()),
+            false => Err(format!(
+                "terminal `{}` is window {window}'s TUI: only that window types into it",
+                terminal.id
+            )),
+        }
+    }
+
     /// The client is gone: what it opened, it closes (a window's TUI too).
     pub fn close_all(&self, server: &Server) {
         for name in self.opened.lock().expect("opened lock").drain() {
@@ -977,7 +993,9 @@ impl Connection {
                 })
             }
             ClientCommand::TerminalInput { terminal, data } => {
-                server.terminals.find(&terminal)?.input(data.as_bytes())?;
+                let found = server.terminals.find(&terminal)?;
+                self.may_drive(&found)?;
+                found.input(data.as_bytes())?;
                 Ok(CommandResult::Done)
             }
             ClientCommand::TerminalResize {
@@ -985,7 +1003,9 @@ impl Connection {
                 cols,
                 rows,
             } => {
-                server.terminals.find(&terminal)?.resize(cols, rows)?;
+                let found = server.terminals.find(&terminal)?;
+                self.may_drive(&found)?;
+                found.resize(cols, rows)?;
                 Ok(CommandResult::Done)
             }
             ClientCommand::TerminalRead { terminal } => {
