@@ -4,7 +4,7 @@ mod workspaces;
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
-use composer_server::client::{AskOptions, ask};
+use composer_client::cli::{AskOptions, ask};
 use composer_server::harness::ClaudeToken;
 use composer_server::mcp::{McpOptions, run_mcp};
 use composer_server::worker::{WorkerOptions, run_worker};
@@ -355,7 +355,7 @@ async fn main() -> anyhow::Result<()> {
             };
             let (server_url, token) = remote::client(&workspace)?;
             let change = state.map(|s| (entry, s == "on"));
-            composer_server::client::harness(&server_url, &token, project, change).await?;
+            composer_client::cli::harness(&server_url, &token, project, change).await?;
         }
         Some(Command::Workspace { action }) => match action {
             WorkspaceCommand::New { name, template } => {
@@ -370,14 +370,14 @@ async fn main() -> anyhow::Result<()> {
                 AppCommand::Allow { project, app } => (project, app, false),
                 AppCommand::Promote { project, app } => (project, app, true),
                 AppCommand::Rebuild { all, yes } => {
-                    composer_server::client::rebuild_apps(&server_url, &token, all, yes).await?;
+                    composer_client::cli::rebuild_apps(&server_url, &token, all, yes).await?;
                     return Ok(());
                 }
             };
-            composer_server::client::local_app(&server_url, &token, project, app, promote).await?;
+            composer_client::cli::local_app(&server_url, &token, project, app, promote).await?;
         }
         Some(Command::Library { action }) => {
-            use composer_server::client::LibraryAction;
+            use composer_client::cli::LibraryAction;
             let action = match action {
                 LibraryCommand::List => LibraryAction::List,
                 LibraryCommand::Install { site, name } => LibraryAction::Install { site, name },
@@ -387,21 +387,21 @@ async fn main() -> anyhow::Result<()> {
                 }
             };
             let (server_url, token) = remote::client(&workspace)?;
-            composer_server::client::library(&server_url, &token, action).await?;
+            composer_client::cli::library(&server_url, &token, action).await?;
         }
         Some(Command::Ticket {
             action,
             ticket,
             yes,
         }) => {
-            use composer_server::client::TicketAction;
+            use composer_client::cli::TicketAction;
             let action = match action.as_str() {
                 "merge" => TicketAction::Merge,
                 "discard" => TicketAction::Discard,
                 _ => TicketAction::Changes,
             };
             let (server_url, token) = remote::client(&workspace)?;
-            composer_server::client::ticket(&server_url, &token, action, ticket, yes).await?;
+            composer_client::cli::ticket(&server_url, &token, action, ticket, yes).await?;
         }
         Some(Command::Pair { name }) => remote::pair(&workspace, &name)?,
         Some(Command::Devices { action }) => {

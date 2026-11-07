@@ -3,7 +3,7 @@ use composer_protocol::{ClientCommand, ClientRequest, CommandResult};
 use futures::SinkExt;
 use tokio_tungstenite::tungstenite::Message;
 
-use crate::client::ask::next_reply;
+use crate::cli::ask::next_reply;
 
 /// `composer harness <project> [on|off <entry>]`: shows a project's external harnesses, or
 /// turns one (or one of its models) on or off.

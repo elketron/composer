@@ -480,6 +480,7 @@ dependencies = [
  "anyhow",
  "axum",
  "clap",
+ "composer-client",
  "composer-protocol",
  "composer-server",
  "composer-tui",
@@ -493,6 +494,25 @@ dependencies = [
  "tokio-util",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "composer-client"
+version = "0.4.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "base64 0.22.1",
+ "composer-protocol",
+ "composer-server",
+ "futures",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tokio-tungstenite 0.30.0",
+ "toml",
 ]
 
 [[package]]
@@ -558,6 +578,7 @@ dependencies = [
  "anyhow",
  "arboard",
  "base64 0.22.1",
+ "composer-client",
  "composer-core",
  "composer-protocol",
  "crossterm",

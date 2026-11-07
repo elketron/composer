@@ -4,7 +4,7 @@ use composer_protocol::{ClientCommand, ClientRequest, CommandResult};
 use futures::SinkExt;
 use tokio_tungstenite::tungstenite::Message;
 
-use crate::client::ask::next_reply;
+use crate::cli::ask::next_reply;
 
 /// What `composer library` does.
 #[derive(Debug, Clone, PartialEq, Eq)]

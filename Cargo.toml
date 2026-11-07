@@ -12,6 +12,7 @@ repository = "https://github.com/elketron/composer"
 composer-core = { path = "crates/core" }
 composer-protocol = { path = "crates/protocol" }
 composer-server = { path = "crates/server" }
+composer-client = { path = "crates/client" }
 composer-tui = { path = "crates/tui" }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = { version = "1.0.154", features = ["preserve_order"] }
