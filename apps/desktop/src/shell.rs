@@ -9,8 +9,8 @@ use base64::Engine;
 use composer_client::{Connection, Endpoint, Event, Store};
 use composer_protocol::{ClientCommand, CommandResult, DeskEntry, DeskTab, ServerMessage};
 use gpui::{
-    Context, Entity, FocusHandle, Focusable, MouseButton, MouseDownEvent, MouseMoveEvent,
-    MouseUpEvent, Subscription, Window, actions, div, prelude::*, px, rgb,
+    Context, Entity, ExternalPaths, FocusHandle, Focusable, MouseButton, MouseDownEvent,
+    MouseMoveEvent, MouseUpEvent, Subscription, Window, actions, div, prelude::*, px, rgb,
 };
 use tokio::sync::mpsc;
 
@@ -23,7 +23,7 @@ use crate::picker::{Item, Pick, Picker, PickerEvent};
 use crate::stage_tabs;
 use crate::term_pane::{FONT, PaneEvent, TermPane};
 use crate::terminal_link::TerminalLink;
-use crate::view_urls::{origin, view_url};
+use crate::view_urls::{origin, paths_text, view_url};
 use crate::web_pane::{WebEvent, WebPane};
 
 actions!(
@@ -73,6 +73,8 @@ pub struct Shell {
     dragging: bool,
     /// Show what the agent opens (else it is only marked unseen). The client's choice.
     follow: bool,
+    /// The window is in front (as of its last draw): notifications only when it isn't.
+    active: bool,
     focus: FocusHandle,
 }
 
@@ -112,6 +114,7 @@ impl Shell {
             chat_width: ChatWidth::DEFAULT,
             dragging: false,
             follow: true,
+            active: true,
             focus: cx.focus_handle(),
         }
     }
@@ -150,6 +153,7 @@ impl Shell {
             self.feed(terminal, data, cx);
             return; // the panes keep the screen; the store's copy isn't needed here
         }
+        self.notify_if_away(&message);
         if let ServerMessage::TerminalExited { terminal, .. } = &message
             && let Some(pane) = self.pane(terminal)
         {
@@ -428,6 +432,13 @@ impl Shell {
             &pane,
             |shell, _, event: &WebEvent, cx| match event {
                 WebEvent::OpenPage(url) => shell.open_page(url.clone(), cx),
+                // Only http(s) and mail links get here (view_urls::external).
+                WebEvent::OpenOutside(url) => {
+                    if let Err(e) = open::that_detached(url) {
+                        shell.link = shell.link.refused(format!("couldn't open {url}: {e}"));
+                        cx.notify();
+                    }
+                }
             },
         ));
         self.webs.arrived(tab, pane);
@@ -495,11 +506,13 @@ impl Shell {
                 endpoint.get("/api/sites").await.unwrap_or_default();
             let apps: Option<composer_protocol::http::AppList> =
                 endpoint.get("/api/apps").await.ok();
-            (sites, apps)
+            let launchers: Vec<serde_json::Value> =
+                endpoint.get("/api/launcher").await.unwrap_or_default();
+            (sites, apps, launchers)
         });
         let weak = picker.downgrade();
         cx.spawn(async move |_, cx| {
-            let Ok((sites, apps)) = fetched.await else {
+            let Ok((sites, apps, launchers)) = fetched.await else {
                 return;
             };
             let mut more: Vec<Item> = apps
@@ -512,6 +525,14 @@ impl Shell {
                     pick: Pick::App(app.site),
                 })
                 .collect();
+            more.extend(launchers.iter().filter_map(|l| {
+                let name = l["name"].as_str()?.to_string();
+                Some(Item {
+                    label: format!("launch: {name}"),
+                    detail: l["command"].as_str().unwrap_or_default().to_string(),
+                    pick: Pick::Launch(name),
+                })
+            }));
             more.extend(sites.into_iter().map(|site| Item {
                 label: format!("page: {}", site.title),
                 detail: format!("site://{}", site.name),
@@ -555,10 +576,99 @@ impl Shell {
                 }
             }
             Pick::NewTerminal => self.new_terminal(cx),
+            Pick::Launch(name) => self.launch(name, cx),
+            Pick::AttachFile => self.attach_file(cx),
             Pick::ToggleFollow => self.follow = !self.follow,
             Pick::Workspaces => self.open_workspaces(window, cx),
             Pick::Sessions => self.open_sessions(window, cx),
         }
+    }
+
+    /// Runs a `[[launcher]]` entry.
+    fn launch(&mut self, name: String, cx: &mut Context<Self>) {
+        let endpoint = self.endpoint.clone();
+        let path = format!("/api/launcher/{name}");
+        let done = cx
+            .global::<Desktop>()
+            .spawn(async move { endpoint.post::<serde_json::Value>(&path).await });
+        cx.spawn(async move |this, cx| {
+            let answer = done.await.unwrap_or_else(|e| Err(e.to_string()));
+            if let Err(e) = answer {
+                let _ = this.update(cx, |shell, cx| {
+                    shell.link = shell.link.refused(format!("launch {name}: {e}"));
+                    cx.notify();
+                });
+            }
+        })
+        .detach();
+    }
+
+    /// Files from the desktop's file picker go into the chat as their paths (the TUI makes
+    /// attachments of pasted paths).
+    fn attach_file(&mut self, cx: &mut Context<Self>) {
+        let picked = cx.prompt_for_paths(gpui::PathPromptOptions {
+            files: true,
+            directories: false,
+            multiple: true,
+            prompt: Some("Attach".into()),
+        });
+        cx.spawn(async move |this, cx| {
+            let Ok(Ok(Some(paths))) = picked.await else {
+                return;
+            };
+            let text = paths_text(paths.iter().map(|p| p.as_path()));
+            let _ = this.update(cx, |shell, cx| shell.paste_into_chat(&text, cx));
+        })
+        .detach();
+    }
+
+    fn paste_into_chat(&mut self, text: &str, cx: &mut Context<Self>) {
+        if let Some(chat) = self.chat.clone() {
+            chat.update(cx, |chat, cx| chat.paste(text, cx));
+        }
+    }
+
+    /// A finished turn or an approval needed, while the window is behind: a notification.
+    fn notify_if_away(&self, message: &ServerMessage) {
+        if self.active {
+            return;
+        }
+        let (summary, body) = match message {
+            ServerMessage::TurnDone { session, .. }
+                if self.store.attached.as_ref() == Some(session) =>
+            {
+                (
+                    "The agent is done",
+                    format!("{} · #{session}", self.workspace),
+                )
+            }
+            ServerMessage::ApprovalRequest {
+                session,
+                title,
+                site,
+                recipe,
+                ..
+            } => {
+                let what = if title.is_empty() {
+                    format!("{site} › {recipe}")
+                } else {
+                    title.clone()
+                };
+                (
+                    "An approval is waiting",
+                    format!("{what} · {} · #{session}", self.workspace),
+                )
+            }
+            _ => return,
+        };
+        // The notification service may block: off the window's thread.
+        std::thread::spawn(move || {
+            let _ = notify_rust::Notification::new()
+                .appname("composer")
+                .summary(summary)
+                .body(&body)
+                .show();
+        });
     }
 
     fn title(&self) -> String {
@@ -591,6 +701,7 @@ impl Render for Shell {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let total = f32::from(window.viewport_size().width);
         self.chat_width = self.chat_width.within(total);
+        self.active = window.is_window_active();
         self.load_shown(cx);
         let shown = stage_tabs::shown(&self.store.desk).map(str::to_string);
         let tabs = self.store.desk.tabs.iter().map(|entry| {
@@ -765,6 +876,11 @@ impl Render for Shell {
                             .h_full()
                             .min_h(px(0.))
                             .overflow_hidden()
+                            // Files dropped on the chat: their paths, which the TUI attaches.
+                            .on_drop(cx.listener(|shell, paths: &ExternalPaths, _, cx| {
+                                let text = paths_text(paths.paths().iter().map(|p| p.as_path()));
+                                shell.paste_into_chat(&text, cx);
+                            }))
                             .child(chat),
                     )
                     .child(
@@ -819,6 +935,15 @@ impl Render for Shell {
                                     .flex_1()
                                     .min_h(px(0.))
                                     .overflow_hidden()
+                                    // Files dropped on a terminal: their quoted paths.
+                                    .on_drop(cx.listener(|shell, paths: &ExternalPaths, _, cx| {
+                                        if let Some(pane) = shell.shown_pane().cloned() {
+                                            let text = paths_text(
+                                                paths.paths().iter().map(|p| p.as_path()),
+                                            );
+                                            pane.update(cx, |pane, cx| pane.paste(&text, cx));
+                                        }
+                                    }))
                                     .child(stage_body),
                             ),
                     ),
