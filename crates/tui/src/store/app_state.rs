@@ -556,12 +556,14 @@ impl AppState {
                     );
                     return vec![];
                 };
+                // Opened with a token of its own (never the workspace's in its URL): on the
+                // session's project if it is one of its apps, else on Home.
                 let session = self.session.current.clone().unwrap_or_default();
-                let url = format!(
-                    "{}/{site}/?token={}&session={session}",
-                    self.conn.server_url, self.conn.token
-                );
-                vec![Effect::CheckApp { site, url }]
+                let project = self
+                    .session
+                    .current_info()
+                    .and_then(|s| self.session.project_of(s));
+                self.open_app(site, session, project)
             }
             Action::EditPage => match &self.page.current {
                 Some(page) => vec![Effect::EditPage(page.url.clone())],
@@ -774,6 +776,20 @@ impl AppState {
         effects
     }
 
+    fn open_app(&mut self, site: String, session: String, project: Option<String>) -> Vec<Effect> {
+        self.send(
+            ClientCommand::AppOpen {
+                site: site.clone(),
+                project: project.clone(),
+            },
+            Pending::OpenApp {
+                site,
+                session,
+                project,
+            },
+        )
+    }
+
     /// Keeps the current session's project open on the server (its apps' watches, `on_open`),
     /// closing the one before when it changes.
     fn follow_project(&mut self) -> Vec<Effect> {
@@ -805,6 +821,12 @@ impl AppState {
                 let pending = id.map(|id| self.conn.take_pending(id));
                 match pending {
                     Some(Pending::Models) => vec![],
+                    // Not one of the project's apps: on Home, then.
+                    Some(Pending::OpenApp {
+                        site,
+                        session,
+                        project: Some(_),
+                    }) => self.open_app(site, session, None),
                     // An older server: the whole chat replays.
                     Some(Pending::History {
                         session,
@@ -1012,6 +1034,14 @@ impl AppState {
 
     fn reply(&mut self, id: u64, result: CommandResult) -> Vec<Effect> {
         match (self.conn.take_pending(id), result) {
+            (Pending::OpenApp { site, session, .. }, CommandResult::AppOpened { opened }) => {
+                let url = format!(
+                    "{}{}&session={session}",
+                    origin(&self.conn.server_url),
+                    opened.url
+                );
+                vec![Effect::CheckApp { site, url }]
+            }
             (Pending::ListSessions, CommandResult::Sessions { sessions }) => {
                 for info in sessions.into_iter().rev() {
                     self.session.upsert(info);
@@ -1285,6 +1315,16 @@ fn mcp_summary(servers: &[composer_protocol::http::McpServerInfo]) -> (String, F
         FlashLevel::Info
     };
     (format!("mcp: {}", parts.join(" · ")), level)
+}
+
+/// `http://host:port` of a server URL (`http://host:port/w/default`): app URLs come with their
+/// own path.
+fn origin(server_url: &str) -> &str {
+    let after = server_url.find("://").map_or(0, |i| i + 3);
+    match server_url[after..].find('/') {
+        Some(slash) => &server_url[..after + slash],
+        None => server_url,
+    }
 }
 
 #[cfg(test)]
@@ -1785,9 +1825,78 @@ mod tests {
     }
 
     #[test]
+    fn an_app_opens_by_its_own_token_on_the_project_else_home() {
+        let (mut state, _) = connected();
+        state.conn.server_url = "http://h:1/w/default".into();
+        state.session.upsert(SessionInfo {
+            project: Some("/p/game".into()),
+            ..info("s", None)
+        });
+        state.reduce(Action::AttachSession("s".into()));
+        let effects = state.reduce(Action::OpenApp(Some("calendar".into())));
+        let commands: Vec<_> = sent(&effects)
+            .into_iter()
+            .filter(|(_, c)| matches!(c, ClientCommand::AppOpen { .. }))
+            .collect();
+        let [(id, ClientCommand::AppOpen { site, project })] = commands.as_slice() else {
+            panic!("{effects:?}")
+        };
+        assert_eq!(
+            (site.as_str(), project.as_deref()),
+            ("calendar", Some("/p/game"))
+        );
+        // Not one of the project's apps: on Home.
+        let effects = state.reduce(Action::Server(ServerMessage::Error {
+            id: Some(*id),
+            message: "isn't one of project `game`'s apps".into(),
+        }));
+        let commands: Vec<_> = sent(&effects)
+            .into_iter()
+            .filter(|(_, c)| matches!(c, ClientCommand::AppOpen { .. }))
+            .collect();
+        let [(id, ClientCommand::AppOpen { project: None, .. })] = commands.as_slice() else {
+            panic!("{effects:?}")
+        };
+        let effects = state.reduce(Action::Server(ServerMessage::Ok {
+            id: *id,
+            result: CommandResult::AppOpened {
+                opened: composer_protocol::http::AppOpened {
+                    url: "/w/default/h/calendar/?app_token=app_x".into(),
+                    token: Some("app_x".into()),
+                },
+            },
+        }));
+        let [Effect::CheckApp { site, url }] = effects.as_slice() else {
+            panic!("{effects:?}")
+        };
+        assert_eq!(site, "calendar");
+        assert_eq!(
+            url,
+            "http://h:1/w/default/h/calendar/?app_token=app_x&session=s"
+        );
+        assert!(!url.contains(&state.conn.token) || state.conn.token.is_empty());
+    }
+
+    #[test]
     fn an_app_opens_only_when_built() {
         let (mut state, _) = connected();
         let effects = state.reduce(Action::OpenApp(Some("orchestration".into())));
+        let commands: Vec<_> = sent(&effects)
+            .into_iter()
+            .filter(|(_, c)| matches!(c, ClientCommand::AppOpen { .. }))
+            .collect();
+        let [(id, ClientCommand::AppOpen { .. })] = commands.as_slice() else {
+            panic!("{effects:?}")
+        };
+        let effects = state.reduce(Action::Server(ServerMessage::Ok {
+            id: *id,
+            result: CommandResult::AppOpened {
+                opened: composer_protocol::http::AppOpened {
+                    url: "/h/orchestration/?app_token=app_x".into(),
+                    token: Some("app_x".into()),
+                },
+            },
+        }));
         let [Effect::CheckApp { site, url }] = effects.as_slice() else {
             panic!("{effects:?}")
         };
