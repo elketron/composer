@@ -24,6 +24,14 @@ impl Provider for Silent {
     }
 }
 
+/// A request that must be answered within 10 s: a reply that never comes fails the test, not
+/// hangs it.
+async fn ask(connection: &Connection, command: ClientCommand) -> Result<CommandResult, String> {
+    tokio::time::timeout(Duration::from_secs(10), connection.request(command))
+        .await
+        .expect("the reply never came")
+}
+
 #[tokio::test]
 async fn a_connection_reconnects_and_pairs_replies() {
     let dir = tempfile::tempdir().unwrap();
@@ -44,12 +52,7 @@ async fn a_connection_reconnects_and_pairs_replies() {
         .unwrap()
         .unwrap();
     assert!(matches!(first, Event::Disconnected(_)), "{first:?}");
-    assert!(
-        connection
-            .request(ClientCommand::SessionList)
-            .await
-            .is_err()
-    );
+    assert!(ask(&connection, ClientCommand::SessionList).await.is_err());
 
     // The server comes up: it connects on its own.
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
@@ -66,48 +69,53 @@ async fn a_connection_reconnects_and_pairs_replies() {
     }
 
     // A request and its reply; an error reply.
-    let created = connection
-        .request(ClientCommand::SessionCreate {
+    let created = ask(
+        &connection,
+        ClientCommand::SessionCreate {
             agent: "default".into(),
             project: None,
-        })
-        .await
-        .unwrap();
+        },
+    )
+    .await
+    .unwrap();
     let CommandResult::Session { session } = created else {
         panic!("{created:?}")
     };
-    let listed = connection
-        .request(ClientCommand::SessionList)
-        .await
-        .unwrap();
+    let listed = ask(&connection, ClientCommand::SessionList).await.unwrap();
     assert!(
         matches!(listed, CommandResult::Sessions { sessions } if sessions.iter().any(|s| s.id == session.id))
     );
-    let missing = connection
-        .request(ClientCommand::DeskGet {
+    let missing = ask(
+        &connection,
+        ClientCommand::DeskGet {
             session: "nope".into(),
-        })
-        .await;
+        },
+    )
+    .await;
     assert!(missing.is_err());
 
     // Events: attached to the session, a desk change arrives as an event.
-    connection
-        .request(ClientCommand::SessionAttach {
+    ask(
+        &connection,
+        ClientCommand::SessionAttach {
             session: session.id.clone(),
             since: None,
-        })
-        .await
-        .unwrap();
-    connection
-        .request(ClientCommand::DeskOpen {
+        },
+    )
+    .await
+    .unwrap();
+    ask(
+        &connection,
+        ClientCommand::DeskOpen {
             session: session.id.clone(),
             tab: composer_protocol::DeskTab::Page {
                 url: "site://memory".into(),
             },
             focus: true,
-        })
-        .await
-        .unwrap();
+        },
+    )
+    .await
+    .unwrap();
     loop {
         let event = tokio::time::timeout(Duration::from_secs(5), events.recv())
             .await
