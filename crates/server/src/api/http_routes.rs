@@ -57,6 +57,26 @@ pub async fn projects(
     Json(projects)
 }
 
+/// `GET /api/apps`: the workspace's Home (its global and both-scope apps).
+pub async fn home_apps(
+    State(server): State<Arc<Server>>,
+) -> Json<composer_protocol::http::AppList> {
+    let list = tokio::task::spawn_blocking(move || crate::apps::home_apps(&server)).await;
+    Json(list.expect("listing apps doesn't panic"))
+}
+
+/// `GET /api/projects/<name>/apps`: the apps attached to a project.
+pub async fn project_apps(
+    State(server): State<Arc<Server>>,
+    axum::extract::Path(name): axum::extract::Path<String>,
+) -> Result<Json<composer_protocol::http::AppList>, ApiError> {
+    let list = tokio::task::spawn_blocking(move || crate::apps::project_apps(&server, &name))
+        .await
+        .expect("listing apps doesn't panic");
+    list.map(Json)
+        .map_err(|e| ApiError(axum::http::StatusCode::NOT_FOUND, e))
+}
+
 pub async fn sites(State(server): State<Arc<Server>>) -> Result<Json<Vec<SiteSummary>>, ApiError> {
     let sites = server.web.sites()?;
     let index = server.index.read().expect("index lock");

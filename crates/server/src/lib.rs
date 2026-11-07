@@ -3,6 +3,7 @@
 pub mod actions;
 pub mod agent;
 pub mod api;
+pub mod apps;
 pub mod attachments;
 pub mod client;
 mod config;

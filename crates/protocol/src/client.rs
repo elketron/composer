@@ -102,6 +102,14 @@ pub enum ClientCommand {
     #[serde(rename = "project.overview")]
     ProjectOverview { project: String },
 
+    /// The apps of a project (by name), or of the workspace's Home without one; the reply is
+    /// `apps`.
+    #[serde(rename = "apps.list")]
+    AppsList {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        project: Option<String>,
+    },
+
     /// The MCP servers in `config.toml`, connecting those that are on (so it is also a test of
     /// them); the reply is `mcp_servers`.
     #[serde(rename = "mcp.list")]

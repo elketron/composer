@@ -259,6 +259,10 @@ pub enum CommandResult {
     McpServers {
         servers: Vec<crate::http::McpServerInfo>,
     },
+    /// `apps.list`.
+    Apps {
+        list: crate::http::AppList,
+    },
     /// `library.list`.
     Library {
         sites: Vec<crate::http::LibrarySiteInfo>,
