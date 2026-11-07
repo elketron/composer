@@ -27,7 +27,7 @@ fn find_in(path_var: &OsStr) -> Option<PathBuf> {
 /// diff it as text), has nothing to show, fails or times out.
 #[allow(
     clippy::disallowed_methods,
-    reason = "composer's own git show on a project"
+    reason = "the git jail's own bwrap (or git, with the sandbox off)"
 )]
 pub async fn semantic_diff(
     difft: &Path,
@@ -45,13 +45,9 @@ pub async fn semantic_diff(
     if status.starts_with('A') {
         std::fs::write(&old, "").ok()?;
     } else {
-        let shown = Command::new("git")
-            .arg("-C")
-            .arg(path)
-            .args(["show", &format!("{base}:{file}")])
-            .output()
-            .await
-            .ok()?;
+        let (program, jailed) =
+            crate::sandbox::git_jailed(path, &["show", &format!("{base}:{file}")]).ok()?;
+        let shown = Command::new(program).args(jailed).output().await.ok()?;
         if !shown.status.success() {
             return None;
         }
@@ -60,7 +56,17 @@ pub async fn semantic_diff(
     if status.starts_with('D') {
         std::fs::write(&new, "").ok()?;
     } else {
-        std::fs::copy(path.join(file), &new).ok()?;
+        // The file as the worktree has it, never what a symlink there points to (a run could
+        // link `~/.ssh/id_ed25519`): composer reads it outside the sandbox.
+        let changed = path.join(file);
+        if std::fs::symlink_metadata(&changed)
+            .ok()?
+            .file_type()
+            .is_symlink()
+        {
+            return None;
+        }
+        std::fs::copy(&changed, &new).ok()?;
     }
     run_difft(difft, &old, &new, DIFFT_TIMEOUT).await
 }

@@ -122,9 +122,13 @@ async fn semantic_diff_falls_back_without_difft_and_comments_land_on_the_ticket(
         .unwrap();
     let mut socket = connect(addr, &server.token).await;
 
-    // PATH holds git only: no difft, so every file has just the text diff.
+    // PATH holds git (and bwrap) only: no difft, so every file has just the text diff.
     let bin = tempfile::tempdir().unwrap();
     std::os::unix::fs::symlink(&git_bin, bin.path().join("git")).unwrap();
+    // Composer's git runs in its jail.
+    if let Some(bwrap) = on_path("bwrap") {
+        std::os::unix::fs::symlink(bwrap, bin.path().join("bwrap")).unwrap();
+    }
     let old_path = std::env::var_os("PATH").unwrap();
     unsafe { std::env::set_var("PATH", bin.path()) };
     let plain = changes(&mut socket, 1).await;

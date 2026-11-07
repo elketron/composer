@@ -145,6 +145,7 @@ impl Server {
                 Approvals::load_read_only(&home.approvals_file())?,
             ),
         };
+        crate::sandbox::configure_git_jail(&config.sandbox);
         let worker_exe = std::env::var_os("COMPOSER_WORKER_EXE")
             .map(PathBuf::from)
             .or_else(|| std::env::current_exe().ok())
@@ -223,6 +224,7 @@ impl Server {
         .map(|(name, _)| name.to_string())
         .collect();
         if current.sandbox != next.sandbox {
+            crate::sandbox::configure_git_jail(&next.sandbox);
             // Every stdio server starts again in the new world.
             let mut mcp = self.mcp.write().expect("mcp lock");
             *mcp = Arc::new(McpServers::new(

@@ -41,7 +41,7 @@ pub struct SandboxSpec {
 }
 
 /// What every spawn sees read-only, wherever it comes from.
-const SYSTEM: [&str; 2] = ["/usr", "/etc"];
+pub(crate) const SYSTEM: [&str; 2] = ["/usr", "/etc"];
 
 impl SandboxSpec {
     /// The base world of a spawn of `workspace`; `foreign` are the projects other workspaces own.
@@ -188,35 +188,7 @@ impl SandboxSpec {
     /// Everything before `-- program`.
     pub fn args(&self) -> Result<Vec<OsString>, String> {
         let home = self.user_home.as_os_str();
-        let mut args: Vec<OsString> = [
-            "--die-with-parent",
-            "--unshare-pid",
-            "--unshare-ipc",
-            "--unshare-uts",
-            "--unshare-cgroup-try",
-            "--hostname",
-            "sandbox",
-            "--proc",
-            "/proc",
-            "--dev",
-            "/dev",
-            "--tmpfs",
-            "/tmp",
-            "--tmpfs",
-            "/run",
-        ]
-        .iter()
-        .map(OsString::from)
-        .collect();
-        args.extend(["--tmpfs".into(), home.into()]);
-        // As on the host: merged-/usr links (Arch: all to usr/bin, usr/lib; Ubuntu: lib64 to
-        // usr/lib64), or folders of their own.
-        for top in ["/bin", "/sbin", "/lib", "/lib32", "/lib64"] {
-            match std::fs::read_link(top) {
-                Ok(target) => args.extend(["--symlink".into(), target.into(), top.into()]),
-                Err(_) => args.extend(Mount::Ro(top.into()).args()),
-            }
-        }
+        let mut args = base_args(&self.user_home);
         for mount in self.mounts()? {
             args.extend(mount.args());
         }
@@ -275,8 +247,44 @@ impl SandboxSpec {
     }
 }
 
+/// What every sandbox starts from: its own pid, ipc, uts and cgroup namespaces and hostname, gone
+/// with composer; fresh `/proc` and `/dev`; empty `/tmp`, `/run` and `$HOME` (`home`); the
+/// host's `/bin`, `/lib`... links (or folders).
+pub(crate) fn base_args(home: &Path) -> Vec<OsString> {
+    let mut args: Vec<OsString> = [
+        "--die-with-parent",
+        "--unshare-pid",
+        "--unshare-ipc",
+        "--unshare-uts",
+        "--unshare-cgroup-try",
+        "--hostname",
+        "sandbox",
+        "--proc",
+        "/proc",
+        "--dev",
+        "/dev",
+        "--tmpfs",
+        "/tmp",
+        "--tmpfs",
+        "/run",
+    ]
+    .iter()
+    .map(OsString::from)
+    .collect();
+    args.extend(["--tmpfs".into(), home.into()]);
+    // As on the host: merged-/usr links (Arch: all to usr/bin, usr/lib; Ubuntu: lib64 to
+    // usr/lib64), or folders of their own.
+    for top in ["/bin", "/sbin", "/lib", "/lib32", "/lib64"] {
+        match std::fs::read_link(top) {
+            Ok(target) => args.extend(["--symlink".into(), target.into(), top.into()]),
+            Err(_) => args.extend(Mount::Ro(top.into()).args()),
+        }
+    }
+    args
+}
+
 /// `path` with symlinks resolved, or as it is when it doesn't exist.
-fn canonical(path: &Path) -> PathBuf {
+pub(crate) fn canonical(path: &Path) -> PathBuf {
     std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
