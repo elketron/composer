@@ -17,7 +17,7 @@ use smallvec::SmallVec;
 
 use crate::browser_pump;
 use crate::dom_keys::codes;
-use crate::view_urls::page_for;
+use crate::view_urls::{external, page_for};
 
 /// What CEF's callbacks write and the pane reads. Main thread only.
 #[derive(Default)]
@@ -33,6 +33,8 @@ pub struct Shared {
     pub cursor: CursorStyle,
     /// Pages the user asked for (links, popups), for the window to open as tabs.
     pub open_pages: Vec<String>,
+    /// Links that leave the workspace, for the OS to open.
+    pub open_outside: Vec<String>,
 }
 
 #[derive(Clone)]
@@ -158,13 +160,15 @@ wrap_request_handler! {
             let main = frame.is_some_and(|f| f.is_main() != 0);
             let (Some(request), true, true) = (request, main, user_gesture != 0) else { return 0 };
             let url = CefStringUtf16::from(&request.url()).to_string();
-            match page_for(&url, &self.handler.base) {
-                Some(page) => {
-                    self.handler.shared.borrow_mut().open_pages.push(page);
-                    1
-                }
-                None => 0,
+            if let Some(page) = page_for(&url, &self.handler.base) {
+                self.handler.shared.borrow_mut().open_pages.push(page);
+                return 1;
             }
+            if external(&url, &self.handler.base) {
+                self.handler.shared.borrow_mut().open_outside.push(url);
+                return 1;
+            }
+            0
         }
     }
 }
@@ -193,8 +197,11 @@ wrap_life_span_handler! {
         ) -> ::std::os::raw::c_int {
             // No windows of their own: a page opens as a tab, anything else waits for 0186
             // (opening with the OS).
-            if let Some(page) = target_url.and_then(|u| page_for(&u.to_string(), &self.handler.base)) {
+            let url = target_url.map(|u| u.to_string()).unwrap_or_default();
+            if let Some(page) = page_for(&url, &self.handler.base) {
                 self.handler.shared.borrow_mut().open_pages.push(page);
+            } else if external(&url, &self.handler.base) {
+                self.handler.shared.borrow_mut().open_outside.push(url);
             }
             1
         }
@@ -242,6 +249,8 @@ pub struct WebPane {
 pub enum WebEvent {
     /// A link to a page: open it as a tab.
     OpenPage(String),
+    /// A link outside the workspace: the OS opens it.
+    OpenOutside(String),
 }
 
 impl EventEmitter<WebEvent> for WebPane {}
@@ -300,9 +309,18 @@ impl WebPane {
 
     /// After CEF's work: new frames become images, links to pages become events.
     pub fn after_pump(&mut self, cx: &mut Context<Self>) {
-        let pages = std::mem::take(&mut self.shared.borrow_mut().open_pages);
+        let (pages, outside) = {
+            let mut s = self.shared.borrow_mut();
+            (
+                std::mem::take(&mut s.open_pages),
+                std::mem::take(&mut s.open_outside),
+            )
+        };
         for page in pages {
             cx.emit(WebEvent::OpenPage(page));
+        }
+        for url in outside {
+            cx.emit(WebEvent::OpenOutside(url));
         }
         let mut s = self.shared.borrow_mut();
         if !s.dirty {

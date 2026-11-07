@@ -41,6 +41,32 @@ pub fn page_for(link: &str, base: &str) -> Option<String> {
     Some(format!("site://{rest}"))
 }
 
+/// A link that leaves the workspace (another site on the web, mail): it opens with the OS,
+/// not in the pane. Links within the workspace's server stay in the pane.
+pub fn external(link: &str, base: &str) -> bool {
+    let web = link.starts_with("http://") || link.starts_with("https://");
+    let ours = link.starts_with(origin(base));
+    (web && !ours) || link.starts_with("mailto:")
+}
+
+/// Dropped or picked files as text for a terminal: each path quoted for a shell when it needs
+/// it, separated by spaces.
+pub fn paths_text<'a>(paths: impl Iterator<Item = &'a std::path::Path>) -> String {
+    paths
+        .map(|p| {
+            let p = p.to_string_lossy();
+            if p.chars()
+                .all(|c| c.is_ascii_alphanumeric() || "/._-+=:@,".contains(c))
+            {
+                p.into_owned()
+            } else {
+                format!("'{}'", p.replace('\'', "'\\''"))
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 fn encode(segment: &str) -> String {
     segment
         .bytes()
@@ -81,6 +107,26 @@ mod tests {
         assert_eq!(
             view_url(&endpoint, &DeskTab::Terminal { id: "t".into() }),
             None
+        );
+    }
+
+    #[test]
+    fn outside_links_and_dropped_paths() {
+        assert!(external("https://example.com/x", BASE));
+        assert!(external("mailto:a@b.c", BASE));
+        assert!(!external(
+            "http://127.0.0.1:7420/w/default/orchestration/",
+            BASE
+        ));
+        assert!(!external("site://plans/x.md", BASE));
+        assert!(!external("javascript:alert(1)", BASE));
+        let paths = [
+            std::path::Path::new("/tmp/a.png"),
+            std::path::Path::new("/tmp/my file's.txt"),
+        ];
+        assert_eq!(
+            paths_text(paths.into_iter()),
+            "/tmp/a.png '/tmp/my file'\\''s.txt'"
         );
     }
 

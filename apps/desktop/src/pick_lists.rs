@@ -63,6 +63,11 @@ pub fn commands(following: bool) -> Vec<Item> {
             pick: Pick::NewTerminal,
         },
         Item {
+            label: "Attach a file…".into(),
+            detail: "or drop it on the chat".into(),
+            pick: Pick::AttachFile,
+        },
+        Item {
             label: format!("Follow agent: turn {follow}"),
             detail: String::new(),
             pick: Pick::ToggleFollow,
@@ -135,7 +140,8 @@ mod tests {
         let items = workspaces(vec!["default".into(), "lab".into()], "lab");
         assert_eq!(items[1].label, "lab  (this window)");
         assert_eq!(items[0].detail, "ctrl+alt+1");
-        assert_eq!(commands(true)[1].label, "Follow agent: turn off");
+        assert_eq!(commands(true)[2].label, "Follow agent: turn off");
+        assert_eq!(commands(true)[1].pick, Pick::AttachFile);
         assert_eq!(short("abcdef", 3), "abc…");
         assert_eq!(short("abc", 3), "abc");
         assert_eq!(short("héllo wörld", 4), "héll…", "by characters");

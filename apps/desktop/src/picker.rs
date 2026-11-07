@@ -16,6 +16,9 @@ pub enum Pick {
     Session(String),
     Page(String),
     App(String),
+    /// A `[[launcher]]` entry (it runs on this machine: the server's, on Linux).
+    Launch(String),
+    AttachFile,
     NewTerminal,
     ToggleFollow,
     Workspaces,

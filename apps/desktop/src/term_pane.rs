@@ -144,6 +144,12 @@ impl TermPane {
         cx.notify();
     }
 
+    /// Text as a paste (bracketed when the program asked): dropped or picked files' paths.
+    pub fn paste(&mut self, text: &str, cx: &mut Context<Self>) {
+        let _ = self.term.send_paste(text);
+        cx.notify();
+    }
+
     /// Old output (a terminal's scrollback when the pane opens): drawn, never answered.
     pub fn replay(&mut self, bytes: &[u8], cx: &mut Context<Self>) {
         let link = self.link.clone();

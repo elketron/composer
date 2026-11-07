@@ -1107,6 +1107,8 @@ dependencies = [
  "gpui-pre",
  "gpui-pre-platform",
  "image",
+ "notify-rust",
+ "open",
  "serde_json",
  "smallvec",
  "tattoy-wezterm-surface",
