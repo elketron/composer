@@ -70,6 +70,119 @@ class AgentSummary {
       };
 }
 
+/// An app (a site with a `ui/` or an `app:` block) in a project's rail or on the workspace's Home:
+/// `GET /api/apps`, `GET /api/projects/<name>/apps`, ws `apps.list`.
+class AppInfo {
+  const AppInfo({
+    required this.site,
+    required this.label,
+    this.icon,
+    required this.scope,
+    required this.why,
+    this.tile = false,
+    this.opens = const [],
+    this.built = false,
+    this.local = false,
+    this.client = false,
+    this.outdated = false,
+    this.tileText,
+  });
+
+  final String site;
+
+  /// The rail label, else the site's title.
+  final String label;
+
+  final String? icon;
+
+  /// `project`, `global` or `both`.
+  final String scope;
+
+  /// `pinned`, `matched files:*.FCStd`, `home`.
+  final String why;
+
+  /// It contributes a tile to Home.
+  final bool tile;
+
+  /// File patterns it opens.
+  final List<String> opens;
+
+  /// `ui/dist/index.html` exists.
+  final bool built;
+
+  /// A project-local app (`<project>/.composer/apps/<site>`); `why` says whether it is allowed.
+  final bool local;
+
+  /// A client of the workspace (`[apps] clients`): opened with its full access.
+  final bool client;
+
+  /// Built with an older sdk: it shows nothing until rebuilt (`ui-build`, or `composer app
+  /// rebuild`).
+  final bool outdated;
+
+  /// On Home, for a `tile` app: its tile, the body of `site://<site>/tile.md` (which the app or
+  /// the agent keeps current).
+  final String? tileText;
+
+  factory AppInfo.fromJson(Map<String, Object?> json) => AppInfo(
+        site: json['site'] as String,
+        label: json['label'] as String,
+        icon: json['icon'] == null ? null : json['icon'] as String,
+        scope: json['scope'] as String,
+        why: json['why'] as String,
+        tile: json['tile'] == null ? false : json['tile'] as bool,
+        opens: json['opens'] == null ? const [] : (json['opens'] as List).map((e) => e as String).toList(),
+        built: json['built'] == null ? false : json['built'] as bool,
+        local: json['local'] == null ? false : json['local'] as bool,
+        client: json['client'] == null ? false : json['client'] as bool,
+        outdated: json['outdated'] == null ? false : json['outdated'] as bool,
+        tileText: json['tile_text'] == null ? null : json['tile_text'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'site': site,
+        'label': label,
+        if (icon != null) 'icon': icon,
+        'scope': scope,
+        'why': why,
+        'tile': tile,
+        if (opens.isNotEmpty) 'opens': opens,
+        'built': built,
+        'local': local,
+        'client': client,
+        'outdated': outdated,
+        if (tileText != null) 'tile_text': tileText,
+      };
+}
+
+/// A project's apps, or Home's; `errors` are sites whose `app:` block doesn't parse.
+class AppList {
+  const AppList({
+    this.project,
+    required this.apps,
+    this.errors = const [],
+  });
+
+  /// The project's name; `None` for Home.
+  final String? project;
+
+  final List<AppInfo> apps;
+
+  final List<String> errors;
+
+  factory AppList.fromJson(Map<String, Object?> json) => AppList(
+        project: json['project'] == null ? null : json['project'] as String,
+        apps: (json['apps'] as List).map((e) => AppInfo.fromJson(e as Map<String, Object?>)).toList(),
+        errors: json['errors'] == null ? const [] : (json['errors'] as List).map((e) => e as String).toList(),
+      );
+
+  Map<String, Object?> toJson() => {
+        if (project != null) 'project': project,
+        'apps': apps.map((e) => e.toJson()).toList(),
+        if (errors.isNotEmpty) 'errors': errors,
+      };
+}
+
 /// `POST /api/sessions/{id}/messages` — a micro app pushing a message to the agent.
 class AppMessage {
   const AppMessage({
@@ -100,6 +213,31 @@ class AppMessage {
         'text': text,
         if (pages.isNotEmpty) 'pages': pages,
         if (images.isNotEmpty) 'images': images,
+      };
+}
+
+/// `POST /api/projects/<name>/apps/<site>/open`: where to load the app (its token in the URL
+/// once; the page then keeps it in a cookie scoped to the app), and the token itself for a
+/// client that calls the app's API directly.
+class AppOpened {
+  const AppOpened({
+    required this.url,
+    this.token,
+  });
+
+  final String url;
+
+  /// The app's own token; `None` for a client app (its URL has a one-time code instead).
+  final String? token;
+
+  factory AppOpened.fromJson(Map<String, Object?> json) => AppOpened(
+        url: json['url'] as String,
+        token: json['token'] == null ? null : json['token'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'url': url,
+        if (token != null) 'token': token,
       };
 }
 
@@ -294,6 +432,7 @@ sealed class ClientCommand {
         'session.history' => ClientCommandSessionHistory.fromJson(json),
         'session.detach' => ClientCommandSessionDetach.fromJson(json),
         'message.send' => ClientCommandMessageSend.fromJson(json),
+        'selection.clear' => ClientCommandSelectionClear.fromJson(json),
         'session.compact' => ClientCommandSessionCompact.fromJson(json),
         'turn.cancel' => ClientCommandTurnCancel.fromJson(json),
         'project.set' => ClientCommandProjectSet.fromJson(json),
@@ -301,7 +440,27 @@ sealed class ClientCommand {
         'model.set' => ClientCommandModelSet.fromJson(json),
         'harness.list' => ClientCommandHarnessList.fromJson(json),
         'harness.set' => ClientCommandHarnessSet.fromJson(json),
+        'window.hello' => ClientCommandWindowHello.fromJson(json),
+        'window.session' => ClientCommandWindowSession.fromJson(json),
+        'terminal.open' => ClientCommandTerminalOpen.fromJson(json),
+        'terminal.input' => ClientCommandTerminalInput.fromJson(json),
+        'terminal.resize' => ClientCommandTerminalResize.fromJson(json),
+        'terminal.read' => ClientCommandTerminalRead.fromJson(json),
+        'terminal.close' => ClientCommandTerminalClose.fromJson(json),
+        'desk.get' => ClientCommandDeskGet.fromJson(json),
+        'desk.open' => ClientCommandDeskOpen.fromJson(json),
+        'desk.close' => ClientCommandDeskClose.fromJson(json),
+        'desk.focus' => ClientCommandDeskFocus.fromJson(json),
+        'desk.move' => ClientCommandDeskMove.fromJson(json),
+        'project.open' => ClientCommandProjectOpen.fromJson(json),
+        'project.close' => ClientCommandProjectClose.fromJson(json),
+        'projects.open' => ClientCommandProjectsOpen.fromJson(json),
         'project.overview' => ClientCommandProjectOverview.fromJson(json),
+        'apps.list' => ClientCommandAppsList.fromJson(json),
+        'app.open' => ClientCommandAppOpen.fromJson(json),
+        'apps.rebuild' => ClientCommandAppsRebuild.fromJson(json),
+        'app.allow' => ClientCommandAppAllow.fromJson(json),
+        'app.promote' => ClientCommandAppPromote.fromJson(json),
         'mcp.list' => ClientCommandMcpList.fromJson(json),
         'library.list' => ClientCommandLibraryList.fromJson(json),
         'library.install' => ClientCommandLibraryInstall.fromJson(json),
@@ -475,6 +634,25 @@ final class ClientCommandMessageSend extends ClientCommand {
       };
 }
 
+/// Removes the session's selection chip: the next message goes without it (ticket 0175;
+/// otherwise the next user message carries it). The reply is `done`.
+final class ClientCommandSelectionClear extends ClientCommand {
+  const ClientCommandSelectionClear({
+    required this.session,
+  });
+
+  final String session;
+
+  factory ClientCommandSelectionClear.fromJson(Map<String, Object?> json) => ClientCommandSelectionClear(
+        session: json['session'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'selection.clear',
+        'session': session,
+      };
+}
+
 /// Compact the session now: save memory, then summarize older messages.
 final class ClientCommandSessionCompact extends ClientCommand {
   const ClientCommandSessionCompact({
@@ -614,6 +792,350 @@ final class ClientCommandHarnessSet extends ClientCommand {
       };
 }
 
+/// A desktop window says hello (ticket 0177): it gets an id, and the server starts the TUI for
+/// it (`composer --window <id>`) in a terminal of its own, shown in the chat column. The reply
+/// is `window`; the TUI's output comes as `terminal.output` with this `window`.
+final class ClientCommandWindowHello extends ClientCommand {
+  const ClientCommandWindowHello({
+    this.cols = 0,
+    this.rows = 0,
+  });
+
+  final int cols;
+
+  final int rows;
+
+  factory ClientCommandWindowHello.fromJson(Map<String, Object?> json) => ClientCommandWindowHello(
+        cols: json['cols'] == null ? 0 : (json['cols'] as num).toInt(),
+        rows: json['rows'] == null ? 0 : (json['rows'] as num).toInt(),
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'window.hello',
+        'cols': cols,
+        'rows': rows,
+      };
+}
+
+/// The window's TUI shows this session now (the TUI sends it): the window's stage follows
+/// (`window.changed` to the window). The reply is `done`.
+final class ClientCommandWindowSession extends ClientCommand {
+  const ClientCommandWindowSession({
+    required this.window,
+    required this.session,
+  });
+
+  final String window;
+
+  final String session;
+
+  factory ClientCommandWindowSession.fromJson(Map<String, Object?> json) => ClientCommandWindowSession(
+        window: json['window'] as String,
+        session: json['session'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'window.session',
+        'window': window,
+        'session': session,
+      };
+}
+
+/// Opens a terminal for a session (ticket 0176): a shell in the workspace's sandbox, in the
+/// session's project (or the sites); a tab on its desk. With the `id` of one that ended (idle),
+/// a fresh shell where it was. The reply is `terminal`.
+final class ClientCommandTerminalOpen extends ClientCommand {
+  const ClientCommandTerminalOpen({
+    required this.session,
+    this.terminal,
+    this.cols = 0,
+    this.rows = 0,
+  });
+
+  final String session;
+
+  /// (Not `id`: that is the request's.)
+  final String? terminal;
+
+  final int cols;
+
+  final int rows;
+
+  factory ClientCommandTerminalOpen.fromJson(Map<String, Object?> json) => ClientCommandTerminalOpen(
+        session: json['session'] as String,
+        terminal: json['terminal'] == null ? null : json['terminal'] as String,
+        cols: json['cols'] == null ? 0 : (json['cols'] as num).toInt(),
+        rows: json['rows'] == null ? 0 : (json['rows'] as num).toInt(),
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'terminal.open',
+        'session': session,
+        if (terminal != null) 'terminal': terminal,
+        'cols': cols,
+        'rows': rows,
+      };
+}
+
+/// Typed into a terminal (text, escape sequences included). The reply is `done`.
+final class ClientCommandTerminalInput extends ClientCommand {
+  const ClientCommandTerminalInput({
+    required this.terminal,
+    required this.data,
+  });
+
+  final String terminal;
+
+  final String data;
+
+  factory ClientCommandTerminalInput.fromJson(Map<String, Object?> json) => ClientCommandTerminalInput(
+        terminal: json['terminal'] as String,
+        data: json['data'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'terminal.input',
+        'terminal': terminal,
+        'data': data,
+      };
+}
+
+/// A terminal's new size. The reply is `done`.
+final class ClientCommandTerminalResize extends ClientCommand {
+  const ClientCommandTerminalResize({
+    required this.terminal,
+    required this.cols,
+    required this.rows,
+  });
+
+  final String terminal;
+
+  final int cols;
+
+  final int rows;
+
+  factory ClientCommandTerminalResize.fromJson(Map<String, Object?> json) => ClientCommandTerminalResize(
+        terminal: json['terminal'] as String,
+        cols: (json['cols'] as num).toInt(),
+        rows: (json['rows'] as num).toInt(),
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'terminal.resize',
+        'terminal': terminal,
+        'cols': cols,
+        'rows': rows,
+      };
+}
+
+/// A terminal's scrollback (a client that joins late); the reply is `terminal`.
+final class ClientCommandTerminalRead extends ClientCommand {
+  const ClientCommandTerminalRead({
+    required this.terminal,
+  });
+
+  final String terminal;
+
+  factory ClientCommandTerminalRead.fromJson(Map<String, Object?> json) => ClientCommandTerminalRead(
+        terminal: json['terminal'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'terminal.read',
+        'terminal': terminal,
+      };
+}
+
+/// Ends a terminal. The reply is `done`.
+final class ClientCommandTerminalClose extends ClientCommand {
+  const ClientCommandTerminalClose({
+    required this.terminal,
+  });
+
+  final String terminal;
+
+  factory ClientCommandTerminalClose.fromJson(Map<String, Object?> json) => ClientCommandTerminalClose(
+        terminal: json['terminal'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'terminal.close',
+        'terminal': terminal,
+      };
+}
+
+/// A session's desk; the reply is `desk`.
+final class ClientCommandDeskGet extends ClientCommand {
+  const ClientCommandDeskGet({
+    required this.session,
+  });
+
+  final String session;
+
+  factory ClientCommandDeskGet.fromJson(Map<String, Object?> json) => ClientCommandDeskGet(
+        session: json['session'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'desk.get',
+        'session': session,
+      };
+}
+
+/// Opens a tab on a session's desk (an equal tab already there is focused, not doubled);
+/// `focus`: make it the shown one (default). The reply is `desk`.
+final class ClientCommandDeskOpen extends ClientCommand {
+  const ClientCommandDeskOpen({
+    required this.session,
+    required this.tab,
+    this.focus = false,
+  });
+
+  final String session;
+
+  final DeskTab tab;
+
+  final bool focus;
+
+  factory ClientCommandDeskOpen.fromJson(Map<String, Object?> json) => ClientCommandDeskOpen(
+        session: json['session'] as String,
+        tab: DeskTab.fromJson(json['tab'] as Map<String, Object?>),
+        focus: json['focus'] == null ? false : json['focus'] as bool,
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'desk.open',
+        'session': session,
+        'tab': tab.toJson(),
+        'focus': focus,
+      };
+}
+
+/// Closes a tab (by id); the reply is `desk`.
+final class ClientCommandDeskClose extends ClientCommand {
+  const ClientCommandDeskClose({
+    required this.session,
+    required this.tab,
+  });
+
+  final String session;
+
+  final String tab;
+
+  factory ClientCommandDeskClose.fromJson(Map<String, Object?> json) => ClientCommandDeskClose(
+        session: json['session'] as String,
+        tab: json['tab'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'desk.close',
+        'session': session,
+        'tab': tab,
+      };
+}
+
+/// Shows a tab (by id); the reply is `desk`.
+final class ClientCommandDeskFocus extends ClientCommand {
+  const ClientCommandDeskFocus({
+    required this.session,
+    required this.tab,
+  });
+
+  final String session;
+
+  final String tab;
+
+  factory ClientCommandDeskFocus.fromJson(Map<String, Object?> json) => ClientCommandDeskFocus(
+        session: json['session'] as String,
+        tab: json['tab'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'desk.focus',
+        'session': session,
+        'tab': tab,
+      };
+}
+
+/// Moves a tab (by id) to position `to`; the reply is `desk`.
+final class ClientCommandDeskMove extends ClientCommand {
+  const ClientCommandDeskMove({
+    required this.session,
+    required this.tab,
+    required this.to,
+  });
+
+  final String session;
+
+  final String tab;
+
+  final int to;
+
+  factory ClientCommandDeskMove.fromJson(Map<String, Object?> json) => ClientCommandDeskMove(
+        session: json['session'] as String,
+        tab: json['tab'] as String,
+        to: (json['to'] as num).toInt(),
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'desk.move',
+        'session': session,
+        'tab': tab,
+        'to': to,
+      };
+}
+
+/// Opens a project (its name, or its folder) for this client: the first open in the workspace
+/// starts its file watch and runs its apps' `on_open` recipes; the reply is `project_opened`.
+/// Opening it again from the same client does nothing; a dropped connection closes it.
+final class ClientCommandProjectOpen extends ClientCommand {
+  const ClientCommandProjectOpen({
+    required this.project,
+  });
+
+  final String project;
+
+  factory ClientCommandProjectOpen.fromJson(Map<String, Object?> json) => ClientCommandProjectOpen(
+        project: json['project'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'project.open',
+        'project': project,
+      };
+}
+
+/// Closes a project this client opened; the last close stops its watch. The reply is `done`.
+final class ClientCommandProjectClose extends ClientCommand {
+  const ClientCommandProjectClose({
+    required this.project,
+  });
+
+  final String project;
+
+  factory ClientCommandProjectClose.fromJson(Map<String, Object?> json) => ClientCommandProjectClose(
+        project: json['project'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'project.close',
+        'project': project,
+      };
+}
+
+/// The projects open in the workspace, with how many clients have each; the reply is
+/// `open_projects`.
+final class ClientCommandProjectsOpen extends ClientCommand {
+  const ClientCommandProjectsOpen();
+
+  factory ClientCommandProjectsOpen.fromJson(Map<String, Object?> json) => ClientCommandProjectsOpen(
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'projects.open',
+      };
+}
+
 /// What is going on in a project (a name in the projects directory, or a path); the reply is
 /// `project`.
 final class ClientCommandProjectOverview extends ClientCommand {
@@ -630,6 +1152,128 @@ final class ClientCommandProjectOverview extends ClientCommand {
   Map<String, Object?> toJson() => {
         'type': 'project.overview',
         'project': project,
+      };
+}
+
+/// The apps of a project (by name), or of the workspace's Home without one; the reply is
+/// `apps`.
+final class ClientCommandAppsList extends ClientCommand {
+  const ClientCommandAppsList({
+    this.project,
+  });
+
+  final String? project;
+
+  factory ClientCommandAppsList.fromJson(Map<String, Object?> json) => ClientCommandAppsList(
+        project: json['project'] == null ? null : json['project'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'apps.list',
+        if (project != null) 'project': project,
+      };
+}
+
+/// Opens an app: on a project (by name), or on Home without one; the reply is `app_opened`
+/// (the URL to load, with its token or one-time code in it once).
+final class ClientCommandAppOpen extends ClientCommand {
+  const ClientCommandAppOpen({
+    required this.site,
+    this.project,
+    this.session,
+  });
+
+  final String site;
+
+  final String? project;
+
+  /// The session it is opened from: the one its messages go to.
+  final String? session;
+
+  factory ClientCommandAppOpen.fromJson(Map<String, Object?> json) => ClientCommandAppOpen(
+        site: json['site'] as String,
+        project: json['project'] == null ? null : json['project'] as String,
+        session: json['session'] == null ? null : json['session'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'app.open',
+        'site': site,
+        if (project != null) 'project': project,
+        if (session != null) 'session': session,
+      };
+}
+
+/// Rebuilds the workspace's apps built with an older sdk (or not built; `all`: every one) with
+/// their `ui-build`, in the sandbox. Without `yes` the reply shows what would run; with it,
+/// it runs (the user's command is the approval). The reply is `note`.
+final class ClientCommandAppsRebuild extends ClientCommand {
+  const ClientCommandAppsRebuild({
+    this.all = false,
+    this.yes = false,
+  });
+
+  final bool all;
+
+  final bool yes;
+
+  factory ClientCommandAppsRebuild.fromJson(Map<String, Object?> json) => ClientCommandAppsRebuild(
+        all: json['all'] == null ? false : json['all'] as bool,
+        yes: json['yes'] == null ? false : json['yes'] as bool,
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'apps.rebuild',
+        'all': all,
+        'yes': yes,
+      };
+}
+
+/// Allows a project-local app (`<project>/.composer/apps/<app>`) as it is now: it is served
+/// and its recipes run until its `index.md` or `justfile` changes. The reply is `note`.
+final class ClientCommandAppAllow extends ClientCommand {
+  const ClientCommandAppAllow({
+    required this.project,
+    required this.app,
+  });
+
+  final String project;
+
+  final String app;
+
+  factory ClientCommandAppAllow.fromJson(Map<String, Object?> json) => ClientCommandAppAllow(
+        project: json['project'] as String,
+        app: json['app'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'app.allow',
+        'project': project,
+        'app': app,
+      };
+}
+
+/// Copies a project-local app into the workspace's sites (refused when a site has its name);
+/// the workspace's copy wins from then on. The reply is `note`.
+final class ClientCommandAppPromote extends ClientCommand {
+  const ClientCommandAppPromote({
+    required this.project,
+    required this.app,
+  });
+
+  final String project;
+
+  final String app;
+
+  factory ClientCommandAppPromote.fromJson(Map<String, Object?> json) => ClientCommandAppPromote(
+        project: json['project'] as String,
+        app: json['app'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'app.promote',
+        'project': project,
+        'app': app,
       };
 }
 
@@ -1196,6 +1840,8 @@ sealed class CommandResult {
 
   factory CommandResult.fromJson(Map<String, Object?> json) => switch (json['kind']) {
         'done' => CommandResultDone.fromJson(json),
+        'app_opened' => CommandResultAppOpened.fromJson(json),
+        'note' => CommandResultNote.fromJson(json),
         'session' => CommandResultSession.fromJson(json),
         'sessions' => CommandResultSessions.fromJson(json),
         'slot_granted' => CommandResultSlotGranted.fromJson(json),
@@ -1211,6 +1857,12 @@ sealed class CommandResult {
         'history' => CommandResultHistory.fromJson(json),
         'project' => CommandResultProject.fromJson(json),
         'mcp_servers' => CommandResultMcpServers.fromJson(json),
+        'window' => CommandResultWindow.fromJson(json),
+        'terminal' => CommandResultTerminal.fromJson(json),
+        'desk' => CommandResultDesk.fromJson(json),
+        'apps' => CommandResultApps.fromJson(json),
+        'project_opened' => CommandResultProjectOpened.fromJson(json),
+        'open_projects' => CommandResultOpenProjects.fromJson(json),
         'library' => CommandResultLibrary.fromJson(json),
         'library_installed' => CommandResultLibraryInstalled.fromJson(json),
         'library_updated' => CommandResultLibraryUpdated.fromJson(json),
@@ -1234,6 +1886,42 @@ final class CommandResultDone extends CommandResult {
 
   Map<String, Object?> toJson() => {
         'kind': 'done',
+      };
+}
+
+/// `app.open`.
+final class CommandResultAppOpened extends CommandResult {
+  const CommandResultAppOpened({
+    required this.opened,
+  });
+
+  final AppOpened opened;
+
+  factory CommandResultAppOpened.fromJson(Map<String, Object?> json) => CommandResultAppOpened(
+        opened: AppOpened.fromJson(json['opened'] as Map<String, Object?>),
+      );
+
+  Map<String, Object?> toJson() => {
+        'kind': 'app_opened',
+        'opened': opened.toJson(),
+      };
+}
+
+/// Done, with what the user should know (`app.allow`, `app.promote`).
+final class CommandResultNote extends CommandResult {
+  const CommandResultNote({
+    required this.text,
+  });
+
+  final String text;
+
+  factory CommandResultNote.fromJson(Map<String, Object?> json) => CommandResultNote(
+        text: json['text'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'kind': 'note',
+        'text': text,
       };
 }
 
@@ -1534,6 +2222,130 @@ final class CommandResultMcpServers extends CommandResult {
       };
 }
 
+/// `window.hello`: the window's id and the terminal its TUI runs in.
+final class CommandResultWindow extends CommandResult {
+  const CommandResultWindow({
+    required this.window,
+    required this.terminal,
+  });
+
+  final String window;
+
+  final String terminal;
+
+  factory CommandResultWindow.fromJson(Map<String, Object?> json) => CommandResultWindow(
+        window: json['window'] as String,
+        terminal: json['terminal'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'kind': 'window',
+        'window': window,
+        'terminal': terminal,
+      };
+}
+
+/// `terminal.open` / `terminal.read`: the terminal and its scrollback (base64).
+final class CommandResultTerminal extends CommandResult {
+  const CommandResultTerminal({
+    required this.terminal,
+    required this.scrollback,
+  });
+
+  final String terminal;
+
+  final String scrollback;
+
+  factory CommandResultTerminal.fromJson(Map<String, Object?> json) => CommandResultTerminal(
+        terminal: json['terminal'] as String,
+        scrollback: json['scrollback'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'kind': 'terminal',
+        'terminal': terminal,
+        'scrollback': scrollback,
+      };
+}
+
+/// `desk.*`: the session's desk now.
+final class CommandResultDesk extends CommandResult {
+  const CommandResultDesk({
+    required this.desk,
+  });
+
+  final Desk desk;
+
+  factory CommandResultDesk.fromJson(Map<String, Object?> json) => CommandResultDesk(
+        desk: Desk.fromJson(json['desk'] as Map<String, Object?>),
+      );
+
+  Map<String, Object?> toJson() => {
+        'kind': 'desk',
+        'desk': desk.toJson(),
+      };
+}
+
+/// `apps.list`.
+final class CommandResultApps extends CommandResult {
+  const CommandResultApps({
+    required this.list,
+  });
+
+  final AppList list;
+
+  factory CommandResultApps.fromJson(Map<String, Object?> json) => CommandResultApps(
+        list: AppList.fromJson(json['list'] as Map<String, Object?>),
+      );
+
+  Map<String, Object?> toJson() => {
+        'kind': 'apps',
+        'list': list.toJson(),
+      };
+}
+
+/// `project.open`: its name, and whether this was the first open (watch started, `on_open`
+/// running).
+final class CommandResultProjectOpened extends CommandResult {
+  const CommandResultProjectOpened({
+    required this.project,
+    required this.first,
+  });
+
+  final String project;
+
+  final bool first;
+
+  factory CommandResultProjectOpened.fromJson(Map<String, Object?> json) => CommandResultProjectOpened(
+        project: json['project'] as String,
+        first: json['first'] as bool,
+      );
+
+  Map<String, Object?> toJson() => {
+        'kind': 'project_opened',
+        'project': project,
+        'first': first,
+      };
+}
+
+/// `projects.open`.
+final class CommandResultOpenProjects extends CommandResult {
+  const CommandResultOpenProjects({
+    required this.projects,
+  });
+
+  final List<OpenProject> projects;
+
+  factory CommandResultOpenProjects.fromJson(Map<String, Object?> json) => CommandResultOpenProjects(
+        projects: (json['projects'] as List).map((e) => OpenProject.fromJson(e as Map<String, Object?>)).toList(),
+      );
+
+  Map<String, Object?> toJson() => {
+        'kind': 'open_projects',
+        'projects': projects.map((e) => e.toJson()).toList(),
+      };
+}
+
 /// `library.list`.
 final class CommandResultLibrary extends CommandResult {
   const CommandResultLibrary({
@@ -1744,6 +2556,171 @@ final class CommandResultWork extends CommandResult {
 /// A `kind` this version doesn't know (a newer server): kept as raw JSON.
 final class CommandResultUnknown extends CommandResult {
   const CommandResultUnknown(this.raw);
+  final Map<String, Object?> raw;
+
+  Map<String, Object?> toJson() => raw;
+}
+
+/// A session's desk: its tabs in order, and the one shown. Empty: the project home.
+class Desk {
+  const Desk({
+    this.tabs = const [],
+    this.active,
+  });
+
+  final List<DeskEntry> tabs;
+
+  final String? active;
+
+  factory Desk.fromJson(Map<String, Object?> json) => Desk(
+        tabs: json['tabs'] == null ? const [] : (json['tabs'] as List).map((e) => DeskEntry.fromJson(e as Map<String, Object?>)).toList(),
+        active: json['active'] == null ? null : json['active'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        if (tabs.isNotEmpty) 'tabs': tabs.map((e) => e.toJson()).toList(),
+        if (active != null) 'active': active,
+      };
+}
+
+/// Who changed a desk.
+enum DeskBy {
+  user('user'),
+  agent('agent');
+
+  const DeskBy(this.wire);
+  final String wire;
+
+  static DeskBy fromJson(Object? json) =>
+      values.firstWhere((v) => v.wire == json, orElse: () => throw FormatException('unknown DeskBy: $json'));
+
+  String toJson() => wire;
+}
+
+/// A tab on a desk.
+class DeskEntry {
+  const DeskEntry({
+    required this.id,
+    required this.tab,
+    this.unseen = false,
+  });
+
+  /// `app:cad@game`, `app:calendar`, `page:site://x`, `terminal:<id>`, `changes:<project>`.
+  final String id;
+
+  final DeskTab tab;
+
+  /// Opened by the agent and not looked at yet (a badge, for a client not following it).
+  final bool unseen;
+
+  factory DeskEntry.fromJson(Map<String, Object?> json) => DeskEntry(
+        id: json['id'] as String,
+        tab: DeskTab.fromJson(json['tab'] as Map<String, Object?>),
+        unseen: json['unseen'] == null ? false : json['unseen'] as bool,
+      );
+
+  Map<String, Object?> toJson() => {
+        'id': id,
+        'tab': tab.toJson(),
+        'unseen': unseen,
+      };
+}
+
+/// What a tab shows. Its id is derived from this, so the same thing is never open twice.
+sealed class DeskTab {
+  const DeskTab();
+
+  factory DeskTab.fromJson(Map<String, Object?> json) => switch (json['kind']) {
+        'app' => DeskTabApp.fromJson(json),
+        'page' => DeskTabPage.fromJson(json),
+        'terminal' => DeskTabTerminal.fromJson(json),
+        'changes' => DeskTabChanges.fromJson(json),
+        _ => DeskTabUnknown(json),
+      };
+
+  Map<String, Object?> toJson();
+}
+
+/// An app: on a project (by name), or on Home (`None`).
+final class DeskTabApp extends DeskTab {
+  const DeskTabApp({
+    required this.site,
+    this.project,
+  });
+
+  final String site;
+
+  final String? project;
+
+  factory DeskTabApp.fromJson(Map<String, Object?> json) => DeskTabApp(
+        site: json['site'] as String,
+        project: json['project'] == null ? null : json['project'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'kind': 'app',
+        'site': site,
+        if (project != null) 'project': project,
+      };
+}
+
+/// A page (`site://...`).
+final class DeskTabPage extends DeskTab {
+  const DeskTabPage({
+    required this.url,
+  });
+
+  final String url;
+
+  factory DeskTabPage.fromJson(Map<String, Object?> json) => DeskTabPage(
+        url: json['url'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'kind': 'page',
+        'url': url,
+      };
+}
+
+/// A server-owned terminal.
+final class DeskTabTerminal extends DeskTab {
+  const DeskTabTerminal({
+    required this.id,
+  });
+
+  final String id;
+
+  factory DeskTabTerminal.fromJson(Map<String, Object?> json) => DeskTabTerminal(
+        id: json['id'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'kind': 'terminal',
+        'id': id,
+      };
+}
+
+/// A project's changes (its ticket branches, its diff).
+final class DeskTabChanges extends DeskTab {
+  const DeskTabChanges({
+    required this.project,
+  });
+
+  final String project;
+
+  factory DeskTabChanges.fromJson(Map<String, Object?> json) => DeskTabChanges(
+        project: json['project'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'kind': 'changes',
+        'project': project,
+      };
+}
+
+/// A `kind` this version doesn't know (a newer server): kept as raw JSON.
+final class DeskTabUnknown extends DeskTab {
+  const DeskTabUnknown(this.raw);
   final Map<String, Object?> raw;
 
   Map<String, Object?> toJson() => raw;
@@ -2149,6 +3126,29 @@ class ModelInfo {
       };
 }
 
+/// A project open in the workspace (`projects.open`).
+class OpenProject {
+  const OpenProject({
+    required this.name,
+    required this.clients,
+  });
+
+  final String name;
+
+  /// The clients (TUI, desktop, app sockets) that have it open.
+  final int clients;
+
+  factory OpenProject.fromJson(Map<String, Object?> json) => OpenProject(
+        name: json['name'] as String,
+        clients: (json['clients'] as num).toInt(),
+      );
+
+  Map<String, Object?> toJson() => {
+        'name': name,
+        'clients': clients,
+      };
+}
+
 enum PageChangeKind {
   created('created'),
   modified('modified'),
@@ -2320,6 +3320,53 @@ class ProjectDiff {
         'files': files.map((e) => e.toJson()).toList(),
         'diff': diff,
         if (ticket != null) 'ticket': ticket?.toJson(),
+      };
+}
+
+/// `GET <app>/api/project`: the project an app was opened on (the sdk's `project()`).
+class ProjectInfo {
+  const ProjectInfo({
+    required this.name,
+    required this.root,
+    this.branch,
+    this.pipeline,
+    this.pipelines = const [],
+    this.tags = const [],
+  });
+
+  /// Its name in the workspace (and in the app's URL).
+  final String name;
+
+  /// The absolute folder.
+  final String root;
+
+  /// The branch checked out, for a git repository.
+  final String? branch;
+
+  /// The first pipeline with a work linking it (`cad`), if any; `pipelines` has them all.
+  final String? pipeline;
+
+  final List<String> pipelines;
+
+  /// `[projects."<path>"] tags`.
+  final List<String> tags;
+
+  factory ProjectInfo.fromJson(Map<String, Object?> json) => ProjectInfo(
+        name: json['name'] as String,
+        root: json['root'] as String,
+        branch: json['branch'] == null ? null : json['branch'] as String,
+        pipeline: json['pipeline'] == null ? null : json['pipeline'] as String,
+        pipelines: json['pipelines'] == null ? const [] : (json['pipelines'] as List).map((e) => e as String).toList(),
+        tags: json['tags'] == null ? const [] : (json['tags'] as List).map((e) => e as String).toList(),
+      );
+
+  Map<String, Object?> toJson() => {
+        'name': name,
+        'root': root,
+        if (branch != null) 'branch': branch,
+        if (pipeline != null) 'pipeline': pipeline,
+        if (pipelines.isNotEmpty) 'pipelines': pipelines,
+        if (tags.isNotEmpty) 'tags': tags,
       };
 }
 
@@ -2593,6 +3640,49 @@ class SearchHit {
       };
 }
 
+/// What the user points at in an app (ticket 0175): the hunk, the part, the ticket. It reaches the
+/// chat as a chip and the next message as context.
+class Selection {
+  const Selection({
+    required this.app,
+    required this.label,
+    this.text,
+    this.url,
+    this.data,
+  });
+
+  /// The app (its site) it was selected in.
+  final String app;
+
+  /// What the chip says: "ticket 0042", "hunk 3 of src/main.rs".
+  final String label;
+
+  /// The selected text, if any.
+  final String? text;
+
+  /// A page or file it is about (`site://...`, a path in the project).
+  final String? url;
+
+  /// Anything else the app wants the agent to have (small JSON).
+  final Object? data;
+
+  factory Selection.fromJson(Map<String, Object?> json) => Selection(
+        app: json['app'] as String,
+        label: json['label'] as String,
+        text: json['text'] == null ? null : json['text'] as String,
+        url: json['url'] == null ? null : json['url'] as String,
+        data: json['data'],
+      );
+
+  Map<String, Object?> toJson() => {
+        'app': app,
+        'label': label,
+        if (text != null) 'text': text,
+        if (url != null) 'url': url,
+        if (data != null) 'data': data,
+      };
+}
+
 /// `GET /api/info`: what this server is (for the app's server list).
 class ServerInfo {
   const ServerInfo({
@@ -2660,6 +3750,14 @@ sealed class ServerMessage {
         'session.updated' => ServerMessageSessionUpdated.fromJson(json),
         'page.changed' => ServerMessagePageChanged.fromJson(json),
         'worker.status' => ServerMessageWorkerStatus.fromJson(json),
+        'terminal.output' => ServerMessageTerminalOutput.fromJson(json),
+        'terminal.exited' => ServerMessageTerminalExited.fromJson(json),
+        'window.changed' => ServerMessageWindowChanged.fromJson(json),
+        'selection.changed' => ServerMessageSelectionChanged.fromJson(json),
+        'app.event' => ServerMessageAppEvent.fromJson(json),
+        'desk.changed' => ServerMessageDeskChanged.fromJson(json),
+        'project.changed' => ServerMessageProjectChanged.fromJson(json),
+        'on_open.ran' => ServerMessageOnOpenRan.fromJson(json),
         'stage.ended' => ServerMessageStageEnded.fromJson(json),
         'reminder.due' => ServerMessageReminderDue.fromJson(json),
         'config.reloaded' => ServerMessageConfigReloaded.fromJson(json),
@@ -3183,6 +4281,246 @@ final class ServerMessageWorkerStatus extends ServerMessage {
         'ticket': ticket,
         'parent': parent,
         'state': state.toJson(),
+      };
+}
+
+/// A terminal's output (base64 bytes), to the session's clients.
+final class ServerMessageTerminalOutput extends ServerMessage {
+  const ServerMessageTerminalOutput({
+    required this.session,
+    required this.terminal,
+    required this.data,
+    this.window,
+  });
+
+  final String session;
+
+  final String terminal;
+
+  final String data;
+
+  /// A window's TUI terminal: to that window only.
+  final String? window;
+
+  factory ServerMessageTerminalOutput.fromJson(Map<String, Object?> json) => ServerMessageTerminalOutput(
+        session: json['session'] as String,
+        terminal: json['terminal'] as String,
+        data: json['data'] as String,
+        window: json['window'] == null ? null : json['window'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'terminal.output',
+        'session': session,
+        'terminal': terminal,
+        'data': data,
+        if (window != null) 'window': window,
+      };
+}
+
+/// A terminal ended (its shell exited, it was closed, or it was idle too long).
+final class ServerMessageTerminalExited extends ServerMessage {
+  const ServerMessageTerminalExited({
+    required this.session,
+    required this.terminal,
+    this.window,
+  });
+
+  final String session;
+
+  final String terminal;
+
+  final String? window;
+
+  factory ServerMessageTerminalExited.fromJson(Map<String, Object?> json) => ServerMessageTerminalExited(
+        session: json['session'] as String,
+        terminal: json['terminal'] as String,
+        window: json['window'] == null ? null : json['window'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'terminal.exited',
+        'session': session,
+        'terminal': terminal,
+        if (window != null) 'window': window,
+      };
+}
+
+/// The window's TUI shows another session: the stage shows its desk (to the window only).
+final class ServerMessageWindowChanged extends ServerMessage {
+  const ServerMessageWindowChanged({
+    required this.window,
+    required this.session,
+  });
+
+  final String window;
+
+  final String session;
+
+  factory ServerMessageWindowChanged.fromJson(Map<String, Object?> json) => ServerMessageWindowChanged(
+        window: json['window'] as String,
+        session: json['session'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'window.changed',
+        'window': window,
+        'session': session,
+      };
+}
+
+/// What the user points at in an app of the session changed (`None`: nothing): the chip.
+final class ServerMessageSelectionChanged extends ServerMessage {
+  const ServerMessageSelectionChanged({
+    required this.session,
+    this.selection,
+  });
+
+  final String session;
+
+  final Selection? selection;
+
+  factory ServerMessageSelectionChanged.fromJson(Map<String, Object?> json) => ServerMessageSelectionChanged(
+        session: json['session'] as String,
+        selection: json['selection'] == null ? null : Selection.fromJson(json['selection'] as Map<String, Object?>),
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'selection.changed',
+        'session': session,
+        if (selection != null) 'selection': selection?.toJson(),
+      };
+}
+
+/// Something happened in an app of the session (a gate flipped, approve clicked); the agent
+/// sees it on its next turn.
+final class ServerMessageAppEvent extends ServerMessage {
+  const ServerMessageAppEvent({
+    required this.session,
+    required this.app,
+    required this.kind,
+    this.detail,
+  });
+
+  final String session;
+
+  final String app;
+
+  final String kind;
+
+  final Object? detail;
+
+  factory ServerMessageAppEvent.fromJson(Map<String, Object?> json) => ServerMessageAppEvent(
+        session: json['session'] as String,
+        app: json['app'] as String,
+        kind: json['kind'] as String,
+        detail: json['detail'],
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'app.event',
+        'session': session,
+        'app': app,
+        'kind': kind,
+        if (detail != null) 'detail': detail,
+      };
+}
+
+/// A session's desk changed (`by` the user or the agent): to the clients attached to it.
+final class ServerMessageDeskChanged extends ServerMessage {
+  const ServerMessageDeskChanged({
+    required this.session,
+    required this.desk,
+    required this.by,
+    this.opened,
+  });
+
+  final String session;
+
+  final Desk desk;
+
+  final DeskBy by;
+
+  /// The tab the agent opened or pointed at: a client following the agent shows it
+  /// (`desk.focus`), one not following badges it (it stays `unseen`).
+  final String? opened;
+
+  factory ServerMessageDeskChanged.fromJson(Map<String, Object?> json) => ServerMessageDeskChanged(
+        session: json['session'] as String,
+        desk: Desk.fromJson(json['desk'] as Map<String, Object?>),
+        by: DeskBy.fromJson(json['by']),
+        opened: json['opened'] == null ? null : json['opened'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'desk.changed',
+        'session': session,
+        'desk': desk.toJson(),
+        'by': by.toJson(),
+        if (opened != null) 'opened': opened,
+      };
+}
+
+/// Files changed in an open project (paths relative to it, a settled burst at a time; at most
+/// 200). To the clients that opened it and its apps' sockets.
+final class ServerMessageProjectChanged extends ServerMessage {
+  const ServerMessageProjectChanged({
+    required this.project,
+    required this.paths,
+  });
+
+  final String project;
+
+  final List<String> paths;
+
+  factory ServerMessageProjectChanged.fromJson(Map<String, Object?> json) => ServerMessageProjectChanged(
+        project: json['project'] as String,
+        paths: (json['paths'] as List).map((e) => e as String).toList(),
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'project.changed',
+        'project': project,
+        'paths': paths,
+      };
+}
+
+/// An app's `on_open` recipe ran when its project was first opened: `ok`, `failed`,
+/// `timed out`, or `needs approval` (it didn't run).
+final class ServerMessageOnOpenRan extends ServerMessage {
+  const ServerMessageOnOpenRan({
+    required this.project,
+    required this.app,
+    required this.recipe,
+    required this.status,
+    required this.output,
+  });
+
+  final String project;
+
+  final String app;
+
+  final String recipe;
+
+  final String status;
+
+  final String output;
+
+  factory ServerMessageOnOpenRan.fromJson(Map<String, Object?> json) => ServerMessageOnOpenRan(
+        project: json['project'] as String,
+        app: json['app'] as String,
+        recipe: json['recipe'] as String,
+        status: json['status'] as String,
+        output: json['output'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'on_open.ran',
+        'project': project,
+        'app': app,
+        'recipe': recipe,
+        'status': status,
+        'output': output,
       };
 }
 
