@@ -183,6 +183,10 @@ pub struct AppInfo {
     /// A project-local app (`<project>/.composer/apps/<site>`); `why` says whether it is allowed.
     #[serde(default)]
     pub local: bool,
+    /// Built with an older sdk: it shows nothing until rebuilt (`ui-build`, or `composer app
+    /// rebuild`).
+    #[serde(default)]
+    pub outdated: bool,
     /// On Home, for a `tile` app: its tile, the body of `site://<site>/tile.md` (which the app or
     /// the agent keeps current).
     #[serde(default, skip_serializing_if = "Option::is_none")]

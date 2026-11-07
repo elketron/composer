@@ -211,6 +211,7 @@ fn listing(
                 tile: app.manifest.tile,
                 opens: app.manifest.opens.iter().map(ToString::to_string).collect(),
                 built: dir.join("ui/dist/index.html").is_file(),
+                outdated: crate::apps::outdated(&dir),
                 local: app.local.is_some(),
                 tile_text: None,
                 site: app.site,

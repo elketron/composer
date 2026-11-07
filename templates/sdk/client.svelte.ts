@@ -28,6 +28,11 @@ export interface PageChange {
 
 const params = new URLSearchParams(location.search);
 
+/** This sdk's version, stamped into every app built with it (the server tells an older build
+ * apart: one before 2 doesn't know the `/h/` and `/p/` routes). */
+export const SDK_VERSION = 2;
+document.documentElement.dataset.composerSdk = `composer-sdk:${SDK_VERSION}`;
+
 const segments = location.pathname.split('/').filter(Boolean);
 const inWorkspace = segments[0] === 'w' && segments.length >= 2;
 /** Where the workspace's own segments end: after `/w/<workspace>`, or at the start. */

@@ -83,6 +83,11 @@ async fn an_app_token_reads_the_web_and_writes_only_its_own() {
         "---\ntitle: CAD\napp:\n  scope: project\n  when: [\"files:*.FCStd\"]\n---\n# CAD\n",
     );
     write(&sites.join("cad/ui/dist/index.html"), "<p>the cad app</p>");
+    // Built with the current sdk (0169).
+    write(
+        &sites.join("cad/ui/dist/assets/a.js"),
+        "d=\"composer-sdk:2\"",
+    );
     write(&sites.join("cad/justfile"), "hello:\n    echo hi\n");
     write(
         &sites.join("other/index.md"),
