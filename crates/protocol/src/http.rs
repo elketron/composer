@@ -180,6 +180,10 @@ pub struct AppInfo {
     /// `ui/dist/index.html` exists.
     #[serde(default)]
     pub built: bool,
+    /// On Home, for a `tile` app: its tile, the body of `site://<site>/tile.md` (which the app or
+    /// the agent keeps current).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tile_text: Option<String>,
 }
 
 /// `GET <app>/api/project`: the project an app was opened on (the sdk's `project()`).
@@ -213,6 +217,16 @@ pub struct ProjectInfo {
 pub struct AppOpened {
     pub url: String,
     pub token: String,
+}
+
+/// A project open in the workspace (`projects.open`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct OpenProject {
+    pub name: String,
+    /// The clients (TUI, desktop, app sockets) that have it open.
+    pub clients: u32,
 }
 
 /// A project's apps, or Home's; `errors` are sites whose `app:` block doesn't parse.

@@ -11,8 +11,10 @@ mod app_tokens;
 mod attach_reason;
 mod attached_app;
 mod file_glob;
-mod project_facts;
+mod open_projects;
+pub(crate) mod project_facts;
 mod project_name;
+mod project_watch;
 mod workspace_apps;
 
 pub use app_condition::AppCondition;
@@ -24,8 +26,11 @@ pub use app_tokens::AppTokens;
 pub use attach_reason::AttachReason;
 pub use attached_app::AttachedApp;
 pub use file_glob::FileGlob;
+pub use open_projects::OpenProjects;
 pub use project_facts::ProjectFacts;
 pub use project_name::ProjectName;
+pub use project_watch::ProjectWatch;
 pub use workspace_apps::{
-    find_project, home_apps, project_apps, project_info, workspace_apps, workspace_projects,
+    attached_apps, find_project, find_project_by, home_apps, project_apps, project_info,
+    workspace_apps, workspace_projects,
 };

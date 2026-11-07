@@ -65,21 +65,54 @@ pub fn find_project(server: &Server, name: &str) -> Result<(ProjectName, PathBuf
         })
 }
 
-/// The apps of the project called `name`.
-pub fn project_apps(server: &Server, name: &str) -> Result<AppList, String> {
+/// The project a client names: by its name, else by its folder (`~/...`, absolute, or a name in
+/// the projects directory).
+pub fn find_project_by(
+    server: &Server,
+    name_or_path: &str,
+) -> Result<(ProjectName, PathBuf), String> {
+    if let Ok(found) = find_project(server, name_or_path) {
+        return Ok(found);
+    }
+    let dir = server.config().projects.dir.clone();
+    let folder = ProjectPath::resolve(name_or_path, &dir)
+        .map(|p| canonical(p.as_path()))
+        .map_err(|_| format!("no project `{name_or_path}` in this workspace"))?;
+    workspace_projects(server)
+        .into_iter()
+        .find(|(_, f)| canonical(f) == folder)
+        .ok_or_else(|| format!("no project `{name_or_path}` in this workspace"))
+}
+
+/// The apps attached to the project called `name`, with their manifests; and the sites whose
+/// `app:` block doesn't parse.
+pub fn attached_apps(
+    server: &Server,
+    name: &str,
+) -> Result<(ProjectName, PathBuf, Vec<AttachedApp>, Vec<String>), String> {
     let (project, folder) = find_project(server, name)?;
     let config = server.config();
     let settings = project_settings(&config, &folder.display().to_string());
     let facts = ProjectFacts::gather(&folder, linking_pipelines(server, &folder), settings.tags);
     let (apps, errors) = workspace_apps(server);
     let attached = AttachedApp::for_project(&apps, &facts, &settings.apps, &settings.hide_apps);
+    Ok((project, folder, attached, errors))
+}
+
+/// The apps of the project called `name`.
+pub fn project_apps(server: &Server, name: &str) -> Result<AppList, String> {
+    let (project, _, attached, errors) = attached_apps(server, name)?;
     Ok(listing(server, Some(project.to_string()), attached, errors))
 }
 
-/// The workspace's Home: its global and both-scope apps.
+/// The workspace's Home: its global and both-scope apps, each `tile` app with its tile.
 pub fn home_apps(server: &Server) -> AppList {
     let (apps, errors) = workspace_apps(server);
-    listing(server, None, AttachedApp::for_home(&apps), errors)
+    let mut list = listing(server, None, AttachedApp::for_home(&apps), errors);
+    for app in list.apps.iter_mut().filter(|a| a.tile) {
+        app.tile_text = index_of(server, &app.site, "tile.md").map(|p| p.body().trim().to_string());
+    }
+    list
 }
 
 /// What the sdk's `project()` returns for an app opened with `grant`.
@@ -157,6 +190,7 @@ fn listing(
                     .join(&app.site)
                     .join("ui/dist/index.html")
                     .is_file(),
+                tile_text: None,
                 site: app.site,
             }
         })

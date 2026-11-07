@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use crate::apps::FileGlob;
 
 /// Folders a file walk never enters: version control, dependencies and build output.
-const SKIPPED: [&str; 8] = [
+pub(crate) const SKIPPED: [&str; 8] = [
     ".git",
     "node_modules",
     "target",

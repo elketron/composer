@@ -21,10 +21,14 @@ pub async fn upgrade(State(server): State<Arc<Server>>, ws: WebSocketUpgrade) ->
 pub(crate) async fn run(server: Arc<Server>, socket: WebSocket, app: Option<AppGrant>) {
     let (mut sink, mut stream) = socket.split();
     let (out_tx, mut out_rx) = mpsc::unbounded_channel::<Arc<ServerMessage>>();
-    let connection = Arc::new(match app {
-        Some(grant) => Connection::for_app(out_tx, grant),
+    let connection = Arc::new(match &app {
+        Some(grant) => Connection::for_app(out_tx, grant.clone()),
         None => Connection::new(out_tx),
     });
+    // An app's socket keeps its project open while it is there.
+    if let Some(grant) = &app {
+        connection.open(&server, &grant.project, &grant.folder);
+    }
 
     let writer = tokio::spawn(async move {
         while let Some(message) = out_rx.recv().await {
@@ -77,6 +81,7 @@ pub(crate) async fn run(server: Arc<Server>, socket: WebSocket, app: Option<AppG
             connection.send(Arc::new(reply));
         }
     }
+    connection.close_all(&server);
     forwarder.abort();
     writer.abort();
 }
