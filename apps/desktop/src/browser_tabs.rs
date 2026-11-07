@@ -68,5 +68,9 @@ mod tests {
         assert!(tabs.begin("a"));
         tabs.clear();
         assert!(tabs.begin("a"));
+        // A tab that left the desk while its pane was on its way: made afresh when it's back.
+        assert!(tabs.begin("c"));
+        tabs.keep(&HashSet::new());
+        assert!(tabs.begin("c"), "still marked as on its way");
     }
 }
