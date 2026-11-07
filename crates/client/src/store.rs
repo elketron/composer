@@ -214,6 +214,11 @@ mod tests {
             data: None,
         };
         store.apply(&ServerMessage::SelectionChanged {
+            session: "b".into(),
+            selection: Some(selection.clone()),
+        });
+        assert_eq!(store.selection, None, "another session's selection");
+        store.apply(&ServerMessage::SelectionChanged {
             session: "a".into(),
             selection: Some(selection.clone()),
         });
