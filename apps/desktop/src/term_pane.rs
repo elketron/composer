@@ -78,10 +78,15 @@ pub struct TermPane {
     ended: bool,
     scroll: Scrollback,
     selection: Option<Selection>,
-    /// A drag is selecting (not one the program gets).
-    selecting: bool,
-    /// The button held in a drag the program gets.
-    held: Option<wt::MouseButton>,
+    gesture: Gesture,
+}
+
+/// What a held mouse button is doing: nothing, selecting in the pane, or a drag the program gets.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Gesture {
+    None,
+    Selecting,
+    Program(wt::MouseButton),
 }
 
 impl EventEmitter<PaneEvent> for TermPane {}
@@ -116,8 +121,7 @@ impl TermPane {
             ended: false,
             scroll: Scrollback::default(),
             selection: None,
-            selecting: false,
-            held: None,
+            gesture: Gesture::None,
         }
     }
 
@@ -234,7 +238,7 @@ impl TermPane {
             _ => return,
         };
         if self.program_mouse(&ev.modifiers) {
-            self.held = Some(button);
+            self.gesture = Gesture::Program(button);
             self.send_mouse(
                 wt::MouseEventKind::Press,
                 button,
@@ -244,7 +248,7 @@ impl TermPane {
         } else if ev.button == MouseButton::Left {
             let (row, col, _) = self.cell(ev.position);
             self.selection = Some(Selection::at(row, col));
-            self.selecting = true;
+            self.gesture = Gesture::Selecting;
         } else if ev.button == MouseButton::Middle {
             paste_primary(&mut self.term, cx);
         }
@@ -252,31 +256,29 @@ impl TermPane {
     }
 
     fn on_mouse_move(&mut self, ev: &MouseMoveEvent, _w: &mut Window, cx: &mut Context<Self>) {
-        if let Some(button) = self.held {
-            self.send_mouse(wt::MouseEventKind::Move, button, ev.position, &ev.modifiers);
-        } else if self.selecting
-            && let Some(selection) = self.selection
-        {
-            let (row, col, _) = self.cell(ev.position);
-            self.selection = Some(selection.to(row, col));
-            cx.notify();
+        match (self.gesture, self.selection) {
+            (Gesture::Program(button), _) => {
+                self.send_mouse(wt::MouseEventKind::Move, button, ev.position, &ev.modifiers);
+            }
+            (Gesture::Selecting, Some(selection)) => {
+                let (row, col, _) = self.cell(ev.position);
+                self.selection = Some(selection.to(row, col));
+                cx.notify();
+            }
+            _ => {}
         }
     }
 
     fn on_mouse_up(&mut self, ev: &MouseUpEvent, _w: &mut Window, cx: &mut Context<Self>) {
-        if let Some(button) = self.held.take() {
-            self.send_mouse(
-                wt::MouseEventKind::Release,
-                button,
-                ev.position,
-                &ev.modifiers,
-            );
-            return;
+        match std::mem::replace(&mut self.gesture, Gesture::None) {
+            Gesture::Program(button) => {
+                let kind = wt::MouseEventKind::Release;
+                self.send_mouse(kind, button, ev.position, &ev.modifiers);
+                return;
+            }
+            Gesture::None => return,
+            Gesture::Selecting => {}
         }
-        if !self.selecting {
-            return;
-        }
-        self.selecting = false;
         match self.selection {
             Some(selection) if !selection.is_empty() => {
                 write_primary(self.selected_text(selection), cx);
