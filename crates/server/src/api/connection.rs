@@ -3,8 +3,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use composer_protocol::{
-    Attachment, ChangedBy, ChatMessage, ClientCommand, ClientRequest, CommandResult, MessageSource,
-    Role, Seq, ServerMessage, SessionId,
+    Attachment, ChangedBy, ChatMessage, ClientCommand, ClientRequest, CommandResult, DeskBy,
+    MessageSource, Role, Seq, ServerMessage, SessionId,
 };
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
@@ -922,6 +922,29 @@ impl Connection {
                 *self.subscriptions.lock().expect("subs lock") = urls;
                 Ok(CommandResult::Done)
             }
+            ClientCommand::DeskGet { session } => Ok(CommandResult::Desk {
+                desk: server
+                    .sessions
+                    .get(&session)
+                    .map_err(|e| e.to_string())?
+                    .desk(),
+            }),
+            ClientCommand::DeskOpen {
+                session,
+                tab,
+                focus,
+            } => change_desk(server, &session, |desk| {
+                desk.open(tab, focus, DeskBy::User).map(|_| ())
+            }),
+            ClientCommand::DeskClose { session, tab } => {
+                change_desk(server, &session, |desk| desk.close(&tab))
+            }
+            ClientCommand::DeskFocus { session, tab } => {
+                change_desk(server, &session, |desk| desk.focus(&tab))
+            }
+            ClientCommand::DeskMove { session, tab, to } => {
+                change_desk(server, &session, |desk| desk.move_to(&tab, to))
+            }
         }
     }
 }
@@ -987,4 +1010,20 @@ async fn rebuild_note(server: &Arc<Server>, all: bool, yes: bool) -> String {
         })
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+/// Changes `session`'s desk (the user's change) and tells its clients: the desk after.
+fn change_desk(
+    server: &Server,
+    session: &str,
+    change: impl FnOnce(&mut crate::desk::SessionDesk) -> Result<(), String>,
+) -> Result<CommandResult, String> {
+    let session = server.sessions.get(session).map_err(|e| e.to_string())?;
+    let desk = session.change_desk(change)?;
+    server.hub.send(ServerMessage::DeskChanged {
+        session: session.id().to_string(),
+        desk: desk.clone(),
+        by: DeskBy::User,
+    });
+    Ok(CommandResult::Desk { desk })
 }

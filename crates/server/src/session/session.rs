@@ -26,6 +26,8 @@ pub struct Session {
     running: AtomicBool,
     cancel: Mutex<CancellationToken>,
     open_approvals: Mutex<OpenApprovals>,
+    /// Held while the desk (`desk.json`) is read, changed and written.
+    desk_lock: Mutex<()>,
 }
 
 impl Session {
@@ -60,7 +62,39 @@ impl Session {
                 count: 0,
                 after: TurnState::Idle,
             }),
+            desk_lock: Mutex::new(()),
         }))
+    }
+
+    /// Its desk (`desk.json`); empty (the project home) when it has none yet.
+    pub fn desk(&self) -> composer_protocol::Desk {
+        let _held = self.desk_lock.lock().expect("desk lock");
+        self.read_desk()
+    }
+
+    /// Changes its desk with `change` and writes it (atomically); the desk after.
+    pub fn change_desk<T>(
+        &self,
+        change: impl FnOnce(&mut crate::desk::SessionDesk) -> std::result::Result<T, String>,
+    ) -> std::result::Result<composer_protocol::Desk, String> {
+        let _held = self.desk_lock.lock().expect("desk lock");
+        let mut desk = crate::desk::SessionDesk::new(self.read_desk());
+        change(&mut desk)?;
+        let desk = desk.into_desk();
+        let file = self.dir.join("desk.json");
+        let temporary = self.dir.join("desk.json.tmp");
+        let json = serde_json::to_string_pretty(&desk).expect("a desk serializes");
+        std::fs::write(&temporary, json)
+            .and_then(|()| std::fs::rename(&temporary, &file))
+            .map_err(|e| format!("{}: {e}", file.display()))?;
+        Ok(desk)
+    }
+
+    fn read_desk(&self) -> composer_protocol::Desk {
+        std::fs::read_to_string(self.dir.join("desk.json"))
+            .ok()
+            .and_then(|text| serde_json::from_str(&text).ok())
+            .unwrap_or_default()
     }
 
     pub fn id(&self) -> &str {

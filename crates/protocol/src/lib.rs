@@ -9,9 +9,11 @@
 
 mod client;
 mod common;
+mod desk;
 pub mod http;
 mod server;
 
 pub use client::{ClientCommand, ClientRequest};
 pub use common::*;
+pub use desk::{Desk, DeskBy, DeskEntry, DeskTab};
 pub use server::{CommandResult, ServerMessage};

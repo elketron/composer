@@ -97,6 +97,36 @@ pub enum ClientCommand {
         on: bool,
     },
 
+    /// A session's desk; the reply is `desk`.
+    #[serde(rename = "desk.get")]
+    DeskGet { session: SessionId },
+
+    /// Opens a tab on a session's desk (an equal tab already there is focused, not doubled);
+    /// `focus`: make it the shown one (default). The reply is `desk`.
+    #[serde(rename = "desk.open")]
+    DeskOpen {
+        session: SessionId,
+        tab: crate::DeskTab,
+        #[serde(default = "yes")]
+        focus: bool,
+    },
+
+    /// Closes a tab (by id); the reply is `desk`.
+    #[serde(rename = "desk.close")]
+    DeskClose { session: SessionId, tab: String },
+
+    /// Shows a tab (by id); the reply is `desk`.
+    #[serde(rename = "desk.focus")]
+    DeskFocus { session: SessionId, tab: String },
+
+    /// Moves a tab (by id) to position `to`; the reply is `desk`.
+    #[serde(rename = "desk.move")]
+    DeskMove {
+        session: SessionId,
+        tab: String,
+        to: usize,
+    },
+
     /// Opens a project (its name, or its folder) for this client: the first open in the workspace
     /// starts its file watch and runs its apps' `on_open` recipes; the reply is `project_opened`.
     /// Opening it again from the same client does nothing; a dropped connection closes it.
@@ -326,4 +356,8 @@ pub enum ClientCommand {
         #[serde(default)]
         args: serde_json::Value,
     },
+}
+
+fn yes() -> bool {
+    true
 }
