@@ -57,7 +57,7 @@ if kind == "claude":
     check("a's worktrees: only its own", os.listdir(os.path.join(state, "worktrees")) == ["0001"])
     check("own ~/.claude writable", can_write(os.path.join(os.environ["HOME"], ".claude")))
 # The user's own files a spawn is lent are read-only (asked, never written: they are real).
-lent = ["/usr/bin", "/etc"] + [os.path.join(os.environ["HOME"], p) for p in [".cargo/bin", ".rustup", ".gitconfig"]]
+lent = ["/usr/bin", "/etc", paths["home_templates"], paths["ws_templates"]] + [os.path.join(os.environ["HOME"], p) for p in [".cargo/bin", ".rustup", ".gitconfig"]]
 if kind == "claude":
     lent += [os.path.join(os.environ["HOME"], ".claude", n) for n in ["CLAUDE.md", "settings.json", "skills", "agents", "commands", "plugins"]]
 for path in lent:
@@ -287,6 +287,8 @@ pub async fn world() -> World {
             "home_entries_no_claude": home_entries_no_claude,
             "sites": a.sites(),
             "a_state": a.state(),
+            "home_templates": home.root().join("templates"),
+            "ws_templates": a.root().join("templates"),
             "host_tmp": host_tmp.path().join("marker"),
             "ns": { "pid": ns("pid"), "ipc": ns("ipc"), "uts": ns("uts"), "cgroup": ns("cgroup") },
             "token": TOKEN,
