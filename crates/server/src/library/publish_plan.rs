@@ -199,6 +199,10 @@ fn digest(dir: &Path, files: &BTreeSet<PathBuf>) -> String {
 }
 
 /// A unified diff of one file, library version → workspace version (`git diff --no-index`).
+#[allow(
+    clippy::disallowed_methods,
+    reason = "git diff --no-index on two scratch files composer wrote"
+)]
 fn file_diff(rel: &Path, old: Option<&[u8]>, new: Option<&[u8]>) -> String {
     let text = |b: Option<&[u8]>| b.is_none_or(|b| std::str::from_utf8(b).is_ok());
     if !(text(old) && text(new)) {

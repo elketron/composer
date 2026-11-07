@@ -1,5 +1,9 @@
 //! Attachments over the real HTTP and WebSocket API: uploaded, checked, made safe, referred to
 //! by a message, and seen by the model as an image and as marked text.
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests set up repos and fakes outside the sandbox"
+)]
 
 mod support;
 

@@ -3,6 +3,10 @@
 //! ticket with its worktree, a watchable page, a reminder, a site with recipes and a built app.
 //! From A, every route, command, tool, recipe, search and event is tried against B's things and
 //! must fail (404, refused, not found), while the same attempt against A's own things succeeds.
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests set up repos and fakes outside the sandbox"
+)]
 
 mod support;
 

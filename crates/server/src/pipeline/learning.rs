@@ -344,6 +344,10 @@ async fn complete(server: &Arc<Server>, prompt: String) -> Result<String, String
 }
 
 /// A unified diff of a page's text before and after, named `path`; empty when they're equal.
+#[allow(
+    clippy::disallowed_methods,
+    reason = "git diff --no-index on two scratch files composer wrote"
+)]
 fn text_diff(before: &str, after: &str, path: &str) -> String {
     if before == after {
         return String::new();

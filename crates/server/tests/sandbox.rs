@@ -2,6 +2,10 @@
 //! project and its own `/tmp`; nothing of workspace b, the library, any `state/`, the rest of
 //! `$HOME`, or the host's `/tmp`. Binds hide other workspaces' projects and never reach into the
 //! composer home. Without a working `bwrap`, nothing runs.
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests set up repos and fakes outside the sandbox"
+)]
 
 mod support;
 

@@ -1,5 +1,9 @@
 //! Pipelines: made from templates, works made in them (folders with a brief and a folder per
 //! stage), their stages' state in the project overview, `_config` overrides; and the agent tools.
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests set up repos and fakes outside the sandbox"
+)]
 
 mod support;
 

@@ -1,4 +1,8 @@
 //! Micro apps: scaffolding, serving with cookie auth, files API, and messages from apps.
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests set up repos and fakes outside the sandbox"
+)]
 
 mod support;
 

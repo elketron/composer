@@ -2,6 +2,10 @@
 //! publish and templates each write only where they may. Publishing is the only write that leaves
 //! a workspace; nothing reads another workspace's content; a published site never carries pages;
 //! nothing outside a site gets into one.
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests set up repos and fakes outside the sandbox"
+)]
 
 mod support;
 

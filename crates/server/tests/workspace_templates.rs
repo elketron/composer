@@ -1,6 +1,10 @@
 //! New workspaces from templates (ticket 0154): the stock sites, the template's library sites and
 //! its config; refused before anything is written when the template or the name is wrong; and a
 //! running host serves a new workspace right away.
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests set up repos and fakes outside the sandbox"
+)]
 
 mod support;
 

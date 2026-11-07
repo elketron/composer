@@ -1,4 +1,8 @@
 //! Tools that create things outside existing sites: `new_site` and `new_project`.
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests set up repos and fakes outside the sandbox"
+)]
 
 mod support;
 

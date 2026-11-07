@@ -2,6 +2,10 @@
 //! call (one MCP server process), and its orchestrator decides the approval: it denies the first
 //! call with a reason the worker gets, and approves the second. A recipe it denies tells the
 //! worker process why too.
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests set up repos and fakes outside the sandbox"
+)]
 
 mod support;
 
@@ -108,7 +112,7 @@ async fn a_worker_process_calls_an_mcp_tool_through_the_parent() {
     std::fs::write(
         home.config_file(),
         format!(
-            "[provider]\nbase_url = \"{base_url}\"\n\n[mcp.fake]\ncommand = \"python3\"\nargs = [\"{}\"]\n",
+            "[provider]\nbase_url = \"{base_url}\"\n\n[mcp.fake]\ncommand = \"python3\"\nargs = [\"{0}\"]\nbinds_ro = [\"{0}\"]\n",
             script.display()
         ),
     )

@@ -1,6 +1,12 @@
 //! MCP servers from `config.toml`: listed with their state (`mcp.list`), their tools offered to the
 //! agents that list them, calls approved unless `allow` or an earlier `always` covers them, a
 //! server's changed tools picked up; over stdio (a fake server in Python) and streamable HTTP.
+//! A stdio server runs in its workspace's sandbox: it sees the workspace's sites and what its
+//! entry binds, not composer's state or the rest of the machine.
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests set up repos and fakes outside the sandbox"
+)]
 
 mod support;
 
@@ -166,6 +172,8 @@ async fn stdio_servers() {
         McpServerConfig {
             command: "python3".into(),
             args: vec![script.display().to_string()],
+            // The sandbox has its own `/tmp`: the script is a declared bind.
+            binds_ro: vec![scratch.path().display().to_string()],
             allow: vec!["echo".into()],
             enabled: true,
             ..Default::default()
@@ -473,4 +481,88 @@ async fn http_servers() {
     .unwrap();
     assert!(stored.contains("attachment://"), "{stored}");
     assert!(!stored.contains(PNG));
+}
+
+/// Writes what it sees to its rw bind, then answers like an MCP server with no tools.
+const LOOKING_SERVER: &str = r#"
+import json, os, sys
+paths = json.loads(os.environ["LOOK"])
+seen = {name: os.path.exists(path) for name, path in paths.items()}
+seen["cwd is sites"] = os.getcwd() == paths["sites"]
+open(os.path.join(paths["out"], "seen.json"), "w").write(json.dumps(seen))
+for line in sys.stdin:
+    m = json.loads(line)
+    if m.get("id") is None:
+        continue
+    r = {"protocolVersion": "2025-06-18", "capabilities": {}, "serverInfo": {"name": "l", "version": "1"}} \
+        if m["method"] == "initialize" else {"tools": []}
+    sys.stdout.write(json.dumps({"jsonrpc": "2.0", "id": m["id"], "result": r}) + "\n")
+    sys.stdout.flush()
+"#;
+
+#[tokio::test]
+async fn a_stdio_server_sees_its_workspace_and_its_binds_only() {
+    if !has_python() {
+        return;
+    }
+    let scratch = tempfile::tempdir().unwrap();
+    let (bin, out, other) = (
+        scratch.path().join("bin"),
+        scratch.path().join("out"),
+        scratch.path().join("other"),
+    );
+    for dir in [&bin, &out, &other] {
+        std::fs::create_dir_all(dir).unwrap();
+    }
+    std::fs::write(bin.join("look.py"), LOOKING_SERVER).unwrap();
+    std::fs::write(other.join("secret"), "x").unwrap();
+    let look = json!({
+        "sites": "${COMPOSER_WORKSPACE_HOME}/sites",
+        "token": "${COMPOSER_WORKSPACE_HOME}/state/token",
+        "out": out, "bin": bin, "other": other.join("secret"),
+    });
+    let mut config = Config::defaults();
+    let entry = |binds_ro: Vec<String>| McpServerConfig {
+        command: "python3".into(),
+        args: vec![bin.join("look.py").display().to_string()],
+        env: [("LOOK".to_string(), look.to_string())].into(),
+        binds_ro,
+        binds_rw: vec![out.display().to_string()],
+        enabled: true,
+        ..Default::default()
+    };
+    config
+        .mcp
+        .insert("look".into(), entry(vec![bin.display().to_string()]));
+    config.mcp.insert(
+        "greedy".into(),
+        entry(vec![
+            bin.display().to_string(),
+            "${COMPOSER_WORKSPACE_HOME}/state".into(),
+        ]),
+    );
+    let (dir, server, _, _) = start_with(config, vec![]).await;
+    assert!(dir.path().join("state/token").exists());
+    let mut look = server.mcp().list(&[]).await;
+    look.sort_by(|a, b| a.name.cmp(&b.name));
+    let (greedy, look) = (&look[0], &look[1]);
+    assert_eq!(look.state, "ready", "{:?}", look.error);
+    // A bind into composer's state is refused before anything starts.
+    assert_eq!(greedy.state, "failed");
+    assert!(
+        greedy
+            .error
+            .as_deref()
+            .unwrap_or_default()
+            .contains("composer home"),
+        "{:?}",
+        greedy.error
+    );
+    let seen: Value =
+        serde_json::from_str(&std::fs::read_to_string(out.join("seen.json")).unwrap()).unwrap();
+    let expected = json!({
+        "sites": true, "out": true, "bin": true, "cwd is sites": true,
+        "token": false, "other": false,
+    });
+    assert_eq!(seen, expected);
 }

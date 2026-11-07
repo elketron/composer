@@ -74,6 +74,10 @@ pub fn scoped_folder(config: &Config, entry: &LauncherEntry) -> Result<PathBuf, 
 
 /// Spawns the entry: `command <args...> <folder>`, working in the folder. Detached: the
 /// process is the desktop's from here on; what it writes lights the watchers like any other.
+#[allow(
+    clippy::disallowed_methods,
+    reason = "launcher entries are the user's own apps, started by the user"
+)]
 pub async fn spawn(entry: &LauncherEntry, folder: &Path) -> Result<LaunchResult, String> {
     if entry.command.is_empty() {
         return Err(format!(

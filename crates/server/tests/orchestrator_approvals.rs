@@ -1,5 +1,9 @@
 //! A worker's approval its orchestrator decides: a turn that ends without `answer_approval`
 //! gets one reminder; it decides then, or the user is asked.
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests set up repos and fakes outside the sandbox"
+)]
 
 mod support;
 

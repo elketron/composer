@@ -1,5 +1,9 @@
 //! A composer worker the server stops (a shutdown, a restart) pauses instead of failing, and a
 //! message goes on from where it was: the same session, its history, then the message.
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests set up repos and fakes outside the sandbox"
+)]
 
 mod support;
 

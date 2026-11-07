@@ -1,5 +1,9 @@
 //! The library as a git repo (ticket 0151): `init` starts it with the stock, `update` commits hand
 //! edits and new stock apart, and an old library folder becomes a repo on the next update.
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests set up repos and fakes outside the sandbox"
+)]
 
 use std::path::Path;
 use std::process::Command;

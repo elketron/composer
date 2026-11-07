@@ -3,6 +3,10 @@
 //! worker's prompt is the stage's scoped context, not the usual one. At the gate, `rerun` (with
 //! a note) runs it again and `approved` starts the third, written into `_stage.md` as the
 //! board app does.
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests set up repos and fakes outside the sandbox"
+)]
 
 mod support;
 

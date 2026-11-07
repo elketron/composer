@@ -13,13 +13,14 @@ use tokio_util::sync::CancellationToken;
 
 use crate::actions::{ApprovalAnswer, ApprovalWait, Approvals, Caller, PendingApprovals};
 use crate::config::Config;
+use crate::config_sections::SandboxConfig;
 use crate::devices::Devices;
 use crate::error::{Result, ServerError};
 use crate::harness::{HarnessSwitches, ToolRules};
 use crate::hash::content_hash;
 use crate::hub::EventHub;
 use crate::init::local_token;
-use crate::mcp_clients::McpServers;
+use crate::mcp_clients::{McpServers, SandboxWorld};
 use crate::project::{ProjectOwnership, ProjectPath};
 use crate::provider::{OpenAiProvider, Provider};
 use crate::sandbox::SandboxSpec;
@@ -159,6 +160,7 @@ impl Server {
                     .into_iter()
                     .map(|(k, v)| (k.to_string(), v))
                     .collect(),
+                sandbox_world(&home, &ownership, &config.sandbox),
             ))),
             approvals,
             pending_approvals: PendingApprovals::default(),
@@ -220,7 +222,19 @@ impl Server {
         .filter(|(_, changed)| *changed)
         .map(|(name, _)| name.to_string())
         .collect();
-        if current.mcp != next.mcp {
+        if current.sandbox != next.sandbox {
+            // Every stdio server starts again in the new world.
+            let mut mcp = self.mcp.write().expect("mcp lock");
+            *mcp = Arc::new(McpServers::new(
+                &next.mcp,
+                self.home
+                    .env()
+                    .into_iter()
+                    .map(|(k, v)| (k.to_string(), v))
+                    .collect(),
+                sandbox_world(&self.home, &self.ownership, &next.sandbox),
+            ));
+        } else if current.mcp != next.mcp {
             let mut mcp = self.mcp.write().expect("mcp lock");
             *mcp = Arc::new(mcp.reconfigured(&next.mcp));
         }
@@ -345,13 +359,7 @@ impl Server {
     /// project it owns. What this workspace's agents may not read, link to or be pointed at.
     /// The base sandbox of a spawn in this workspace (add its project, folder, ...).
     pub fn sandbox(&self) -> SandboxSpec {
-        let foreign = self
-            .ownership()
-            .others(self.home.name())
-            .iter()
-            .map(|p| p.as_path().to_path_buf())
-            .collect();
-        SandboxSpec::new(&self.home, self.config().sandbox.clone(), foreign)
+        sandbox_world(&self.home, &self.ownership, &self.config().sandbox)()
     }
 
     /// Says at start whether spawns will run sandboxed: off (the user's choice), or on and
@@ -776,4 +784,24 @@ pub(crate) async fn shutdown_signal() {
     }
     #[cfg(not(unix))]
     let _ = tokio::signal::ctrl_c().await;
+}
+
+/// The world of `home`'s spawns under `config`, made when asked: the projects other workspaces
+/// own (hidden) are the ones they own then.
+fn sandbox_world(
+    home: &WorkspaceHome,
+    ownership: &Arc<RwLock<Arc<ProjectOwnership>>>,
+    config: &SandboxConfig,
+) -> SandboxWorld {
+    let (home, ownership, config) = (home.clone(), ownership.clone(), config.clone());
+    Arc::new(move || {
+        let foreign = ownership
+            .read()
+            .expect("ownership lock")
+            .others(home.name())
+            .iter()
+            .map(|p| p.as_path().to_path_buf())
+            .collect();
+        SandboxSpec::new(&home, config.clone(), foreign)
+    })
 }

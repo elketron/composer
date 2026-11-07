@@ -1,5 +1,9 @@
 //! A ticket's diff view: the structural diff from difft when it is on the PATH (and the text
 //! diff alone when it isn't), and review comments written onto the ticket page.
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests set up repos and fakes outside the sandbox"
+)]
 
 mod support;
 

@@ -293,6 +293,10 @@ fn merge(stock: &StockRoot, current: &[u8], base: &[u8], new: &[u8]) -> Result<M
 
 /// Three-way merge (`git merge-file`) of `current` and `new` from `base`, using `scratch` (a
 /// folder of its own, removed afterwards) for the three files.
+#[allow(
+    clippy::disallowed_methods,
+    reason = "git merge-file on scratch copies composer wrote"
+)]
 pub(crate) fn merge_three(
     scratch: &Path,
     current: &[u8],

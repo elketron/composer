@@ -1,6 +1,10 @@
 //! Files as the event bus: a change inside a site reaches subscribed clients as `page.changed`
 //! (any file, editors' atomic saves included), and a session that asked to `watch` a path gets
 //! a message when a matching change lands.
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests set up repos and fakes outside the sandbox"
+)]
 
 mod support;
 

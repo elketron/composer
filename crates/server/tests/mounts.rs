@@ -3,6 +3,10 @@
 //! both for mounts that exist at startup and for ones created while running, and their pages
 //! become searchable. A symlink into a folder outside the allowed scope is refused: changes
 //! there light nothing up and reading through it errors.
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests set up repos and fakes outside the sandbox"
+)]
 
 mod support;
 

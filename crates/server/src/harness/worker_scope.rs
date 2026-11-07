@@ -19,6 +19,10 @@ impl WorkerScope {
     /// `program` for the run of `session`: inside a scope capped at `memory_max` (systemd's
     /// syntax: `50%`, `12G`; empty: no cap) where systemd-run works, else as it is. Arguments
     /// added to the command go to `program`.
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "the caller passes the program already wrapped in bwrap, or composer's own worker; systemd-run around a program the caller already wrapped"
+    )]
     pub fn command(program: &OsStr, session: &str, memory_max: &str) -> (Command, Option<Self>) {
         if !available() {
             return (Command::new(program), None);
@@ -40,6 +44,10 @@ impl WorkerScope {
     }
 
     /// Kept by a command whose env was cleared: systemd-run needs them.
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "systemctl stopping composer's own scope"
+    )]
     pub fn keep_env(command: &mut Command) {
         for key in SYSTEMD_ENV {
             if let Some(value) = std::env::var_os(key) {
@@ -49,6 +57,10 @@ impl WorkerScope {
     }
 
     /// Ends whatever is still running in it.
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "systemctl stopping composer's own scope"
+    )]
     pub fn stop(&self) {
         let _ = std::process::Command::new("systemctl")
             .args(["--user", "stop", "--no-block", &self.unit])
@@ -61,6 +73,7 @@ impl WorkerScope {
 
 /// Whether runs can go in scopes here (systemd with a user manager; not WSL without it, not
 /// macOS).
+#[allow(clippy::disallowed_methods, reason = "probes systemd-run once")]
 fn available() -> bool {
     static AVAILABLE: OnceLock<bool> = OnceLock::new();
     *AVAILABLE.get_or_init(|| {

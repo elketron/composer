@@ -1,5 +1,9 @@
 //! Two workspaces in one host (tickets 0145, 0146): each has its own web, index, token, sessions
 //! and state; its API lives only at `/w/<name>/`, and a token opens only its own workspace.
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests set up repos and fakes outside the sandbox"
+)]
 
 mod support;
 

@@ -210,6 +210,12 @@ pub struct McpServerConfig {
     pub url: String,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub headers: BTreeMap<String, String>,
+    /// What a stdio server needs from outside its workspace's sandbox, read-only and read-write
+    /// (`~/` and `${VAR}` expanded; checked like `[sandbox]` binds).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub binds_ro: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub binds_rw: Vec<String>,
     /// Tools that run without asking: names or `prefix*` (`get_*`); `*` for all.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub allow: Vec<String>,

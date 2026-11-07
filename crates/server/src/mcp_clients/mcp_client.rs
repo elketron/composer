@@ -7,7 +7,9 @@ use crate::McpServerConfig;
 use crate::mcp_clients::http_transport::HttpTransport;
 use crate::mcp_clients::stdio_transport::StdioTransport;
 use crate::mcp_clients::types::{RemoteTool, Transport};
+use crate::sandbox::SandboxSpec;
 use crate::tools::CallResult;
+use crate::tools::expand_home;
 
 const PROTOCOL_VERSION: &str = "2025-06-18";
 /// A tool call may take a while (a build, a search); the handshake may not.
@@ -23,22 +25,33 @@ pub struct McpClient {
 
 impl McpClient {
     /// Starts or reaches the server, does the handshake and lists its tools. A stdio server
-    /// starts with `workspace`'s variables set (its own `env` on top).
+    /// starts in `sandbox` (with its own `binds_*` added), in the workspace's sites, with
+    /// `workspace`'s variables set (its own `env` on top).
     pub async fn connect(
         name: &str,
         config: &McpServerConfig,
         workspace: &BTreeMap<String, String>,
+        sandbox: &SandboxSpec,
     ) -> Result<Self, String> {
         let transport: Box<dyn Transport> = if !config.command.is_empty() {
             let mut env = workspace.clone();
             for (key, value) in &config.env {
                 env.insert(key.clone(), expand(value, workspace)?);
             }
+            let mut spec = sandbox.clone();
+            for bind in &config.binds_ro {
+                spec = spec.with_ro(expand_home(&expand(bind, workspace)?));
+            }
+            for bind in &config.binds_rw {
+                spec = spec.with_rw(expand_home(&expand(bind, workspace)?));
+            }
+            let sites = spec.sites().to_path_buf();
+            let mut command = spec.in_dir(sites).command(&config.command)?;
+            command.args(&config.args).envs(&env);
             Box::new(StdioTransport::spawn(
                 name,
                 &config.command,
-                &config.args,
-                &env,
+                command,
                 CALL_TIMEOUT,
             )?)
         } else if !config.url.is_empty() {

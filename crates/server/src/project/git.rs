@@ -19,6 +19,10 @@ pub fn git_with(dir: &Path, args: &[&str], env: &[(&str, &str)]) -> Result<Strin
 }
 
 /// git's whole output, whatever its exit status.
+#[allow(
+    clippy::disallowed_methods,
+    reason = "composer's own git on a project (see the inventory: repo config is a known gap)"
+)]
 pub fn git_output(dir: &Path, args: &[&str], env: &[(&str, &str)]) -> Result<Output, String> {
     Command::new("git")
         .arg("-C")

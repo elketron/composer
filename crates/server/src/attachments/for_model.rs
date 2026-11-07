@@ -70,6 +70,10 @@ pub fn attachment_data_url(home: &WorkspaceHome, reference: &str) -> Option<Stri
     ))
 }
 
+#[allow(
+    clippy::disallowed_methods,
+    reason = "composer's own pdftotext on an attachment it stored"
+)]
 fn pdf_text(path: &std::path::Path) -> Option<String> {
     let output = std::process::Command::new("pdftotext")
         .args(["-layout", "-enc", "UTF-8"])

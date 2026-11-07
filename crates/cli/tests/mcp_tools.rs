@@ -1,6 +1,10 @@
 //! `composer mcp` serves a running worker's tools: an external harness reads its ticket and
 //! finishes it through MCP, and the orchestrator hears about it as from any worker. The
 //! orchestrator works in a git project, so the worker gets its own worktree.
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests set up repos and fakes outside the sandbox"
+)]
 
 mod support;
 

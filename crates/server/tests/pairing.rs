@@ -1,4 +1,8 @@
 //! Remote access: pairing devices and their tokens, behind `tailscale serve`.
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests set up repos and fakes outside the sandbox"
+)]
 
 mod support;
 
