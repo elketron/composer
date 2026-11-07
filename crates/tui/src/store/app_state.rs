@@ -781,6 +781,8 @@ impl AppState {
             ClientCommand::AppOpen {
                 site: site.clone(),
                 project: project.clone(),
+                // The app messages this session only (ticket 0172).
+                session: Some(session.clone()).filter(|s| !s.is_empty()),
             },
             Pending::OpenApp {
                 site,
@@ -1838,12 +1840,27 @@ mod tests {
             .into_iter()
             .filter(|(_, c)| matches!(c, ClientCommand::AppOpen { .. }))
             .collect();
-        let [(id, ClientCommand::AppOpen { site, project })] = commands.as_slice() else {
+        let [
+            (
+                id,
+                ClientCommand::AppOpen {
+                    site,
+                    project,
+                    session,
+                },
+            ),
+        ] = commands.as_slice()
+        else {
             panic!("{effects:?}")
         };
         assert_eq!(
             (site.as_str(), project.as_deref()),
             ("calendar", Some("/p/game"))
+        );
+        assert_eq!(
+            session.as_deref(),
+            Some("s"),
+            "the session it is opened from"
         );
         // Not one of the project's apps: on Home.
         let effects = state.reduce(Action::Server(ServerMessage::Error {
