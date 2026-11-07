@@ -56,6 +56,13 @@ check("a's state: only the run's own parts", shown == (["worktrees"] if kind == 
 if kind == "claude":
     check("a's worktrees: only its own", os.listdir(os.path.join(state, "worktrees")) == ["0001"])
     check("own ~/.claude writable", can_write(os.path.join(os.environ["HOME"], ".claude")))
+# The user's own files a spawn is lent are read-only (asked, never written: they are real).
+lent = ["/usr/bin", "/etc"] + [os.path.join(os.environ["HOME"], p) for p in [".cargo/bin", ".rustup", ".gitconfig"]]
+if kind == "claude":
+    lent += [os.path.join(os.environ["HOME"], ".claude", n) for n in ["CLAUDE.md", "settings.json", "skills", "agents", "commands", "plugins"]]
+for path in lent:
+    if os.path.exists(path):
+        check("read-only: " + path, not os.access(path, os.W_OK))
 check("own sites writable", can_write(paths["sites"]))
 check("own /tmp writable", can_write("/tmp"))
 check("host /tmp hidden", not os.path.exists(paths["host_tmp"]))
