@@ -15,6 +15,7 @@ use gpui::{
 use tokio::sync::mpsc;
 
 use crate::chat_width::ChatWidth;
+use crate::link_state::LinkState;
 use crate::stage_tabs;
 use crate::term_pane::{FONT, PaneEvent, TermPane};
 use crate::terminal_link::TerminalLink;
@@ -30,15 +31,13 @@ pub struct Shell {
     connection: Connection,
     ids: Arc<AtomicU64>,
     store: Store,
-    connected: bool,
+    link: LinkState,
     chat: Option<Entity<TermPane>>,
     /// Stage terminals, by terminal id.
     panes: HashMap<String, Entity<TermPane>>,
     subscriptions: Vec<Subscription>,
     chat_width: ChatWidth,
     dragging: bool,
-    /// The last error a request came back with (shown in the title bar).
-    trouble: Option<String>,
     focus: FocusHandle,
 }
 
@@ -65,13 +64,12 @@ impl Shell {
             connection,
             ids: Arc::new(AtomicU64::new(FIRST_IDS)),
             store: Store::default(),
-            connected: false,
+            link: LinkState::Connecting,
             chat: None,
             panes: HashMap::new(),
             subscriptions: Vec::new(),
             chat_width: ChatWidth::DEFAULT,
             dragging: false,
-            trouble: None,
             focus: cx.focus_handle(),
         }
     }
@@ -79,8 +77,7 @@ impl Shell {
     fn on_event(&mut self, event: Event, cx: &mut Context<Self>) {
         match event {
             Event::Connected => {
-                self.connected = true;
-                self.trouble = None;
+                self.link = LinkState::Up;
                 self.hello(cx);
                 // Stage panes start over from the server's scrollback.
                 self.panes.clear();
@@ -96,8 +93,7 @@ impl Shell {
                 }
             }
             Event::Disconnected(reason) => {
-                self.connected = false;
-                self.trouble = Some(reason);
+                self.link = LinkState::Down(reason);
             }
             Event::Message(message) => self.on_message(message, cx),
         }
@@ -142,7 +138,7 @@ impl Shell {
             let _ = this.update(cx, |shell, cx| {
                 match answer {
                     Ok(result) => shell.on_result(result, cx),
-                    Err(e) => shell.trouble = Some(e),
+                    Err(e) => shell.link = shell.link.refused(e),
                 }
                 cx.notify();
             });
@@ -274,7 +270,9 @@ impl Shell {
 
     fn new_terminal(&mut self, cx: &mut Context<Self>) {
         let Some(session) = self.store.attached.clone() else {
-            self.trouble = Some("no session yet: the chat hasn't started one".into());
+            self.link = self
+                .link
+                .refused("no session yet: the chat hasn't started one".into());
             return;
         };
         self.ask(
@@ -318,12 +316,7 @@ impl Shell {
         let project = session
             .and_then(|s| s.project.clone())
             .unwrap_or_else(|| "no project".into());
-        let state = match (&self.trouble, self.connected) {
-            (_, true) if self.trouble.is_none() => String::new(),
-            (Some(trouble), _) => format!("   ⚠ {trouble}"),
-            (None, _) => "   connecting…".into(),
-        };
-        format!("◉ {} ▸ {project}{state}", self.workspace)
+        format!("◉ {} ▸ {project}{}", self.workspace, self.link.suffix())
     }
 }
 

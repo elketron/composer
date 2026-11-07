@@ -6,6 +6,7 @@
 
 mod chat_width;
 mod key_map;
+mod link_state;
 mod shell;
 mod stage_tabs;
 mod term_pane;
