@@ -150,6 +150,19 @@ pub enum ServerMessage {
         state: WorkerState,
     },
 
+    /// A terminal's output (base64 bytes), to the session's clients.
+    #[serde(rename = "terminal.output")]
+    TerminalOutput {
+        session: SessionId,
+        terminal: String,
+        data: String,
+    },
+    /// A terminal ended (its shell exited, it was closed, or it was idle too long).
+    #[serde(rename = "terminal.exited")]
+    TerminalExited {
+        session: SessionId,
+        terminal: String,
+    },
     /// What the user points at in an app of the session changed (`None`: nothing): the chip.
     #[serde(rename = "selection.changed")]
     SelectionChanged {
@@ -308,6 +321,11 @@ pub enum CommandResult {
     },
     McpServers {
         servers: Vec<crate::http::McpServerInfo>,
+    },
+    /// `terminal.open` / `terminal.read`: the terminal and its scrollback (base64).
+    Terminal {
+        terminal: String,
+        scrollback: String,
     },
     /// `desk.*`: the session's desk now.
     Desk {

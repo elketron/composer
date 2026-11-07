@@ -65,6 +65,8 @@ pub struct Server {
     pub once_codes: crate::apps::OnceCodes,
     /// Events apps reported, per session and app per minute (ticket 0175).
     pub app_events: crate::apps::EventLimit,
+    /// Its sessions' terminals (ticket 0176).
+    pub terminals: crate::terminals::Terminals,
     /// Sessions' watches on site files (`state/watches.json`).
     pub watches: WatchRegistry,
     /// Harnesses turned off per project at runtime (`state/projects.json`).
@@ -182,6 +184,7 @@ impl Server {
             local_apps: crate::apps::LocalAllowances::load(home.state().join("local_apps.json")),
             once_codes: crate::apps::OnceCodes::default(),
             app_events: crate::apps::EventLimit::default(),
+            terminals: crate::terminals::Terminals::default(),
             watches: match &parent {
                 None => WatchRegistry::load(home.state().join("watches.json")),
                 Some(_) => WatchRegistry::in_memory(),

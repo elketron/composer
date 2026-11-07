@@ -29,6 +29,7 @@ use crate::tools::set_project_tool::SetProjectTool;
 use crate::tools::spawn_worker_tool::SpawnWorkerTool;
 use crate::tools::stage_tools::{DeskTool, ShowAppTool, ShowPageTool};
 use crate::tools::stop_worker_tool::StopWorkerTool;
+use crate::tools::terminal_tools::{TerminalReadTool, TerminalSendTool};
 use crate::tools::watch_tool::WatchTool;
 use crate::tools::write_tool::WriteTool;
 use crate::tools::{CallResult, Tool, ToolContext, text_result};
@@ -68,6 +69,8 @@ impl ToolRegistry {
                 Arc::new(ShowPageTool),
                 Arc::new(DeskTool),
                 Arc::new(SelectionTool),
+                Arc::new(TerminalReadTool),
+                Arc::new(TerminalSendTool),
                 Arc::new(FinishTool),
             ],
         }

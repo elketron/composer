@@ -125,6 +125,11 @@ impl Session {
             .unwrap_or_default()
     }
 
+    /// Its folder (`state/sessions/<id>`).
+    pub fn dir(&self) -> &Path {
+        &self.dir
+    }
+
     pub fn id(&self) -> &str {
         &self.id
     }

@@ -35,6 +35,7 @@ mod slot_guard;
 mod slot_pool;
 mod stock_root;
 mod template_name;
+pub mod terminals;
 pub mod tools;
 mod update;
 mod watcher;

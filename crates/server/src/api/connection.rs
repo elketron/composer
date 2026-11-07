@@ -1,3 +1,4 @@
+use base64::Engine;
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -920,6 +921,46 @@ impl Connection {
             | ClientCommand::ApprovalAsk { .. } => Err("handled asynchronously".into()),
             ClientCommand::Subscribe { urls } => {
                 *self.subscriptions.lock().expect("subs lock") = urls;
+                Ok(CommandResult::Done)
+            }
+            ClientCommand::TerminalOpen {
+                session,
+                terminal,
+                cols,
+                rows,
+            } => {
+                let s = server.sessions.get(&session).map_err(|e| e.to_string())?;
+                let (id, scrollback) =
+                    server
+                        .terminals
+                        .open(server, &s, terminal.as_deref(), cols, rows)?;
+                Ok(CommandResult::Terminal {
+                    terminal: id,
+                    scrollback: base64::engine::general_purpose::STANDARD.encode(scrollback),
+                })
+            }
+            ClientCommand::TerminalInput { terminal, data } => {
+                server.terminals.find(&terminal)?.input(data.as_bytes())?;
+                Ok(CommandResult::Done)
+            }
+            ClientCommand::TerminalResize {
+                terminal,
+                cols,
+                rows,
+            } => {
+                server.terminals.find(&terminal)?.resize(cols, rows)?;
+                Ok(CommandResult::Done)
+            }
+            ClientCommand::TerminalRead { terminal } => {
+                let found = server.terminals.find(&terminal)?;
+                Ok(CommandResult::Terminal {
+                    terminal,
+                    scrollback: base64::engine::general_purpose::STANDARD
+                        .encode(found.scrollback()),
+                })
+            }
+            ClientCommand::TerminalClose { terminal } => {
+                server.terminals.close(server, &terminal)?;
                 Ok(CommandResult::Done)
             }
             ClientCommand::SelectionClear { session } => {

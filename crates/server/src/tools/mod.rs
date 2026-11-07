@@ -25,6 +25,7 @@ mod set_project_tool;
 mod spawn_worker_tool;
 mod stage_tools;
 mod stop_worker_tool;
+mod terminal_tools;
 mod tool_context;
 mod tool_registry;
 mod watch_tool;
