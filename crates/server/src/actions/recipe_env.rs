@@ -1,13 +1,16 @@
+use crate::sandbox::SandboxSpec;
 use crate::server::Server;
 use crate::session::Session;
 
 /// What a recipe is told through its environment: its site, the session that ran it and that
 /// session's project, and the workspace it belongs to (`COMPOSER_WORKSPACE`, ...), so a
 /// `composer` command it runs opens its own workspace, never the one the server was started from.
-/// Built only from the server that runs the recipe.
+/// Built only from the server that runs the recipe, with the sandbox it runs in: the workspace's
+/// sites and that project read-write.
 #[derive(Debug, Clone)]
 pub struct RecipeEnv {
     vars: Vec<(&'static str, String)>,
+    sandbox: SandboxSpec,
 }
 
 impl RecipeEnv {
@@ -24,10 +27,23 @@ impl RecipeEnv {
                 "COMPOSER_SESSION",
                 session.map(|s| s.id().to_string()).unwrap_or_default(),
             ),
-            ("COMPOSER_PROJECT", project),
+            ("COMPOSER_PROJECT", project.clone()),
+            (
+                "COMPOSER_SDK",
+                server.home.templates().join("sdk").display().to_string(),
+            ),
         ];
         vars.extend(server.home.env());
-        Self { vars }
+        let mut sandbox = server.sandbox();
+        if !project.is_empty() {
+            sandbox = sandbox.with_rw(project);
+        }
+        Self { vars, sandbox }
+    }
+
+    /// The sandbox the recipe runs in.
+    pub fn sandbox(&self) -> &SandboxSpec {
+        &self.sandbox
     }
 
     /// The variables to set, by name.

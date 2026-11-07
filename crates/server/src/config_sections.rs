@@ -89,6 +89,36 @@ pub struct AttachmentsConfig {
     pub inline_max_kb: usize,
 }
 
+/// `[sandbox]`: the world each spawn an agent or a site controls runs in (`bwrap`). The home's
+/// global config sets the machine's paths; a workspace's config may add `binds_ro`, `binds_rw` and
+/// `devices` of its own. Paths are `~/` or absolute; missing ones are skipped.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SandboxConfig {
+    /// `false` runs spawns as they are, without a sandbox: only by the user's explicit choice.
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    /// System folders mounted read-only besides `/usr` and `/etc`.
+    #[serde(default = "default_sandbox_system_dirs")]
+    pub system_dirs: Vec<String>,
+    /// Toolchains, read-only.
+    #[serde(default = "default_sandbox_toolchains")]
+    pub toolchains: Vec<String>,
+    /// Caches package managers write to, read-write (shared by every workspace).
+    #[serde(default = "default_sandbox_caches")]
+    pub caches: Vec<String>,
+    /// More folders or files, read-only.
+    #[serde(default)]
+    pub binds_ro: Vec<String>,
+    /// More folders or files, read-write (`~/Projects` for a site whose recipes take any project).
+    /// Another workspace's projects inside one stay hidden; a bind into the composer home or
+    /// another workspace's project is refused.
+    #[serde(default)]
+    pub binds_rw: Vec<String>,
+    /// Devices (`/dev/dri` for the GPU).
+    #[serde(default)]
+    pub devices: Vec<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ClaudeCodeConfig {
     /// The Claude Code CLI. It must already be logged in (`claude auth login`).
@@ -270,6 +300,29 @@ fn default_claude_tools() -> Vec<String> {
         "Bash(git log:*)",
         "Bash(git add:*)",
         "Bash(git commit:*)",
+    ]
+    .map(String::from)
+    .to_vec()
+}
+
+fn default_sandbox_system_dirs() -> Vec<String> {
+    ["/opt", "/sys", "/run/systemd/resolve"]
+        .map(String::from)
+        .to_vec()
+}
+
+fn default_sandbox_toolchains() -> Vec<String> {
+    ["~/.rustup", "~/.cargo/bin", "~/.bun/bin", "~/.local/bin"]
+        .map(String::from)
+        .to_vec()
+}
+
+fn default_sandbox_caches() -> Vec<String> {
+    [
+        "~/.cargo/registry",
+        "~/.cargo/git",
+        "~/.bun/install/cache",
+        "~/.cache/uv",
     ]
     .map(String::from)
     .to_vec()

@@ -22,6 +22,7 @@ use crate::init::local_token;
 use crate::mcp_clients::McpServers;
 use crate::project::{ProjectOwnership, ProjectPath};
 use crate::provider::{OpenAiProvider, Provider};
+use crate::sandbox::SandboxSpec;
 use crate::session::{Session, SessionManager};
 use crate::slot_pool::SlotPool;
 use crate::tools::{ToolRegistry, expand_home};
@@ -342,6 +343,30 @@ impl Server {
 
     /// Whether `path` (a folder or file) is another workspace's: in or holding its folder, or a
     /// project it owns. What this workspace's agents may not read, link to or be pointed at.
+    /// The base sandbox of a spawn in this workspace (add its project, folder, ...).
+    pub fn sandbox(&self) -> SandboxSpec {
+        let foreign = self
+            .ownership()
+            .others(self.home.name())
+            .iter()
+            .map(|p| p.as_path().to_path_buf())
+            .collect();
+        SandboxSpec::new(&self.home, self.config().sandbox.clone(), foreign)
+    }
+
+    /// Says at start whether spawns will run sandboxed: off (the user's choice), or on and
+    /// `bwrap` works, or on and they will be refused.
+    pub fn report_sandbox(&self) {
+        let name = self.home.name();
+        if !self.config().sandbox.enabled {
+            tracing::warn!("workspace {name}: the sandbox is off ([sandbox] enabled = false)");
+            return;
+        }
+        if let Err(e) = crate::sandbox::check_bwrap(Path::new("bwrap")) {
+            tracing::error!("workspace {name}: {e}");
+        }
+    }
+
     pub fn foreign_path(&self, path: &Path) -> bool {
         foreign(&self.home, &self.ownership(), path)
     }

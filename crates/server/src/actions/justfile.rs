@@ -120,15 +120,21 @@ impl Justfile {
     }
 }
 
-/// `just` pointed at a site's justfile, run from the site folder.
+/// `just` pointed at a site's justfile, run from the site folder, outside the sandbox: only to
+/// read the justfile (`--dump`, `--show`), which runs none of it.
 pub fn just(site_dir: &Path) -> Command {
     let mut command = Command::new("just");
+    just_args(&mut command, site_dir);
+    command
+}
+
+/// Points `command` (a `just`) at a site's justfile, working in the site folder.
+pub fn just_args(command: &mut Command, site_dir: &Path) {
     command
         .arg("--justfile")
         .arg(site_dir.join("justfile"))
         .arg("--working-directory")
         .arg(site_dir);
-    command
 }
 
 fn just_missing(e: std::io::Error) -> String {
