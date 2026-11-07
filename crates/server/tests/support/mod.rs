@@ -62,9 +62,11 @@ pub async fn send(socket: &mut Socket, id: u64, command: ClientCommand) {
     socket.send(Message::Text(json.into())).await.unwrap();
 }
 
+/// Waits up to 15 s: a test that passes never waits this long, and a full parallel run can be slow
+/// (5 s flaked once under `scripts/ci.sh`, ticket 0181).
 pub async fn next_event(socket: &mut Socket) -> ServerMessage {
     loop {
-        let message = tokio::time::timeout(std::time::Duration::from_secs(5), socket.next())
+        let message = tokio::time::timeout(std::time::Duration::from_secs(15), socket.next())
             .await
             .expect("timed out waiting for an event")
             .unwrap()

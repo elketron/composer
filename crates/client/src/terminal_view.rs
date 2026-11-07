@@ -16,3 +16,17 @@ impl TerminalView {
         self.scrollback.drain(..over);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn keeps_the_newest_bytes_only() {
+        let mut view = TerminalView::default();
+        view.push(&vec![b'a'; KEEP]);
+        view.push(b"tail");
+        assert_eq!(view.scrollback.len(), KEEP);
+        assert!(view.scrollback.ends_with(b"atail"));
+    }
+}

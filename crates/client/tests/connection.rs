@@ -132,3 +132,25 @@ fn the_crate_never_links_the_server() {
         "composer-client depends on the server: the desktop would link it"
     );
 }
+
+#[tokio::test]
+async fn a_request_in_flight_fails_when_the_connection_drops() {
+    use futures::StreamExt;
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    // A server that takes one request and hangs up without answering.
+    tokio::spawn(async move {
+        let (tcp, _) = listener.accept().await.unwrap();
+        let mut socket = tokio_tungstenite::accept_async(tcp).await.unwrap();
+        let _ = socket.next().await;
+    });
+    let (connection, mut events) = Connection::open(Endpoint::new(format!("http://{addr}"), "t"));
+    assert_eq!(events.recv().await.unwrap(), Event::Connected);
+    let answer = tokio::time::timeout(
+        Duration::from_secs(5),
+        connection.request(ClientCommand::SessionList),
+    )
+    .await
+    .expect("the request ends with the connection, not hangs");
+    assert!(answer.unwrap_err().starts_with("disconnected"));
+}

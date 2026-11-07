@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use base64::Engine;
+use composer_protocol::http::OpenProject;
 use composer_protocol::{
     ClientCommand, CommandResult, Desk, Selection, ServerMessage, SessionInfo,
 };
@@ -19,6 +20,10 @@ pub struct Store {
     /// The tab the agent opened or pointed at last (a following client shows it).
     pub pointed: Option<String>,
     pub terminals: BTreeMap<String, TerminalView>,
+    /// The projects some client has open (`projects.open`; no event: ask again to refresh).
+    pub open_projects: Vec<OpenProject>,
+    /// The project this client opened (`project.open`).
+    pub opened_project: Option<String>,
     /// This client's desktop window, and its TUI's terminal.
     pub window: Option<WindowBinding>,
 }
@@ -112,6 +117,10 @@ impl Store {
                     view.push(&bytes);
                 }
                 self.terminals.insert(terminal.clone(), view);
+            }
+            CommandResult::OpenProjects { projects } => self.open_projects = projects.clone(),
+            CommandResult::ProjectOpened { project, .. } => {
+                self.opened_project = Some(project.clone());
             }
             CommandResult::Window { window, terminal } => {
                 self.window = Some(WindowBinding {
@@ -231,6 +240,26 @@ mod tests {
             window: None,
         });
         assert!(store.terminals["t1"].exited);
+
+        // Open projects: the list, and the one this client opened.
+        store.apply(&ServerMessage::Ok {
+            id: 4,
+            result: CommandResult::OpenProjects {
+                projects: vec![OpenProject {
+                    name: "composer".into(),
+                    clients: 2,
+                }],
+            },
+        });
+        store.apply(&ServerMessage::Ok {
+            id: 5,
+            result: CommandResult::ProjectOpened {
+                project: "composer".into(),
+                first: false,
+            },
+        });
+        assert_eq!(store.open_projects[0].name, "composer");
+        assert_eq!(store.opened_project.as_deref(), Some("composer"));
 
         // The window: its TUI shows b, so the store attaches to b and asks for its desk.
         store.apply(&ServerMessage::Ok {
