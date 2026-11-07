@@ -1024,6 +1024,7 @@ fn change_desk(
         session: session.id().to_string(),
         desk: desk.clone(),
         by: DeskBy::User,
+        opened: None,
     });
     Ok(CommandResult::Desk { desk })
 }

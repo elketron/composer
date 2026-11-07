@@ -26,6 +26,7 @@ use crate::tools::run_tool::RunTool;
 use crate::tools::search_tool::SearchTool;
 use crate::tools::set_project_tool::SetProjectTool;
 use crate::tools::spawn_worker_tool::SpawnWorkerTool;
+use crate::tools::stage_tools::{DeskTool, ShowAppTool, ShowPageTool};
 use crate::tools::stop_worker_tool::StopWorkerTool;
 use crate::tools::watch_tool::WatchTool;
 use crate::tools::write_tool::WriteTool;
@@ -62,6 +63,9 @@ impl ToolRegistry {
                 Arc::new(StopWorkerTool),
                 Arc::new(AnswerApprovalTool),
                 Arc::new(WatchTool),
+                Arc::new(ShowAppTool),
+                Arc::new(ShowPageTool),
+                Arc::new(DeskTool),
                 Arc::new(FinishTool),
             ],
         }

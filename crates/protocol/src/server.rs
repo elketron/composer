@@ -156,6 +156,10 @@ pub enum ServerMessage {
         session: SessionId,
         desk: crate::Desk,
         by: crate::DeskBy,
+        /// The tab the agent opened or pointed at: a client following the agent shows it
+        /// (`desk.focus`), one not following badges it (it stays `unseen`).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        opened: Option<String>,
     },
     /// Files changed in an open project (paths relative to it, a settled burst at a time; at most
     /// 200). To the clients that opened it and its apps' sockets.
