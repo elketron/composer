@@ -955,3 +955,100 @@ async fn a_stale_session_shows_no_diff_of_the_other_workspaces_project() {
         200
     );
 }
+
+// ---- Apps (phase 4, ticket 0167) --------------------------------------------------------------
+
+/// An app's token opens no workspace route, its own workspace's or another's: it only works on
+/// its own app's path.
+#[tokio::test]
+async fn an_app_token_opens_none_of_the_workspace_routes() {
+    let f = fixture().await;
+    let web = f.a.server.web.root().to_path_buf();
+    std::fs::create_dir_all(web.join("board-a/ui/dist")).unwrap();
+    std::fs::write(
+        web.join("board-a/index.md"),
+        "---\ntitle: Board\n---\n# Board\n",
+    )
+    .unwrap();
+    std::fs::write(web.join("board-a/ui/dist/index.html"), "<p>board</p>").unwrap();
+    let (status, body) = http(
+        f.addr,
+        "POST",
+        "/w/default/api/apps/board-a/open",
+        &f.a.server.token,
+        None,
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    let opened: Value = serde_json::from_str(&body).unwrap();
+    let app = opened["token"].as_str().unwrap().to_string();
+    for side in [&f.a, &f.b] {
+        for (method, path, body) in routes(side) {
+            if path.contains("/api/actions/") && !has("just") {
+                continue;
+            }
+            let (status, text) = http(f.addr, method, &path, &app, body).await;
+            assert_eq!(status, 404, "an app token on {method} {path}: {text}");
+        }
+    }
+    let ws = format!("ws://{}/w/default/ws?token={app}", f.addr);
+    assert!(tokio_tungstenite::connect_async(&ws).await.is_err());
+    // Its own path works.
+    let (status, _) = http(f.addr, "GET", "/w/default/h/board-a/", &app, None).await;
+    assert_eq!(status, 200);
+}
+
+/// Workspace A can't open an app on B's project, list its apps or open it, by name or folder.
+#[tokio::test]
+async fn apps_never_reach_another_workspaces_project() {
+    let f = fixture().await;
+    let token = &f.a.server.token;
+    let theirs = &f.b.project;
+    let name = Path::new(theirs)
+        .file_name()
+        .unwrap()
+        .to_string_lossy()
+        .to_string();
+    for path in [format!("/w/default/api/projects/{name}/apps")] {
+        let (status, text) = http(f.addr, "GET", &path, token, None).await;
+        assert_eq!(status, 404, "{path}: {text}");
+    }
+    let (status, text) = http(
+        f.addr,
+        "POST",
+        &format!("/w/default/api/projects/{name}/apps/orchestration/open"),
+        token,
+        None,
+    )
+    .await;
+    assert_eq!(status, 404, "{text}");
+    let ws = format!("ws://{}/w/default/ws?token={token}", f.addr);
+    let (mut socket, _) = tokio_tungstenite::connect_async(&ws).await.unwrap();
+    for (id, project) in [(1, name.clone()), (2, theirs.clone())] {
+        let request = composer_protocol::ClientRequest {
+            id,
+            command: ClientCommand::ProjectOpen { project },
+        };
+        socket
+            .send(Message::Text(
+                serde_json::to_string(&request).unwrap().into(),
+            ))
+            .await
+            .unwrap();
+        let refused = loop {
+            let Some(Ok(Message::Text(text))) = socket.next().await else {
+                panic!("closed")
+            };
+            match serde_json::from_str::<ServerMessage>(&text).unwrap() {
+                ServerMessage::Error {
+                    id: Some(i),
+                    message,
+                } if i == id => break message,
+                ServerMessage::Ok { id: i, result } if i == id => panic!("opened: {result:?}"),
+                _ => {}
+            }
+        };
+        assert!(refused.contains("no project"), "{refused}");
+    }
+    assert!(f.a.server.open_projects.list().is_empty());
+}
