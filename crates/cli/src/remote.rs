@@ -14,6 +14,14 @@ fn remote_file(home: &WorkspaceHome) -> std::path::PathBuf {
 
 /// The server this machine talks to: the one from `composer login`, else the local one.
 pub fn client(home: &WorkspaceHome) -> anyhow::Result<(String, String)> {
+    // The client crate's way (what the desktop does too); a standalone home or a token not made
+    // yet falls through to the old one, which makes it.
+    if !home.is_standalone()
+        && let Ok(endpoint) =
+            composer_client::Endpoint::discover(home.home_root(), home.name().as_str())
+    {
+        return Ok((endpoint.base().to_string(), endpoint.token().to_string()));
+    }
     if let Ok(text) = std::fs::read_to_string(remote_file(home)) {
         let remote: Value = serde_json::from_str(&text).context("reading remote.json")?;
         if let (Some(server), Some(token)) = (remote["server"].as_str(), remote["token"].as_str()) {
