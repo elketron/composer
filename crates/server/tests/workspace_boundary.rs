@@ -574,6 +574,15 @@ fn commands(a: &Side, side: &Side) -> Vec<(&'static str, ClientCommand)> {
                 decision: ApprovalDecision::Deny,
             },
         ),
+        (
+            // The plan of publishing a site: A's own exists, B's isn't A's to publish.
+            "library.publish (plan)",
+            ClientCommand::LibraryPublish {
+                site: side.site.clone(),
+                name: None,
+                approved: None,
+            },
+        ),
     ]
 }
 
