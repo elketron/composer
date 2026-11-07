@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use composer_core::{Page, SiteUrl};
-use composer_protocol::http::{AppInfo, AppList};
+use composer_protocol::http::{AppInfo, AppList, ProjectInfo};
 
 use crate::apps::{AppManifest, AttachedApp, ProjectFacts, ProjectName};
 use crate::harness::project_settings;
@@ -80,6 +80,29 @@ pub fn project_apps(server: &Server, name: &str) -> Result<AppList, String> {
 pub fn home_apps(server: &Server) -> AppList {
     let (apps, errors) = workspace_apps(server);
     listing(server, None, AttachedApp::for_home(&apps), errors)
+}
+
+/// What the sdk's `project()` returns for an app opened with `grant`.
+pub fn project_info(server: &Server, grant: &crate::apps::AppGrant) -> ProjectInfo {
+    let config = server.config();
+    let settings = project_settings(&config, &grant.folder.display().to_string());
+    let pipelines = linking_pipelines(server, &grant.folder);
+    let branch = crate::project::git::git(&grant.folder, &["rev-parse", "--abbrev-ref", "HEAD"])
+        .ok()
+        .filter(|b| !b.is_empty() && b != "HEAD");
+    ProjectInfo {
+        name: grant.project.to_string(),
+        root: grant.folder.display().to_string(),
+        branch: grant
+            .folder
+            .join(".git")
+            .exists()
+            .then_some(branch)
+            .flatten(),
+        pipeline: pipelines.first().cloned(),
+        pipelines,
+        tags: settings.tags,
+    }
 }
 
 /// The pipelines (sites) with a work whose `project:` is `folder`.
