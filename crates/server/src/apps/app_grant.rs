@@ -11,6 +11,9 @@ pub struct AppGrant {
     pub project: ProjectName,
     pub folder: PathBuf,
     pub site: String,
+    /// A project-local app: its folder (`<project>/.composer/apps/<name>`); `None` for the
+    /// workspace's site of that name.
+    pub local: Option<PathBuf>,
 }
 
 impl AppGrant {

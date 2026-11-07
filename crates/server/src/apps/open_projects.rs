@@ -8,7 +8,7 @@ use composer_protocol::http::OpenProject;
 use tokio_util::sync::CancellationToken;
 
 use crate::actions::{Caller, Justfile, RecipeEnv, run_recipe};
-use crate::apps::{AppGrant, ProjectName, ProjectWatch, attached_apps};
+use crate::apps::{AppGrant, AttachReason, ProjectName, ProjectWatch, attached_apps};
 use crate::server::Server;
 
 /// Output of an `on_open` recipe beyond this is cut in its event.
@@ -89,13 +89,21 @@ async fn run_on_open(server: &Arc<Server>, name: &str) {
         return;
     };
     let timeout = Duration::from_secs(server.config().agent.recipe_timeout_secs);
-    for app in apps.iter().filter(|a| !a.manifest.on_open.is_empty()) {
+    let runnable = apps
+        .iter()
+        .filter(|a| a.why != AttachReason::LocalNotAllowed && !a.manifest.on_open.is_empty());
+    for app in runnable {
         let grant = AppGrant {
             project: project.clone(),
             folder: folder.clone(),
             site: app.site.clone(),
+            local: app.local.clone(),
         };
-        let justfile = Justfile::load(&server.web.root().join(&app.site)).await;
+        let dir = app
+            .local
+            .clone()
+            .unwrap_or_else(|| server.web.root().join(&app.site));
+        let justfile = Justfile::load(&dir).await;
         for recipe in &app.manifest.on_open {
             let (status, output) = match &justfile {
                 Err(e) => ("failed".to_string(), e.clone()),
@@ -134,9 +142,11 @@ async fn run_one(
         );
     };
     let hash = justfile.hash(recipe);
-    if !server
-        .approvals
-        .may_run(&grant.site, &found, &hash, Caller::App)
+    // A local app's allowance covers its justfile; a workspace app's recipes need approval.
+    if grant.local.is_none()
+        && !server
+            .approvals
+            .may_run(&grant.site, &found, &hash, Caller::App)
     {
         return (
             "needs approval".into(),

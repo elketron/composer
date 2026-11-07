@@ -122,6 +122,14 @@ enum Command {
         #[command(subcommand)]
         action: LibraryCommand,
     },
+    /// A project's own apps (`<project>/.composer/apps/<app>`): allow one as it is now, or promote
+    /// it into this workspace's sites (needs a running server).
+    ///
+    /// `composer app allow mygame viewer`; `composer app promote mygame viewer`.
+    App {
+        #[command(subcommand)]
+        action: AppCommand,
+    },
     /// Workspaces of this home: make a new one (optionally from a template), list them, or list
     /// the templates (global/workspace-templates/<name>.toml).
     ///
@@ -181,6 +189,15 @@ enum WorkspaceCommand {
     List,
     /// The workspace templates.
     Templates,
+}
+
+#[derive(Subcommand)]
+enum AppCommand {
+    /// Allow a project-local app as it is now (look at it first: it comes with the project); a
+    /// change to its index.md or justfile turns it off again.
+    Allow { project: String, app: String },
+    /// Copy a project-local app into this workspace's sites; the workspace's copy wins after.
+    Promote { project: String, app: String },
 }
 
 #[derive(Subcommand)]
@@ -326,6 +343,14 @@ async fn main() -> anyhow::Result<()> {
             WorkspaceCommand::List => workspaces::list(&home)?,
             WorkspaceCommand::Templates => workspaces::templates(&home)?,
         },
+        Some(Command::App { action }) => {
+            let (project, app, promote) = match action {
+                AppCommand::Allow { project, app } => (project, app, false),
+                AppCommand::Promote { project, app } => (project, app, true),
+            };
+            let (server_url, token) = remote::client(&workspace)?;
+            composer_server::client::local_app(&server_url, &token, project, app, promote).await?;
+        }
         Some(Command::Library { action }) => {
             use composer_server::client::LibraryAction;
             let action = match action {

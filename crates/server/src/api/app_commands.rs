@@ -47,6 +47,7 @@ mod tests {
             project: ProjectName::new("game").unwrap(),
             folder: "/p/game".into(),
             site: "cad".into(),
+            local: None,
         }
     }
 
