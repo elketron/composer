@@ -442,6 +442,7 @@ sealed class ClientCommand {
         'harness.set' => ClientCommandHarnessSet.fromJson(json),
         'window.hello' => ClientCommandWindowHello.fromJson(json),
         'window.session' => ClientCommandWindowSession.fromJson(json),
+        'window.join' => ClientCommandWindowJoin.fromJson(json),
         'terminal.open' => ClientCommandTerminalOpen.fromJson(json),
         'terminal.input' => ClientCommandTerminalInput.fromJson(json),
         'terminal.resize' => ClientCommandTerminalResize.fromJson(json),
@@ -838,6 +839,26 @@ final class ClientCommandWindowSession extends ClientCommand {
         'type': 'window.session',
         'window': window,
         'session': session,
+      };
+}
+
+/// The window's own TUI joins its window (ticket 0185): its connection then gets the
+/// window's events too, so a session the desktop picks (`window.session`) reaches it. The
+/// reply is `done`.
+final class ClientCommandWindowJoin extends ClientCommand {
+  const ClientCommandWindowJoin({
+    required this.window,
+  });
+
+  final String window;
+
+  factory ClientCommandWindowJoin.fromJson(Map<String, Object?> json) => ClientCommandWindowJoin(
+        window: json['window'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'window.join',
+        'window': window,
       };
 }
 

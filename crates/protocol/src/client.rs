@@ -118,6 +118,12 @@ pub enum ClientCommand {
     #[serde(rename = "window.session")]
     WindowSession { window: String, session: SessionId },
 
+    /// The window's own TUI joins its window (ticket 0185): its connection then gets the
+    /// window's events too, so a session the desktop picks (`window.session`) reaches it. The
+    /// reply is `done`.
+    #[serde(rename = "window.join")]
+    WindowJoin { window: String },
+
     /// Opens a terminal for a session (ticket 0176): a shell in the workspace's sandbox, in the
     /// session's project (or the sites); a tab on its desk. With the `id` of one that ended (idle),
     /// a fresh shell where it was. The reply is `terminal`.

@@ -123,6 +123,63 @@ async fn a_window_gets_its_tui_and_follows_its_session() {
     let session = followed.unwrap();
     assert!(server.sessions.get(&session).is_ok(), "a real session");
 
+    // Joining a window that doesn't exist is refused.
+    let join = ClientRequest {
+        id: 5,
+        command: ClientCommand::WindowJoin {
+            window: "w00000000".into(),
+        },
+    };
+    bystander
+        .send(Message::Text(serde_json::to_string(&join).unwrap().into()))
+        .await
+        .unwrap();
+    loop {
+        let Some(Ok(Message::Text(text))) = bystander.next().await else {
+            panic!("closed")
+        };
+        match serde_json::from_str::<ServerMessage>(&text).unwrap() {
+            ServerMessage::Error { id: Some(5), .. } => break,
+            ServerMessage::Ok { id: 5, .. } => panic!("joined a window that doesn't exist"),
+            _ => {}
+        }
+    }
+
+    // The window picks another session (the desktop's switcher): its TUI shows it (ticket 0185).
+    let other = server
+        .sessions
+        .create("default", None)
+        .unwrap()
+        .id()
+        .to_string();
+    let pick = ClientRequest {
+        id: 3,
+        command: ClientCommand::WindowSession {
+            window: id.clone().unwrap(),
+            session: other.clone(),
+        },
+    };
+    window
+        .send(Message::Text(serde_json::to_string(&pick).unwrap().into()))
+        .await
+        .unwrap();
+    // The pick itself, then the TUI confirming it shows that session.
+    let mut heard = 0;
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
+    while heard < 2 {
+        let left = deadline.saturating_duration_since(tokio::time::Instant::now());
+        let Ok(Some(Ok(Message::Text(text)))) = tokio::time::timeout(left, window.next()).await
+        else {
+            panic!("the TUI didn't take the picked session ({heard} window.changed)")
+        };
+        if let ServerMessage::WindowChanged { session, .. } =
+            serde_json::from_str::<ServerMessage>(&text).unwrap()
+        {
+            assert_eq!(session, other, "the TUI went somewhere else");
+            heard += 1;
+        }
+    }
+
     // Only the window types into its TUI (unsandboxed: its editor can run a shell).
     let typed = ClientRequest {
         id: 2,

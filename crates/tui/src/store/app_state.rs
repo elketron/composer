@@ -785,6 +785,10 @@ impl AppState {
         );
         effects.extend(self.send(ClientCommand::SessionList, Pending::ListSessions));
         effects.extend(self.send(ClientCommand::ModelList, Pending::Models));
+        // A desktop window's TUI: the window's events (a session it picks) come here too.
+        if let Some(window) = self.window.clone() {
+            effects.extend(self.send(ClientCommand::WindowJoin { window }, Pending::Ignore));
+        }
         // After a reconnect, catch up on what we missed (or, its history never came, start over).
         if let Some(current) = self.session.current.clone() {
             effects.extend(if self.session.loaded {
@@ -885,6 +889,14 @@ impl AppState {
                         vec![]
                     }
                 }
+            }
+            // The desktop picked another session for this TUI's window: show it.
+            ServerMessage::WindowChanged { window, session }
+                if self.window.as_deref() == Some(window.as_str())
+                    && self.session.current.as_deref() != Some(session.as_str()) =>
+            {
+                // Attaching then says so (`window.session`): the window hears it confirmed.
+                self.attach(&session, true)
             }
             ServerMessage::SelectionChanged { session, selection }
                 if self.session.current.as_deref() == Some(session.as_str()) =>
@@ -1570,6 +1582,46 @@ mod tests {
                 before: None,
                 messages: HISTORY_MESSAGES
             }
+        );
+    }
+
+    #[test]
+    fn a_window_tui_joins_its_window_and_shows_the_session_it_picks() {
+        let mut state = AppState::new(
+            Startup {
+                agent: "default".into(),
+                window: Some("w1".into()),
+                ..Startup::default()
+            },
+            160_000,
+        );
+        let joined = state.reduce(Action::Connected);
+        assert!(sent(&joined).iter().any(|(_, c)| *c
+            == ClientCommand::WindowJoin {
+                window: "w1".into()
+            }));
+        state.session.upsert(info("a", None));
+        state.session.upsert(info("b", None));
+        state.reduce(Action::AttachSession("a".into()));
+        let changed = |window: &str, session: &str| {
+            Action::Server(ServerMessage::WindowChanged {
+                window: window.into(),
+                session: session.into(),
+            })
+        };
+        assert_eq!(
+            attached(&state.reduce(changed("w2", "b"))),
+            None,
+            "another window"
+        );
+        assert_eq!(
+            attached(&state.reduce(changed("w1", "a"))),
+            None,
+            "already showing it"
+        );
+        assert_eq!(
+            attached(&state.reduce(changed("w1", "b"))).as_deref(),
+            Some("b")
         );
     }
 

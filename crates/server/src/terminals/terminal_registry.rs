@@ -122,6 +122,15 @@ impl Terminals {
         self.open.lock().expect("terminals lock").get(id).cloned()
     }
 
+    /// Whether window `window`'s TUI is running.
+    pub fn has_window(&self, window: &str) -> bool {
+        self.open
+            .lock()
+            .expect("terminals lock")
+            .values()
+            .any(|t| t.window.as_deref() == Some(window))
+    }
+
     /// The terminal `id`, or what to do when there is none.
     pub fn find(&self, id: &str) -> Result<Arc<Terminal>, String> {
         self.get(id).ok_or_else(|| {

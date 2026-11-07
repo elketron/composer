@@ -41,6 +41,8 @@ pub struct Connection {
     /// A desktop window's connection (ticket 0177): its id and its TUI's terminal; the TUI ends
     /// when the window goes.
     window: Mutex<Option<(String, String)>>,
+    /// The window this connection is the TUI of (`window.join`): its events come here too.
+    joined: Mutex<Option<String>>,
 }
 
 impl Connection {
@@ -55,6 +57,7 @@ impl Connection {
             app: None,
             opened: Mutex::new(HashSet::new()),
             window: Mutex::new(None),
+            joined: Mutex::new(None),
         }
     }
 
@@ -164,12 +167,14 @@ impl Connection {
     pub fn wants(&self, message: &ServerMessage) -> bool {
         match scope(message) {
             EventScope::Global => true,
-            EventScope::Window(window) => self
-                .window
-                .lock()
-                .expect("window lock")
-                .as_ref()
-                .is_some_and(|(id, _)| id == window),
+            EventScope::Window(window) => {
+                self.window
+                    .lock()
+                    .expect("window lock")
+                    .as_ref()
+                    .is_some_and(|(id, _)| id == window)
+                    || self.joined.lock().expect("joined lock").as_deref() == Some(window)
+            }
             EventScope::Project(name) => {
                 self.app
                     .as_ref()
@@ -950,6 +955,14 @@ impl Connection {
             | ClientCommand::ApprovalAsk { .. } => Err("handled asynchronously".into()),
             ClientCommand::Subscribe { urls } => {
                 *self.subscriptions.lock().expect("subs lock") = urls;
+                Ok(CommandResult::Done)
+            }
+            ClientCommand::WindowJoin { window } => {
+                // Only a window that exists: its TUI's terminal is running.
+                if !server.terminals.has_window(&window) {
+                    return Err(format!("no window `{window}`"));
+                }
+                *self.joined.lock().expect("joined lock") = Some(window);
                 Ok(CommandResult::Done)
             }
             ClientCommand::WindowHello { cols, rows } => {
