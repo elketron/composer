@@ -39,8 +39,8 @@ const workspaceBase = inWorkspace ? `/w/${segments[1]}` : '';
 /** This app's workspace (`default`, ...), or `null` when served without one. */
 export const workspace: string | null = inWorkspace ? segments[1] : null;
 
-/** The project the app was opened on (its name), or `null` on Home. */
-export const project: string | null = onProject ? decodeURIComponent(segments[at + 1]) : null;
+/** The name of the project the app was opened on, or `null` on Home. */
+export const projectName: string | null = onProject ? decodeURIComponent(segments[at + 1]) : null;
 
 /** This app's site: `/w/default/design/` → `design`; `/w/default/p/game/cad/` → `cad`. */
 export const site: string = (onProject ? segments[at + 2] : segments[at]) ?? '';
@@ -82,6 +82,41 @@ async function json<T>(response: Response): Promise<T> {
     throw new Error(body.error ?? `${response.status} ${response.statusText}`);
   }
   return response.json();
+}
+
+export interface Project {
+  /** Its name in the workspace (and in this app's URL). */
+  name: string;
+  /** The absolute folder. */
+  root: string;
+  /** The branch checked out (git projects). */
+  branch?: string;
+  /** The first pipeline with a work linking it; `pipelines` has them all. */
+  pipeline?: string;
+  pipelines: string[];
+  tags: string[];
+}
+
+/** The project this app was opened on, or `null` on Home (no project open). */
+export async function project(): Promise<Project | null> {
+  if (!projectName) return null;
+  return json(await fetch(`${base}/api/project`));
+}
+
+/** This app's work data on its project (renders, view models, JSON): kept in the workspace, keyed
+ * by project, not in the project. Its recipes see the same folder as `APP_DATA`. */
+export async function data(path: string): Promise<Response> {
+  if (!projectName) throw new Error('data() needs a project: open the app from a project');
+  const response = await fetch(`${base}/api/data/${path}`);
+  if (!response.ok) throw new Error(`${response.status} ${await response.text()}`);
+  return response;
+}
+
+/** Writes this app's work data on its project (see `data`). */
+export async function putData(path: string, body: Blob | string): Promise<void> {
+  if (!projectName) throw new Error('putData() needs a project: open the app from a project');
+  const response = await fetch(`${base}/api/data/${path}`, { method: 'PUT', body });
+  if (!response.ok) throw new Error(`${response.status} ${await response.text()}`);
 }
 
 /** Reads a markdown page (frontmatter parsed). */

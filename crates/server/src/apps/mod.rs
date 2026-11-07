@@ -27,5 +27,5 @@ pub use file_glob::FileGlob;
 pub use project_facts::ProjectFacts;
 pub use project_name::ProjectName;
 pub use workspace_apps::{
-    find_project, home_apps, project_apps, workspace_apps, workspace_projects,
+    find_project, home_apps, project_apps, project_info, workspace_apps, workspace_projects,
 };

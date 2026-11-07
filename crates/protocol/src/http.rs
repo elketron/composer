@@ -182,6 +182,28 @@ pub struct AppInfo {
     pub built: bool,
 }
 
+/// `GET <app>/api/project`: the project an app was opened on (the sdk's `project()`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct ProjectInfo {
+    /// Its name in the workspace (and in the app's URL).
+    pub name: String,
+    /// The absolute folder.
+    pub root: String,
+    /// The branch checked out, for a git repository.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub branch: Option<String>,
+    /// The first pipeline with a work linking it (`cad`), if any; `pipelines` has them all.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pipeline: Option<String>,
+    #[serde(default)]
+    pub pipelines: Vec<String>,
+    /// `[projects."<path>"] tags`.
+    #[serde(default)]
+    pub tags: Vec<String>,
+}
+
 /// `POST /api/projects/<name>/apps/<site>/open`: where to load the app (its token in the URL
 /// once; the page then keeps it in a cookie scoped to the app), and the token itself for a
 /// client that calls the app's API directly.

@@ -17,8 +17,8 @@ use axum::routing::{get, post};
 use axum::{Extension, Json, Router};
 use composer_core::SiteUrl;
 use composer_protocol::http::{
-    ActionSummary, AppMessage, PageResponse, PutPageRequest, PutPageResponse, RunActionRequest,
-    RunActionResponse, SearchHit, SiteSummary,
+    ActionSummary, AppMessage, PageResponse, ProjectInfo, PutPageRequest, PutPageResponse,
+    RunActionRequest, RunActionResponse, SearchHit, SiteSummary,
 };
 
 use crate::api::auth::{is_https, same_origin};
@@ -54,6 +54,11 @@ pub fn router(server: Arc<Server>) -> Router<Arc<Server>> {
         .route(
             &format!("{base}/api/project/files/{{*path}}"),
             get(get_project_file).put(put_project_file),
+        )
+        .route(&format!("{base}/api/project"), get(project))
+        .route(
+            &format!("{base}/api/data/{{*path}}"),
+            get(get_data).put(put_data),
         )
         .route(&format!("{base}/api/actions/{{site}}"), get(list_actions))
         .route(
@@ -278,18 +283,21 @@ async fn put_file(
     app_routes::put_file(state, Path((site, path)), body).await
 }
 
+/// The sdk's `project()`: the project the app was opened on.
+async fn project(
+    State(server): State<Arc<Server>>,
+    Extension(grant): Extension<AppGrant>,
+) -> Json<ProjectInfo> {
+    let info = tokio::task::spawn_blocking(move || crate::apps::project_info(&server, &grant));
+    Json(info.await.expect("project info doesn't panic"))
+}
+
 async fn get_project_file(
     Extension(grant): Extension<AppGrant>,
     Path((_, _, path)): Path<(String, String, String)>,
 ) -> Result<Response, ApiError> {
-    let file = in_project(&grant, &path)?;
-    let bytes = std::fs::read(&file).map_err(|_| {
-        ApiError(
-            StatusCode::NOT_FOUND,
-            format!("{path} isn't a file in project `{}`", grant.project),
-        )
-    })?;
-    Ok(([(header::CONTENT_TYPE, "application/octet-stream")], bytes).into_response())
+    let what = format!("project `{}`", grant.project);
+    read_in(&inside(&grant.folder, &path, &what)?, &path, &what)
 }
 
 async fn put_project_file(
@@ -297,19 +305,67 @@ async fn put_project_file(
     Path((_, _, path)): Path<(String, String, String)>,
     body: Bytes,
 ) -> Result<StatusCode, ApiError> {
-    let file = in_project(&grant, &path)?;
+    let what = format!("project `{}`", grant.project);
+    write_in(&inside(&grant.folder, &path, &what)?, &path, &body)
+}
+
+/// The app's work data on its project (`APP_DATA` for its recipes): `GET <app>/api/data/<path>`.
+async fn get_data(
+    State(server): State<Arc<Server>>,
+    Extension(grant): Extension<AppGrant>,
+    Path((_, _, path)): Path<(String, String, String)>,
+) -> Result<Response, ApiError> {
+    let data = data_folder(&server, &grant)?;
+    let what = format!("the {} app's data on `{}`", grant.site, grant.project);
+    read_in(&inside(&data, &path, &what)?, &path, &what)
+}
+
+async fn put_data(
+    State(server): State<Arc<Server>>,
+    Extension(grant): Extension<AppGrant>,
+    Path((_, _, path)): Path<(String, String, String)>,
+    body: Bytes,
+) -> Result<StatusCode, ApiError> {
+    let data = data_folder(&server, &grant)?;
+    let what = format!("the {} app's data on `{}`", grant.site, grant.project);
+    write_in(&inside(&data, &path, &what)?, &path, &body)
+}
+
+fn data_folder(server: &Server, grant: &AppGrant) -> Result<PathBuf, ApiError> {
+    let data = grant.data(&server.home);
+    std::fs::create_dir_all(&data).map_err(|e| {
+        ApiError(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("{}: {e}", data.display()),
+        )
+    })?;
+    Ok(data)
+}
+
+fn read_in(file: &FsPath, path: &str, what: &str) -> Result<Response, ApiError> {
+    let bytes = std::fs::read(file).map_err(|_| {
+        ApiError(
+            StatusCode::NOT_FOUND,
+            format!("{path} isn't a file in {what}"),
+        )
+    })?;
+    Ok(([(header::CONTENT_TYPE, "application/octet-stream")], bytes).into_response())
+}
+
+fn write_in(file: &FsPath, path: &str, body: &[u8]) -> Result<StatusCode, ApiError> {
     let write = || -> std::io::Result<()> {
         if let Some(parent) = file.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        std::fs::write(&file, &body)
+        std::fs::write(file, body)
     };
     write().map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, format!("{path}: {e}")))?;
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// `path` inside the app's project: relative, no `..`, and no symlink on the way that leads out.
-fn in_project(grant: &AppGrant, path: &str) -> Result<PathBuf, ApiError> {
+/// `path` inside `folder` (`what`, for the message): relative, no `..`, and no symlink on the
+/// way that leads out.
+fn inside(folder: &FsPath, path: &str, what: &str) -> Result<PathBuf, ApiError> {
     let relative = FsPath::new(path);
     let plain = relative
         .components()
@@ -317,16 +373,13 @@ fn in_project(grant: &AppGrant, path: &str) -> Result<PathBuf, ApiError> {
     let outside = || {
         ApiError(
             StatusCode::FORBIDDEN,
-            format!(
-                "{path} isn't inside project `{}`: give a path relative to it, without `..`",
-                grant.project
-            ),
+            format!("{path} isn't inside {what}: give a path relative to it, without `..`"),
         )
     };
     if !plain || path.is_empty() {
         return Err(outside());
     }
-    let root = std::fs::canonicalize(&grant.folder).map_err(|_| outside())?;
+    let root = std::fs::canonicalize(folder).map_err(|_| outside())?;
     let file = root.join(relative);
     // The deepest part that exists, symlinks resolved, must still be in the project.
     let existing = file

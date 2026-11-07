@@ -25,11 +25,25 @@ impl RecipeEnv {
     }
 
     /// For a recipe an app runs: its own site's, on the project it was opened on.
+    /// It also gets `PROJECT_ROOT`, `PROJECT_NAME` and `APP_DATA` (its data folder, made now and
+    /// writable in the sandbox).
     pub fn for_app(server: &Server, grant: &crate::apps::AppGrant) -> Self {
         let project = server
             .see_project(&grant.folder.display().to_string())
             .unwrap_or_default();
-        Self::with_project(server, &grant.site, None, project)
+        let data = grant.data(&server.home);
+        if let Err(e) = std::fs::create_dir_all(&data) {
+            tracing::warn!("{}: {e}", data.display());
+        }
+        let mut env = Self::with_project(server, &grant.site, None, project.clone());
+        env.vars.extend([
+            ("PROJECT_ROOT", project),
+            ("PROJECT_NAME", grant.project.to_string()),
+            ("APP_DATA", data.display().to_string()),
+        ]);
+        // Composer's own choice of a folder in the workspace's state: mounted, not a bind.
+        env.sandbox = env.sandbox.with_mount(crate::sandbox::Mount::Rw(data));
+        env
     }
 
     fn with_project(

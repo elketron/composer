@@ -3,7 +3,7 @@
   Replace it with what the site needs; keep AppShell for the shared look.
 -->
 <script lang="ts">
-  import { AppShell, Button, Kbd, onChange, page, search, send, session, site, type Page, type SearchHit } from '$sdk';
+  import { AppShell, Button, Kbd, onChange, page, project, search, send, session, site, type Page, type Project, type SearchHit } from '$sdk';
 
   let pages: SearchHit[] = $state([]);
   let selected = $state(0);
@@ -11,6 +11,9 @@
   let message = $state('');
   let notice = $state('');
   let input: HTMLTextAreaElement | undefined = $state();
+  // The project this app was opened on (null on Home): its name, folder, branch, tags.
+  let opened: Project | null = $state(null);
+  project().then((p) => (opened = p));
 
   async function loadPages() {
     pages = (await search(`site:${site}`)).sort((a, b) => a.url.localeCompare(b.url));
@@ -58,7 +61,7 @@
 
 <svelte:window {onkeydown} />
 
-<AppShell crumb="pages" status={pages[selected]?.url ?? ''}>
+<AppShell crumb={opened ? `${opened.name} · pages` : 'pages'} status={pages[selected]?.url ?? ''}>
   {#snippet actions()}
     <Button variant="primary" kbd="⌘↵" onclick={submit} disabled={!session || !message.trim()}>Send to agent</Button>
   {/snippet}
