@@ -123,6 +123,98 @@ async fn a_window_gets_its_tui_and_follows_its_session() {
     let session = followed.unwrap();
     assert!(server.sessions.get(&session).is_ok(), "a real session");
 
+    // Joining a window that doesn't exist is refused.
+    let join = ClientRequest {
+        id: 5,
+        command: ClientCommand::WindowJoin {
+            window: "w00000000".into(),
+        },
+    };
+    bystander
+        .send(Message::Text(serde_json::to_string(&join).unwrap().into()))
+        .await
+        .unwrap();
+    loop {
+        let Some(Ok(Message::Text(text))) = bystander.next().await else {
+            panic!("closed")
+        };
+        match serde_json::from_str::<ServerMessage>(&text).unwrap() {
+            ServerMessage::Error { id: Some(5), .. } => break,
+            ServerMessage::Ok { id: 5, .. } => panic!("joined a window that doesn't exist"),
+            _ => {}
+        }
+    }
+
+    // Joining the real window (as its TUI does) brings its session changes only: never its
+    // terminal's output, which would make a TUI redraw for ever.
+    let join = ClientRequest {
+        id: 6,
+        command: ClientCommand::WindowJoin {
+            window: id.clone().unwrap(),
+        },
+    };
+    bystander
+        .send(Message::Text(serde_json::to_string(&join).unwrap().into()))
+        .await
+        .unwrap();
+
+    // The window picks another session (the desktop's switcher): its TUI shows it (ticket 0185).
+    let other = server
+        .sessions
+        .create("default", None)
+        .unwrap()
+        .id()
+        .to_string();
+    let pick = ClientRequest {
+        id: 3,
+        command: ClientCommand::WindowSession {
+            window: id.clone().unwrap(),
+            session: other.clone(),
+        },
+    };
+    window
+        .send(Message::Text(serde_json::to_string(&pick).unwrap().into()))
+        .await
+        .unwrap();
+    // The pick itself, then the TUI confirming it shows that session.
+    let mut heard = 0;
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
+    while heard < 2 {
+        let left = deadline.saturating_duration_since(tokio::time::Instant::now());
+        let Ok(Some(Ok(Message::Text(text)))) = tokio::time::timeout(left, window.next()).await
+        else {
+            panic!("the TUI didn't take the picked session ({heard} window.changed)")
+        };
+        if let ServerMessage::WindowChanged { session, .. } =
+            serde_json::from_str::<ServerMessage>(&text).unwrap()
+        {
+            assert_eq!(session, other, "the TUI went somewhere else");
+            heard += 1;
+        }
+    }
+
+    let (mut joined_heard, mut joined_output) = (false, 0);
+    // Until quiet, or 3 s at most (a redraw loop is never quiet).
+    let until = tokio::time::Instant::now() + Duration::from_secs(3);
+    while tokio::time::Instant::now() < until
+        && let Ok(Some(Ok(Message::Text(text)))) =
+            tokio::time::timeout(Duration::from_millis(500), bystander.next()).await
+    {
+        match serde_json::from_str::<ServerMessage>(&text).unwrap() {
+            ServerMessage::WindowChanged { session, .. } if session == other => joined_heard = true,
+            ServerMessage::TerminalOutput { .. } => joined_output += 1,
+            _ => {}
+        }
+    }
+    assert!(
+        joined_heard,
+        "a joined connection hears the window's session change"
+    );
+    assert_eq!(
+        joined_output, 0,
+        "a joined connection got the window's terminal output"
+    );
+
     // Only the window types into its TUI (unsandboxed: its editor can run a shell).
     let typed = ClientRequest {
         id: 2,

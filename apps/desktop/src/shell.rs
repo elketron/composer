@@ -16,14 +16,37 @@ use tokio::sync::mpsc;
 
 use crate::browser_tabs::BrowserTabs;
 use crate::chat_width::ChatWidth;
+use crate::desktop::{self, Desktop};
 use crate::link_state::LinkState;
+use crate::pick_lists;
+use crate::picker::{Item, Pick, Picker, PickerEvent};
 use crate::stage_tabs;
 use crate::term_pane::{FONT, PaneEvent, TermPane};
 use crate::terminal_link::TerminalLink;
 use crate::view_urls::{origin, view_url};
 use crate::web_pane::{WebEvent, WebPane};
 
-actions!(desktop, [FocusChat, FocusStage, NextTab, PrevTab]);
+actions!(
+    desktop,
+    [
+        FocusChat,
+        FocusStage,
+        NextTab,
+        PrevTab,
+        Palette,
+        PickWorkspace,
+        PickSession,
+        Workspace1,
+        Workspace2,
+        Workspace3,
+        Workspace4,
+        Workspace5,
+        Workspace6,
+        Workspace7,
+        Workspace8,
+        Workspace9
+    ]
+);
 
 /// The size a window's TUI starts at, before the pane has laid out.
 const FIRST_GRID: (u16, u16) = (100, 40);
@@ -31,6 +54,10 @@ const FIRST_IDS: u64 = 1;
 
 pub struct Shell {
     workspace: String,
+    /// The workspace's colour (its stripe and name), so which one is in front is unmistakable.
+    colour: u32,
+    /// The palette or a picker, over the window.
+    overlay: Option<Entity<Picker>>,
     endpoint: Endpoint,
     connection: Connection,
     ids: Arc<AtomicU64>,
@@ -52,6 +79,7 @@ pub struct Shell {
 impl Shell {
     pub fn new(
         workspace: String,
+        colour: u32,
         endpoint: Endpoint,
         connection: Connection,
         mut events: mpsc::UnboundedReceiver<Event>,
@@ -70,6 +98,8 @@ impl Shell {
         .detach();
         Self {
             workspace,
+            colour,
+            overlay: None,
             endpoint,
             connection,
             ids: Arc::new(AtomicU64::new(FIRST_IDS)),
@@ -91,6 +121,8 @@ impl Shell {
             Event::Connected => {
                 self.link = LinkState::Up;
                 self.hello(cx);
+                // All the sessions, for the switcher (updates follow as events).
+                self.ask(ClientCommand::SessionList, cx);
                 // Stage panes start over from the server's scrollback; apps get fresh tokens.
                 self.panes.clear();
                 self.webs.clear();
@@ -415,6 +447,120 @@ impl Shell {
         }
     }
 
+    /// Opens a picker over the window.
+    fn show_picker(&mut self, picker: Entity<Picker>, window: &mut Window, cx: &mut Context<Self>) {
+        // Focus goes back where it was when the picker closes (else no pane gets keys).
+        let back = window.focused(cx).unwrap_or_else(|| self.focus.clone());
+        self.subscriptions.push(cx.subscribe_in(
+            &picker,
+            window,
+            move |shell, _, event: &PickerEvent, window, cx| {
+                shell.overlay = None;
+                window.focus(&back, cx);
+                match event {
+                    PickerEvent::Picked(pick) => shell.picked(pick.clone(), window, cx),
+                    PickerEvent::Dismissed => {}
+                }
+                cx.notify();
+            },
+        ));
+        window.focus(&picker.read(cx).focus_handle(cx), cx);
+        self.overlay = Some(picker);
+        cx.notify();
+    }
+
+    fn open_workspaces(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let items = pick_lists::workspaces(cx.global::<Desktop>().workspaces(), &self.workspace);
+        let picker = cx.new(|cx| Picker::new("workspace", items, cx));
+        self.show_picker(picker, window, cx);
+    }
+
+    fn open_sessions(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let items = pick_lists::sessions(&self.store.sessions, self.store.attached.as_deref());
+        let picker = cx.new(|cx| Picker::new("session", items, cx));
+        self.show_picker(picker, window, cx);
+    }
+
+    /// Commands, then sessions; the workspace's sites and Home apps join when fetched.
+    fn open_palette(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let mut items = pick_lists::commands(self.follow);
+        items.extend(pick_lists::sessions(
+            &self.store.sessions,
+            self.store.attached.as_deref(),
+        ));
+        let picker = cx.new(|cx| Picker::new("palette", items, cx));
+        let endpoint = self.endpoint.clone();
+        let fetched = cx.global::<Desktop>().spawn(async move {
+            let sites: Vec<composer_protocol::http::SiteSummary> =
+                endpoint.get("/api/sites").await.unwrap_or_default();
+            let apps: Option<composer_protocol::http::AppList> =
+                endpoint.get("/api/apps").await.ok();
+            (sites, apps)
+        });
+        let weak = picker.downgrade();
+        cx.spawn(async move |_, cx| {
+            let Ok((sites, apps)) = fetched.await else {
+                return;
+            };
+            let mut more: Vec<Item> = apps
+                .map(|list| list.apps)
+                .unwrap_or_default()
+                .into_iter()
+                .map(|app| Item {
+                    label: format!("app: {}", app.label),
+                    detail: app.site.clone(),
+                    pick: Pick::App(app.site),
+                })
+                .collect();
+            more.extend(sites.into_iter().map(|site| Item {
+                label: format!("page: {}", site.title),
+                detail: format!("site://{}", site.name),
+                pick: Pick::Page(format!("site://{}", site.name)),
+            }));
+            let _ = weak.update(cx, |picker, cx| picker.extend(more, cx));
+        })
+        .detach();
+        self.show_picker(picker, window, cx);
+    }
+
+    fn picked(&mut self, pick: Pick, window: &mut Window, cx: &mut Context<Self>) {
+        match pick {
+            Pick::Workspace(name) => cx.defer(move |cx| desktop::open(&name, cx)),
+            Pick::Session(session) => match self.store.window.clone() {
+                // The window's TUI attaches to it; the stage follows when it says so.
+                Some(binding) => self.ask(
+                    ClientCommand::WindowSession {
+                        window: binding.window,
+                        session,
+                    },
+                    cx,
+                ),
+                None => self.link = self.link.refused("the chat hasn't started yet".into()),
+            },
+            Pick::Page(url) => self.open_page(url, cx),
+            Pick::App(site) => {
+                if let Some(session) = self.store.attached.clone() {
+                    let tab = DeskTab::App {
+                        site,
+                        project: None,
+                    };
+                    self.ask(
+                        ClientCommand::DeskOpen {
+                            session,
+                            tab,
+                            focus: true,
+                        },
+                        cx,
+                    );
+                }
+            }
+            Pick::NewTerminal => self.new_terminal(cx),
+            Pick::ToggleFollow => self.follow = !self.follow,
+            Pick::Workspaces => self.open_workspaces(window, cx),
+            Pick::Sessions => self.open_sessions(window, cx),
+        }
+    }
+
     fn title(&self) -> String {
         let session = self
             .store
@@ -424,7 +570,7 @@ impl Shell {
         let project = session
             .and_then(|s| s.project.clone())
             .unwrap_or_else(|| "no project".into());
-        format!("◉ {} ▸ {project}{}", self.workspace, self.link.suffix())
+        format!("▸ {project}{}", self.link.suffix())
     }
 }
 
@@ -478,6 +624,18 @@ impl Render for Shell {
                         })),
                 )
         });
+        let follow_toggle = div()
+            .id("follow")
+            .text_color(rgb(MUTED))
+            .child(if self.follow {
+                "● following agent"
+            } else {
+                "○ not following"
+            })
+            .on_click(cx.listener(|shell, _, _, cx| {
+                shell.follow = !shell.follow;
+                cx.notify();
+            }));
         let stage_body = match (self.shown_pane(), self.shown_web(), shown.is_some()) {
             (Some(pane), _, _) => pane.clone().into_any_element(),
             (None, Some(web), _) => web.clone().into_any_element(),
@@ -494,6 +652,7 @@ impl Render for Shell {
 
         div()
             .size_full()
+            .relative()
             .flex()
             .flex_col()
             .bg(rgb(BG))
@@ -501,6 +660,24 @@ impl Render for Shell {
             .font_family(FONT)
             .key_context("shell")
             .track_focus(&self.focus)
+            .on_action(cx.listener(|shell, _: &Palette, window, cx| shell.open_palette(window, cx)))
+            .on_action(
+                cx.listener(|shell, _: &PickWorkspace, window, cx| {
+                    shell.open_workspaces(window, cx)
+                }),
+            )
+            .on_action(
+                cx.listener(|shell, _: &PickSession, window, cx| shell.open_sessions(window, cx)),
+            )
+            .on_action(cx.listener(|_, _: &Workspace1, _, cx| jump(0, cx)))
+            .on_action(cx.listener(|_, _: &Workspace2, _, cx| jump(1, cx)))
+            .on_action(cx.listener(|_, _: &Workspace3, _, cx| jump(2, cx)))
+            .on_action(cx.listener(|_, _: &Workspace4, _, cx| jump(3, cx)))
+            .on_action(cx.listener(|_, _: &Workspace5, _, cx| jump(4, cx)))
+            .on_action(cx.listener(|_, _: &Workspace6, _, cx| jump(5, cx)))
+            .on_action(cx.listener(|_, _: &Workspace7, _, cx| jump(6, cx)))
+            .on_action(cx.listener(|_, _: &Workspace8, _, cx| jump(7, cx)))
+            .on_action(cx.listener(|_, _: &Workspace9, _, cx| jump(8, cx)))
             .on_action(cx.listener(|shell, _: &FocusChat, window, cx| {
                 if let Some(chat) = &shell.chat {
                     window.focus(&chat.read(cx).focus_handle(cx), cx);
@@ -536,6 +713,8 @@ impl Render for Shell {
                     cx.notify();
                 }),
             )
+            // The workspace's colour across the top: which workspace this is, at a glance.
+            .child(div().h(px(3.)).flex_none().bg(rgb(self.colour)))
             .child(
                 div()
                     .flex()
@@ -546,20 +725,30 @@ impl Render for Shell {
                     .border_b_1()
                     .border_color(rgb(LINE))
                     .text_size(px(12.))
-                    .child(self.title())
                     .child(
                         div()
-                            .id("follow")
-                            .text_color(rgb(MUTED))
-                            .child(if self.follow {
-                                "● following agent"
-                            } else {
-                                "○ not following"
-                            })
-                            .on_click(cx.listener(|shell, _, _, cx| {
-                                shell.follow = !shell.follow;
-                                cx.notify();
-                            })),
+                            .flex()
+                            .flex_row()
+                            .gap_2()
+                            .child(
+                                div()
+                                    .text_color(rgb(self.colour))
+                                    .font_weight(gpui::FontWeight::BOLD)
+                                    .child(format!("◉ {}", self.workspace)),
+                            )
+                            .child(self.title()),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .gap_4()
+                            .child(
+                                div()
+                                    .text_color(rgb(MUTED))
+                                    .child(workers_label(cx.global::<Desktop>().workers())),
+                            )
+                            .child(follow_toggle),
                     ),
             )
             .child(
@@ -634,6 +823,32 @@ impl Render for Shell {
                             ),
                     ),
             )
+            // The palette or a picker, over everything.
+            .children(self.overlay.clone().map(|picker| {
+                div()
+                    .absolute()
+                    .top(px(70.))
+                    .left_0()
+                    .right_0()
+                    .flex()
+                    .justify_center()
+                    .child(picker)
+            }))
+    }
+}
+
+/// Shows the `n`th workspace's window (`ctrl+alt+1..9`).
+fn jump(n: usize, cx: &mut gpui::App) {
+    if let Some(name) = cx.global::<Desktop>().workspaces().get(n).cloned() {
+        cx.defer(move |cx| desktop::open(&name, cx));
+    }
+}
+
+fn workers_label(running: u64) -> String {
+    match running {
+        0 => "no workers running".into(),
+        1 => "1 worker running".into(),
+        n => format!("{n} workers running"),
     }
 }
 
