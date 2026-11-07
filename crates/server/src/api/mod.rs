@@ -14,6 +14,7 @@ mod http_routes;
 mod launcher_routes;
 mod library_commands;
 mod pair_routes;
+mod view_routes;
 mod ws_routes;
 
 use std::sync::Arc;
@@ -88,6 +89,10 @@ pub fn router(server: Arc<Server>) -> Router {
             "/api/files/{site}/{*path}",
             get(app_routes::get_file).put(app_routes::put_file),
         )
+        // Read-only HTML views of pages and changes (the desktop's tabs).
+        .route("/view/changes/{project}", get(view_routes::changes))
+        .route("/view/{site}", get(view_routes::site_index))
+        .route("/view/{site}/{*path}", get(view_routes::page))
         // Built micro apps; routes with a fixed first segment (/api, /ws) take precedence.
         .route("/{site}", get(app_routes::app_redirect))
         .route("/{site}/", get(app_routes::app_index))
