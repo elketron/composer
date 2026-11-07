@@ -211,6 +211,10 @@ pub enum ServerMessage {
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum CommandResult {
     Done,
+    /// Done, with what the user should know (`app.allow`, `app.promote`).
+    Note {
+        text: String,
+    },
     Session {
         session: SessionInfo,
     },

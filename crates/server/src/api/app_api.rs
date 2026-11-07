@@ -21,6 +21,7 @@ use composer_protocol::http::{
     RunActionRequest, RunActionResponse, SearchHit, SiteSummary,
 };
 
+use crate::actions::{Justfile, RecipeEnv, check_args, run_recipe};
 use crate::api::auth::{is_https, same_origin};
 use crate::api::{ApiError, action_routes, app_routes, http_routes, ws_routes};
 use crate::apps::AppGrant;
@@ -184,6 +185,16 @@ fn refused(grant: &AppGrant, what: &str) -> ApiError {
 
 fn own_site(grant: &AppGrant, site: &str, what: &str) -> Result<(), ApiError> {
     let site = SiteUrl::new(site, "")?.site().to_string();
+    if grant.local.is_some() {
+        return Err(ApiError(
+            StatusCode::FORBIDDEN,
+            format!(
+                "the project-local app `{}` can't {what} site://{site}: it has no site in the web; \
+                 it writes its project (`project/files/...`) and its data (`data/...`)",
+                grant.site
+            ),
+        ));
+    }
     if site == grant.site {
         Ok(())
     } else {
@@ -200,7 +211,10 @@ async fn index(
     State(server): State<Arc<Server>>,
     Extension(grant): Extension<AppGrant>,
 ) -> Response {
-    app_routes::serve_app(&server, &grant.site, "")
+    match &grant.local {
+        Some(dir) => app_routes::serve_local(&grant.site, dir, ""),
+        None => app_routes::serve_app(&server, &grant.site, ""),
+    }
 }
 
 async fn file(
@@ -208,7 +222,10 @@ async fn file(
     Extension(grant): Extension<AppGrant>,
     Path((_, _, path)): Path<(String, String, String)>,
 ) -> Response {
-    app_routes::serve_app(&server, &grant.site, &path)
+    match &grant.local {
+        Some(dir) => app_routes::serve_local(&grant.site, dir, &path),
+        None => app_routes::serve_app(&server, &grant.site, &path),
+    }
 }
 
 async fn ws(
@@ -398,6 +415,10 @@ async fn list_actions(
     Extension(grant): Extension<AppGrant>,
     Path((_, _, site)): Path<(String, String, String)>,
 ) -> Result<Json<Vec<ActionSummary>>, ApiError> {
+    if let Some(dir) = &grant.local {
+        own_actions(&grant, &site)?;
+        return local_actions(dir).await;
+    }
     own_site(&grant, &site, "list the actions of")?;
     action_routes::list(state, Path(site)).await
 }
@@ -408,9 +429,95 @@ async fn run_action(
     Path((_, _, site, recipe)): Path<(String, String, String, String)>,
     body: Option<Json<RunActionRequest>>,
 ) -> Result<Json<RunActionResponse>, ApiError> {
-    own_site(&grant, &site, "run the actions of")?;
     let Json(request) = body.unwrap_or_default();
+    if grant.local.is_some() {
+        own_actions(&grant, &site)?;
+        return run_local(&server, &grant, &recipe, &request).await;
+    }
+    own_site(&grant, &site, "run the actions of")?;
     action_routes::run_action(server, site, recipe, request, Some(grant)).await
+}
+
+/// A local app runs only its own recipes (`site` is its name).
+fn own_actions(grant: &AppGrant, site: &str) -> Result<(), ApiError> {
+    if site == grant.site {
+        return Ok(());
+    }
+    Err(ApiError(
+        StatusCode::FORBIDDEN,
+        format!(
+            "the project-local app `{}` runs only its own justfile's recipes, not site://{site}'s",
+            grant.site
+        ),
+    ))
+}
+
+async fn local_justfile(dir: &FsPath) -> Result<Justfile, ApiError> {
+    Justfile::load(dir)
+        .await
+        .map_err(|e| ApiError(StatusCode::NOT_FOUND, e))
+}
+
+/// A local app's recipes: all approved, since allowing the app was for its justfile.
+async fn local_actions(dir: &FsPath) -> Result<Json<Vec<ActionSummary>>, ApiError> {
+    let justfile = local_justfile(dir).await?;
+    let recipes = justfile.recipes().into_iter().filter(|r| !r.private);
+    Ok(Json(
+        recipes
+            .map(|r| ActionSummary {
+                approved: true,
+                name: r.name,
+                doc: r.doc,
+                parameters: r.parameters,
+            })
+            .collect(),
+    ))
+}
+
+/// Runs a local app's recipe on its project (sandboxed like any app's; its allowance is the
+/// approval).
+async fn run_local(
+    server: &Arc<Server>,
+    grant: &AppGrant,
+    recipe: &str,
+    request: &RunActionRequest,
+) -> Result<Json<RunActionResponse>, ApiError> {
+    let dir = grant.local.clone().expect("a local grant");
+    let justfile = local_justfile(&dir).await?;
+    let found = justfile
+        .recipe(recipe)
+        .filter(|r| !r.private)
+        .ok_or_else(|| {
+            ApiError(
+                StatusCode::NOT_FOUND,
+                format!("no recipe `{recipe}` in the local app `{}`", grant.site),
+            )
+        })?;
+    check_args(&found, &request.args, true)
+        .map_err(|e| ApiError(StatusCode::UNPROCESSABLE_ENTITY, e))?;
+    let env = RecipeEnv::for_app(server, grant);
+    let timeout = std::time::Duration::from_secs(server.config().agent.recipe_timeout_secs);
+    let output = run_recipe(
+        &justfile,
+        &found.name,
+        &request.args,
+        &env,
+        timeout,
+        &tokio_util::sync::CancellationToken::new(),
+    )
+    .await
+    .map_err(|e| ApiError(StatusCode::UNPROCESSABLE_ENTITY, e))?;
+    let status = match (output.exit_code, output.timed_out) {
+        (_, true) => "timed out",
+        (Some(0), _) => "ok",
+        (Some(_), _) => "failed",
+        (None, _) => "killed",
+    };
+    Ok(Json(RunActionResponse {
+        status: status.into(),
+        exit_code: output.exit_code,
+        output: output.output,
+    }))
 }
 
 /// A message into a session, marked as coming from this app (whatever site it claims).

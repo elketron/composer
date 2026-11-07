@@ -65,6 +65,7 @@ mod tests {
             project: ProjectName::new(project).unwrap(),
             folder: format!("/p/{project}").into(),
             site: site.into(),
+            local: None,
         }
     }
 

@@ -93,19 +93,50 @@ pub(crate) fn serve_app(server: &Server, site: &str, path: &str) -> Response {
             .into_response();
     }
     // `url.path()` is normalized and cannot leave the site; a refused mount still answers.
-    let requested = url.path();
-    let mut file = dist.join(requested);
+    let file = pick(&dist, url.path());
+    if let Err(e) = server.web.check(&file) {
+        return ApiError::from(e).into_response();
+    }
+    send_file(&file)
+}
+
+/// A project-local app's `ui/dist` (`dir` is its folder): like a site's, and no symlink in it may
+/// lead out of it.
+pub(crate) fn serve_local(name: &str, dir: &std::path::Path, path: &str) -> Response {
+    let Ok(url) = SiteUrl::new(name, path) else {
+        return StatusCode::BAD_REQUEST.into_response();
+    };
+    let dist = dir.join("ui").join("dist");
+    let file = pick(&dist, url.path());
+    let inside = std::fs::canonicalize(&dist)
+        .ok()
+        .zip(std::fs::canonicalize(&file).ok())
+        .is_some_and(|(dist, file)| file.starts_with(dist));
+    if !inside {
+        return (
+            StatusCode::NOT_FOUND,
+            format!("the local app `{name}` isn't built: no ui/dist/index.html in it"),
+        )
+            .into_response();
+    }
+    send_file(&file)
+}
+
+/// The file of `dist` for `requested` (normalized); client-side routes fall back to the app.
+fn pick(dist: &std::path::Path, requested: &str) -> std::path::PathBuf {
+    let file = dist.join(requested);
     let has_extension = requested
         .rsplit('/')
         .next()
         .is_some_and(|f| f.contains('.'));
     if requested.is_empty() || !file.is_file() && !has_extension {
-        file = dist.join("index.html"); // client-side routes fall back to the app
+        return dist.join("index.html");
     }
-    if let Err(e) = server.web.check(&file) {
-        return ApiError::from(e).into_response();
-    }
-    match std::fs::read(&file) {
+    file
+}
+
+fn send_file(file: &std::path::Path) -> Response {
+    match std::fs::read(file) {
         Ok(bytes) => {
             let name = file.to_string_lossy();
             let cache = if name.ends_with("index.html") {

@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use composer_core::{Page, SiteUrl};
 use composer_protocol::http::{AppInfo, AppList, ProjectInfo};
 
-use crate::apps::{AppManifest, AttachedApp, ProjectFacts, ProjectName};
+use crate::apps::{AppManifest, AttachReason, AttachedApp, LocalApp, ProjectFacts, ProjectName};
 use crate::harness::project_settings;
 use crate::pipeline::Pipeline;
 use crate::project::{ProjectPath, project_list};
@@ -94,8 +94,31 @@ pub fn attached_apps(
     let config = server.config();
     let settings = project_settings(&config, &folder.display().to_string());
     let facts = ProjectFacts::gather(&folder, linking_pipelines(server, &folder), settings.tags);
-    let (apps, errors) = workspace_apps(server);
-    let attached = AttachedApp::for_project(&apps, &facts, &settings.apps, &settings.hide_apps);
+    let (apps, mut errors) = workspace_apps(server);
+    let mut attached = AttachedApp::for_project(&apps, &facts, &settings.apps, &settings.hide_apps);
+    let (locals, local_errors) = LocalApp::discover(&folder);
+    errors.extend(local_errors);
+    for local in locals {
+        if apps.iter().any(|(site, _)| *site == local.name)
+            || server.web.root().join(&local.name).is_dir()
+        {
+            errors.push(format!(
+                "the project-local app `{}` is shadowed by site://{} (the workspace's wins)",
+                local.name, local.name
+            ));
+            continue;
+        }
+        let why = match server.local_apps.allows(&project, &local) {
+            true => AttachReason::Local,
+            false => AttachReason::LocalNotAllowed,
+        };
+        attached.push(AttachedApp {
+            site: local.name.clone(),
+            manifest: local.manifest.clone(),
+            why,
+            local: Some(local.dir.clone()),
+        });
+    }
     Ok((project, folder, attached, errors))
 }
 
@@ -170,7 +193,14 @@ fn listing(
     let apps = attached
         .into_iter()
         .map(|app| {
-            let title = index(server, &app.site).map(|p| p.title());
+            let title = match &app.local {
+                Some(dir) => local_title(&app.site, dir),
+                None => index(server, &app.site).map(|p| p.title()),
+            };
+            let dir = app
+                .local
+                .clone()
+                .unwrap_or_else(|| server.web.root().join(&app.site));
             AppInfo {
                 label: app
                     .manifest
@@ -184,12 +214,8 @@ fn listing(
                 why: app.why.to_string(),
                 tile: app.manifest.tile,
                 opens: app.manifest.opens.iter().map(ToString::to_string).collect(),
-                built: server
-                    .web
-                    .root()
-                    .join(&app.site)
-                    .join("ui/dist/index.html")
-                    .is_file(),
+                built: dir.join("ui/dist/index.html").is_file(),
+                local: app.local.is_some(),
                 tile_text: None,
                 site: app.site,
             }
@@ -200,6 +226,11 @@ fn listing(
         apps,
         errors,
     }
+}
+
+fn local_title(name: &str, dir: &Path) -> Option<String> {
+    let text = std::fs::read_to_string(dir.join("index.md")).ok()?;
+    Some(Page::parse(SiteUrl::new(name, "index.md").ok()?, text).title())
 }
 
 fn index(server: &Server, site: &str) -> Option<Page> {

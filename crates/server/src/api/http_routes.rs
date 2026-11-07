@@ -72,19 +72,26 @@ pub async fn open_app(
     axum::extract::Path((name, site)): axum::extract::Path<(String, String)>,
 ) -> Result<Json<composer_protocol::http::AppOpened>, ApiError> {
     let opened = tokio::task::spawn_blocking(move || {
-        let list = crate::apps::project_apps(&server, &name)?;
-        if !list.apps.iter().any(|a| a.site == site) {
+        let (project, folder, apps, _) = crate::apps::attached_apps(&server, &name)?;
+        let Some(app) = apps.into_iter().find(|a| a.site == site) else {
             return Err(format!(
                 "site://{site} isn't one of project `{name}`'s apps: its `app:` block's `when` \
                  doesn't match it; pin it with `apps = [\"{site}\"]` in the project's \
                  [projects] entry, or see `GET /api/projects/{name}/apps`"
             ));
+        };
+        if app.why == crate::apps::AttachReason::LocalNotAllowed {
+            return Err(format!(
+                "`{site}` is a project-local app of `{name}` (in its .composer/apps/) that you \
+                 haven't allowed, or that changed since: look at it, then run `composer app \
+                 allow {name} {site}`"
+            ));
         }
-        let (project, folder) = crate::apps::find_project(&server, &name)?;
         let token = server.app_tokens.mint(crate::apps::AppGrant {
             project: project.clone(),
             folder,
             site: site.clone(),
+            local: app.local,
         });
         let url = format!(
             "{}/p/{}/{}/?app_token={token}",

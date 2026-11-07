@@ -125,6 +125,16 @@ pub enum ClientCommand {
         project: Option<String>,
     },
 
+    /// Allows a project-local app (`<project>/.composer/apps/<app>`) as it is now: it is served
+    /// and its recipes run until its `index.md` or `justfile` changes. The reply is `note`.
+    #[serde(rename = "app.allow")]
+    AppAllow { project: String, app: String },
+
+    /// Copies a project-local app into the workspace's sites (refused when a site has its name);
+    /// the workspace's copy wins from then on. The reply is `note`.
+    #[serde(rename = "app.promote")]
+    AppPromote { project: String, app: String },
+
     /// The MCP servers in `config.toml`, connecting those that are on (so it is also a test of
     /// them); the reply is `mcp_servers`.
     #[serde(rename = "mcp.list")]

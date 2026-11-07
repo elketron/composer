@@ -79,6 +79,28 @@ impl Connection {
         })
     }
 
+    /// `app.allow` (`allow`) or `app.promote` of a project-local app; replies later.
+    fn local_app(
+        self: &Arc<Self>,
+        server: &Arc<Server>,
+        id: u64,
+        project: String,
+        app: String,
+        allow: bool,
+    ) {
+        let (connection, server) = (self.clone(), server.clone());
+        tokio::spawn(async move {
+            let done = tokio::task::spawn_blocking(move || match allow {
+                true => crate::apps::allow_local(&server, &project, &app),
+                false => crate::apps::promote_local(&server, &project, &app),
+            })
+            .await
+            .map_err(|e| e.to_string())
+            .and_then(|r| r);
+            connection.reply(id, done.map(|text| CommandResult::Note { text }));
+        });
+    }
+
     /// This client has `name` open (`true`: the first in the workspace); again does nothing.
     pub fn open(&self, server: &Arc<Server>, name: &ProjectName, folder: &std::path::Path) -> bool {
         if !self
@@ -425,6 +447,14 @@ impl Connection {
                     });
                     connection.reply(id, reply);
                 });
+                None
+            }
+            ClientCommand::AppAllow { project, app } => {
+                self.local_app(server, id, project, app, true);
+                None
+            }
+            ClientCommand::AppPromote { project, app } => {
+                self.local_app(server, id, project, app, false);
                 None
             }
             ClientCommand::ProjectsOpen => Some(ServerMessage::Ok {
@@ -845,6 +875,8 @@ impl Connection {
             | ClientCommand::ProjectOpen { .. }
             | ClientCommand::ProjectClose { .. }
             | ClientCommand::ProjectsOpen
+            | ClientCommand::AppAllow { .. }
+            | ClientCommand::AppPromote { .. }
             | ClientCommand::LibraryList
             | ClientCommand::LibraryInstall { .. }
             | ClientCommand::LibraryUpdate { .. }

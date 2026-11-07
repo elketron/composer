@@ -6,6 +6,8 @@ pub struct AttachedApp {
     pub site: String,
     pub manifest: AppManifest,
     pub why: AttachReason,
+    /// A project-local app's folder.
+    pub local: Option<std::path::PathBuf>,
 }
 
 impl AttachedApp {
@@ -25,6 +27,7 @@ impl AttachedApp {
                 site: site.clone(),
                 manifest: manifest.clone(),
                 why: AttachReason::Pinned,
+                local: None,
             })
         });
         let mut list: Vec<Self> = pinned.collect();
@@ -37,6 +40,7 @@ impl AttachedApp {
                     site: site.clone(),
                     manifest: manifest.clone(),
                     why: AttachReason::Matched(hit.clone()),
+                    local: None,
                 })
             });
         list.extend(matched);
@@ -51,6 +55,7 @@ impl AttachedApp {
                 site: site.clone(),
                 manifest: manifest.clone(),
                 why: AttachReason::Home,
+                local: None,
             })
             .collect()
     }
