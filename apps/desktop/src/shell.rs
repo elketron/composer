@@ -44,6 +44,8 @@ pub struct Shell {
     subscriptions: Vec<Subscription>,
     chat_width: ChatWidth,
     dragging: bool,
+    /// Show what the agent opens (else it is only marked unseen). The client's choice.
+    follow: bool,
     focus: FocusHandle,
 }
 
@@ -79,6 +81,7 @@ impl Shell {
             subscriptions: Vec::new(),
             chat_width: ChatWidth::DEFAULT,
             dragging: false,
+            follow: true,
             focus: cx.focus_handle(),
         }
     }
@@ -123,8 +126,18 @@ impl Shell {
         for command in self.store.apply(&message) {
             self.ask(command, cx);
         }
-        if matches!(message, ServerMessage::DeskChanged { .. }) {
+        if let ServerMessage::DeskChanged {
+            session, opened, ..
+        } = &message
+        {
             self.sync_panes(cx);
+            // The agent opened something: a following client shows it.
+            if let Some(tab) = opened
+                && self.follow
+                && self.store.attached.as_ref() == Some(session)
+            {
+                self.show_tab(tab.clone(), cx);
+            }
         }
     }
 
@@ -176,7 +189,13 @@ impl Shell {
                     let pane = self.new_pane(terminal.clone(), cx);
                     self.panes.insert(terminal.clone(), pane);
                 }
-                self.feed(&terminal, &scrollback, cx);
+                // Scrollback: replayed without answering the queries in it.
+                if let (Ok(bytes), Some(pane)) = (
+                    base64::engine::general_purpose::STANDARD.decode(&scrollback),
+                    self.panes.get(&terminal).cloned(),
+                ) {
+                    pane.update(cx, |pane, cx| pane.replay(&bytes, cx));
+                }
             }
             CommandResult::Desk { .. } => self.sync_panes(cx),
             _ => {}
@@ -519,12 +538,29 @@ impl Render for Shell {
             )
             .child(
                 div()
+                    .flex()
+                    .flex_row()
+                    .justify_between()
                     .px_3()
                     .py_1()
                     .border_b_1()
                     .border_color(rgb(LINE))
                     .text_size(px(12.))
-                    .child(self.title()),
+                    .child(self.title())
+                    .child(
+                        div()
+                            .id("follow")
+                            .text_color(rgb(MUTED))
+                            .child(if self.follow {
+                                "● following agent"
+                            } else {
+                                "○ not following"
+                            })
+                            .on_click(cx.listener(|shell, _, _, cx| {
+                                shell.follow = !shell.follow;
+                                cx.notify();
+                            })),
+                    ),
             )
             .child(
                 div()

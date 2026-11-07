@@ -9,7 +9,7 @@ use gpui::{App, WeakEntity};
 use crate::web_pane::WebPane;
 
 /// While some pane is open: CEF work every 4 ms (smooth video, about 2 % of a core); otherwise
-/// the pump only checks back now and then.
+/// every 100 ms.
 const BUSY: Duration = Duration::from_millis(4);
 const IDLE: Duration = Duration::from_millis(100);
 
@@ -29,11 +29,13 @@ pub fn start(cx: &mut App) {
                 p.retain(|pane| pane.upgrade().is_some());
                 p.clone()
             });
+            // CEF's work runs even with no pane: its start-up continues in the loop, and a
+            // browser made later on a CEF left unpumped never painted (ticket 0184).
+            cef::do_message_loop_work();
             if panes.is_empty() {
                 cx.background_executor().timer(IDLE).await;
                 continue;
             }
-            cef::do_message_loop_work();
             for pane in panes {
                 let _ = pane.update(cx, |pane, cx| pane.after_pump(cx));
             }

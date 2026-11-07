@@ -9,6 +9,7 @@ mod browser_tabs;
 mod cef_runtime;
 mod chat_width;
 mod dom_keys;
+mod grid;
 mod key_map;
 mod link_state;
 mod shell;
