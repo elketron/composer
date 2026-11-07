@@ -54,6 +54,16 @@ pub async fn require_token(
     {
         return (StatusCode::FORBIDDEN, "cross-origin request").into_response();
     }
+    // A browser holding the workspace's cookie sends it from an app's page too: an app page
+    // calls its own API with its own token instead (ticket 0163).
+    if cookie && !bearer && query_token.is_none() && from_app_page(headers, server.route_base()) {
+        return (
+            StatusCode::FORBIDDEN,
+            "an app page calls its own API (<base>/p/<project>/<app>/api/...) with its app token, \
+             not the workspace's",
+        )
+            .into_response();
+    }
 
     let secure = is_https(headers);
     let mut response = next.run(request).await;
@@ -61,6 +71,17 @@ pub async fn require_token(
         set_cookie(&mut response, &token, secure, None, server.route_base());
     }
     response
+}
+
+/// The request comes from a page of a project app (its `Referer` is under `<base>/p/`).
+fn from_app_page(headers: &HeaderMap, route_base: &str) -> bool {
+    let apps = format!("{route_base}/p/");
+    headers
+        .get(header::REFERER)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|r| r.split_once("://").map(|(_, rest)| rest))
+        .and_then(|rest| rest.find('/').map(|at| &rest[at..]))
+        .is_some_and(|path| path.starts_with(&apps))
 }
 
 /// The browser's origin is our host, directly or as `tailscale serve` forwards it.

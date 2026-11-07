@@ -11,8 +11,10 @@ use tokio_util::sync::CancellationToken;
 
 use crate::actions::Caller;
 use crate::agent::AgentDefinition;
+use crate::api::app_commands::app_may;
 use crate::api::event_scope::{EventScope, scope};
 use crate::api::glob::url_matches;
+use crate::apps::AppGrant;
 use crate::attachments::resolve;
 use crate::harness::{PERMISSION_TOOL, WorkerSink, answer_permission, permission_tool_info};
 use crate::server::Server;
@@ -31,6 +33,8 @@ pub struct Connection {
     /// Model slots lent to a worker; dropped (released) with the connection.
     grants: Mutex<HashMap<u64, SlotGuard>>,
     next_grant: AtomicU64,
+    /// An app's socket: only the commands its token allows.
+    app: Option<AppGrant>,
 }
 
 impl Connection {
@@ -42,6 +46,16 @@ impl Connection {
             worker_session: Mutex::new(None),
             grants: Mutex::new(HashMap::new()),
             next_grant: AtomicU64::new(0),
+            app: None,
+        }
+    }
+
+    /// The socket of an app opened on a project (ticket 0163): it may subscribe to pages, list
+    /// pipelines and apps, and start and run its own site's works; nothing else.
+    pub fn for_app(out: mpsc::UnboundedSender<Arc<ServerMessage>>, grant: AppGrant) -> Self {
+        Self {
+            app: Some(grant),
+            ..Self::new(out)
         }
     }
 
@@ -93,6 +107,15 @@ impl Connection {
         request: ClientRequest,
     ) -> Option<ServerMessage> {
         let id = request.id;
+        let mut request = request;
+        if let Some(grant) = &self.app
+            && let Err(message) = app_may(grant, &mut request.command)
+        {
+            return Some(ServerMessage::Error {
+                id: Some(id),
+                message,
+            });
+        }
         match request.command {
             ClientCommand::WorkerEvent { event } => {
                 self.worker_event(server, *event);

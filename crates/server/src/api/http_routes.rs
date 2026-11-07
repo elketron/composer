@@ -65,6 +65,53 @@ pub async fn home_apps(
     Json(list.expect("listing apps doesn't panic"))
 }
 
+/// `POST /api/projects/<name>/apps/<site>/open`: a token for `site`'s app on the project (it must
+/// be attached), and the URL that loads it.
+pub async fn open_app(
+    State(server): State<Arc<Server>>,
+    axum::extract::Path((name, site)): axum::extract::Path<(String, String)>,
+) -> Result<Json<composer_protocol::http::AppOpened>, ApiError> {
+    let opened = tokio::task::spawn_blocking(move || {
+        let list = crate::apps::project_apps(&server, &name)?;
+        if !list.apps.iter().any(|a| a.site == site) {
+            return Err(format!(
+                "site://{site} isn't one of project `{name}`'s apps: its `app:` block's `when` \
+                 doesn't match it; pin it with `apps = [\"{site}\"]` in the project's \
+                 [projects] entry, or see `GET /api/projects/{name}/apps`"
+            ));
+        }
+        let (project, folder) = crate::apps::find_project(&server, &name)?;
+        let token = server.app_tokens.mint(crate::apps::AppGrant {
+            project: project.clone(),
+            folder,
+            site: site.clone(),
+        });
+        let url = format!(
+            "{}/p/{}/{}/?app_token={token}",
+            server.route_base(),
+            crate::api::app_api::encode_segment(project.as_str()),
+            crate::api::app_api::encode_segment(&site)
+        );
+        Ok(composer_protocol::http::AppOpened { url, token })
+    })
+    .await
+    .expect("opening an app doesn't panic");
+    opened
+        .map(Json)
+        .map_err(|e| ApiError(axum::http::StatusCode::NOT_FOUND, e))
+}
+
+/// `DELETE /api/projects/<name>/apps/<site>/tokens`: revokes every token `site`'s app was opened
+/// with on the project; how many.
+pub async fn revoke_app(
+    State(server): State<Arc<Server>>,
+    axum::extract::Path((name, site)): axum::extract::Path<(String, String)>,
+) -> Result<Json<usize>, ApiError> {
+    let project = crate::apps::ProjectName::new(&name)
+        .map_err(|e| ApiError(axum::http::StatusCode::BAD_REQUEST, e))?;
+    Ok(Json(server.app_tokens.revoke(&project, &site)))
+}
+
 /// `GET /api/projects/<name>/apps`: the apps attached to a project.
 pub async fn project_apps(
     State(server): State<Arc<Server>>,
@@ -175,7 +222,7 @@ pub async fn post_message(
     Ok(StatusCode::ACCEPTED)
 }
 
-fn read(server: &Server, url: SiteUrl) -> Result<Json<PageResponse>, ApiError> {
+pub(crate) fn read(server: &Server, url: SiteUrl) -> Result<Json<PageResponse>, ApiError> {
     let page = server.web.read_page(&url)?;
     let backlinks = server
         .index
@@ -193,7 +240,7 @@ fn read(server: &Server, url: SiteUrl) -> Result<Json<PageResponse>, ApiError> {
     }))
 }
 
-fn write(
+pub(crate) fn write(
     server: &Server,
     url: SiteUrl,
     body: PutPageRequest,

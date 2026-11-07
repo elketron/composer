@@ -21,6 +21,23 @@ impl RecipeEnv {
             .and_then(|s| s.info().project)
             .and_then(|p| server.see_project(&p).ok())
             .unwrap_or_default();
+        Self::with_project(server, site, session, project)
+    }
+
+    /// For a recipe an app runs: its own site's, on the project it was opened on.
+    pub fn for_app(server: &Server, grant: &crate::apps::AppGrant) -> Self {
+        let project = server
+            .see_project(&grant.folder.display().to_string())
+            .unwrap_or_default();
+        Self::with_project(server, &grant.site, None, project)
+    }
+
+    fn with_project(
+        server: &Server,
+        site: &str,
+        session: Option<&Session>,
+        project: String,
+    ) -> Self {
         let mut vars = vec![
             ("COMPOSER_SITE", site.to_string()),
             (

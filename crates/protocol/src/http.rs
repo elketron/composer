@@ -182,6 +182,17 @@ pub struct AppInfo {
     pub built: bool,
 }
 
+/// `POST /api/projects/<name>/apps/<site>/open`: where to load the app (its token in the URL
+/// once; the page then keeps it in a cookie scoped to the app), and the token itself for a
+/// client that calls the app's API directly.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct AppOpened {
+    pub url: String,
+    pub token: String,
+}
+
 /// A project's apps, or Home's; `errors` are sites whose `app:` block doesn't parse.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
