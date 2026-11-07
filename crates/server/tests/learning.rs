@@ -1,6 +1,10 @@
 //! Learning from edits: at a gate, what you changed in the stage's output (against the kept
 //! copy of what the agent wrote) is your edit; when enough works got edits at the same stage, a
 //! model proposes amending the stage's contract, as an approval.
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests set up repos and fakes outside the sandbox"
+)]
 
 mod support;
 

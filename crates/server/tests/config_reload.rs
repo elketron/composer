@@ -1,6 +1,10 @@
 //! `config.toml` is read again when it changes (and on `config.reload`): a project allowed an
 //! external harness after the server started can use it, a file that doesn't parse keeps the
 //! running config, and settings read only at startup are named as needing a restart.
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests set up repos and fakes outside the sandbox"
+)]
 
 mod support;
 

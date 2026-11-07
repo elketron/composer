@@ -1,4 +1,8 @@
 //! Compaction: memory pass, summary, history replaced; and the memory-aware prompt.
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests set up repos and fakes outside the sandbox"
+)]
 
 mod support;
 

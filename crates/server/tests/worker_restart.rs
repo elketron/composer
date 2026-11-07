@@ -1,6 +1,10 @@
 //! Workers a restart cut off: the last server was killed while they ran, so their sessions
 //! still say `running`. The next one pauses those that can resume and fails the rest; Stop then
 //! fails a paused one for good.
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests set up repos and fakes outside the sandbox"
+)]
 
 mod support;
 

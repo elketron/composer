@@ -1,5 +1,9 @@
 //! Reminders going off: every client hears it once, the page records it, and `action: agent`
 //! hands it to a session.
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests set up repos and fakes outside the sandbox"
+)]
 
 mod support;
 

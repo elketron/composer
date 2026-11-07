@@ -1,6 +1,10 @@
 //! Installing sites from the library and updating them (ticket 0152): install copies a library
 //! site's definition into one workspace and records the commit; update merges per file against
 //! that commit; stock sites take the same path.
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests set up repos and fakes outside the sandbox"
+)]
 
 use std::path::Path;
 

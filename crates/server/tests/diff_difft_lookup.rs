@@ -1,5 +1,9 @@
 //! `project_diff` looks difft up once, and without it does none of the per-file difft work
 //! (no `git show` of the old content). Watched through a `git` wrapper on a temp PATH.
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests set up repos and fakes outside the sandbox"
+)]
 
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;

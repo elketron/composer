@@ -1,5 +1,9 @@
 //! Publishing a workspace site to the library (ticket 0153): only its definition goes, only what
 //! was approved, never over a library copy this workspace hasn't seen; agents can only ask.
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests set up repos and fakes outside the sandbox"
+)]
 
 mod support;
 

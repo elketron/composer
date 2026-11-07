@@ -23,6 +23,7 @@ pub fn check_bwrap(program: &Path) -> Result<(), String> {
     result
 }
 
+#[allow(clippy::disallowed_methods, reason = "probes bwrap itself")]
 fn probe(program: &Path) -> Result<(), String> {
     let output = std::process::Command::new(program)
         .args([

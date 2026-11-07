@@ -25,6 +25,10 @@ fn find_in(path_var: &OsStr) -> Option<PathBuf> {
 /// `difft` (the executable at `difft`) on `file` as of `base` against its current content in
 /// the checkout at `path`. `None` when difft doesn't know the file's language (it would only
 /// diff it as text), has nothing to show, fails or times out.
+#[allow(
+    clippy::disallowed_methods,
+    reason = "composer's own git show on a project"
+)]
 pub async fn semantic_diff(
     difft: &Path,
     path: &Path,
@@ -61,6 +65,10 @@ pub async fn semantic_diff(
     run_difft(difft, &old, &new, DIFFT_TIMEOUT).await
 }
 
+#[allow(
+    clippy::disallowed_methods,
+    reason = "composer's own difft on files git gave it"
+)]
 async fn run_difft(difft: &Path, old: &Path, new: &Path, timeout: Duration) -> Option<String> {
     let run = Command::new(difft)
         .args(["--color", "never", "--display", "inline", "--context", "3"])

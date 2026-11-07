@@ -157,6 +157,10 @@ impl SandboxSpec {
 
     /// `program` to run in this world. Not enabled: as it is. Enabled and `bwrap` can't build a
     /// namespace, or a bind isn't allowed: refused.
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "the sandbox's own bwrap (or the program as it is when the user turned it off)"
+    )]
     pub fn command(&self, program: impl AsRef<OsStr>) -> Result<Command, String> {
         let (program, args) = self.wrap(program)?;
         let mut command = Command::new(program);

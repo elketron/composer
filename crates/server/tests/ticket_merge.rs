@@ -1,5 +1,9 @@
 //! A finished ticket's branch: reviewed, merged by the orchestrator once the user approves (and
 //! not when they don't), and discarded.
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests set up repos and fakes outside the sandbox"
+)]
 
 mod support;
 

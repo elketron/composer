@@ -1,4 +1,8 @@
 //! What the app lists: agents, projects, and sites with their descriptions.
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests set up repos and fakes outside the sandbox"
+)]
 
 mod support;
 

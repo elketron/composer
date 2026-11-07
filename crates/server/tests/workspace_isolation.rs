@@ -1,5 +1,9 @@
 //! Nothing an agent (or a recipe, worker or MCP server it starts) does in one workspace reaches
 //! another (ticket 0148). Each test here failed before its fix.
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests set up repos and fakes outside the sandbox"
+)]
 
 mod support;
 
@@ -327,6 +331,7 @@ async fn mcp_servers_start_in_their_own_workspace() {
                     command: "python3".into(),
                     args: vec![script.display().to_string()],
                     env: BTreeMap::from([("NAMED".into(), "${COMPOSER_WORKSPACE}".into())]),
+                    binds_ro: vec![script.display().to_string()],
                     enabled: true,
                     ..Default::default()
                 },

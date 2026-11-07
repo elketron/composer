@@ -154,6 +154,10 @@ fn new_file_diff(file: &str, text: &str) -> String {
     out
 }
 
+#[allow(
+    clippy::disallowed_methods,
+    reason = "composer's own git on a project (see the inventory: repo config is a known gap)"
+)]
 async fn git(path: &Path, args: &[&str]) -> Result<String, String> {
     let output = Command::new("git")
         .arg("-C")

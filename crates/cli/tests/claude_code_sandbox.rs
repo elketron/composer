@@ -4,6 +4,10 @@
 //! Code credentials. It commits in its worktree and finishes through a real `composer mcp`, which
 //! gets the workspace token from its env (the sandbox has no `state/`). Without a stored token,
 //! nothing starts.
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests set up repos and fakes outside the sandbox"
+)]
 
 mod support;
 

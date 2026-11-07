@@ -1,5 +1,9 @@
 //! Projects: the list (search, folders outside the projects directory, session counts) and one
 //! project's overview (git state, works, ticket branches, memory, switches).
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests set up repos and fakes outside the sandbox"
+)]
 
 mod support;
 

@@ -1,4 +1,8 @@
 //! The changes view's data: git diff of the active project.
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests set up repos and fakes outside the sandbox"
+)]
 
 mod support;
 

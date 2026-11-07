@@ -1,6 +1,10 @@
 //! A worker process that reaches its token limit doesn't fail: it waits, its orchestrator is
 //! told what it was doing and continues it with a message (compacting its session first), and it
 //! finishes the ticket.
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests set up repos and fakes outside the sandbox"
+)]
 
 mod support;
 

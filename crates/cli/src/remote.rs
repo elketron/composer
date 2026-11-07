@@ -131,6 +131,10 @@ pub fn logout(home: &WorkspaceHome) -> anyhow::Result<()> {
 }
 
 /// This machine's MagicDNS name, e.g. `my-pc.tail1234.ts.net`.
+#[allow(
+    clippy::disallowed_methods,
+    reason = "tailscale, run by the user's own remote command"
+)]
 fn tailscale_name() -> Option<String> {
     let output = Command::new("tailscale")
         .args(["status", "--json"])
@@ -145,6 +149,10 @@ fn tailscale_name() -> Option<String> {
 }
 
 /// Whether `tailscale serve` already proxies to our bind address.
+#[allow(
+    clippy::disallowed_methods,
+    reason = "tailscale, run by the user's own remote command"
+)]
 fn tailscale_serves(bind: &str) -> bool {
     Command::new("tailscale")
         .args(["serve", "status", "--json"])

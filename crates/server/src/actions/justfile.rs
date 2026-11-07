@@ -122,6 +122,10 @@ impl Justfile {
 
 /// `just` pointed at a site's justfile, run from the site folder, outside the sandbox: only to
 /// read the justfile (`--dump`, `--show`), which runs none of it.
+#[allow(
+    clippy::disallowed_methods,
+    reason = "reads the justfile (`--dump`, `--show`), runs none of it"
+)]
 pub fn just(site_dir: &Path) -> Command {
     let mut command = Command::new("just");
     just_args(&mut command, site_dir);

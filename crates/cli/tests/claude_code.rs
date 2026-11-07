@@ -2,6 +2,10 @@
 //! finishes through a real `composer mcp`): project switch, login check, cleared environment,
 //! the run's flags, folder and ticket fields, a run without `finish`, resuming, a usage limit.
 //! With the sandbox off (its own login); `claude_code_sandbox.rs` has the sandboxed run.
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests set up repos and fakes outside the sandbox"
+)]
 
 mod support;
 

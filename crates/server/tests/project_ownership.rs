@@ -1,5 +1,9 @@
 //! A project belongs to one workspace (ticket 0147): whichever workspace uses it first owns it;
 //! the other can't use or see it under any spelling, nested folders included.
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests set up repos and fakes outside the sandbox"
+)]
 
 mod support;
 

@@ -92,6 +92,10 @@ fn refuse_if_serving(config: &str) -> Result<()> {
 
 /// `<home>.backup-<unix time>.tar.gz` next to the home, without ticket worktrees (they can be
 /// large; their commits live in the repositories, and the folders are moved, not deleted).
+#[allow(
+    clippy::disallowed_methods,
+    reason = "tar of the home before a migration, composer's own paths"
+)]
 fn backup(home: &Home) -> Result<PathBuf> {
     let root = home.root();
     let (Some(parent), Some(name)) = (root.parent(), root.file_name()) else {
@@ -201,6 +205,10 @@ fn table_name(header: &str) -> &str {
 }
 
 /// `git worktree repair` in each moved worktree, so its repository points at the new place.
+#[allow(
+    clippy::disallowed_methods,
+    reason = "git worktree repair during a migration, composer's own paths"
+)]
 fn repair_worktrees(dir: &Path) -> Vec<(PathBuf, bool)> {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return Vec::new();

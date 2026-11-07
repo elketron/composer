@@ -2,6 +2,10 @@
 //! through the server (`write` tool / app putFile) or straight to the filesystem by
 //! another process — including into a folder created moments before (ticket 0071: the
 //! watcher's window on fresh folders made a written page unsearchable until an edit).
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests set up repos and fakes outside the sandbox"
+)]
 
 mod support;
 

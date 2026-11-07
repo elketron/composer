@@ -148,6 +148,10 @@ inline_max_kb = 100
 # args = ["stdio"]
 # env = { GITHUB_PERSONAL_ACCESS_TOKEN = "${GITHUB_TOKEN}" }
 # allow = ["get_*", "list_*", "search_*"]
+# A stdio server runs in the workspace's sandbox (its sites, the toolchains, an empty `$HOME`);
+# give it what else it needs, checked like `[sandbox]` binds:
+# binds_ro = ["~/.config/github-mcp"]
+# binds_rw = []
 #
 # [mcp.docs]
 # url = "https://example.com/mcp"

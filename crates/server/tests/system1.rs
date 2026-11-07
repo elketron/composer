@@ -1,5 +1,9 @@
 //! `[system1]`: a fast model decides workers' approvals in one call; one that answers nonsense
 //! leaves it to the orchestrator or, as here without one that decides, the user.
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests set up repos and fakes outside the sandbox"
+)]
 
 mod support;
 

@@ -1,4 +1,8 @@
 //! The whole server against a scripted model, driven over the real WebSocket and HTTP API.
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests set up repos and fakes outside the sandbox"
+)]
 
 mod support;
 

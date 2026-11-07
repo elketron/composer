@@ -1,4 +1,8 @@
 //! Worker agents: which agents `spawn_worker` may start, and how orchestrators learn of them.
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests set up repos and fakes outside the sandbox"
+)]
 
 mod support;
 

@@ -1,5 +1,9 @@
 //! Cancelling a running worker stops its process; the ticket fails as cancelled and the
 //! orchestrator is told. A running worker refuses messages (its turns run in its harness).
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests set up repos and fakes outside the sandbox"
+)]
 
 mod support;
 

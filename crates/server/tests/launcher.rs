@@ -1,5 +1,9 @@
 //! The launcher over HTTP: config `[[launcher]]` entries listed to apps, launched by name,
 //! and scope refusals. The launched processes are stubs that touch a marker and exit.
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests set up repos and fakes outside the sandbox"
+)]
 
 mod support;
 

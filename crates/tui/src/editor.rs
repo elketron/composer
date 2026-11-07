@@ -17,6 +17,10 @@ pub async fn edit_page(api: &ApiClient, url: &str) -> Action {
     }
 }
 
+#[allow(
+    clippy::disallowed_methods,
+    reason = "the user's editor, opened by the user in the terminal"
+)]
 async fn round_trip(api: &ApiClient, url: &str) -> Result<Option<String>, String> {
     let page = api.page(url).await?;
     let name = page.url.rsplit('/').next().unwrap_or("page.md").to_string();
@@ -41,6 +45,10 @@ async fn round_trip(api: &ApiClient, url: &str) -> Result<Option<String>, String
 }
 
 /// Opens `text` read-only in `$EDITOR` (nvim gets `-R`). Nothing is saved.
+#[allow(
+    clippy::disallowed_methods,
+    reason = "the user's editor, opened by the user in the terminal"
+)]
 pub fn view_text(name: &str, text: &str) -> Action {
     let result = (|| -> Result<(), String> {
         let dir = tempfile::tempdir().map_err(|e| e.to_string())?;
@@ -64,6 +72,10 @@ pub fn view_text(name: &str, text: &str) -> Action {
 }
 
 /// Opens `url` in the browser (`$BROWSER`, else `xdg-open`), without waiting for it.
+#[allow(
+    clippy::disallowed_methods,
+    reason = "the user's opener, opened by the user in the terminal"
+)]
 pub fn open_browser(url: &str) -> Action {
     let opener = std::env::var("BROWSER").unwrap_or_else(|_| "xdg-open".into());
     let spawned = Command::new(&opener)
@@ -79,6 +91,10 @@ pub fn open_browser(url: &str) -> Action {
 }
 
 /// Opens a project file in `$EDITOR` at `line` (`+line` works for vi, vim, nvim, helix, ...).
+#[allow(
+    clippy::disallowed_methods,
+    reason = "the user's editor, opened by the user in the terminal"
+)]
 pub fn open_file(path: &str, line: u32) -> Action {
     if !std::path::Path::new(path).is_file() {
         return Action::Flash(format!("{path} is not on this machine"), FlashLevel::Warn);

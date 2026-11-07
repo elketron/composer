@@ -127,6 +127,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "a test of the process group, not a spawn of composer"
+    )]
     async fn what_a_run_leaves_behind_goes_with_it() {
         let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join("pid");

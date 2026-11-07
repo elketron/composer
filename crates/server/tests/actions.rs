@@ -1,4 +1,8 @@
 //! Site actions: listing, running, and the approve-once-per-version rule. Needs `just`.
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests set up repos and fakes outside the sandbox"
+)]
 
 mod support;
 

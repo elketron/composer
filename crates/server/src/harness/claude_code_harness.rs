@@ -254,6 +254,10 @@ impl Harness for ClaudeCodeHarness {
 }
 
 /// `claude auth status`: logged in, with the same cleared environment the run gets.
+#[allow(
+    clippy::disallowed_methods,
+    reason = "only with the sandbox off (a sandboxed run logs in by token)"
+)]
 async fn check_login(command: &str) -> Result<(), String> {
     let output = tokio::process::Command::new(command)
         .args(["auth", "status", "--json"])

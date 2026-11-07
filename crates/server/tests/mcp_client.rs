@@ -3,6 +3,10 @@
 //! server's changed tools picked up; over stdio (a fake server in Python) and streamable HTTP.
 //! A stdio server runs in its workspace's sandbox: it sees the workspace's sites and what its
 //! entry binds, not composer's state or the rest of the machine.
+#![allow(
+    clippy::disallowed_methods,
+    reason = "tests set up repos and fakes outside the sandbox"
+)]
 
 mod support;
 
