@@ -170,6 +170,10 @@ fn spawn(
     rows: u16,
 ) -> Result<Arc<Terminal>, String> {
     let mut spec = server.sandbox().tty().in_dir(cwd);
+    // The user's shell config, read-only ([terminals] lend): composer's own choice of mounts.
+    for lent in &server.config().terminals.lend {
+        spec = spec.with_mount(crate::sandbox::Mount::Ro(crate::tools::expand_home(lent)));
+    }
     if let Some(project) = session
         .info()
         .project

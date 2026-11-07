@@ -111,6 +111,27 @@ pub struct TerminalsConfig {
     /// Output kept per terminal for a client that joins late, and for the agent to read.
     #[serde(default = "default_scrollback_kb")]
     pub scrollback_kb: usize,
+    /// The user's shell config lent to terminals read-only (their `$HOME` is otherwise empty):
+    /// missing ones are skipped. What is here the agent could read too (with approval to type):
+    /// keep secrets out of these files.
+    #[serde(default = "default_lend")]
+    pub lend: Vec<String>,
+}
+
+fn default_lend() -> Vec<String> {
+    [
+        "~/.zshrc",
+        "~/.zshenv",
+        "~/.zprofile",
+        "~/.p10k.zsh",
+        "~/.oh-my-zsh",
+        "~/.bashrc",
+        "~/.profile",
+        "~/.config/fish",
+        "~/.config/starship.toml",
+    ]
+    .map(String::from)
+    .to_vec()
 }
 
 fn default_idle_hours() -> u64 {

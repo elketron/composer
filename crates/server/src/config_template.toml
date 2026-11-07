@@ -110,6 +110,10 @@ read_dirs = ["~/.cargo/registry/src", "~/.cargo/git/checkouts", "~/.rustup/toolc
 idle_hours = 24
 # Output kept per terminal (for a client joining late, and for the agent to read), in KB.
 scrollback_kb = 256
+# Your shell config, lent read-only (a terminal's $HOME is otherwise empty; add what your shell's
+# setup reads, plugins and themes included); keep secrets out of these files: the agent could
+# read them too.
+lend = ["~/.zshrc", "~/.zshenv", "~/.zprofile", "~/.p10k.zsh", "~/.oh-my-zsh", "~/.bashrc", "~/.profile", "~/.config/fish", "~/.config/starship.toml"]
 
 [apps]
 # Apps that are clients of this workspace: opened with its full access (sessions, approvals),
