@@ -65,6 +65,18 @@ pub async fn home_apps(
     Json(list.expect("listing apps doesn't panic"))
 }
 
+/// `GET /api/projects/<name>/home`: the project home's tiles.
+pub async fn project_home(
+    State(server): State<Arc<Server>>,
+    axum::extract::Path(name): axum::extract::Path<String>,
+) -> Result<Json<composer_protocol::http::AppList>, ApiError> {
+    tokio::task::spawn_blocking(move || crate::apps::project_home(&server, &name))
+        .await
+        .expect("listing tiles doesn't panic")
+        .map(Json)
+        .map_err(|e| ApiError(axum::http::StatusCode::NOT_FOUND, e))
+}
+
 /// `POST /api/projects/<name>/apps/<site>/open`: a token for `site`'s app on the project (it must
 /// be attached), and the URL that loads it.
 pub async fn open_app(

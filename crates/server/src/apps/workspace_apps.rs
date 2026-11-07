@@ -139,6 +139,21 @@ pub fn project_apps(server: &Server, name: &str) -> Result<AppList, String> {
     Ok(listing(server, Some(project.to_string()), attached, errors))
 }
 
+/// The project home (ticket 0174): the project's `tile` apps, each with its tile for this project:
+/// the `tile.md` in its data for the project (the app, or its recipe, keeps it current).
+pub fn project_home(server: &Server, name: &str) -> Result<AppList, String> {
+    let (project, _, attached, errors) = attached_apps(server, name)?;
+    let tiles: Vec<AttachedApp> = attached.into_iter().filter(|a| a.manifest.tile).collect();
+    let mut list = listing(server, Some(project.to_string()), tiles, errors);
+    let data = server.home.state().join("projects").join(project.as_str());
+    for app in list.apps.iter_mut() {
+        app.tile_text = std::fs::read_to_string(data.join(&app.site).join("tile.md"))
+            .ok()
+            .map(|t| t.trim().to_string());
+    }
+    Ok(list)
+}
+
 /// The workspace's Home: its global and both-scope apps, each `tile` app with its tile.
 pub fn home_apps(server: &Server) -> AppList {
     let (apps, errors) = workspace_apps(server);

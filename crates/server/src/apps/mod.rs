@@ -55,6 +55,6 @@ pub use project_facts::ProjectFacts;
 pub use project_name::ProjectName;
 pub use project_watch::ProjectWatch;
 pub use workspace_apps::{
-    attached_apps, find_project, find_project_by, home_apps, project_apps, project_info,
-    workspace_apps, workspace_projects,
+    attached_apps, find_project, find_project_by, home_apps, project_apps, project_home,
+    project_info, workspace_apps, workspace_projects,
 };

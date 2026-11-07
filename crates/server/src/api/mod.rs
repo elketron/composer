@@ -42,6 +42,7 @@ pub fn router(server: Arc<Server>) -> Router {
             axum::routing::post(http_routes::open_home_app),
         )
         .route("/api/projects/{name}/apps", get(http_routes::project_apps))
+        .route("/api/projects/{name}/home", get(http_routes::project_home))
         .route(
             "/api/projects/{name}/apps/{site}/open",
             axum::routing::post(http_routes::open_app),
