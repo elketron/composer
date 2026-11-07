@@ -1,6 +1,13 @@
 ---
 title: Orchestration
 type: index
+# The ticket board: everything on Home, a project's own tickets inside one (git projects:
+# tickets work in worktrees).
+app:
+  scope: both
+  when: [git]
+  rail: { icon: board, label: Tickets }
+  tile: true
 ---
 # Orchestration
 
