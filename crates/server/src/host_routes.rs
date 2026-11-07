@@ -15,6 +15,7 @@ use serde_json::json;
 use tower::ServiceExt;
 
 use crate::host_state::HostState;
+use crate::template_name::TemplateName;
 use crate::workspace_name::WorkspaceName;
 
 /// `GET /api/workspaces`: the workspaces the presented token opens, as `[{name, base}]`. The
@@ -65,7 +66,16 @@ async fn create(state: &HostState, request: NewWorkspace) -> Response {
         Ok(name) => name,
         Err(e) => return (StatusCode::BAD_REQUEST, e.to_string()).into_response(),
     };
-    match state.create(&name, request.template.as_deref()).await {
+    let template = match request
+        .template
+        .as_deref()
+        .map(TemplateName::new)
+        .transpose()
+    {
+        Ok(template) => template,
+        Err(e) => return (StatusCode::BAD_REQUEST, e).into_response(),
+    };
+    match state.create(&name, template.as_ref()).await {
         Ok(server) => (
             StatusCode::CREATED,
             Json(json!({ "name": name.as_str(), "base": server.home.route_base() })),

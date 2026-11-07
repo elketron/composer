@@ -1,7 +1,9 @@
 //! `composer workspace new|list|templates`.
 
 use composer_server::library::WorkspaceLibrary;
-use composer_server::{Config, Home, WorkspaceName, WorkspaceTemplate, create_workspace};
+use composer_server::{
+    Config, Home, TemplateName, WorkspaceName, WorkspaceTemplate, create_workspace,
+};
 
 /// Creates a workspace. With a server running, the server makes it and serves it right away;
 /// otherwise it is made on disk and served from the next start.
@@ -23,7 +25,9 @@ pub async fn new(home: &Home, name: &str, template: Option<String>) -> anyhow::R
         }
         println!("workspace {name} created and served at http://{bind}/w/{name}/");
     } else {
-        let workspace = create_workspace(home, &name, template.as_deref()).await?;
+        let template = template.as_deref().map(TemplateName::new).transpose();
+        let template = template.map_err(anyhow::Error::msg)?;
+        let workspace = create_workspace(home, &name, template.as_ref()).await?;
         println!(
             "workspace {name} created at {} (served from the next `composer serve`)",
             workspace.root().display()

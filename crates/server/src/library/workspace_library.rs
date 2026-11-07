@@ -5,8 +5,8 @@ use crate::actions::Approvals;
 use crate::home::Home;
 use crate::init::{approve_recipes_in, stock_file, write_creating_dirs};
 use crate::library::{
-    Installation, Installed, InstalledSites, Library, LibraryCommit, LibrarySiteState, PublishPlan,
-    SiteName,
+    Installation, Installed, InstalledSites, Library, LibraryCommit, LibrarySiteState,
+    PublishChange, PublishPlan, SiteName,
 };
 use crate::update::{Merge, UpdateItem, UpdateOutcome, merge_three};
 use crate::workspace_home::WorkspaceHome;
@@ -160,7 +160,7 @@ impl WorkspaceLibrary {
         let dest = self.library.root().join(plan.name.as_str());
         // Only the definition's files: what it no longer has goes, anything else stays.
         for (rel, kind) in &plan.changes {
-            if *kind == "removed" {
+            if *kind == PublishChange::Removed {
                 remove_with_empty_parents(&dest, rel)?;
             }
         }

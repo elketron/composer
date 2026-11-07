@@ -8,7 +8,9 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use composer_server::library::{Library, SiteName, WorkspaceLibrary};
-use composer_server::{Home, Host, Server, Starter, WorkspaceName, create_workspace, init_home};
+use composer_server::{
+    Home, Host, Server, Starter, TemplateName, WorkspaceName, create_workspace, init_home,
+};
 use serde_json::{Value, json};
 use support::MockProvider;
 
@@ -49,9 +51,13 @@ fn name(n: &str) -> WorkspaceName {
 #[tokio::test]
 async fn a_workspace_from_a_template_has_its_sites_and_config() {
     let (_dir, home) = home().await;
-    let workspace = create_workspace(&home, &name("printing"), Some("3d"))
-        .await
-        .unwrap();
+    let workspace = create_workspace(
+        &home,
+        &name("printing"),
+        Some(&TemplateName::new("3d").unwrap()),
+    )
+    .await
+    .unwrap();
     assert!(workspace.sites().join("cad/stages/01_plan.md").is_file());
     // The stock sites too, agents included, all installed from the library.
     assert!(workspace.sites().join("agents/default.md").is_file());
@@ -79,24 +85,36 @@ async fn a_workspace_from_a_template_has_its_sites_and_config() {
 #[tokio::test]
 async fn a_wrong_template_or_name_writes_nothing() {
     let (_dir, home) = home().await;
-    let error = create_workspace(&home, &name("x"), Some("broken"))
-        .await
-        .unwrap_err()
-        .to_string();
+    let error = create_workspace(
+        &home,
+        &name("x"),
+        Some(&TemplateName::new("broken").unwrap()),
+    )
+    .await
+    .unwrap_err()
+    .to_string();
     assert!(error.contains("nope") && !error.contains("cad,"), "{error}");
     assert!(!home.workspace(&name("x")).root().exists());
 
-    let error = create_workspace(&home, &name("x"), Some("missing"))
-        .await
-        .unwrap_err()
-        .to_string();
+    let error = create_workspace(
+        &home,
+        &name("x"),
+        Some(&TemplateName::new("missing").unwrap()),
+    )
+    .await
+    .unwrap_err()
+    .to_string();
     assert!(error.contains("no workspace template `missing`"), "{error}");
 
     // A config the template breaks: the workspace made so far is removed again.
-    let error = create_workspace(&home, &name("x"), Some("badconfig"))
-        .await
-        .unwrap_err()
-        .to_string();
+    let error = create_workspace(
+        &home,
+        &name("x"),
+        Some(&TemplateName::new("badconfig").unwrap()),
+    )
+    .await
+    .unwrap_err()
+    .to_string();
     assert!(error.contains("badconfig"), "{error}");
     assert!(!home.workspace(&name("x")).root().exists());
 

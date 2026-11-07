@@ -4,6 +4,7 @@ use crate::workspace_template_file::TemplateFile;
 
 use crate::home::Home;
 use crate::library::{Library, SiteName, WorkspaceLibrary};
+use crate::template_name::TemplateName;
 use crate::workspace_home::WorkspaceHome;
 
 /// A recipe for a new workspace (`global/workspace-templates/<name>.toml`): the library sites it
@@ -18,7 +19,7 @@ use crate::workspace_home::WorkspaceHome;
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct WorkspaceTemplate {
-    name: String,
+    name: TemplateName,
     description: String,
     sites: Vec<SiteName>,
     config: toml::Table,
@@ -31,14 +32,7 @@ impl WorkspaceTemplate {
     }
 
     /// Template `name` of `home`.
-    pub fn load(home: &Home, name: &str) -> Result<Self, String> {
-        let plain = !name.is_empty()
-            && name
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_'));
-        if !plain {
-            return Err(format!("`{name}` is not a template name"));
-        }
+    pub fn load(home: &Home, name: &TemplateName) -> Result<Self, String> {
         let path = Self::folder(home).join(format!("{name}.toml"));
         let text = std::fs::read_to_string(&path).map_err(|_| {
             format!(
@@ -50,10 +44,10 @@ impl WorkspaceTemplate {
         Self::parse(name, &text).map_err(|e| format!("{}: {e}", path.display()))
     }
 
-    pub fn parse(name: &str, text: &str) -> Result<Self, String> {
+    pub fn parse(name: &TemplateName, text: &str) -> Result<Self, String> {
         let file: TemplateFile = toml::from_str(text).map_err(|e| e.to_string())?;
         Ok(Self {
-            name: name.to_string(),
+            name: name.clone(),
             description: file.description,
             sites: file.sites,
             config: file.config,
@@ -75,14 +69,16 @@ impl WorkspaceTemplate {
         names.sort();
         names
             .into_iter()
-            .map(|name| match Self::load(home, &name) {
-                Ok(template) => (name, template.description),
-                Err(e) => (name, format!("(unreadable: {e})")),
-            })
+            .map(
+                |name| match TemplateName::new(&name).and_then(|n| Self::load(home, &n)) {
+                    Ok(template) => (name, template.description),
+                    Err(e) => (name, format!("(unreadable: {e})")),
+                },
+            )
             .collect()
     }
 
-    pub fn name(&self) -> &str {
+    pub fn name(&self) -> &TemplateName {
         &self.name
     }
 
@@ -123,7 +119,7 @@ impl WorkspaceTemplate {
             library.install(site, None, &approvals).await?;
         }
         if !self.config.is_empty() {
-            append_config(&workspace.config_file(), &self.name, &self.config)?;
+            append_config(&workspace.config_file(), self.name.as_str(), &self.config)?;
             workspace
                 .load_config()
                 .map_err(|e| format!("workspace template `{}`'s [config]: {e}", self.name))?;
@@ -147,13 +143,14 @@ mod tests {
 
     #[test]
     fn parses_and_refuses_unknown_keys_and_bad_sites() {
+        let name = |n: &str| TemplateName::new(n).unwrap();
         let template = WorkspaceTemplate::parse(
-            "3d",
+            &name("3d"),
             "description = \"3D\"\nsites = [\"cad\"]\n[config.agent]\nslots = 2\n",
         )
         .unwrap();
         assert_eq!(template.sites(), [SiteName::new("cad").unwrap()]);
-        assert!(WorkspaceTemplate::parse("x", "site = [\"cad\"]\n").is_err());
-        assert!(WorkspaceTemplate::parse("x", "sites = [\"../cad\"]\n").is_err());
+        assert!(WorkspaceTemplate::parse(&name("x"), "site = [\"cad\"]\n").is_err());
+        assert!(WorkspaceTemplate::parse(&name("x"), "sites = [\"../cad\"]\n").is_err());
     }
 }

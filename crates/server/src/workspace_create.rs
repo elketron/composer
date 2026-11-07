@@ -2,6 +2,7 @@ use crate::error::{Result, ServerError};
 use crate::home::Home;
 use crate::init::init_workspace;
 use crate::library::Library;
+use crate::template_name::TemplateName;
 use crate::workspace_home::WorkspaceHome;
 use crate::workspace_name::WorkspaceName;
 use crate::workspace_template::WorkspaceTemplate;
@@ -12,7 +13,7 @@ use crate::workspace_template::WorkspaceTemplate;
 pub async fn create_workspace(
     home: &Home,
     name: &WorkspaceName,
-    template: Option<&str>,
+    template: Option<&TemplateName>,
 ) -> Result<WorkspaceHome> {
     let workspace = home.workspace(name);
     if workspace.root().exists() {

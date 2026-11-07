@@ -8,6 +8,7 @@ use crate::error::{Result, ServerError};
 use crate::home::Home;
 use crate::project::{ProjectOwnership, ProjectPath};
 use crate::server::Server;
+use crate::template_name::TemplateName;
 use crate::workspace_create::create_workspace;
 use crate::workspace_home::WorkspaceHome;
 use crate::workspace_name::WorkspaceName;
@@ -121,7 +122,7 @@ impl HostState {
     pub async fn create(
         &self,
         name: &WorkspaceName,
-        template: Option<&str>,
+        template: Option<&TemplateName>,
     ) -> Result<Arc<Server>> {
         if self.workspace(name).is_some() {
             return Err(ServerError::Invalid(format!(

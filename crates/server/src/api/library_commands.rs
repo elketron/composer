@@ -113,7 +113,7 @@ pub fn plan_info(plan: &PublishPlan) -> LibraryPublishPlan {
             .iter()
             .map(|(path, kind)| LibraryChange {
                 path: path.display().to_string(),
-                outcome: (*kind).into(),
+                outcome: kind.to_string(),
                 review: None,
             })
             .collect(),

@@ -10,7 +10,8 @@ use std::path::{Path, PathBuf};
 
 use composer_server::library::{Library, SiteName, WorkspaceLibrary};
 use composer_server::{
-    Home, WorkspaceHome, WorkspaceName, create_workspace, init_home, init_workspace, update_home,
+    Home, TemplateName, WorkspaceHome, WorkspaceName, create_workspace, init_home, init_workspace,
+    update_home,
 };
 
 struct Fixture {
@@ -102,9 +103,13 @@ async fn install_update_and_templates_never_write_outside_their_workspace() {
         .await
         .unwrap();
     b.update(false, &b.approvals().unwrap()).await.unwrap();
-    let c = create_workspace(&f.home, &WorkspaceName::new("c").unwrap(), Some("3d"))
-        .await
-        .unwrap();
+    let c = create_workspace(
+        &f.home,
+        &WorkspaceName::new("c").unwrap(),
+        Some(&TemplateName::new("3d").unwrap()),
+    )
+    .await
+    .unwrap();
     assert!(c.sites().join("cad/tools/slice.py").is_file());
 
     assert_eq!(snapshot(f.a.root()), a_before, "a untouched");
