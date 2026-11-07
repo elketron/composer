@@ -17,6 +17,9 @@ use sandbox_world::{failed, world};
 
 #[tokio::test]
 async fn every_kind_of_spawn_stays_in_its_workspace() {
+    // A terminal's shell (0176): a plain one, so no shell setup wizard eats the command.
+    // SAFETY: before the server starts; the only test in this binary.
+    unsafe { std::env::set_var("SHELL", "/bin/sh") };
     let w = world().await;
 
     let (code, output) = w.recipe().await.unwrap();
@@ -25,8 +28,9 @@ async fn every_kind_of_spawn_stays_in_its_workspace() {
     assert_eq!(state, "ready", "{error:?}");
     let ticket = w.claude().await.unwrap();
     assert!(ticket.contains("status: done"), "{ticket}\n{}", w.logs());
+    w.terminal().await.unwrap();
 
-    for kind in ["recipe", "mcp", "claude"] {
+    for kind in ["recipe", "mcp", "claude", "terminal"] {
         let report = w
             .report(kind)
             .unwrap_or_else(|| panic!("{kind} didn't report"));

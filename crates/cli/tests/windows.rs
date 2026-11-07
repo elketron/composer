@@ -56,6 +56,13 @@ async fn a_window_gets_its_tui_and_follows_its_session() {
     ))
     .await
     .unwrap();
+    // Another client of the workspace: it must not see the window's TUI.
+    let (mut bystander, _) = tokio_tungstenite::connect_async(format!(
+        "ws://{addr}/w/default/ws?token={}",
+        server.token
+    ))
+    .await
+    .unwrap();
     let hello = ClientRequest {
         id: 1,
         command: ClientCommand::WindowHello {
@@ -101,12 +108,30 @@ async fn a_window_gets_its_tui_and_follows_its_session() {
         }
     }
     assert!(drew > 0, "the TUI drew in its terminal");
+    while let Ok(Some(Ok(Message::Text(text)))) =
+        tokio::time::timeout(Duration::from_millis(300), bystander.next()).await
+    {
+        let event = serde_json::from_str::<ServerMessage>(&text).unwrap();
+        assert!(
+            !matches!(
+                event,
+                ServerMessage::TerminalOutput { .. } | ServerMessage::WindowChanged { .. }
+            ),
+            "another client saw the window's TUI: {event:?}"
+        );
+    }
     let session = followed.unwrap();
     assert!(server.sessions.get(&session).is_ok(), "a real session");
 
-    // The window goes: its TUI ends.
+    // Idle reaping leaves a window's TUI alone (it lives as long as its window).
     let terminal = terminal.unwrap();
-    assert!(server.terminals.get(&terminal).is_some());
+    server.terminals.reap(&server, Duration::ZERO);
+    assert!(
+        server.terminals.get(&terminal).is_some(),
+        "reaped a window's TUI"
+    );
+
+    // The window goes: its TUI ends.
     drop(window);
     for _ in 0..50 {
         if server.terminals.get(&terminal).is_none() {

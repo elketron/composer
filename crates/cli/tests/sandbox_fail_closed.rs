@@ -37,7 +37,10 @@ async fn a_broken_bwrap_refuses_every_spawn() {
     assert!(error.unwrap_or_default().contains("namespace"));
     let refused = w.claude().await.unwrap_err();
     assert!(refused.contains("namespace"), "{refused}");
-    for kind in ["recipe", "mcp", "claude"] {
+    // A terminal too (0176).
+    let refused = w.terminal().await.unwrap_err();
+    assert!(refused.contains("namespace"), "{refused}");
+    for kind in ["recipe", "mcp", "claude", "terminal"] {
         assert!(w.report(kind).is_none(), "{kind} ran");
     }
 }
