@@ -96,8 +96,11 @@ async fn new_app_scaffolds_the_ui_and_a_build_action() {
 
 #[tokio::test]
 async fn apps_are_served_with_cookie_auth() {
-    let (dir, server, _p, addr) = start(vec![]).await;
-    // A client app (the chat app's kind): served on the workspace's own route (ticket 0168).
+    // A client app (the chat app's kind, listed in [apps] clients): served on the workspace's own
+    // route (tickets 0168, 0170).
+    let mut config = composer_server::Config::defaults();
+    config.apps.clients = vec!["plans".into()];
+    let (dir, server, _p, addr) = start_with(config, vec![]).await;
     std::fs::write(
         dir.path().join("sites/plans/index.md"),
         "---\ntitle: Plans\napp:\n  client: true\n---\n# Plans\n",

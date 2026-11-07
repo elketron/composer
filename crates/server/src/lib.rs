@@ -47,7 +47,7 @@ mod workspace_template_file;
 
 pub use config::Config;
 pub use config_sections::{
-    AgentConfig, AttachmentsConfig, ClaudeCodeConfig, LauncherEntry, McpServerConfig,
+    AgentConfig, AppsConfig, AttachmentsConfig, ClaudeCodeConfig, LauncherEntry, McpServerConfig,
     PipelinesConfig, ProjectSettings, ProjectsConfig, ProviderConfig, RemindersConfig,
     SandboxConfig, ServerConfig,
 };

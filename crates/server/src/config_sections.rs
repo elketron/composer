@@ -101,6 +101,19 @@ pub struct AttachmentsConfig {
     pub inline_max_kb: usize,
 }
 
+/// `[apps]`: which apps are clients of the workspace (ticket 0170): opened with its full access
+/// (sessions, approvals) instead of a token of their own. The user's choice, in config, which no
+/// agent can write; a site's own `client: true` only asks.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AppsConfig {
+    #[serde(default = "default_clients")]
+    pub clients: Vec<String>,
+}
+
+fn default_clients() -> Vec<String> {
+    vec!["chat".into()]
+}
+
 /// `[sandbox]`: the world each spawn an agent or a site controls runs in (`bwrap`). The home's
 /// global config sets the machine's paths; a workspace's config may add `binds_ro`, `binds_rw` and
 /// `devices` of its own. Paths are `~/` or absolute; missing ones are skipped.

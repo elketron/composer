@@ -3,19 +3,19 @@ use composer_protocol::http::AppOpened;
 
 use crate::api::encode_segment;
 use crate::apps::{
-    AppGrant, AppManifest, AttachReason, GrantedProject, attached_apps, find_project_by,
+    AppGrant, AppManifest, AttachReason, GrantedProject, attached_apps, find_project_by, is_client,
 };
 use crate::server::Server;
 
 /// Opens `site`'s app on `project` (`None`: on Home): the URL that loads it, with what it needs
 /// once in the URL. On a project and on Home an app gets a token of its own (`app_token`); a
-/// client app on Home (`client: true`, the chat app) gets a one-time code that becomes the
-/// workspace's cookie (`once`): never the workspace token itself.
+/// client app on Home (listed in `[apps] clients`: the chat app) gets a one-time code that becomes
+/// the workspace's cookie (`once`): never the workspace token itself.
 pub fn open_app(server: &Server, site: &str, project: Option<&str>) -> Result<AppOpened, String> {
     let base = server.route_base();
     let Some(name) = project else {
-        let manifest = home_manifest(server, site)?;
-        if manifest.client {
+        home_manifest(server, site)?;
+        if is_client(server, site) {
             let code = server.once_codes.mint();
             return Ok(AppOpened {
                 url: format!("{base}/{}/?once={code}", encode_segment(site)),

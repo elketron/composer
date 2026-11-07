@@ -280,6 +280,13 @@ async fn fixture() -> Fixture {
         let workspace = home.workspace(&name);
         let mut config = workspace.load_config().unwrap();
         config.projects.dir = projects.display().to_string();
+        // Its site's app is a client (the workspace's own route serves it).
+        let own = if name.as_str() == "default" {
+            "only-default"
+        } else {
+            "only-b"
+        };
+        config.apps.clients = vec![own.into()];
         // A launcher entry on its own project and one on the other workspace's.
         let other = if name.as_str() == "default" {
             "b"
