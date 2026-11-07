@@ -1,10 +1,11 @@
 <!--
-  Ticket board for site://orchestration: one column per status, live.
+  Ticket board for site://orchestration: one column per status, live. On Home it shows every
+  ticket; opened on a project, that project's own (its tickets' `project:`).
   Tickets are pages; this app only reads them. New tickets are asked of the agent,
   which creates them with the site's `new-ticket` action.
 -->
 <script lang="ts">
-  import { AppShell, Badge, Button, Kbd, onChange, page, search, send, session, type Page } from '$sdk';
+  import { AppShell, Badge, Button, Kbd, onChange, page, project, search, send, session, type Page, type Project } from '$sdk';
 
   type Status = 'open' | 'claimed' | 'done' | 'failed';
   const columns: { status: Status; tone: 'muted' | 'warn' | 'ok' | 'err' }[] = [
@@ -23,14 +24,27 @@
   let notice = $state('');
   let input: HTMLInputElement | undefined = $state();
 
+  // The project the board was opened on; null on Home (every ticket).
+  let opened: Project | null = $state(null);
+  const ready = project().then((p) => (opened = p));
+
   const field = (t: Page, key: string) => String(t.frontmatter[key] ?? '');
+  /** A ticket's `project:` names the open project: its folder (`~/...` or absolute) or its name. */
+  const ofProject = (t: Page) => {
+    if (!opened) return true;
+    const named = field(t, 'project').replace(/\/$/, '');
+    if (!named) return false;
+    if (named === opened.root || named === opened.name) return true;
+    return named.startsWith('~/') && opened.root.endsWith(named.slice(1));
+  };
   const inColumn = (status: Status) =>
     tickets.filter((t) => (field(t, 'status') || 'open') === status).sort((a, b) => field(a, 'id').localeCompare(field(b, 'id')));
   const selected = $derived(inColumn(columns[column].status)[row]);
 
   async function load() {
+    await ready;
     const hits = await search('type:ticket site:orchestration');
-    tickets = await Promise.all(hits.map((h) => page(h.url)));
+    tickets = (await Promise.all(hits.map((h) => page(h.url)))).filter(ofProject);
     row = Math.min(row, Math.max(inColumn(columns[column].status).length - 1, 0));
   }
 
@@ -77,7 +91,7 @@
 
 <svelte:window {onkeydown} />
 
-<AppShell crumb="tickets" status={selected?.url ?? ''}>
+<AppShell crumb={opened ? `${opened.name} · tickets` : 'tickets'} status={selected?.url ?? ''}>
   {#snippet actions()}
     <Button kbd="n" onclick={() => { asking = true; queueMicrotask(() => input?.focus()); }} disabled={!session}>New ticket</Button>
   {/snippet}
