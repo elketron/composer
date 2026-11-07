@@ -260,6 +260,7 @@ async fn home_apps_have_their_own_tokens_and_clients_a_one_time_code() {
         ClientCommand::AppOpen {
             site: "cal".into(),
             project: None,
+            session: None,
         },
     )
     .await;

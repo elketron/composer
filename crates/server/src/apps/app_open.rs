@@ -7,12 +7,29 @@ use crate::apps::{
 };
 use crate::server::Server;
 
-/// Opens `site`'s app on `project` (`None`: on Home): the URL that loads it, with what it needs
-/// once in the URL. On a project and on Home an app gets a token of its own (`app_token`); a
+/// Opens `site`'s app on `project` (`None`: on Home), from `session` (the one its messages go
+/// to): the URL that loads it, with what it needs once in the URL. On a project and on Home an app gets a token of its own (`app_token`); a
 /// client app on Home (listed in `[apps] clients`: the chat app) gets a one-time code that becomes
 /// the workspace's cookie (`once`): never the workspace token itself.
-pub fn open_app(server: &Server, site: &str, project: Option<&str>) -> Result<AppOpened, String> {
+pub fn open_app(
+    server: &Server,
+    site: &str,
+    project: Option<&str>,
+    session: Option<&str>,
+) -> Result<AppOpened, String> {
     let base = server.route_base();
+    // The session it is opened from: the one its messages go to (ticket 0172).
+    let session = match session.filter(|s| !s.is_empty()) {
+        Some(id) => Some(
+            server
+                .sessions
+                .get(id)
+                .map_err(|_| format!("no session `{id}` in this workspace"))?
+                .id()
+                .to_string(),
+        ),
+        None => None,
+    };
     let Some(name) = project else {
         home_manifest(server, site)?;
         if is_client(server, site) {
@@ -26,6 +43,7 @@ pub fn open_app(server: &Server, site: &str, project: Option<&str>) -> Result<Ap
             project: None,
             site: site.to_string(),
             local: None,
+            session: session.clone(),
         });
         return Ok(AppOpened {
             url: format!("{base}/h/{}/?app_token={token}", encode_segment(site)),
@@ -55,6 +73,7 @@ pub fn open_app(server: &Server, site: &str, project: Option<&str>) -> Result<Ap
         }),
         site: site.to_string(),
         local: app.local,
+        session,
     });
     Ok(AppOpened {
         url: format!(

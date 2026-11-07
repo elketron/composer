@@ -587,7 +587,8 @@ async fn run_local(
     }))
 }
 
-/// A message into a session, marked as coming from this app (whatever site it claims).
+/// A message into the session the app was opened from (ticket 0172), marked as coming from this
+/// app (whatever site it claims). Another session, or none: refused.
 async fn post_message(
     state: State<Arc<Server>>,
     Extension(grant): Extension<AppGrant>,
@@ -595,6 +596,20 @@ async fn post_message(
     Json(mut body): Json<AppMessage>,
 ) -> Result<StatusCode, ApiError> {
     let id = arg(&p, "id");
+    if grant.session.as_deref() != Some(id.as_str()) {
+        let opened = match &grant.session {
+            Some(own) => format!("from session `{own}`"),
+            None => "outside a chat".to_string(),
+        };
+        return Err(ApiError(
+            StatusCode::FORBIDDEN,
+            format!(
+                "the {} app was opened {opened}: it messages only the session it was opened from \
+                 (open it from that chat: the TUI's `a`, or `app.open` with `session`)",
+                grant.site
+            ),
+        ));
+    }
     body.site = Some(grant.site.clone());
     http_routes::post_message(state, Path(id), Json(body)).await
 }

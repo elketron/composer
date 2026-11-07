@@ -50,6 +50,7 @@ mod tests {
             }),
             site: "cad".into(),
             local: None,
+            session: None,
         }
     }
 

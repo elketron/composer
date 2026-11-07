@@ -132,6 +132,9 @@ pub enum ClientCommand {
         site: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         project: Option<String>,
+        /// The session it is opened from: the one its messages go to.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        session: Option<String>,
     },
 
     /// Rebuilds the workspace's apps built with an older sdk (or not built; `all`: every one) with

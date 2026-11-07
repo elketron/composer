@@ -70,6 +70,7 @@ mod tests {
             }),
             site: site.into(),
             local: None,
+            session: None,
         }
     }
 

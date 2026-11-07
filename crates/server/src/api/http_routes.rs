@@ -70,28 +70,34 @@ pub async fn home_apps(
 pub async fn open_app(
     State(server): State<Arc<Server>>,
     axum::extract::Path((name, site)): axum::extract::Path<(String, String)>,
+    Query(params): Query<HashMap<String, String>>,
 ) -> Result<Json<composer_protocol::http::AppOpened>, ApiError> {
-    opened(server, site, Some(name)).await
+    opened(server, site, Some(name), params.get("session").cloned()).await
 }
 
 /// `POST /api/apps/<site>/open`: a Home app's URL (its token, or a client app's one-time code).
 pub async fn open_home_app(
     State(server): State<Arc<Server>>,
     axum::extract::Path(site): axum::extract::Path<String>,
+    Query(params): Query<HashMap<String, String>>,
 ) -> Result<Json<composer_protocol::http::AppOpened>, ApiError> {
-    opened(server, site, None).await
+    opened(server, site, None, params.get("session").cloned()).await
 }
 
+/// Both open routes take `?session=<id>`: the session the app is opened from.
 async fn opened(
     server: Arc<Server>,
     site: String,
     project: Option<String>,
+    session: Option<String>,
 ) -> Result<Json<composer_protocol::http::AppOpened>, ApiError> {
-    tokio::task::spawn_blocking(move || crate::apps::open_app(&server, &site, project.as_deref()))
-        .await
-        .expect("opening an app doesn't panic")
-        .map(Json)
-        .map_err(|e| ApiError(axum::http::StatusCode::NOT_FOUND, e))
+    tokio::task::spawn_blocking(move || {
+        crate::apps::open_app(&server, &site, project.as_deref(), session.as_deref())
+    })
+    .await
+    .expect("opening an app doesn't panic")
+    .map(Json)
+    .map_err(|e| ApiError(axum::http::StatusCode::NOT_FOUND, e))
 }
 
 /// `DELETE /api/projects/<name>/apps/<site>/tokens`: revokes every token `site`'s app was opened

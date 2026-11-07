@@ -97,6 +97,7 @@ async fn run_on_open(server: &Arc<Server>, name: &str) {
             }),
             site: app.site.clone(),
             local: app.local.clone(),
+            session: None,
         };
         let dir = app
             .local

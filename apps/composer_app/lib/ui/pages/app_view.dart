@@ -26,7 +26,12 @@ class AppView extends StatefulWidget {
     final base = Uri.parse(url);
     final client = HttpClient();
     try {
-      final request = await client.postUrl(base.replace(path: '${base.path}/api/apps/$site/open'));
+      // Opened from the chat's session: the one the app's messages go to.
+      final open = base.replace(
+        path: '${base.path}/api/apps/$site/open',
+        queryParameters: session == null ? null : {'session': session},
+      );
+      final request = await client.postUrl(open);
       request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
       final response = await request.close();
       final body = await response.transform(utf8.decoder).join();
