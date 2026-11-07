@@ -8,15 +8,17 @@ pub struct ProjectName(String);
 
 impl ProjectName {
     pub fn new(name: &str) -> Result<Self, String> {
+        // `@` is for places that aren't projects (`data://@home/...`).
         let ok = !name.is_empty()
             && !name.starts_with('.')
+            && !name.starts_with('@')
             && name.len() <= 100
             && !name
                 .chars()
                 .any(|c| c == '/' || c == '\\' || c.is_control());
         if !ok {
             return Err(format!(
-                "`{name}` isn't a project name: a folder name (no `/`, not starting with `.`)"
+                "`{name}` isn't a project name: a folder name (no `/`, not starting with `.` or `@`)"
             ));
         }
         Ok(Self(name.to_string()))
@@ -55,7 +57,7 @@ mod tests {
             "composer"
         );
         assert!(ProjectName::new("my game").is_ok());
-        for bad in ["", ".hidden", "a/b", "a\\b", "x\ny"] {
+        for bad in ["", ".hidden", "@home", "a/b", "a\\b", "x\ny"] {
             assert!(ProjectName::new(bad).is_err(), "{bad:?}");
         }
     }

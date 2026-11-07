@@ -199,6 +199,10 @@ async fn side(
         .unwrap();
     // A project with a ticket in its worktree, used (claimed) by this workspace.
     let project_dir = projects.join(format!("p-{name}"));
+    // An app's data for it (ticket 0171), holding the word.
+    let data = server.home.state().join(format!("projects/p-{name}/probe"));
+    std::fs::create_dir_all(&data).unwrap();
+    std::fs::write(data.join("word.txt"), word).unwrap();
     project_and_ticket(&server, &project_dir, ticket);
     let project = server
         .use_project(&project_dir.display().to_string())
@@ -702,6 +706,11 @@ fn tool_calls(side: &Side) -> Vec<(&'static str, Value, String)> {
         (
             "open",
             json!({ "url": format!("site://{}/index.md", side.site) }),
+            side.word.clone(),
+        ),
+        (
+            "open",
+            json!({ "url": format!("data://p-{}/probe/word.txt", side.name) }),
             side.word.clone(),
         ),
         (
