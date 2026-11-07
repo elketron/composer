@@ -34,7 +34,9 @@ pub fn scope(message: &ServerMessage) -> EventScope<'_> {
         ApprovalRequest { .. } | ApprovalResolved { .. } => EventScope::Global,
         PageChanged { url, .. } => EventScope::Page(url),
         // Unsequenced: to the clients attached to the session.
-        DeskChanged { session, .. } => EventScope::Session {
+        DeskChanged { session, .. }
+        | SelectionChanged { session, .. }
+        | AppEvent { session, .. } => EventScope::Session {
             id: session,
             seq: None,
         },

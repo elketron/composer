@@ -60,6 +60,11 @@ pub enum ClientCommand {
         attachments: Vec<Attachment>,
     },
 
+    /// Removes the session's selection chip: the next message goes without it (ticket 0175;
+    /// otherwise the next user message carries it). The reply is `done`.
+    #[serde(rename = "selection.clear")]
+    SelectionClear { session: SessionId },
+
     /// Compact the session now: save memory, then summarize older messages.
     #[serde(rename = "session.compact")]
     SessionCompact { session: SessionId },

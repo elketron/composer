@@ -17,5 +17,5 @@ pub use session::Session;
 pub use session_folder::SessionFolder;
 pub use session_manager::SessionManager;
 pub use transcript::{FULL_PARSES, Transcript, is_ephemeral};
-pub use turn::{TURN_LIMIT, compact_and_wait, compact_now, submit};
+pub use turn::{TURN_LIMIT, compact_and_wait, compact_now, selection_context, submit};
 pub use types::{StepOutput, TranscriptInner};

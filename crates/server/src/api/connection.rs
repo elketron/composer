@@ -922,6 +922,16 @@ impl Connection {
                 *self.subscriptions.lock().expect("subs lock") = urls;
                 Ok(CommandResult::Done)
             }
+            ClientCommand::SelectionClear { session } => {
+                let s = server.sessions.get(&session).map_err(|e| e.to_string())?;
+                if s.set_selection(None) {
+                    server.hub.send(ServerMessage::SelectionChanged {
+                        session,
+                        selection: None,
+                    });
+                }
+                Ok(CommandResult::Done)
+            }
             ClientCommand::DeskGet { session } => Ok(CommandResult::Desk {
                 desk: server
                     .sessions

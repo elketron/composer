@@ -63,6 +63,8 @@ pub struct Server {
     pub local_apps: crate::apps::LocalAllowances,
     /// One-time codes that open client apps (ticket 0168).
     pub once_codes: crate::apps::OnceCodes,
+    /// Events apps reported, per session and app per minute (ticket 0175).
+    pub app_events: crate::apps::EventLimit,
     /// Sessions' watches on site files (`state/watches.json`).
     pub watches: WatchRegistry,
     /// Harnesses turned off per project at runtime (`state/projects.json`).
@@ -179,6 +181,7 @@ impl Server {
             open_projects: crate::apps::OpenProjects::default(),
             local_apps: crate::apps::LocalAllowances::load(home.state().join("local_apps.json")),
             once_codes: crate::apps::OnceCodes::default(),
+            app_events: crate::apps::EventLimit::default(),
             watches: match &parent {
                 None => WatchRegistry::load(home.state().join("watches.json")),
                 Some(_) => WatchRegistry::in_memory(),
