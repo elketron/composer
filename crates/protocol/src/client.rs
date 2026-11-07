@@ -134,6 +134,17 @@ pub enum ClientCommand {
         project: Option<String>,
     },
 
+    /// Rebuilds the workspace's apps built with an older sdk (or not built; `all`: every one) with
+    /// their `ui-build`, in the sandbox. Without `yes` the reply shows what would run; with it,
+    /// it runs (the user's command is the approval). The reply is `note`.
+    #[serde(rename = "apps.rebuild")]
+    AppsRebuild {
+        #[serde(default)]
+        all: bool,
+        #[serde(default)]
+        yes: bool,
+    },
+
     /// Allows a project-local app (`<project>/.composer/apps/<app>`) as it is now: it is served
     /// and its recipes run until its `index.md` or `justfile` changes. The reply is `note`.
     #[serde(rename = "app.allow")]

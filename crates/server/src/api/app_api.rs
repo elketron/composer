@@ -227,10 +227,41 @@ async fn redirect(Path(p): Path<Params>, uri: axum::http::Uri) -> Redirect {
     Redirect::permanent(&format!("{}/{query}", encode_segment(&arg(&p, "app"))))
 }
 
+/// An app built with an older sdk calls the workspace's API from these routes and shows nothing:
+/// say so instead.
+fn outdated_page(server: &Server, grant: &AppGrant) -> Option<Response> {
+    let dir = grant
+        .local
+        .clone()
+        .unwrap_or_else(|| server.web.root().join(&grant.site));
+    if !crate::apps::outdated(&dir) {
+        return None;
+    }
+    let site = &grant.site;
+    let message = format!(
+        "the {site} app was built with an older composer sdk (before version {}), which doesn't \
+         know where it is served now: rebuild it (its <code>ui-build</code> action, or \
+         <code>composer app rebuild</code> for every app), then reload.",
+        crate::apps::SDK_VERSION
+    );
+    Some(
+        (
+            StatusCode::CONFLICT,
+            axum::response::Html(format!(
+                "<!doctype html><meta charset=utf-8><body style=\"background:#0c0d0f;color:#868c96;font:14px monospace;padding:40px\">{message}</body>"
+            )),
+        )
+            .into_response(),
+    )
+}
+
 async fn index(
     State(server): State<Arc<Server>>,
     Extension(grant): Extension<AppGrant>,
 ) -> Response {
+    if let Some(page) = outdated_page(&server, &grant) {
+        return page;
+    }
     match &grant.local {
         Some(dir) => app_routes::serve_local(&grant.site, dir, ""),
         None => app_routes::serve_app(&server, &grant.site, ""),
@@ -243,6 +274,11 @@ async fn file(
     Path(p): Path<Params>,
 ) -> Response {
     let path = arg(&p, "path");
+    // A page (not an asset): an outdated build says so.
+    let page = path == "index.html" || !path.rsplit('/').next().unwrap_or("").contains('.');
+    if let Some(refused) = page.then(|| outdated_page(&server, &grant)).flatten() {
+        return refused;
+    }
     match &grant.local {
         Some(dir) => app_routes::serve_local(&grant.site, dir, &path),
         None => app_routes::serve_app(&server, &grant.site, &path),

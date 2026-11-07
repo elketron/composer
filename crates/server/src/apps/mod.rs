@@ -2,11 +2,13 @@
 //! facts of a project its `when` is matched against, and the apps a project (or the workspace's
 //! Home) gets: matched, pinned or hidden by the project's `[projects."<path>"]` entry.
 
+pub(crate) mod app_build;
 mod app_condition;
 mod app_grant;
 mod app_manifest;
 mod app_open;
 mod app_rail;
+mod app_rebuild;
 mod app_scope;
 mod app_tokens;
 mod attach_reason;
@@ -25,11 +27,13 @@ mod project_name;
 mod project_watch;
 mod workspace_apps;
 
+pub use app_build::{SDK_VERSION, built_with, outdated};
 pub use app_condition::AppCondition;
 pub use app_grant::AppGrant;
 pub use app_manifest::AppManifest;
 pub use app_open::{open_app, site_manifest};
 pub use app_rail::AppRail;
+pub use app_rebuild::{rebuild, rebuild_plan};
 pub use app_scope::AppScope;
 pub use app_tokens::AppTokens;
 pub use attach_reason::AttachReason;

@@ -971,6 +971,12 @@ async fn an_app_token_opens_none_of_the_workspace_routes() {
     )
     .unwrap();
     std::fs::write(web.join("board-a/ui/dist/index.html"), "<p>board</p>").unwrap();
+    std::fs::create_dir_all(web.join("board-a/ui/dist/assets")).unwrap();
+    std::fs::write(
+        web.join("board-a/ui/dist/assets/a.js"),
+        "d=\"composer-sdk:2\"",
+    )
+    .unwrap();
     let (status, body) = http(
         f.addr,
         "POST",

@@ -198,6 +198,16 @@ enum AppCommand {
     Allow { project: String, app: String },
     /// Copy a project-local app into this workspace's sites; the workspace's copy wins after.
     Promote { project: String, app: String },
+    /// Rebuild the apps built with an older sdk (or not built) with their `ui-build`, in the
+    /// sandbox. Shows what would run; `--yes` runs it.
+    Rebuild {
+        /// Every app, not only the outdated ones.
+        #[arg(long)]
+        all: bool,
+        /// Run what was shown.
+        #[arg(long)]
+        yes: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -344,11 +354,15 @@ async fn main() -> anyhow::Result<()> {
             WorkspaceCommand::Templates => workspaces::templates(&home)?,
         },
         Some(Command::App { action }) => {
+            let (server_url, token) = remote::client(&workspace)?;
             let (project, app, promote) = match action {
                 AppCommand::Allow { project, app } => (project, app, false),
                 AppCommand::Promote { project, app } => (project, app, true),
+                AppCommand::Rebuild { all, yes } => {
+                    composer_server::client::rebuild_apps(&server_url, &token, all, yes).await?;
+                    return Ok(());
+                }
             };
-            let (server_url, token) = remote::client(&workspace)?;
             composer_server::client::local_app(&server_url, &token, project, app, promote).await?;
         }
         Some(Command::Library { action }) => {

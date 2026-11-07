@@ -463,6 +463,14 @@ impl Connection {
                 });
                 None
             }
+            ClientCommand::AppsRebuild { all, yes } => {
+                let (connection, server) = (self.clone(), server.clone());
+                tokio::spawn(async move {
+                    let text = rebuild_note(&server, all, yes).await;
+                    connection.reply(id, Ok(CommandResult::Note { text }));
+                });
+                None
+            }
             ClientCommand::AppAllow { project, app } => {
                 self.local_app(server, id, project, app, true);
                 None
@@ -890,6 +898,7 @@ impl Connection {
             | ClientCommand::ProjectClose { .. }
             | ClientCommand::ProjectsOpen
             | ClientCommand::AppOpen { .. }
+            | ClientCommand::AppsRebuild { .. }
             | ClientCommand::AppAllow { .. }
             | ClientCommand::AppPromote { .. }
             | ClientCommand::LibraryList
@@ -939,4 +948,34 @@ async fn run_work(
     Ok(CommandResult::Work {
         work: started.work.summary(),
     })
+}
+
+/// `apps.rebuild`: what would run, or (with `yes`) what ran.
+async fn rebuild_note(server: &Arc<Server>, all: bool, yes: bool) -> String {
+    if !yes {
+        let plan = crate::apps::rebuild_plan(server, all).await;
+        if plan.is_empty() {
+            return "every app is built with the current sdk: nothing to rebuild".into();
+        }
+        let shown: Vec<String> = plan
+            .iter()
+            .map(|(site, recipe)| format!("site://{site}:\n{recipe}"))
+            .collect();
+        return format!(
+            "{}\n\nNothing was run. Run again with --yes to build these {} app(s).",
+            shown.join("\n"),
+            plan.len()
+        );
+    }
+    let done = crate::apps::rebuild(server, all).await;
+    if done.is_empty() {
+        return "every app is built with the current sdk: nothing to rebuild".into();
+    }
+    done.iter()
+        .map(|(site, status, output)| match status.as_str() {
+            "built" => format!("{site}: built"),
+            _ => format!("{site}: {status}\n{output}"),
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }

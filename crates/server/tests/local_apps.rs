@@ -102,6 +102,7 @@ async fn a_project_local_app_runs_once_allowed() {
         "probe:\n    echo seen > \"$APP_DATA/probe.txt\"\n",
     );
     write(&app.join("ui/dist/index.html"), "<p>the viewer</p>");
+    write(&app.join("ui/dist/assets/a.js"), "d=\"composer-sdk:2\"");
     let mut config = Config::defaults();
     config.projects.dir = root.display().to_string();
     let (dir, server, _provider, addr) = start_with(config, vec![]).await;
