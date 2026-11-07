@@ -11,7 +11,11 @@ use crate::workspace_home::WorkspaceHome;
 
 /// Serves MCP on stdin/stdout until stdin closes (the harness exits) or the server goes away.
 pub async fn run_mcp(home: WorkspaceHome, options: McpOptions) -> Result<()> {
-    let token = local_token(&home)?;
+    // A sandboxed harness passes it: the sandbox has no `state/` to read it from.
+    let token = match std::env::var("COMPOSER_TOKEN") {
+        Ok(token) if !token.is_empty() => token,
+        _ => local_token(&home)?,
+    };
     let link = ParentLink::open(&options.parent_url, &token)
         .await
         .map_err(ServerError::Invalid)?;

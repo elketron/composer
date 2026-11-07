@@ -1,6 +1,7 @@
 //! The Claude Code harness against a fake `claude` (a shell script that speaks stream-json and
 //! finishes through a real `composer mcp`): project switch, login check, cleared environment,
 //! the run's flags, folder and ticket fields, a run without `finish`, resuming, a usage limit.
+//! With the sandbox off (its own login); `claude_code_sandbox.rs` has the sandboxed run.
 
 mod support;
 
@@ -183,7 +184,7 @@ async fn claude_code_works_tickets() {
     std::fs::write(
         home.config_file(),
         format!(
-            "[provider]\nbase_url = \"{base_url}\"\n\n[projects.\"{}\"]\nexternal_harnesses = [\"claude-code\"]\nallowed_tools = [\"Bash(cargo test:*)\"]\nmodels = [\"claude-code:sonnet\"]\n\n[claude_code]\ncommand = \"{}\"\nread_dirs = [\"{}\", \"{}/missing\"]\n",
+            "[provider]\nbase_url = \"{base_url}\"\n\n[projects.\"{}\"]\nexternal_harnesses = [\"claude-code\"]\nallowed_tools = [\"Bash(cargo test:*)\"]\nmodels = [\"claude-code:sonnet\"]\n\n[claude_code]\ncommand = \"{}\"\nread_dirs = [\"{}\", \"{}/missing\"]\n\n[sandbox]\nenabled = false\n",
             project.display(),
             fake.display(),
             deps.display(),

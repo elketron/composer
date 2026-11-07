@@ -34,6 +34,8 @@ pub struct SandboxSpec {
     foreign: Vec<PathBuf>,
     ro: Vec<PathBuf>,
     rw: Vec<PathBuf>,
+    /// Composer's own mounts (a run's `.claude`, its attachments): not checked like binds.
+    own: Vec<Mount>,
     chdir: Option<PathBuf>,
     tty: bool,
 }
@@ -57,6 +59,7 @@ impl SandboxSpec {
             foreign: foreign.iter().map(|p| canonical(p)).collect(),
             ro: Vec::new(),
             rw: Vec::new(),
+            own: Vec::new(),
             chdir: None,
             tty: false,
         }
@@ -72,6 +75,18 @@ impl SandboxSpec {
     pub fn with_ro(mut self, path: impl Into<PathBuf>) -> Self {
         self.ro.push(path.into());
         self
+    }
+
+    /// A mount composer itself chooses (never a path from config or an agent): not checked
+    /// against the protected parts of the home, so it may show a piece of this workspace's state.
+    pub(crate) fn with_mount(mut self, mount: Mount) -> Self {
+        self.own.push(mount);
+        self
+    }
+
+    /// The user's `$HOME` (empty inside, apart from what is mounted into it).
+    pub fn user_home(&self) -> &Path {
+        &self.user_home
     }
 
     /// Where the program starts.
@@ -129,6 +144,7 @@ impl SandboxSpec {
             mounts.push(Mount::Rw(self.allowed(&path)?));
         }
         mounts.extend(expand(&self.config.devices).into_iter().map(Mount::Dev));
+        mounts.extend(self.own.iter().cloned());
         let hidden = self.hidden(&mounts);
         mounts.extend(hidden.into_iter().map(Mount::Hide));
         Ok(mounts)
@@ -137,17 +153,27 @@ impl SandboxSpec {
     /// `program` to run in this world. Not enabled: as it is. Enabled and `bwrap` can't build a
     /// namespace, or a bind isn't allowed: refused.
     pub fn command(&self, program: impl AsRef<OsStr>) -> Result<Command, String> {
+        let (program, args) = self.wrap(program)?;
+        let mut command = Command::new(program);
+        command.args(args);
+        if let (false, Some(dir)) = (self.enabled(), &self.chdir) {
+            command.current_dir(dir);
+        }
+        Ok(command)
+    }
+
+    /// `program` in this world as the program to start and its first arguments
+    /// (`bwrap`, `[... -- program]`), for a caller that builds the command itself (inside a
+    /// systemd scope). Not enabled: `program` as it is; the caller sets its directory.
+    pub fn wrap(&self, program: impl AsRef<OsStr>) -> Result<(OsString, Vec<OsString>), String> {
+        let program = program.as_ref().to_os_string();
         if !self.enabled() {
-            let mut command = Command::new(program);
-            if let Some(dir) = &self.chdir {
-                command.current_dir(dir);
-            }
-            return Ok(command);
+            return Ok((program, Vec::new()));
         }
         check_bwrap(&self.bwrap)?;
-        let mut command = Command::new(&self.bwrap);
-        command.args(self.args()?).arg("--").arg(program);
-        Ok(command)
+        let mut args = self.args()?;
+        args.extend(["--".into(), program]);
+        Ok((self.bwrap.clone().into_os_string(), args))
     }
 
     /// Everything before `-- program`.

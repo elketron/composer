@@ -13,6 +13,8 @@ pub enum Mount {
     Dev(PathBuf),
     /// `outside`, read-only, at `inside`.
     RoAt { outside: PathBuf, inside: PathBuf },
+    /// `outside`, read-write, at `inside`.
+    RwAt { outside: PathBuf, inside: PathBuf },
     /// An empty folder over what is there: hides it.
     Hide(PathBuf),
 }
@@ -28,6 +30,9 @@ impl Mount {
             Self::RoAt { outside, inside } => {
                 vec!["--ro-bind-try".into(), outside.into(), inside.into()]
             }
+            Self::RwAt { outside, inside } => {
+                vec!["--bind-try".into(), outside.into(), inside.into()]
+            }
             Self::Hide(path) => vec!["--tmpfs".into(), path.into()],
         }
     }
@@ -36,13 +41,13 @@ impl Mount {
     pub fn inside(&self) -> Option<&PathBuf> {
         match self {
             Self::Ro(path) | Self::Rw(path) | Self::Dev(path) => Some(path),
-            Self::RoAt { inside, .. } => Some(inside),
+            Self::RoAt { inside, .. } | Self::RwAt { inside, .. } => Some(inside),
             Self::Hide(_) => None,
         }
     }
 
     /// Whether it can be written through.
     pub fn writable(&self) -> bool {
-        matches!(self, Self::Rw(_) | Self::Dev(_))
+        matches!(self, Self::Rw(_) | Self::Dev(_) | Self::RwAt { .. })
     }
 }
