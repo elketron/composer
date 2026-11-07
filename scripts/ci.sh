@@ -4,6 +4,7 @@
 # fresh home), protocol (the Dart models are current, analyze, test), flutter (analyze, test).
 #   scripts/ci.sh            all
 #   scripts/ci.sh rust apps  some
+#   scripts/ci.sh desktop    the desktop app (apps/desktop, its own workspace; not in CI yet: 0187)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 jobs=("$@")
@@ -46,7 +47,11 @@ for job in "${jobs[@]}"; do
       step "flutter: analyze, test"
       (cd apps/composer_app && flutter pub get >/dev/null && flutter analyze --fatal-infos && flutter test)
       ;;
-    *) echo "unknown job: $job (rust, apps, protocol, flutter)"; exit 2 ;;
+    desktop)
+      step "desktop: fmt, clippy, test"
+      (cd apps/desktop && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test)
+      ;;
+    *) echo "unknown job: $job (rust, apps, protocol, flutter, desktop)"; exit 2 ;;
   esac
 done
 printf '\nall CI steps passed: %s\n' "${jobs[*]}"

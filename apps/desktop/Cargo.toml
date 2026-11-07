@@ -1,0 +1,25 @@
+[package]
+name = "composer-desktop"
+description = "The composer desktop app: the chat (your TUI) on the left, the stage on the right"
+version = "0.4.0"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+
+# Its own workspace: gpui (and, from 0183, CEF) stay out of the main build and its CI job.
+[workspace]
+
+[[bin]]
+name = "composer-desktop"
+path = "src/main.rs"
+
+[dependencies]
+composer-client = { path = "../../crates/client" }
+composer-protocol = { path = "../../crates/protocol" }
+gpui = { package = "gpui-pre", version = "0.3.11" }
+gpui_platform = { package = "gpui-pre-platform", version = "0.3.11", features = ["font-kit", "x11", "wayland"] }
+tattoy-wezterm-term = "0.1.0-fork.5"
+wezterm-surface = { package = "tattoy-wezterm-surface", version = "0.1.0-fork.1" }
+anyhow = "1"
+base64 = "0.22"
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros", "time"] }
