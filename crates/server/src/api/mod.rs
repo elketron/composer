@@ -33,6 +33,8 @@ pub fn router(server: Arc<Server>) -> Router {
         .route("/api/sites", get(http_routes::sites))
         .route("/api/agents", get(http_routes::agents))
         .route("/api/projects", get(http_routes::projects))
+        .route("/api/apps", get(http_routes::home_apps))
+        .route("/api/projects/{name}/apps", get(http_routes::project_apps))
         .route("/api/search", get(http_routes::search))
         .route(
             "/api/pages/{site}",

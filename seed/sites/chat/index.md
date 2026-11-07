@@ -1,6 +1,9 @@
 ---
 title: Chat
 type: index
+app:
+  scope: global
+  rail: { icon: chat, label: Chat }
 ---
 # Chat
 

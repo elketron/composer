@@ -156,6 +156,45 @@ pub struct StageState {
     pub changed: Vec<Url>,
 }
 
+/// An app (a site with a `ui/` or an `app:` block) in a project's rail or on the workspace's Home:
+/// `GET /api/apps`, `GET /api/projects/<name>/apps`, ws `apps.list`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct AppInfo {
+    pub site: String,
+    /// The rail label, else the site's title.
+    pub label: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+    /// `project`, `global` or `both`.
+    pub scope: String,
+    /// `pinned`, `matched files:*.FCStd`, `home`.
+    pub why: String,
+    /// It contributes a tile to Home.
+    #[serde(default)]
+    pub tile: bool,
+    /// File patterns it opens.
+    #[serde(default)]
+    pub opens: Vec<String>,
+    /// `ui/dist/index.html` exists.
+    #[serde(default)]
+    pub built: bool,
+}
+
+/// A project's apps, or Home's; `errors` are sites whose `app:` block doesn't parse.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct AppList {
+    /// The project's name; `None` for Home.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project: Option<String>,
+    pub apps: Vec<AppInfo>,
+    #[serde(default)]
+    pub errors: Vec<String>,
+}
+
 /// An MCP server from `config.toml` (`[mcp.<name>]`), whose tools agents may list.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]

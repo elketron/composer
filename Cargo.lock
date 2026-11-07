@@ -541,6 +541,7 @@ dependencies = [
  "toml",
  "tower",
  "tracing",
+ "walkdir",
 ]
 
 [[package]]

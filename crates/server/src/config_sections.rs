@@ -74,6 +74,18 @@ pub struct ProjectSettings {
     /// `"<harness>:<model>"` (`"claude-code:sonnet"`, `"composer"`). Empty: any.
     #[serde(default)]
     pub models: Vec<String>,
+    /// What it is called in the workspace and in app URLs; default: its folder's name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// Tags apps can attach by (`when: ["tag:game"]`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tags: Vec<String>,
+    /// Apps (sites) pinned to it, first in its rail, whatever their `when`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub apps: Vec<String>,
+    /// Apps never attached to it, even when their `when` matches.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub hide_apps: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

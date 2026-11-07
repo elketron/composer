@@ -323,6 +323,20 @@ impl Connection {
                 });
                 None
             }
+            ClientCommand::AppsList { project } => {
+                let (connection, server) = (self.clone(), server.clone());
+                tokio::spawn(async move {
+                    let listed = tokio::task::spawn_blocking(move || match project {
+                        Some(name) => crate::apps::project_apps(&server, &name),
+                        None => Ok(crate::apps::home_apps(&server)),
+                    })
+                    .await
+                    .map_err(|e| e.to_string())
+                    .and_then(|r| r);
+                    connection.reply(id, listed.map(|list| CommandResult::Apps { list }));
+                });
+                None
+            }
             ClientCommand::McpList => {
                 let (connection, server) = (self.clone(), server.clone());
                 tokio::spawn(async move {
@@ -717,6 +731,7 @@ impl Connection {
             | ClientCommand::ToolCall { .. }
             | ClientCommand::ToolList { .. }
             | ClientCommand::McpList
+            | ClientCommand::AppsList { .. }
             | ClientCommand::LibraryList
             | ClientCommand::LibraryInstall { .. }
             | ClientCommand::LibraryUpdate { .. }
