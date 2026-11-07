@@ -28,3 +28,4 @@ axum.workspace = true
 futures.workspace = true
 tempfile.workspace = true
 tokio-tungstenite.workspace = true
+tokio-util.workspace = true
