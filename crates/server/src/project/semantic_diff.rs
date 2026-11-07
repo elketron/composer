@@ -104,12 +104,26 @@ mod tests {
 
     use super::*;
 
-    /// A `difft` script in a fresh directory that runs `body`.
+    /// A `difft` script in a fresh directory that runs `body`. It is run once as a probe until it
+    /// starts: another test's fork may still hold it open for writing ("text file busy").
+    #[allow(clippy::disallowed_methods, reason = "a test's probe of its own fake")]
     fn fake_difft(body: &str) -> (tempfile::TempDir, PathBuf) {
         let dir = tempfile::tempdir().unwrap();
         let bin = dir.path().join("difft");
-        std::fs::write(&bin, format!("#!/bin/sh\n{body}\n")).unwrap();
+        std::fs::write(
+            &bin,
+            format!("#!/bin/sh\n[ -n \"$PROBE\" ] && exit 0\n{body}\n"),
+        )
+        .unwrap();
         std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).unwrap();
+        for _ in 0..100 {
+            match std::process::Command::new(&bin).env("PROBE", "1").status() {
+                Err(e) if e.kind() == std::io::ErrorKind::ExecutableFileBusy => {
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                _ => break,
+            }
+        }
         (dir, bin)
     }
 
