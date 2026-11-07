@@ -1,19 +1,12 @@
 use async_trait::async_trait;
 use composer_protocol::{ApprovalDecision, ApprovalKind};
-use serde::Deserialize;
 use serde_json::{Value, json};
 
 use crate::library::{SiteName, WorkspaceLibrary};
+use crate::tools::args::PublishSiteArgs;
 use crate::tools::{Tool, ToolContext};
 
 pub struct PublishSiteTool;
-
-#[derive(Deserialize)]
-struct PublishSiteArgs {
-    site: String,
-    #[serde(default, rename = "as")]
-    name: Option<String>,
-}
 
 #[async_trait]
 impl Tool for PublishSiteTool {

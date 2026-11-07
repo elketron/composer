@@ -40,6 +40,7 @@ mod workspace_create;
 mod workspace_home;
 mod workspace_name;
 mod workspace_template;
+mod workspace_template_file;
 
 pub use config::Config;
 pub use config_sections::{

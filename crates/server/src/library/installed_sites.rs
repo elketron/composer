@@ -1,16 +1,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use serde::{Deserialize, Serialize};
-
-use crate::library::{LibraryCommit, SiteName};
-
-/// Where one installed site came from: a library site at a commit (the base of its next update).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Installed {
-    pub from: SiteName,
-    pub commit: LibraryCommit,
-}
+use crate::library::{Installed, SiteName};
 
 /// A workspace's installed sites (`state/library.json`): its site name → where it came from.
 /// Kept in state, not in a page, so no agent edits it. Names and commits are checked when read: an
@@ -64,6 +55,7 @@ impl InstalledSites {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::library::LibraryCommit;
 
     #[test]
     fn saved_and_checked_when_read() {

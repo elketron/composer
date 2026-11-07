@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use serde::Deserialize;
+use crate::workspace_template_file::TemplateFile;
 
 use crate::home::Home;
 use crate::library::{Library, SiteName, WorkspaceLibrary};
@@ -21,17 +21,6 @@ pub struct WorkspaceTemplate {
     name: String,
     description: String,
     sites: Vec<SiteName>,
-    config: toml::Table,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct TemplateFile {
-    #[serde(default)]
-    description: String,
-    #[serde(default)]
-    sites: Vec<SiteName>,
-    #[serde(default)]
     config: toml::Table,
 }
 
