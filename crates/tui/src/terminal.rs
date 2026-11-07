@@ -3,21 +3,31 @@
 use base64::Engine;
 use crossterm::event::{
     DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture,
+    KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
 };
 use ratatui::DefaultTerminal;
 
 /// Raw mode, alternate screen, bracketed paste (a pasted or dropped path arrives in one
 /// piece, so it can become an attachment) and the mouse (selecting within a pane, the wheel). Shift-drag still
-/// selects the terminal's way in most terminals.
+/// selects the terminal's way in most terminals. Where the terminal speaks the kitty keyboard
+/// protocol, keys come unambiguous: Escape followed quickly by a key isn't read as Alt+key.
 pub fn init() -> DefaultTerminal {
     let terminal = ratatui::init();
     let _ = crossterm::execute!(std::io::stdout(), EnableBracketedPaste, EnableMouseCapture);
+    if crossterm::terminal::supports_keyboard_enhancement().unwrap_or(false) {
+        let _ = crossterm::execute!(
+            std::io::stdout(),
+            PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES)
+        );
+    }
     terminal
 }
 
 pub fn restore() {
+    // Popping when nothing was pushed is harmless.
     let _ = crossterm::execute!(
         std::io::stdout(),
+        PopKeyboardEnhancementFlags,
         DisableMouseCapture,
         DisableBracketedPaste
     );

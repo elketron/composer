@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use composer_client::Connection;
 use composer_protocol::{ClientCommand, ClientRequest};
@@ -11,6 +11,9 @@ pub struct TerminalLink {
     connection: Connection,
     terminal: String,
     ids: Arc<AtomicU64>,
+    /// While set, nothing is sent: the pane is replaying old output, whose queries were
+    /// answered when they were new (answering again would type into the program).
+    muted: Arc<AtomicBool>,
 }
 
 impl TerminalLink {
@@ -19,7 +22,16 @@ impl TerminalLink {
             connection,
             terminal,
             ids,
+            muted: Arc::default(),
         }
+    }
+
+    /// Runs `replay` with sending muted.
+    pub fn muted<T>(&self, replay: impl FnOnce() -> T) -> T {
+        self.muted.store(true, Ordering::SeqCst);
+        let out = replay();
+        self.muted.store(false, Ordering::SeqCst);
+        out
     }
 
     pub fn terminal(&self) -> &str {
@@ -42,6 +54,9 @@ impl TerminalLink {
     }
 
     fn send(&self, command: ClientCommand) {
+        if self.muted.load(Ordering::SeqCst) {
+            return;
+        }
         let id = self.ids.fetch_add(1, Ordering::Relaxed);
         let _ = self.connection.send(ClientRequest { id, command });
     }

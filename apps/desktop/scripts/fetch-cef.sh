@@ -8,6 +8,15 @@ cd "$(dirname "$0")/.."
 version=156.0.15                        # CEF of the `cef` crate in Cargo.toml (156.3.x)
 tool_version=156.3.1+156.0.15           # export-cef-dir for that CEF
 dir="${CEF_DIR:-$HOME/.local/share/composer/cef/$version}"
+# A build that ran before this script downloaded its own copy into .cef: keep it as the shared
+# one if there is none yet, else drop it.
+if [ -d .cef ] && [ ! -L .cef ]; then
+  if [ -f "$dir/libcef.so" ]; then
+    rm -rf .cef
+  else
+    mkdir -p "$(dirname "$dir")" && rm -rf "$dir" && mv .cef "$dir"
+  fi
+fi
 if [ ! -f "$dir/libcef.so" ] && [ ! -f "$dir/libcef.dll" ]; then
   if ! command -v export-cef-dir >/dev/null; then
     cargo install --locked export-cef-dir --version "$tool_version"
