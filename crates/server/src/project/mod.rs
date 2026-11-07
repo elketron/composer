@@ -10,7 +10,7 @@ mod semantic_diff;
 mod ticket_branch;
 mod worktree;
 
-pub use git_diff::project_diff;
+pub use git_diff::{project_diff, project_diff_plain};
 pub use project_list::{project_list, session_project};
 pub use project_overview::project_overview;
 pub use project_ownership::ProjectOwnership;

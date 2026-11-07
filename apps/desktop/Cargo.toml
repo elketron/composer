@@ -22,4 +22,7 @@ tattoy-wezterm-term = "0.1.0-fork.5"
 wezterm-surface = { package = "tattoy-wezterm-surface", version = "0.1.0-fork.1" }
 anyhow = "1"
 base64 = "0.22"
+cef = "156.3"
+image = { version = "0.25.1", default-features = false }
+smallvec = "1"
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros", "time"] }

@@ -1,13 +1,13 @@
 //! A workspace's window: the title bar, the chat column (the window's own TUI, in a terminal pane)
 //! and the stage (the attached session's desk as tabs).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
 
 use base64::Engine;
-use composer_client::{Connection, Event, Store};
-use composer_protocol::{ClientCommand, CommandResult, DeskTab, ServerMessage};
+use composer_client::{Connection, Endpoint, Event, Store};
+use composer_protocol::{ClientCommand, CommandResult, DeskEntry, DeskTab, ServerMessage};
 use gpui::{
     Context, Entity, FocusHandle, Focusable, MouseButton, MouseDownEvent, MouseMoveEvent,
     MouseUpEvent, Subscription, Window, actions, div, prelude::*, px, rgb,
@@ -19,6 +19,8 @@ use crate::link_state::LinkState;
 use crate::stage_tabs;
 use crate::term_pane::{FONT, PaneEvent, TermPane};
 use crate::terminal_link::TerminalLink;
+use crate::view_urls::{origin, view_url};
+use crate::web_pane::{WebEvent, WebPane};
 
 actions!(desktop, [FocusChat, FocusStage, NextTab, PrevTab]);
 
@@ -28,6 +30,7 @@ const FIRST_IDS: u64 = 1;
 
 pub struct Shell {
     workspace: String,
+    endpoint: Endpoint,
     connection: Connection,
     ids: Arc<AtomicU64>,
     store: Store,
@@ -35,6 +38,10 @@ pub struct Shell {
     chat: Option<Entity<TermPane>>,
     /// Stage terminals, by terminal id.
     panes: HashMap<String, Entity<TermPane>>,
+    /// Browser panes of the other tabs, by tab id; made when a tab is first shown.
+    webs: HashMap<String, Entity<WebPane>>,
+    /// Tabs whose browser pane is on its way (`app.open` asked).
+    loading: HashSet<String>,
     subscriptions: Vec<Subscription>,
     chat_width: ChatWidth,
     dragging: bool,
@@ -44,6 +51,7 @@ pub struct Shell {
 impl Shell {
     pub fn new(
         workspace: String,
+        endpoint: Endpoint,
         connection: Connection,
         mut events: mpsc::UnboundedReceiver<Event>,
         cx: &mut Context<Self>,
@@ -61,12 +69,15 @@ impl Shell {
         .detach();
         Self {
             workspace,
+            endpoint,
             connection,
             ids: Arc::new(AtomicU64::new(FIRST_IDS)),
             store: Store::default(),
             link: LinkState::Connecting,
             chat: None,
             panes: HashMap::new(),
+            webs: HashMap::new(),
+            loading: HashSet::new(),
             subscriptions: Vec::new(),
             chat_width: ChatWidth::DEFAULT,
             dragging: false,
@@ -79,8 +90,10 @@ impl Shell {
             Event::Connected => {
                 self.link = LinkState::Up;
                 self.hello(cx);
-                // Stage panes start over from the server's scrollback.
+                // Stage panes start over from the server's scrollback; apps get fresh tokens.
                 self.panes.clear();
+                self.webs.clear();
+                self.loading.clear();
                 if let Some(session) = self.store.attached.clone() {
                     self.ask(
                         ClientCommand::SessionAttach {
@@ -223,6 +236,8 @@ impl Shell {
             })
             .collect();
         self.panes.retain(|id, _| on_desk.contains(id));
+        let tabs: HashSet<&str> = self.store.desk.tabs.iter().map(|t| t.id.as_str()).collect();
+        self.webs.retain(|id, _| tabs.contains(id.as_str()));
         for id in on_desk {
             if self.panes.contains_key(&id) {
                 continue;
@@ -298,12 +313,93 @@ impl Shell {
         }
     }
 
-    fn shown_pane(&self) -> Option<&Entity<TermPane>> {
+    fn shown_entry(&self) -> Option<&DeskEntry> {
         let shown = stage_tabs::shown(&self.store.desk)?;
-        let entry = self.store.desk.tabs.iter().find(|t| t.id == shown)?;
-        match &entry.tab {
+        self.store.desk.tabs.iter().find(|t| t.id == shown)
+    }
+
+    fn shown_pane(&self) -> Option<&Entity<TermPane>> {
+        match &self.shown_entry()?.tab {
             DeskTab::Terminal { id } => self.panes.get(id),
             _ => None,
+        }
+    }
+
+    fn shown_web(&self) -> Option<&Entity<WebPane>> {
+        self.webs.get(&self.shown_entry()?.id)
+    }
+
+    /// The shown tab's browser pane, if it is a browser tab and has none yet: a view's URL right
+    /// away, an app's from `app.open`.
+    fn load_shown(&mut self, cx: &mut Context<Self>) {
+        let Some(entry) = self.shown_entry().cloned() else {
+            return;
+        };
+        if matches!(entry.tab, DeskTab::Terminal { .. })
+            || self.webs.contains_key(&entry.id)
+            || !self.loading.insert(entry.id.clone())
+        {
+            return;
+        }
+        if let Some(url) = view_url(&self.endpoint, &entry.tab) {
+            self.show_web(entry.id, url, cx);
+            return;
+        }
+        let DeskTab::App { site, project } = entry.tab else {
+            return;
+        };
+        let session = self.store.attached.clone();
+        let command = ClientCommand::AppOpen {
+            site,
+            project,
+            session: session.clone(),
+        };
+        let connection = self.connection.clone();
+        cx.spawn(async move |this, cx| {
+            let answer = connection.request(command).await;
+            let _ = this.update(cx, |shell, cx| match answer {
+                Ok(CommandResult::AppOpened { opened }) => {
+                    let mut url = format!("{}{}", origin(shell.endpoint.base()), opened.url);
+                    if let Some(session) = session {
+                        url.push_str(&format!("&session={session}"));
+                    }
+                    shell.show_web(entry.id, url, cx);
+                }
+                Ok(_) => {}
+                Err(e) => {
+                    shell.loading.remove(&entry.id);
+                    shell.link = shell.link.refused(e);
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
+    }
+
+    fn show_web(&mut self, tab: String, url: String, cx: &mut Context<Self>) {
+        let base = self.endpoint.base().to_string();
+        let pane = cx.new(|cx| WebPane::new(&url, &base, cx));
+        self.subscriptions.push(cx.subscribe(
+            &pane,
+            |shell, _, event: &WebEvent, cx| match event {
+                WebEvent::OpenPage(url) => shell.open_page(url.clone(), cx),
+            },
+        ));
+        self.loading.remove(&tab);
+        self.webs.insert(tab, pane);
+        cx.notify();
+    }
+
+    fn open_page(&mut self, url: String, cx: &mut Context<Self>) {
+        if let Some(session) = self.store.attached.clone() {
+            self.ask(
+                ClientCommand::DeskOpen {
+                    session,
+                    tab: DeskTab::Page { url },
+                    focus: true,
+                },
+                cx,
+            );
         }
     }
 
@@ -337,6 +433,7 @@ impl Render for Shell {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let total = f32::from(window.viewport_size().width);
         self.chat_width = self.chat_width.within(total);
+        self.load_shown(cx);
         let shown = stage_tabs::shown(&self.store.desk).map(str::to_string);
         let tabs = self.store.desk.tabs.iter().map(|entry| {
             let id = entry.id.clone();
@@ -346,6 +443,7 @@ impl Render for Shell {
                 .id(gpui::SharedString::from(format!("tab-{}", entry.id)))
                 .flex()
                 .flex_row()
+                .flex_none()
                 .gap_2()
                 .px_3()
                 .py_1()
@@ -368,13 +466,11 @@ impl Render for Shell {
                         })),
                 )
         });
-        let stage_body = match (self.shown_pane(), shown.is_some()) {
-            (Some(pane), _) => pane.clone().into_any_element(),
-            (None, true) => {
-                placeholder("This tab opens in a browser pane, which comes next (ticket 0183).")
-                    .into_any_element()
-            }
-            (None, false) => placeholder(
+        let stage_body = match (self.shown_pane(), self.shown_web(), shown.is_some()) {
+            (Some(pane), _, _) => pane.clone().into_any_element(),
+            (None, Some(web), _) => web.clone().into_any_element(),
+            (None, None, true) => placeholder("Opening…").into_any_element(),
+            (None, None, false) => placeholder(
                 "Nothing on the stage. The agent can put apps and pages here; + opens a terminal.",
             )
             .into_any_element(),
@@ -401,6 +497,8 @@ impl Render for Shell {
             .on_action(cx.listener(|shell, _: &FocusStage, window, cx| {
                 if let Some(pane) = shell.shown_pane() {
                     window.focus(&pane.read(cx).focus_handle(cx), cx);
+                } else if let Some(web) = shell.shown_web() {
+                    window.focus(&web.read(cx).focus_handle(cx), cx);
                 }
             }))
             .on_action(cx.listener(|shell, _: &NextTab, _, cx| {
@@ -477,8 +575,11 @@ impl Render for Shell {
                             .flex_col()
                             .child(
                                 div()
+                                    .id("tab-strip")
                                     .flex()
                                     .flex_row()
+                                    .flex_none()
+                                    .overflow_x_scroll()
                                     .border_b_1()
                                     .border_color(rgb(LINE))
                                     .children(tabs)

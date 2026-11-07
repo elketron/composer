@@ -39,34 +39,54 @@ table { border-collapse: collapse; } td, th { border: 1px solid var(--line); pad
 pub async fn page(
     State(server): State<Arc<Server>>,
     Path((site, path)): Path<(String, String)>,
-) -> Result<Response, ApiError> {
-    render_page(&server, SiteUrl::new(&site, &path)?)
+) -> Response {
+    shown(
+        SiteUrl::new(&site, &path)
+            .map_err(ApiError::from)
+            .and_then(|url| render_page(&server, url)),
+    )
 }
 
-pub async fn site_index(
-    State(server): State<Arc<Server>>,
-    Path(site): Path<String>,
-) -> Result<Response, ApiError> {
-    render_page(&server, SiteUrl::new(&site, "")?)
+pub async fn site_index(State(server): State<Arc<Server>>, Path(site): Path<String>) -> Response {
+    shown(
+        SiteUrl::new(&site, "")
+            .map_err(ApiError::from)
+            .and_then(|url| render_page(&server, url)),
+    )
 }
 
 fn render_page(server: &Server, url: SiteUrl) -> Result<Response, ApiError> {
     let page = server.web.read_page(&url)?;
     let body = markdown(page.body());
     let meta = format!("<p class=\"meta\">{}</p>", escape(&page.url.to_string()));
-    Ok(document(&page.title(), &(meta + &body)))
+    // The page's own markdown has its heading.
+    Ok(document(&page.title(), None, &(meta + &body)))
 }
 
-pub async fn changes(
-    State(server): State<Arc<Server>>,
-    Path(project): Path<String>,
-) -> Result<Response, ApiError> {
-    let (name, folder) = crate::apps::find_project_by(&server, &project)
+pub async fn changes(State(server): State<Arc<Server>>, Path(project): Path<String>) -> Response {
+    shown(render_changes(&server, &project).await)
+}
+
+/// A view or its error, both as pages (a browser shows them).
+fn shown(view: Result<Response, ApiError>) -> Response {
+    view.unwrap_or_else(|ApiError(status, message)| {
+        let mut page = document(
+            "Not shown",
+            Some("Not shown"),
+            &format!("<p>{}</p>", escape(&message)),
+        );
+        *page.status_mut() = status;
+        page
+    })
+}
+
+async fn render_changes(server: &Server, project: &str) -> Result<Response, ApiError> {
+    let (name, folder) = crate::apps::find_project_by(server, project)
         .map_err(|e| ApiError(StatusCode::NOT_FOUND, e))?;
     let folder = server
         .see_project(&folder.to_string_lossy())
         .map_err(|e| ApiError(StatusCode::FORBIDDEN, e))?;
-    let diff = crate::project::project_diff(std::path::Path::new(&folder), None)
+    let diff = crate::project::project_diff_plain(std::path::Path::new(&folder), None)
         .await
         .map_err(|e| ApiError(StatusCode::UNPROCESSABLE_ENTITY, e))?;
     let mut out = format!(
@@ -102,7 +122,8 @@ pub async fn changes(
         }
         out.push_str("</pre>");
     }
-    Ok(document(&format!("changes · {}", name.as_str()), &out))
+    let title = format!("changes · {}", name.as_str());
+    Ok(document(&title, Some(&title), &out))
 }
 
 /// Markdown to HTML, with any raw HTML in it shown as text.
@@ -120,10 +141,13 @@ fn markdown(text: &str) -> String {
     out
 }
 
-fn document(title: &str, body: &str) -> Response {
+/// A whole page: `title` for the tab, `heading` drawn above `body` when given.
+fn document(title: &str, heading: Option<&str>, body: &str) -> Response {
+    let heading = heading
+        .map(|h| format!("<h1>{}</h1>", escape(h)))
+        .unwrap_or_default();
     let html = format!(
-        "<!doctype html><html><head><meta charset=\"utf-8\"><title>{}</title><style>{STYLE}</style></head><body><h1>{}</h1>{body}</body></html>",
-        escape(title),
+        "<!doctype html><html><head><meta charset=\"utf-8\"><title>{}</title><style>{STYLE}</style></head><body>{heading}{body}</body></html>",
         escape(title)
     );
     (

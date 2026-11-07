@@ -1,0 +1,4 @@
+# The shared CEF runtime (scripts/fetch-cef.sh links it here): the `cef` crate builds against it
+# instead of downloading its own, and the app finds it at run time (build.rs bakes the path in).
+[env]
+CEF_PATH = { value = ".cef", relative = true }

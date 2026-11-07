@@ -18,8 +18,18 @@ const DIFF_MAX_BYTES: usize = 512 * 1024;
 /// difft runs for this many files at once.
 const DIFFT_PARALLEL: usize = 4;
 
-/// Changes of the working tree (staged or not) against HEAD (or `base`), plus untracked files.
+/// Changes of the working tree (staged or not) against HEAD (or `base`), plus untracked files,
+/// with each file's structural diff when difft is installed.
 pub async fn project_diff(path: &Path, base: Option<&str>) -> Result<ProjectDiff, String> {
+    diff(path, base, true).await
+}
+
+/// The same without structural diffs (fast: a view that shows the text diff only).
+pub async fn project_diff_plain(path: &Path, base: Option<&str>) -> Result<ProjectDiff, String> {
+    diff(path, base, false).await
+}
+
+async fn diff(path: &Path, base: Option<&str>, structural: bool) -> Result<ProjectDiff, String> {
     if !path.join(".git").exists() {
         let inside = git(path, &["rev-parse", "--is-inside-work-tree"]).await;
         if inside.as_deref().map(str::trim) != Ok("true") {
@@ -65,7 +75,7 @@ pub async fn project_diff(path: &Path, base: Option<&str>) -> Result<ProjectDiff
         letters.push(letter);
     }
     // difft is looked up once, now; without it no file needs its old content fetched.
-    if let Some(difft) = find_difft() {
+    if let Some(difft) = find_difft().filter(|_| structural) {
         let jobs: Vec<(String, String)> = files
             .iter()
             .zip(&letters)
