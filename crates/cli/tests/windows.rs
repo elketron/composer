@@ -123,6 +123,35 @@ async fn a_window_gets_its_tui_and_follows_its_session() {
     let session = followed.unwrap();
     assert!(server.sessions.get(&session).is_ok(), "a real session");
 
+    // Only the window types into its TUI (unsandboxed: its editor can run a shell).
+    let typed = ClientRequest {
+        id: 2,
+        command: ClientCommand::TerminalInput {
+            terminal: terminal.clone().unwrap(),
+            data: "x".into(),
+        },
+    };
+    bystander
+        .send(Message::Text(serde_json::to_string(&typed).unwrap().into()))
+        .await
+        .unwrap();
+    let refused = loop {
+        let Some(Ok(Message::Text(text))) = bystander.next().await else {
+            panic!("closed")
+        };
+        if let ServerMessage::Error {
+            id: Some(2),
+            message,
+        } = serde_json::from_str::<ServerMessage>(&text).unwrap()
+        {
+            break message;
+        }
+    };
+    assert!(
+        refused.contains("only that window types into it"),
+        "{refused}"
+    );
+
     // Idle reaping leaves a window's TUI alone (it lives as long as its window).
     let terminal = terminal.unwrap();
     server.terminals.reap(&server, Duration::ZERO);
