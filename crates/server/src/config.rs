@@ -4,7 +4,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::config_sections::{
-    AgentConfig, AttachmentsConfig, ClaudeCodeConfig, LauncherEntry, McpServerConfig,
+    AgentConfig, AppsConfig, AttachmentsConfig, ClaudeCodeConfig, LauncherEntry, McpServerConfig,
     PipelinesConfig, ProjectsConfig, ProviderConfig, RemindersConfig, SandboxConfig, ServerConfig,
     System1Config,
 };
@@ -33,6 +33,8 @@ pub struct Config {
     pub attachments: AttachmentsConfig,
     #[serde(default = "section")]
     pub sandbox: SandboxConfig,
+    #[serde(default = "section")]
+    pub apps: AppsConfig,
     /// MCP servers by name, `[mcp.github]`.
     #[serde(default)]
     pub mcp: BTreeMap<String, McpServerConfig>,

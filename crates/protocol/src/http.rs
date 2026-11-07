@@ -183,6 +183,9 @@ pub struct AppInfo {
     /// A project-local app (`<project>/.composer/apps/<site>`); `why` says whether it is allowed.
     #[serde(default)]
     pub local: bool,
+    /// A client of the workspace (`[apps] clients`): opened with its full access.
+    #[serde(default)]
+    pub client: bool,
     /// Built with an older sdk: it shows nothing until rebuilt (`ui-build`, or `composer app
     /// rebuild`).
     #[serde(default)]

@@ -3,7 +3,7 @@ title: Chat
 type: index
 app:
   scope: global
-  # A full client: sessions, approvals (it keeps the workspace's access).
+  # Asks to be a full client (sessions, approvals): `[apps] clients` in config.toml lists it.
   client: true
   rail: { icon: chat, label: Chat }
 ---

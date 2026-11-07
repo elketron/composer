@@ -10,13 +10,24 @@ use crate::project::{ProjectPath, project_list};
 use crate::server::Server;
 
 /// The workspace's apps by site (sites with a `ui/` or an `app:` block), and the sites whose
-/// block doesn't parse (`site://<site>: <what is wrong>`).
+/// block doesn't parse (`site://<site>: <what is wrong>`) or that ask to be a client the user
+/// hasn't listed.
 pub fn workspace_apps(server: &Server) -> (Vec<(String, AppManifest)>, Vec<String>) {
     let (mut apps, mut errors) = (Vec::new(), Vec::new());
     for site in server.web.sites().unwrap_or_default() {
         let app = index(server, &site.name).and_then(|p| p.frontmatter.get("app").cloned());
         match AppManifest::of_site(app.as_ref(), site.has_ui) {
-            Ok(Some(manifest)) => apps.push((site.name, manifest)),
+            Ok(Some(manifest)) => {
+                if manifest.client && !crate::apps::is_client(server, &site.name) {
+                    errors.push(format!(
+                        "site://{} asks to be a client app (the workspace's full access: sessions, \
+                         approvals); it opens with a token of its own until you add it to \
+                         `[apps] clients` in config.toml",
+                        site.name
+                    ));
+                }
+                apps.push((site.name, manifest));
+            }
             Ok(None) => {}
             Err(e) => errors.push(format!("site://{}/index.md `app:`: {e}", site.name)),
         }
@@ -212,6 +223,7 @@ fn listing(
                 opens: app.manifest.opens.iter().map(ToString::to_string).collect(),
                 built: dir.join("ui/dist/index.html").is_file(),
                 outdated: crate::apps::outdated(&dir),
+                client: app.local.is_none() && crate::apps::is_client(server, &app.site),
                 local: app.local.is_some(),
                 tile_text: None,
                 site: app.site,

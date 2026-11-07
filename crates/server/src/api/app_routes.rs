@@ -41,8 +41,8 @@ pub async fn app_file(
 /// `<base>/<site>/` (the workspace's token) serves client apps only (ticket 0168); any other app
 /// is opened with a token of its own: the refusal says how.
 fn client_only(server: &Server, site: &str) -> Option<Response> {
-    let manifest = crate::apps::site_manifest(server, site).ok().flatten()?;
-    if manifest.client {
+    crate::apps::site_manifest(server, site).ok().flatten()?;
+    if crate::apps::is_client(server, site) {
         return None;
     }
     let message = format!(

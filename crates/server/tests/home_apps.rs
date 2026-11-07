@@ -1,8 +1,9 @@
-//! Home apps open with a token of their own (ticket 0168): `POST /api/apps/<site>/open` (or ws
+//! Home apps open with a token of their own (tickets 0168, 0170): `POST /api/apps/<site>/open` (or ws
 //! `app.open`) gives `<base>/h/<site>/?app_token=...`; with it the app writes only its own site and
 //! its Home data, has no project. The workspace's own route (`<base>/<site>/`) serves only client
-//! apps (`client: true`, the chat app), opened with a one-time code that becomes the cookie: the
-//! workspace token is never in an app's URL. A project-only app doesn't open on Home.
+//! apps (the user's `[apps] clients`, the chat app), opened with a one-time code that becomes the
+//! cookie: the workspace token is never in an app's URL. A site's own `client: true` only asks:
+//! unlisted, it opens with a token like any app. A project-only app doesn't open on Home.
 #![allow(
     clippy::disallowed_methods,
     reason = "tests set up repos and fakes outside the sandbox"
@@ -53,7 +54,9 @@ async fn status_text(response: reqwest::Response) -> (u16, String) {
 
 #[tokio::test]
 async fn home_apps_have_their_own_tokens_and_clients_a_one_time_code() {
-    let (dir, server, _provider, addr) = start(vec![]).await;
+    let mut config = composer_server::Config::defaults();
+    config.apps.clients = vec!["talk".into()];
+    let (dir, server, _provider, addr) = start_with(config, vec![]).await;
     let sites = dir.path().join("sites");
     write(&sites.join("cal/index.md"), "---\ntitle: Cal\n---\n# Cal\n");
     write(&sites.join("cal/ui/dist/index.html"), "<p>cal</p>");
@@ -62,6 +65,12 @@ async fn home_apps_have_their_own_tokens_and_clients_a_one_time_code() {
         "---\ntitle: Talk\napp:\n  client: true\n---\n# Talk\n",
     );
     write(&sites.join("talk/ui/dist/index.html"), "<p>talk</p>");
+    // Asks to be a client; not listed.
+    write(
+        &sites.join("asker/index.md"),
+        "---\ntitle: Asker\napp:\n  client: true\n---\n# Asker\n",
+    );
+    write(&sites.join("asker/ui/dist/index.html"), "<p>asker</p>");
     write(
         &sites.join("parts/index.md"),
         "---\ntitle: Parts\napp:\n  scope: project\n---\n# Parts\n",
@@ -183,6 +192,50 @@ async fn home_apps_have_their_own_tokens_and_clients_a_one_time_code() {
         call(addr, Method::GET, &url, None, None).await.status(),
         404
     );
+
+    // Asking isn't being: a token of its own, and the listing says it asks.
+    let (status, body) = status_text(
+        call(
+            addr,
+            Method::POST,
+            "/api/apps/asker/open",
+            Some(&workspace),
+            None,
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    let opened: Value = serde_json::from_str(&body).unwrap();
+    assert!(
+        opened["url"]
+            .as_str()
+            .unwrap()
+            .starts_with("/h/asker/?app_token=app_"),
+        "{opened}"
+    );
+    let (status, _) =
+        status_text(call(addr, Method::GET, "/asker/", Some(&workspace), None).await).await;
+    assert_eq!(status, 404, "not served on the workspace's route");
+    let (_, body) =
+        status_text(call(addr, Method::GET, "/api/apps", Some(&workspace), None).await).await;
+    let home: Value = serde_json::from_str(&body).unwrap();
+    let errors = home["errors"].to_string();
+    assert!(
+        errors.contains("site://asker asks to be a client app"),
+        "{errors}"
+    );
+    let client = |site: &str| {
+        home["apps"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|a| a["site"] == site)
+            .unwrap()["client"]
+            .as_bool()
+            .unwrap()
+    };
+    assert!(client("talk") && !client("asker"));
 
     // A project app doesn't open on Home.
     let (status, body) = status_text(

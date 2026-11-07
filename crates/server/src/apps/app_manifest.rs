@@ -18,8 +18,8 @@ pub struct AppManifest {
     pub tile: bool,
     pub opens: Vec<FileGlob>,
     pub on_open: Vec<String>,
-    /// A full client of the workspace (the chat app: sessions, approvals): it keeps the
-    /// workspace's access instead of an app token (ticket 0168).
+    /// It asks to be a full client of the workspace (the chat app: sessions, approvals). Only the
+    /// user's `[apps] clients` makes it one (ticket 0170); until then it is listed as asking.
     pub client: bool,
 }
 
