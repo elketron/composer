@@ -42,9 +42,35 @@ async fn drive(server: Arc<Server>, session: Arc<Session>) {
             return;
         }
         let id = session.id().to_string();
-        for message in messages {
+        for mut message in messages {
             server.worker_approvals.read(&id, &message.content);
+            if message.role == Role::User
+                && let Some(selection) = session.selection()
+            {
+                // The chip goes with this message, once (ticket 0175).
+                message.content.push_str(&selection_context(&selection));
+                session.set_selection(None);
+                server.hub.send(ServerMessage::SelectionChanged {
+                    session: id.clone(),
+                    selection: None,
+                });
+            }
             accept_user_message(&server, &session, message);
+        }
+        let notes = session.take_notes();
+        if !notes.is_empty() {
+            // What the session's apps reported since the last turn: context, not a request.
+            let content = format!(
+                "[What the apps on the user's stage reported since your last turn; context, not a \
+                 request]\n{}",
+                notes.join("\n")
+            );
+            if let Err(e) = session.push_history(ModelMessage::User {
+                content,
+                images: vec![],
+            }) {
+                tracing::warn!("session {id}: {e}");
+            }
         }
 
         let cancel = session.new_turn_token();
@@ -74,6 +100,27 @@ async fn drive(server: Arc<Server>, session: Arc<Session>) {
         });
         session.update_info(&server.hub, |info| info.state = TurnState::Idle);
     }
+}
+
+/// The selection as context for the model, after the user's words.
+pub fn selection_context(selection: &composer_protocol::Selection) -> String {
+    let mut text = format!(
+        "\n\n[Selected in the {} app: {}]",
+        selection.app, selection.label
+    );
+    if let Some(url) = &selection.url {
+        text.push_str(&format!("\n{url}"));
+    }
+    if let Some(selected) = &selection.text {
+        let cut: String = selected.chars().take(20_000).collect();
+        text.push_str(&format!("\n```\n{cut}\n```"));
+    }
+    if let Some(data) = &selection.data {
+        let json = data.to_string();
+        let cut: String = json.chars().take(4_000).collect();
+        text.push_str(&format!("\n{cut}"));
+    }
+    text
 }
 
 fn accept_user_message(server: &Arc<Server>, session: &Arc<Session>, message: ChatMessage) {

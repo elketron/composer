@@ -20,6 +20,7 @@ mod run_stage_tool;
 mod run_tool;
 pub(crate) mod scaffold;
 mod search_tool;
+mod selection_tool;
 mod set_project_tool;
 mod spawn_worker_tool;
 mod stage_tools;

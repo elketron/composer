@@ -150,6 +150,23 @@ pub enum ServerMessage {
         state: WorkerState,
     },
 
+    /// What the user points at in an app of the session changed (`None`: nothing): the chip.
+    #[serde(rename = "selection.changed")]
+    SelectionChanged {
+        session: SessionId,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        selection: Option<crate::Selection>,
+    },
+    /// Something happened in an app of the session (a gate flipped, approve clicked); the agent
+    /// sees it on its next turn.
+    #[serde(rename = "app.event")]
+    AppEvent {
+        session: SessionId,
+        app: String,
+        kind: String,
+        #[serde(default)]
+        detail: serde_json::Value,
+    },
     /// A session's desk changed (`by` the user or the agent): to the clients attached to it.
     #[serde(rename = "desk.changed")]
     DeskChanged {

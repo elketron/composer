@@ -83,6 +83,8 @@ fn routes(router: Router<Arc<Server>>, base: &str) -> Router<Arc<Server>> {
             &format!("{base}/api/sessions/{{id}}/messages"),
             post(post_message),
         )
+        .route(&format!("{base}/api/selection"), post(select))
+        .route(&format!("{base}/api/events"), post(app_event))
 }
 
 /// Requires the token the app was opened with (`?app_token=` once, then its cookie; or
@@ -612,4 +614,106 @@ async fn post_message(
     }
     body.site = Some(grant.site.clone());
     http_routes::post_message(state, Path(id), Json(body)).await
+}
+
+/// The session an app was opened from, which its selection and events go to (tickets 0172,
+/// 0175); refused for an app opened outside a chat.
+fn own_session(
+    server: &Server,
+    grant: &AppGrant,
+) -> Result<Arc<crate::session::Session>, ApiError> {
+    let id = grant.session.as_deref().ok_or_else(|| {
+        ApiError(
+            StatusCode::FORBIDDEN,
+            format!(
+                "the {} app was opened outside a chat: open it from one to point the agent at \
+                 things",
+                grant.site
+            ),
+        )
+    })?;
+    server
+        .sessions
+        .get(id)
+        .map_err(|_| ApiError(StatusCode::NOT_FOUND, format!("session `{id}` is gone")))
+}
+
+/// What the app's selection says (the sdk's `select`); `label: null` clears it.
+#[derive(serde::Deserialize)]
+struct SelectBody {
+    label: Option<String>,
+    #[serde(default)]
+    text: Option<String>,
+    #[serde(default)]
+    url: Option<String>,
+    #[serde(default)]
+    data: Option<serde_json::Value>,
+}
+
+/// `POST <app>/api/selection`: what the user points at in the app becomes the session's chip.
+async fn select(
+    State(server): State<Arc<Server>>,
+    Extension(grant): Extension<AppGrant>,
+    Json(body): Json<SelectBody>,
+) -> Result<StatusCode, ApiError> {
+    let session = own_session(&server, &grant)?;
+    let selection = body.label.map(|label| composer_protocol::Selection {
+        app: grant.site.clone(),
+        label,
+        text: body.text,
+        url: body.url,
+        data: body.data,
+    });
+    if session.set_selection(selection.clone()) {
+        server
+            .hub
+            .send(composer_protocol::ServerMessage::SelectionChanged {
+                session: session.id().to_string(),
+                selection,
+            });
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// An app's event (the sdk's `emit`).
+#[derive(serde::Deserialize)]
+struct EventBody {
+    kind: String,
+    #[serde(default)]
+    detail: serde_json::Value,
+}
+
+/// `POST <app>/api/events`: something happened in the app; the agent sees it at its next turn
+/// (it doesn't start one). At most 20 a minute per app and session.
+async fn app_event(
+    State(server): State<Arc<Server>>,
+    Extension(grant): Extension<AppGrant>,
+    Json(body): Json<EventBody>,
+) -> Result<StatusCode, ApiError> {
+    let session = own_session(&server, &grant)?;
+    let kind = body.kind.trim();
+    if kind.is_empty() || kind.len() > 64 {
+        return Err(ApiError(
+            StatusCode::BAD_REQUEST,
+            "an event's `kind` is a short name (gate.approved, tab.saved)".into(),
+        ));
+    }
+    if !server.app_events.allow(session.id(), &grant.site) {
+        return Err(ApiError(
+            StatusCode::TOO_MANY_REQUESTS,
+            format!(
+                "the {} app reported more than 20 events this minute",
+                grant.site
+            ),
+        ));
+    }
+    let detail: String = body.detail.to_string().chars().take(2_000).collect();
+    session.add_note(format!("- the {} app: {kind} {detail}", grant.site));
+    server.hub.send(composer_protocol::ServerMessage::AppEvent {
+        session: session.id().to_string(),
+        app: grant.site.clone(),
+        kind: kind.to_string(),
+        detail: body.detail,
+    });
+    Ok(StatusCode::NO_CONTENT)
 }

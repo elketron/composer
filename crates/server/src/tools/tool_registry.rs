@@ -24,6 +24,7 @@ use crate::tools::publish_site_tool::PublishSiteTool;
 use crate::tools::run_stage_tool::RunStageTool;
 use crate::tools::run_tool::RunTool;
 use crate::tools::search_tool::SearchTool;
+use crate::tools::selection_tool::SelectionTool;
 use crate::tools::set_project_tool::SetProjectTool;
 use crate::tools::spawn_worker_tool::SpawnWorkerTool;
 use crate::tools::stage_tools::{DeskTool, ShowAppTool, ShowPageTool};
@@ -66,6 +67,7 @@ impl ToolRegistry {
                 Arc::new(ShowAppTool),
                 Arc::new(ShowPageTool),
                 Arc::new(DeskTool),
+                Arc::new(SelectionTool),
                 Arc::new(FinishTool),
             ],
         }

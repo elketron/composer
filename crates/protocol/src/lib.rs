@@ -15,5 +15,5 @@ mod server;
 
 pub use client::{ClientCommand, ClientRequest};
 pub use common::*;
-pub use desk::{Desk, DeskBy, DeskEntry, DeskTab};
+pub use desk::{Desk, DeskBy, DeskEntry, DeskTab, Selection};
 pub use server::{CommandResult, ServerMessage};
