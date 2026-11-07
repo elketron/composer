@@ -206,12 +206,7 @@ pub async fn project_diff(
     let session = server.sessions.get(&id)?;
     // A ticket's worker: its changes against the project's branch, while it still has them.
     if let Some(ticket) = session.info().ticket.and_then(|t| TicketId::parse(&t).ok())
-        && (server
-            .home
-            .state()
-            .join("worktrees")
-            .join(ticket.as_str())
-            .exists()
+        && (server.home.worktrees().join(ticket.as_str()).exists()
             || crate::worker::ticket_closed(&server, &ticket).is_some())
     {
         let diff = crate::worker::ticket_changes(&server, &ticket, None)

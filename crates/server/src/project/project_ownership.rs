@@ -92,6 +92,16 @@ impl ProjectOwnership {
         })
     }
 
+    /// The projects other workspaces than `workspace` own.
+    pub fn others(&self, workspace: &WorkspaceName) -> Vec<ProjectPath> {
+        let owners = self.owners.lock().expect("ownership lock");
+        owners
+            .iter()
+            .filter(|(_, owner)| *owner != workspace)
+            .map(|(path, _)| path.clone())
+            .collect()
+    }
+
     /// Fails when `project` (or a folder overlapping it) belongs to another workspace.
     pub fn check(&self, project: &ProjectPath, workspace: &WorkspaceName) -> Result<(), String> {
         match self.owner(project) {

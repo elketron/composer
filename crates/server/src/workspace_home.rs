@@ -169,6 +169,11 @@ impl WorkspaceHome {
         self.root.join("state")
     }
 
+    /// Ticket worktrees (`state/worktrees/<id>`).
+    pub fn worktrees(&self) -> PathBuf {
+        self.state().join("worktrees")
+    }
+
     pub fn sessions(&self) -> PathBuf {
         self.state().join("sessions")
     }

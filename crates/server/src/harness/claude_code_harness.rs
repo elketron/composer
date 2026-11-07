@@ -64,7 +64,7 @@ impl Harness for ClaudeCodeHarness {
             Some(resume) => resume.harness_session.clone(),
             None => new_session_id(),
         };
-        let in_worktree = Path::new(&folder).starts_with(server.home.state().join("worktrees"));
+        let in_worktree = Path::new(&folder).starts_with(server.home.worktrees());
         let prompt = match &request.resume {
             Some(resume) => format!(
                 "Feedback on ticket {} from the user:\n\n{}\n\nWork it in, update the ticket's \

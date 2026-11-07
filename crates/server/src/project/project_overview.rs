@@ -80,7 +80,7 @@ fn works(server: &Server, folder: &str) -> Vec<WorkSummary> {
 
 /// Ticket worktrees of this repository that are still there.
 fn branches(server: &Server, top: &Path) -> Vec<TicketBranchSummary> {
-    let root = server.home.state().join("worktrees");
+    let root = server.home.worktrees();
     let mut branches: Vec<TicketBranchSummary> = std::fs::read_dir(&root)
         .into_iter()
         .flatten()

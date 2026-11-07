@@ -2,8 +2,10 @@ import { fileURLToPath } from 'node:url';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { defineConfig } from 'vite';
 
-// The shared sdk lives in ~/.composer/templates/sdk (this file is in ~/.composer/sites/<site>/ui).
-const sdk = fileURLToPath(new URL('../../../templates/sdk', import.meta.url));
+// The shared sdk: the home's templates/sdk, which composer passes to recipes as COMPOSER_SDK. The
+// fallback is where it was before workspaces (this file in ~/.composer/sites/<site>/ui).
+const sdk =
+  process.env.COMPOSER_SDK ?? fileURLToPath(new URL('../../../templates/sdk', import.meta.url));
 
 export default defineConfig({
   // Served by the composer server at /chat/.

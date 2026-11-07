@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use tokio_util::sync::CancellationToken;
 
-use crate::actions::justfile::just;
+use crate::actions::justfile::just_args;
 use crate::actions::{Justfile, RecipeEnv, RunOutput};
 
 /// Output kept for the model: the start and the end, which is where errors are.
@@ -21,7 +21,12 @@ pub async fn run_recipe(
 ) -> Result<RunOutput, String> {
     // One pipe for stdout and stderr, so the output keeps its real order (as in a terminal).
     let (mut reader, writer) = std::io::pipe().map_err(|e| e.to_string())?;
-    let mut command = just(justfile.dir());
+    let mut command = env
+        .sandbox()
+        .clone()
+        .in_dir(justfile.dir())
+        .command("just")?;
+    just_args(&mut command, justfile.dir());
     command
         .arg(recipe)
         .args(args)

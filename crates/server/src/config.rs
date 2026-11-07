@@ -5,7 +5,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::config_sections::{
     AgentConfig, AttachmentsConfig, ClaudeCodeConfig, LauncherEntry, McpServerConfig,
-    PipelinesConfig, ProjectsConfig, ProviderConfig, RemindersConfig, ServerConfig, System1Config,
+    PipelinesConfig, ProjectsConfig, ProviderConfig, RemindersConfig, SandboxConfig, ServerConfig,
+    System1Config,
 };
 use crate::error::{Result, ServerError};
 
@@ -30,6 +31,8 @@ pub struct Config {
     pub claude_code: ClaudeCodeConfig,
     #[serde(default = "section")]
     pub attachments: AttachmentsConfig,
+    #[serde(default = "section")]
+    pub sandbox: SandboxConfig,
     /// MCP servers by name, `[mcp.github]`.
     #[serde(default)]
     pub mcp: BTreeMap<String, McpServerConfig>,

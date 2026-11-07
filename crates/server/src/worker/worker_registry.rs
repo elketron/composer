@@ -617,11 +617,7 @@ impl WorkerRegistry {
         let reads_only = page.frontmatter.get_str("worktree").as_deref() == Some("false");
         let worktree = match &project {
             Some(_) if reads_only => None,
-            Some(folder) => ticket_worktree(
-                Path::new(folder),
-                &server.home.state().join("worktrees"),
-                id,
-            )?,
+            Some(folder) => ticket_worktree(Path::new(folder), &server.home.worktrees(), id)?,
             None => None,
         };
         let folder = worktree

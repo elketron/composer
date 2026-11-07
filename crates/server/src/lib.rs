@@ -26,6 +26,7 @@ pub mod pipeline;
 pub mod project;
 pub mod provider;
 pub mod reminders;
+pub mod sandbox;
 mod server;
 pub mod session;
 mod slot_guard;
@@ -47,7 +48,7 @@ pub use config::Config;
 pub use config_sections::{
     AgentConfig, AttachmentsConfig, ClaudeCodeConfig, LauncherEntry, McpServerConfig,
     PipelinesConfig, ProjectSettings, ProjectsConfig, ProviderConfig, RemindersConfig,
-    ServerConfig,
+    SandboxConfig, ServerConfig,
 };
 pub use error::{Result, ServerError};
 pub use hash::content_hash;
