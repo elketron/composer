@@ -59,9 +59,20 @@ fn workspace() -> String {
         .unwrap_or_else(|| "default".into())
 }
 
+/// Start-up timing on stderr, on request (`COMPOSER_DESKTOP_TRACE=1`).
+pub fn trace(step: &str) {
+    static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+    let start = START.get_or_init(std::time::Instant::now);
+    if std::env::var_os("COMPOSER_DESKTOP_TRACE").is_some() {
+        eprintln!("[{:>6} ms] {step}", start.elapsed().as_millis());
+    }
+}
+
 fn main() {
+    trace("start");
     // CEF re-runs this binary for its own processes: before anything else.
     cef_runtime::run_helper_process();
+    trace("not a CEF helper");
     let (home, workspace) = (home(), workspace());
     // Its server found before anything opens: a clear message instead of an empty window.
     if let Err(e) = Endpoint::discover(&home, &workspace) {
@@ -76,12 +87,14 @@ fn main() {
             std::process::exit(1);
         }
     };
+    trace("CEF started");
     // The client's connection runs on tokio; gpui runs the windows on the main thread.
     let runtime = tokio::runtime::Runtime::new().expect("a tokio runtime");
     let _entered = runtime.enter();
     let handle = runtime.handle().clone();
 
     gpui_platform::application().run(move |cx: &mut App| {
+        trace("gpui running");
         cx.text_system()
             .add_fonts(FONTS.iter().map(|f| Cow::Borrowed(*f)).collect())
             .expect("the bundled font loads");
@@ -107,6 +120,7 @@ fn main() {
         browser_pump::start(cx);
         Desktop::init(home, handle, cx);
         desktop::open(&workspace, cx);
+        trace("window opened");
         cx.activate(true);
     });
     cef_runtime::shutdown(cache);

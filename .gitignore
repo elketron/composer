@@ -1,2 +1,3 @@
 /target
 /crates/protocol/bindings
+/dist/

@@ -76,6 +76,8 @@ pub struct Shell {
     follow: bool,
     /// The window is in front (as of its last draw): notifications only when it isn't.
     active: bool,
+    /// Drawn once (start-up timing).
+    drawn: bool,
     focus: FocusHandle,
 }
 
@@ -116,6 +118,7 @@ impl Shell {
             dragging: false,
             follow: true,
             active: true,
+            drawn: false,
             focus: cx.focus_handle(),
         }
     }
@@ -123,6 +126,7 @@ impl Shell {
     fn on_event(&mut self, event: Event, cx: &mut Context<Self>) {
         match event {
             Event::Connected => {
+                crate::trace("connected");
                 self.link = LinkState::Up;
                 self.hello(cx);
                 // All the sessions, for the switcher (updates follow as events).
@@ -215,6 +219,7 @@ impl Shell {
         }
         match result {
             CommandResult::Window { terminal, .. } => {
+                crate::trace("the window's TUI started");
                 let chat = self.new_pane(terminal, cx);
                 self.chat = Some(chat);
             }
@@ -667,6 +672,10 @@ const ACCENT: u32 = 0xe0a040;
 
 impl Render for Shell {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if !self.drawn {
+            self.drawn = true;
+            crate::trace("first draw");
+        }
         let total = f32::from(window.viewport_size().width);
         self.chat_width = self.chat_width.within(total);
         self.active = window.is_window_active();

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=composer (desktop)
+Comment=Your agent's chat beside the apps, pages and terminals it works with
+Exec=composer-desktop
+Icon=composer-desktop
+Terminal=false
+Categories=Development;Utility;
+StartupWMClass=composer

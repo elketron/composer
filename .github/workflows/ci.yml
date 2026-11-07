@@ -85,3 +85,21 @@ jobs:
       - run: flutter pub get
       - run: flutter analyze --fatal-infos
       - run: flutter test
+
+  # The desktop app (apps/desktop, its own Cargo workspace: gpui and CEF stay out of the rust job).
+  desktop:
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - name: System packages
+        run: pacman -Syu --noconfirm --needed git base-devel clang cmake rust pkgconf libxkbcommon libxkbcommon-x11 wayland vulkan-icd-loader fontconfig freetype2 libxcb
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: ~/.local/share/composer/cef
+          key: cef-156.0.15
+      - name: fmt, clippy, test
+        run: |
+          git config --global --add safe.directory '*'
+          apps/desktop/scripts/fetch-cef.sh
+          scripts/ci.sh desktop

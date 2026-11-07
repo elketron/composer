@@ -120,6 +120,22 @@ jobs:
           name: linux
           path: dist/*.tar.gz
 
+  desktop:
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - name: System packages
+        run: pacman -Syu --noconfirm --needed git base-devel clang cmake rust pkgconf libxkbcommon libxkbcommon-x11 wayland vulkan-icd-loader fontconfig freetype2 libxcb
+      - uses: actions/checkout@v4
+      - name: Build
+        run: |
+          git config --global --add safe.directory '*'
+          scripts/package-desktop.sh "${VERSION#v}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop
+          path: dist/*.tar.gz
+
   windows:
     runs-on: windows-latest
     steps:
@@ -153,7 +169,7 @@ jobs:
 
   publish:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [server, android, linux, windows]
+    needs: [server, android, linux, desktop, windows]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
