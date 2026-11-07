@@ -5,7 +5,7 @@
   which creates them with the site's `new-ticket` action.
 -->
 <script lang="ts">
-  import { AppShell, Badge, Button, Kbd, onChange, page, project, search, send, session, type Page, type Project } from '$sdk';
+  import { AppShell, Badge, Button, Kbd, onChange, page, project, search, select, send, session, type Page, type Project } from '$sdk';
 
   type Status = 'open' | 'claimed' | 'done' | 'failed';
   const columns: { status: Status; tone: 'muted' | 'warn' | 'ok' | 'err' }[] = [
@@ -40,6 +40,13 @@
   const inColumn = (status: Status) =>
     tickets.filter((t) => (field(t, 'status') || 'open') === status).sort((a, b) => field(a, 'id').localeCompare(field(b, 'id')));
   const selected = $derived(inColumn(columns[column].status)[row]);
+
+  // The ticket under the cursor is what the user points the agent at (the chat's chip).
+  $effect(() => {
+    const ticket = selected;
+    if (!session) return;
+    select(ticket ? { label: `ticket ${field(ticket, 'id')}: ${ticket.title ?? ''}`.trim(), url: ticket.url } : null).catch(() => {});
+  });
 
   async function load() {
     await ready;

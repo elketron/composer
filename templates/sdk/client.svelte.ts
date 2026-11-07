@@ -130,6 +130,30 @@ export async function putData(path: string, body: Blob | string): Promise<void> 
   if (!response.ok) throw new Error(`${response.status} ${await response.text()}`);
 }
 
+/** What the user points at in this app, for the agent (ticket 0175): it shows as a chip in the
+ * chat and goes with the next message; `null` clears it. Only for an app opened from a chat. */
+export async function select(
+  selection: { label: string; text?: string; url?: string; data?: unknown } | null,
+): Promise<void> {
+  const response = await fetch(`${base}/api/selection`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(selection ?? { label: null }),
+  });
+  if (!response.ok && response.status !== 403) throw new Error(`${response.status} ${await response.text()}`);
+}
+
+/** Something happened in this app that the agent should know (a gate flipped, approve clicked):
+ * it sees it at its next turn; it doesn't start one. At most 20 a minute. */
+export async function emit(kind: string, detail: unknown = {}): Promise<void> {
+  const response = await fetch(`${base}/api/events`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ kind, detail }),
+  });
+  if (!response.ok && response.status !== 403) throw new Error(`${response.status} ${await response.text()}`);
+}
+
 /** Reads a markdown page (frontmatter parsed). */
 export async function page(url: string): Promise<Page> {
   return json(await fetch(`${base}/api/pages/${apiPath(url)}`));
