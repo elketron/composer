@@ -34,6 +34,15 @@ pub async fn require_token(
         .filter_map(|pair| pair.split_once('='))
         .find(|(k, v)| *k == "token" && server.accepts_token(v))
         .map(|(_, v)| v.to_string());
+    // A client app's one-time code (ticket 0168): used once, it becomes the cookie.
+    let once = request
+        .uri()
+        .query()
+        .unwrap_or("")
+        .split('&')
+        .filter_map(|pair| pair.split_once('='))
+        .any(|(k, v)| k == "once" && server.once_codes.take(v));
+    let query_token = query_token.or_else(|| once.then(|| server.token.clone()));
     let cookie = headers
         .get_all(header::COOKIE)
         .iter()
@@ -73,15 +82,16 @@ pub async fn require_token(
     response
 }
 
-/// The request comes from a page of a project app (its `Referer` is under `<base>/p/`).
+/// The request comes from an app page with a token of its own (its `Referer` is under
+/// `<base>/p/` or `<base>/h/`).
 fn from_app_page(headers: &HeaderMap, route_base: &str) -> bool {
-    let apps = format!("{route_base}/p/");
+    let (project_apps, home_apps) = (format!("{route_base}/p/"), format!("{route_base}/h/"));
     headers
         .get(header::REFERER)
         .and_then(|v| v.to_str().ok())
         .and_then(|r| r.split_once("://").map(|(_, rest)| rest))
         .and_then(|rest| rest.find('/').map(|at| &rest[at..]))
-        .is_some_and(|path| path.starts_with(&apps))
+        .is_some_and(|path| path.starts_with(&project_apps) || path.starts_with(&home_apps))
 }
 
 /// The browser's origin is our host, directly or as `tailscale serve` forwards it.

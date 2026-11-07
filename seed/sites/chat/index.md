@@ -3,6 +3,8 @@ title: Chat
 type: index
 app:
   scope: global
+  # A full client: sessions, approvals (it keeps the workspace's access).
+  client: true
   rail: { icon: chat, label: Chat }
 ---
 # Chat

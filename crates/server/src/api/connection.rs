@@ -143,7 +143,8 @@ impl Connection {
             EventScope::Project(name) => {
                 self.app
                     .as_ref()
-                    .is_some_and(|g| g.project.as_str() == name)
+                    .and_then(|g| g.project.as_ref())
+                    .is_some_and(|p| p.name.as_str() == name)
                     || self
                         .opened
                         .lock()
@@ -446,6 +447,19 @@ impl Connection {
                         CommandResult::Done
                     });
                     connection.reply(id, reply);
+                });
+                None
+            }
+            ClientCommand::AppOpen { site, project } => {
+                let (connection, server) = (self.clone(), server.clone());
+                tokio::spawn(async move {
+                    let opened = tokio::task::spawn_blocking(move || {
+                        crate::apps::open_app(&server, &site, project.as_deref())
+                    })
+                    .await
+                    .map_err(|e| e.to_string())
+                    .and_then(|r| r);
+                    connection.reply(id, opened.map(|opened| CommandResult::AppOpened { opened }));
                 });
                 None
             }
@@ -875,6 +889,7 @@ impl Connection {
             | ClientCommand::ProjectOpen { .. }
             | ClientCommand::ProjectClose { .. }
             | ClientCommand::ProjectsOpen
+            | ClientCommand::AppOpen { .. }
             | ClientCommand::AppAllow { .. }
             | ClientCommand::AppPromote { .. }
             | ClientCommand::LibraryList

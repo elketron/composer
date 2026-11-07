@@ -97,6 +97,12 @@ async fn new_app_scaffolds_the_ui_and_a_build_action() {
 #[tokio::test]
 async fn apps_are_served_with_cookie_auth() {
     let (dir, server, _p, addr) = start(vec![]).await;
+    // A client app (the chat app's kind): served on the workspace's own route (ticket 0168).
+    std::fs::write(
+        dir.path().join("sites/plans/index.md"),
+        "---\ntitle: Plans\napp:\n  client: true\n---\n# Plans\n",
+    )
+    .unwrap();
     let dist = dir.path().join("sites/plans/ui/dist");
     std::fs::create_dir_all(dist.join("assets")).unwrap();
     std::fs::write(
@@ -203,8 +209,24 @@ async fn apps_are_served_with_cookie_auth() {
         none.contains("no app") && none.contains("memory/ui/"),
         "{none}"
     );
-    // The seeded orchestration site has ui/ sources but nothing built.
-    let unbuilt = page("orchestration").await;
+    // The seeded ticket board isn't a client app: the workspace's route says how to open it
+    // (ticket 0168); opened on Home with its own token, it says it has nothing built.
+    let elsewhere = page("orchestration").await;
+    assert!(elsewhere.contains("a token of its own"), "{elsewhere}");
+    let opened: serde_json::Value = client
+        .post(format!("{base}/api/apps/orchestration/open"))
+        .header("cookie", &cookie)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let url = opened["url"].as_str().unwrap();
+    assert!(url.starts_with("/h/orchestration/?app_token=app_"), "{url}");
+    let response = client.get(format!("{base}{url}")).send().await.unwrap();
+    assert_eq!(response.status(), 404);
+    let unbuilt = response.text().await.unwrap();
     assert!(
         unbuilt.contains("not built") && unbuilt.contains("orchestration/ui/dist/index.html"),
         "{unbuilt}"

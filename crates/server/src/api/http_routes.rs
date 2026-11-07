@@ -71,39 +71,25 @@ pub async fn open_app(
     State(server): State<Arc<Server>>,
     axum::extract::Path((name, site)): axum::extract::Path<(String, String)>,
 ) -> Result<Json<composer_protocol::http::AppOpened>, ApiError> {
-    let opened = tokio::task::spawn_blocking(move || {
-        let (project, folder, apps, _) = crate::apps::attached_apps(&server, &name)?;
-        let Some(app) = apps.into_iter().find(|a| a.site == site) else {
-            return Err(format!(
-                "site://{site} isn't one of project `{name}`'s apps: its `app:` block's `when` \
-                 doesn't match it; pin it with `apps = [\"{site}\"]` in the project's \
-                 [projects] entry, or see `GET /api/projects/{name}/apps`"
-            ));
-        };
-        if app.why == crate::apps::AttachReason::LocalNotAllowed {
-            return Err(format!(
-                "`{site}` is a project-local app of `{name}` (in its .composer/apps/) that you \
-                 haven't allowed, or that changed since: look at it, then run `composer app \
-                 allow {name} {site}`"
-            ));
-        }
-        let token = server.app_tokens.mint(crate::apps::AppGrant {
-            project: project.clone(),
-            folder,
-            site: site.clone(),
-            local: app.local,
-        });
-        let url = format!(
-            "{}/p/{}/{}/?app_token={token}",
-            server.route_base(),
-            crate::api::app_api::encode_segment(project.as_str()),
-            crate::api::app_api::encode_segment(&site)
-        );
-        Ok(composer_protocol::http::AppOpened { url, token })
-    })
-    .await
-    .expect("opening an app doesn't panic");
-    opened
+    opened(server, site, Some(name)).await
+}
+
+/// `POST /api/apps/<site>/open`: a Home app's URL (its token, or a client app's one-time code).
+pub async fn open_home_app(
+    State(server): State<Arc<Server>>,
+    axum::extract::Path(site): axum::extract::Path<String>,
+) -> Result<Json<composer_protocol::http::AppOpened>, ApiError> {
+    opened(server, site, None).await
+}
+
+async fn opened(
+    server: Arc<Server>,
+    site: String,
+    project: Option<String>,
+) -> Result<Json<composer_protocol::http::AppOpened>, ApiError> {
+    tokio::task::spawn_blocking(move || crate::apps::open_app(&server, &site, project.as_deref()))
+        .await
+        .expect("opening an app doesn't panic")
         .map(Json)
         .map_err(|e| ApiError(axum::http::StatusCode::NOT_FOUND, e))
 }

@@ -47,7 +47,9 @@ impl AppTokens {
     pub fn revoke(&self, project: &ProjectName, site: &str) -> usize {
         let mut grants = self.grants.lock().expect("app tokens lock");
         let before = grants.len();
-        grants.retain(|_, g| !(g.project == *project && g.site == site));
+        grants.retain(|_, g| {
+            !(g.project.as_ref().is_some_and(|p| p.name == *project) && g.site == site)
+        });
         before - grants.len()
     }
 }
@@ -62,8 +64,10 @@ mod tests {
 
     fn grant(project: &str, site: &str) -> AppGrant {
         AppGrant {
-            project: ProjectName::new(project).unwrap(),
-            folder: format!("/p/{project}").into(),
+            project: Some(crate::apps::GrantedProject {
+                name: ProjectName::new(project).unwrap(),
+                folder: format!("/p/{project}").into(),
+            }),
             site: site.into(),
             local: None,
         }

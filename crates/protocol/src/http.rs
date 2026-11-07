@@ -219,7 +219,9 @@ pub struct ProjectInfo {
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct AppOpened {
     pub url: String,
-    pub token: String,
+    /// The app's own token; `None` for a client app (its URL has a one-time code instead).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub token: Option<String>,
 }
 
 /// A project open in the workspace (`projects.open`).

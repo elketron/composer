@@ -157,7 +157,10 @@ async fn side(
     server
         .write_page(
             &SiteUrl::new(&site, "index.md").unwrap(),
-            &format!("---\ntitle: Only {name}\n---\n# Only {name}\n\nThe {word} lives here.\n"),
+            // A client app, so the workspace's own route serves it (ticket 0168).
+            &format!(
+                "---\ntitle: Only {name}\napp:\n  client: true\n---\n# Only {name}\n\nThe {word} lives here.\n"
+            ),
             ChangedBy::External,
         )
         .unwrap();

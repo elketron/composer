@@ -159,6 +159,13 @@ pub enum Pending {
     Discarded(String),
     /// `ticket.comment` on this ticket: say how many went in, show the lines.
     Comments(String),
+    /// `app.open` of `site` for `session`: on `project` (then on Home, if it isn't one of its
+    /// apps), then check it is built and open it.
+    OpenApp {
+        site: String,
+        session: String,
+        project: Option<String>,
+    },
     Ignore,
 }
 

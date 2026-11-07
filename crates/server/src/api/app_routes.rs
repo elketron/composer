@@ -22,14 +22,43 @@ pub async fn app_redirect(Path(site): Path<String>, uri: Uri) -> Redirect {
 }
 
 pub async fn app_index(State(server): State<Arc<Server>>, Path(site): Path<String>) -> Response {
-    serve_app(&server, &site, "")
+    match client_only(&server, &site) {
+        Some(refused) => refused,
+        None => serve_app(&server, &site, ""),
+    }
 }
 
 pub async fn app_file(
     State(server): State<Arc<Server>>,
     Path((site, path)): Path<(String, String)>,
 ) -> Response {
-    serve_app(&server, &site, &path)
+    match client_only(&server, &site) {
+        Some(refused) => refused,
+        None => serve_app(&server, &site, &path),
+    }
+}
+
+/// `<base>/<site>/` (the workspace's token) serves client apps only (ticket 0168); any other app
+/// is opened with a token of its own: the refusal says how.
+fn client_only(server: &Server, site: &str) -> Option<Response> {
+    let manifest = crate::apps::site_manifest(server, site).ok().flatten()?;
+    if manifest.client {
+        return None;
+    }
+    let message = format!(
+        "site://{site}'s app opens with a token of its own: <code>POST /api/apps/{site}/open</code> \
+         (Home) or <code>POST /api/projects/&lt;project&gt;/apps/{site}/open</code>, then load the \
+         URL it gives (the TUI's <code>a</code> does this)."
+    );
+    Some(
+        (
+            StatusCode::NOT_FOUND,
+            Html(format!(
+                "<!doctype html><meta charset=utf-8><body style=\"background:#0c0d0f;color:#868c96;font:14px monospace;padding:40px\">{message}</body>"
+            )),
+        )
+            .into_response(),
+    )
 }
 
 /// `GET /api/files/<site>/<path>`: any file of a site, with its content type.

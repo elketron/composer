@@ -26,8 +26,8 @@ pub(crate) async fn run(server: Arc<Server>, socket: WebSocket, app: Option<AppG
         None => Connection::new(out_tx),
     });
     // An app's socket keeps its project open while it is there.
-    if let Some(grant) = &app {
-        connection.open(&server, &grant.project, &grant.folder);
+    if let Some(project) = app.as_ref().and_then(|g| g.project.as_ref()) {
+        connection.open(&server, &project.name, &project.folder);
     }
 
     let writer = tokio::spawn(async move {

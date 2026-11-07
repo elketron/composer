@@ -34,6 +34,8 @@ const inWorkspace = segments[0] === 'w' && segments.length >= 2;
 const at = inWorkspace ? 2 : 0;
 /** Opened on a project: `<workspace>/p/<project>/<app>/` (its own token and API). */
 const onProject = segments[at] === 'p' && segments.length >= at + 3;
+/** Opened on Home with a token of its own: `<workspace>/h/<app>/`. */
+const onHome = segments[at] === 'h' && segments.length >= at + 2;
 const workspaceBase = inWorkspace ? `/w/${segments[1]}` : '';
 
 /** This app's workspace (`default`, ...), or `null` when served without one. */
@@ -42,14 +44,17 @@ export const workspace: string | null = inWorkspace ? segments[1] : null;
 /** The name of the project the app was opened on, or `null` on Home. */
 export const projectName: string | null = onProject ? decodeURIComponent(segments[at + 1]) : null;
 
-/** This app's site: `/w/default/design/` → `design`; `/w/default/p/game/cad/` → `cad`. */
-export const site: string = (onProject ? segments[at + 2] : segments[at]) ?? '';
+/** This app's site: `/w/default/design/` → `design`; `/w/default/p/game/cad/` → `cad`;
+ * `/w/default/h/calendar/` → `calendar`. */
+export const site: string = (onProject ? segments[at + 2] : onHome ? segments[at + 1] : segments[at]) ?? '';
 
 /** Where this app's API lives: the workspace's (`/w/<workspace>`), or on a project the app's own
  * (`/w/<workspace>/p/<project>/<app>`), which its token allows. */
 export const base: string = onProject
   ? `${workspaceBase}/p/${segments[at + 1]}/${segments[at + 2]}`
-  : workspaceBase;
+  : onHome
+    ? `${workspaceBase}/h/${segments[at + 1]}`
+    : workspaceBase;
 
 /** The session that opened the app; messages from `send` go there. Survives reloads. */
 export const session: string | null = (() => {
@@ -64,9 +69,10 @@ export const session: string | null = (() => {
 })();
 
 // Drop the token from the address bar once the cookie is set.
-if (params.has('token') || params.has('app_token')) {
+if (params.has('token') || params.has('app_token') || params.has('once')) {
   params.delete('token');
   params.delete('app_token');
+  params.delete('once');
   const query = params.toString();
   history.replaceState(null, '', location.pathname + (query ? `?${query}` : '') + location.hash);
 }
@@ -106,7 +112,7 @@ export async function project(): Promise<Project | null> {
 /** This app's work data on its project (renders, view models, JSON): kept in the workspace, keyed
  * by project, not in the project. Its recipes see the same folder as `APP_DATA`. */
 export async function data(path: string): Promise<Response> {
-  if (!projectName) throw new Error('data() needs a project: open the app from a project');
+  if (!projectName && !onHome) throw new Error('data() needs the app opened on a project or on Home');
   const response = await fetch(`${base}/api/data/${path}`);
   if (!response.ok) throw new Error(`${response.status} ${await response.text()}`);
   return response;
@@ -114,7 +120,7 @@ export async function data(path: string): Promise<Response> {
 
 /** Writes this app's work data on its project (see `data`). */
 export async function putData(path: string, body: Blob | string): Promise<void> {
-  if (!projectName) throw new Error('putData() needs a project: open the app from a project');
+  if (!projectName && !onHome) throw new Error('putData() needs the app opened on a project or on Home');
   const response = await fetch(`${base}/api/data/${path}`, { method: 'PUT', body });
   if (!response.ok) throw new Error(`${response.status} ${await response.text()}`);
 }

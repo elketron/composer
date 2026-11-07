@@ -24,6 +24,7 @@ use axum::middleware;
 use axum::routing::{get, post};
 
 pub use api_error::ApiError;
+pub use app_api::encode_segment;
 pub use connection::Connection;
 
 use crate::server::Server;
@@ -36,6 +37,10 @@ pub fn router(server: Arc<Server>) -> Router {
         .route("/api/agents", get(http_routes::agents))
         .route("/api/projects", get(http_routes::projects))
         .route("/api/apps", get(http_routes::home_apps))
+        .route(
+            "/api/apps/{site}/open",
+            axum::routing::post(http_routes::open_home_app),
+        )
         .route("/api/projects/{name}/apps", get(http_routes::project_apps))
         .route(
             "/api/projects/{name}/apps/{site}/open",
