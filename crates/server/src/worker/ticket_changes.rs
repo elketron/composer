@@ -73,7 +73,7 @@ pub fn merge_target(server: &Server, ticket: &TicketId, into: Option<&str>) -> O
 }
 
 fn ticket_branch(server: &Server, ticket: &TicketId) -> Result<TicketBranch, String> {
-    let root = server.home.state().join("worktrees");
+    let root = server.home.worktrees();
     match TicketBranch::find(&root, ticket)? {
         Some(branch) => Ok(branch),
         None => Err(ticket_closed(server, ticket).unwrap_or_else(|| {

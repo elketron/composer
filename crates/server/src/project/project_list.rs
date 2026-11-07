@@ -28,7 +28,7 @@ pub fn session_project(sessions: &[SessionInfo], session: &SessionInfo) -> Optio
 /// projects directory; empty: all), the ones with something going on first, then the most
 /// recently used or changed.
 pub fn project_list(server: &Server, query: &str) -> Vec<ProjectSummary> {
-    let worktrees = server.home.state().join("worktrees");
+    let worktrees = server.home.worktrees();
     let mut folders: BTreeMap<String, (String, SystemTime)> = BTreeMap::new();
     let dir = expand_home(&server.config().projects.dir);
     for entry in std::fs::read_dir(&dir).into_iter().flatten().flatten() {

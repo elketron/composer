@@ -62,7 +62,7 @@ pub async fn migrate_home(home: &Home) -> Result<MigrateReport> {
     // The library (and anything else a fresh home has) from the stock files; the workspace
     // exists now, so init leaves it alone.
     init_home(home).await?;
-    report.worktrees = repair_worktrees(&workspace.state().join("worktrees"));
+    report.worktrees = repair_worktrees(&workspace.worktrees());
     report.warnings.extend(
         report
             .worktrees
