@@ -4,4 +4,5 @@
 disallowed-methods = [
     { path = "std::process::Command::new", reason = "start it with `SandboxSpec::command`, or allow it with the reason it runs outside" },
     { path = "tokio::process::Command::new", reason = "start it with `SandboxSpec::command`, or allow it with the reason it runs outside" },
+    { path = "portable_pty::CommandBuilder::new", reason = "a terminal starts in the sandbox (`SandboxSpec::wrap`); allow it with the reason" },
 ]

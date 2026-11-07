@@ -36,7 +36,9 @@ pub fn scope(message: &ServerMessage) -> EventScope<'_> {
         // Unsequenced: to the clients attached to the session.
         DeskChanged { session, .. }
         | SelectionChanged { session, .. }
-        | AppEvent { session, .. } => EventScope::Session {
+        | AppEvent { session, .. }
+        | TerminalOutput { session, .. }
+        | TerminalExited { session, .. } => EventScope::Session {
             id: session,
             seq: None,
         },

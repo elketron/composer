@@ -101,6 +101,26 @@ pub struct AttachmentsConfig {
     pub inline_max_kb: usize,
 }
 
+/// `[terminals]`: the server-owned terminals of sessions (ticket 0176).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TerminalsConfig {
+    /// A terminal nobody typed into or read for this long ends (a fresh shell comes when its tab
+    /// is shown again).
+    #[serde(default = "default_idle_hours")]
+    pub idle_hours: u64,
+    /// Output kept per terminal for a client that joins late, and for the agent to read.
+    #[serde(default = "default_scrollback_kb")]
+    pub scrollback_kb: usize,
+}
+
+fn default_idle_hours() -> u64 {
+    24
+}
+
+fn default_scrollback_kb() -> usize {
+    256
+}
+
 /// `[apps]`: which apps are clients of the workspace (ticket 0170): opened with its full access
 /// (sessions, approvals) instead of a token of their own. The user's choice, in config, which no
 /// agent can write; a site's own `client: true` only asks.

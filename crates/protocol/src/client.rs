@@ -102,6 +102,41 @@ pub enum ClientCommand {
         on: bool,
     },
 
+    /// Opens a terminal for a session (ticket 0176): a shell in the workspace's sandbox, in the
+    /// session's project (or the sites); a tab on its desk. With the `id` of one that ended (idle),
+    /// a fresh shell where it was. The reply is `terminal`.
+    #[serde(rename = "terminal.open")]
+    TerminalOpen {
+        session: SessionId,
+        /// (Not `id`: that is the request's.)
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        terminal: Option<String>,
+        #[serde(default = "default_cols")]
+        cols: u16,
+        #[serde(default = "default_rows")]
+        rows: u16,
+    },
+
+    /// Typed into a terminal (text, escape sequences included). The reply is `done`.
+    #[serde(rename = "terminal.input")]
+    TerminalInput { terminal: String, data: String },
+
+    /// A terminal's new size. The reply is `done`.
+    #[serde(rename = "terminal.resize")]
+    TerminalResize {
+        terminal: String,
+        cols: u16,
+        rows: u16,
+    },
+
+    /// A terminal's scrollback (a client that joins late); the reply is `terminal`.
+    #[serde(rename = "terminal.read")]
+    TerminalRead { terminal: String },
+
+    /// Ends a terminal. The reply is `done`.
+    #[serde(rename = "terminal.close")]
+    TerminalClose { terminal: String },
+
     /// A session's desk; the reply is `desk`.
     #[serde(rename = "desk.get")]
     DeskGet { session: SessionId },
@@ -365,4 +400,12 @@ pub enum ClientCommand {
 
 fn yes() -> bool {
     true
+}
+
+fn default_cols() -> u16 {
+    80
+}
+
+fn default_rows() -> u16 {
+    24
 }

@@ -15,6 +15,7 @@ thiserror.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
 walkdir.workspace = true
+portable-pty.workspace = true
 axum.workspace = true
 tower = { version = "0.5.3", features = ["util"] }
 reqwest.workspace = true
