@@ -5,6 +5,9 @@ use base64::Engine;
 use composer_protocol::ServerMessage;
 use serde_json::{Value, json};
 
+use composer_core::SiteUrl;
+
+use crate::apps::{DataUrl, path_inside};
 use crate::attachments::{AttachmentKind, classify};
 use crate::tools::args::OpenArgs;
 use crate::tools::{CallResult, Tool, ToolContext, expand_home, text_result};
@@ -26,19 +29,24 @@ impl Tool for OpenTool {
          Relative paths are not resolved here: always pass a full site:// URL. \
          Also opens an image so you see it: a picture in a site (`site://designer/mock.png`), or \
          an image file in your active project (a screenshot you took: `/abs/path.png`, `~/x.png`, \
-         or a path relative to the project)."
+         or a path relative to the project). And an app's work data, what it shows for a \
+         project (read-only): `data://<project>/<app>/<path>` (a file; a folder lists its files), \
+         `data://<project>/` (which apps keep data there), `data://@home/<app>/...` (on Home)."
     }
 
     fn parameters(&self) -> Value {
         json!({
             "type": "object",
-            "properties": { "url": { "type": "string", "description": "e.g. site://memory/user, or an image: site://designer/mock.png, build/shot.png" } },
+            "properties": { "url": { "type": "string", "description": "e.g. site://memory/user, or an image: site://designer/mock.png, build/shot.png, or app data: data://game/cad/view.json" } },
             "required": ["url"]
         })
     }
 
     async fn call_result(&self, context: &ToolContext, args: Value) -> CallResult {
         let raw = args["url"].as_str().unwrap_or_default().to_string();
+        if raw.trim().starts_with("data://") {
+            return data(context, &raw).unwrap_or_else(|error| text_result(error, true));
+        }
         match image_path(context, &raw) {
             Some(Ok(path)) => match image(context, &raw, &path) {
                 Ok(result) => result,
@@ -89,6 +97,107 @@ impl Tool for OpenTool {
         }
         Ok(format!("{header}\n\n{}", page.raw))
     }
+}
+
+/// Text beyond this is cut when an app's data file is read.
+const MAX_DATA_TEXT: usize = 100 * 1024;
+/// Files listed at most for a data folder.
+const MAX_LISTED: usize = 200;
+
+/// `data://...`: an app's work data (ticket 0171), read-only. A folder lists its files; an image
+/// is shown; text is read; anything else is described.
+fn data(context: &ToolContext, raw: &str) -> Result<CallResult, String> {
+    let url = DataUrl::parse(raw)?;
+    let server = &context.server;
+    let Some(app) = &url.app else {
+        let folder = url.folder(server)?;
+        let mut apps: Vec<String> = std::fs::read_dir(&folder)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter(|e| e.path().is_dir())
+            .map(|e| e.file_name().to_string_lossy().to_string())
+            .filter(|app| SiteUrl::new(app, "").is_ok_and(|s| context.check_read(&s).is_ok()))
+            .collect();
+        apps.sort();
+        let text = match apps.is_empty() {
+            true => format!("{url}: no app keeps data here yet"),
+            false => format!(
+                "{url}: data of {}",
+                apps.iter()
+                    .map(|a| format!("{url}{a}/"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        };
+        return Ok(text_result(text, false));
+    };
+    let site = SiteUrl::new(app, "").map_err(|e| e.to_string())?;
+    context.check_read(&site)?;
+    let folder = url.folder(server)?;
+    let target = match url.path.is_empty() {
+        true => folder.clone(),
+        false => path_inside(&folder, &url.path, &format!("the {app} app's data"))?,
+    };
+    if target.is_dir() {
+        return Ok(text_result(listing(&url, &target), false));
+    }
+    let pictured = target
+        .extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| IMAGE_EXTENSIONS.contains(&e.to_ascii_lowercase().as_str()));
+    if pictured {
+        return image(context, raw, &target);
+    }
+    let bytes = std::fs::read(&target)
+        .map_err(|_| format!("{url}: no such file (`open` its folder to list what there is)"))?;
+    let text = match String::from_utf8(bytes) {
+        Ok(mut text) => {
+            if text.len() > MAX_DATA_TEXT {
+                let mut end = MAX_DATA_TEXT;
+                while !text.is_char_boundary(end) {
+                    end -= 1;
+                }
+                text.truncate(end);
+                text.push_str("\n… (cut: the file is over 100 KB)");
+            }
+            format!("url: {url}\n\n{text}")
+        }
+        Err(e) => format!(
+            "{url}: a binary file ({} KB), not shown",
+            e.as_bytes().len().div_ceil(1024)
+        ),
+    };
+    Ok(text_result(text, false))
+}
+
+/// The files under `folder` (relative, with sizes), at most [`MAX_LISTED`].
+fn listing(url: &DataUrl, folder: &Path) -> String {
+    let mut files: Vec<(String, u64)> = walkdir::WalkDir::new(folder)
+        .follow_links(false)
+        .into_iter()
+        .flatten()
+        .filter(|e| e.file_type().is_file())
+        .filter_map(|e| {
+            let relative = e.path().strip_prefix(folder).ok()?.display().to_string();
+            Some((relative, e.metadata().map(|m| m.len()).unwrap_or(0)))
+        })
+        .take(MAX_LISTED + 1)
+        .collect();
+    files.sort();
+    if files.is_empty() {
+        return format!("{url}: empty");
+    }
+    let more = files.len() > MAX_LISTED;
+    files.truncate(MAX_LISTED);
+    let mut text = format!("{url}:\n");
+    for (file, size) in &files {
+        text.push_str(&format!("- {file} ({} KB)\n", size.div_ceil(1024)));
+    }
+    if more {
+        text.push_str("… (more)\n");
+    }
+    text
 }
 
 /// The file `raw` names when it is an image: a picture in a site, or an image file in the

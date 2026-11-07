@@ -5,7 +5,7 @@
 //! routes sit outside the workspace token's: an app page never needs (and never gets) it.
 
 use std::collections::HashMap;
-use std::path::{Component, Path as FsPath, PathBuf};
+use std::path::{Path as FsPath, PathBuf};
 use std::sync::Arc;
 
 use axum::body::Bytes;
@@ -469,34 +469,9 @@ fn write_in(file: &FsPath, path: &str, body: &[u8]) -> Result<StatusCode, ApiErr
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// `path` inside `folder` (`what`, for the message): relative, no `..`, and no symlink on the
-/// way that leads out.
+/// [`crate::apps::path_inside`], refused as a 403.
 fn inside(folder: &FsPath, path: &str, what: &str) -> Result<PathBuf, ApiError> {
-    let relative = FsPath::new(path);
-    let plain = relative
-        .components()
-        .all(|c| matches!(c, Component::Normal(_)));
-    let outside = || {
-        ApiError(
-            StatusCode::FORBIDDEN,
-            format!("{path} isn't inside {what}: give a path relative to it, without `..`"),
-        )
-    };
-    if !plain || path.is_empty() {
-        return Err(outside());
-    }
-    let root = std::fs::canonicalize(folder).map_err(|_| outside())?;
-    let file = root.join(relative);
-    // The deepest part that exists, symlinks resolved, must still be in the project.
-    let existing = file
-        .ancestors()
-        .find(|a| a.exists())
-        .and_then(|a| std::fs::canonicalize(a).ok())
-        .ok_or_else(outside)?;
-    if !existing.starts_with(&root) {
-        return Err(outside());
-    }
-    Ok(file)
+    crate::apps::path_inside(folder, path, what).map_err(|e| ApiError(StatusCode::FORBIDDEN, e))
 }
 
 async fn list_actions(
