@@ -18,6 +18,7 @@ use crate::browser_tabs::BrowserTabs;
 use crate::chat_width::ChatWidth;
 use crate::desktop::{self, Desktop};
 use crate::link_state::LinkState;
+use crate::notice::Notice;
 use crate::pick_lists;
 use crate::picker::{Item, Pick, Picker, PickerEvent};
 use crate::stage_tabs;
@@ -630,45 +631,12 @@ impl Shell {
 
     /// A finished turn or an approval needed, while the window is behind: a notification.
     fn notify_if_away(&self, message: &ServerMessage) {
-        if self.active {
-            return;
+        if !self.active
+            && let Some(notice) =
+                Notice::of(message, self.store.attached.as_deref(), &self.workspace)
+        {
+            notice.show();
         }
-        let (summary, body) = match message {
-            ServerMessage::TurnDone { session, .. }
-                if self.store.attached.as_ref() == Some(session) =>
-            {
-                (
-                    "The agent is done",
-                    format!("{} · #{session}", self.workspace),
-                )
-            }
-            ServerMessage::ApprovalRequest {
-                session,
-                title,
-                site,
-                recipe,
-                ..
-            } => {
-                let what = if title.is_empty() {
-                    format!("{site} › {recipe}")
-                } else {
-                    title.clone()
-                };
-                (
-                    "An approval is waiting",
-                    format!("{what} · {} · #{session}", self.workspace),
-                )
-            }
-            _ => return,
-        };
-        // The notification service may block: off the window's thread.
-        std::thread::spawn(move || {
-            let _ = notify_rust::Notification::new()
-                .appname("composer")
-                .summary(summary)
-                .body(&body)
-                .show();
-        });
     }
 
     fn title(&self) -> String {
