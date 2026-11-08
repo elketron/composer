@@ -1,12 +1,26 @@
 // Shared by the end-to-end tests: waiting on the UI, and pairing with the test server.
 
 import 'package:composer_app/main.dart' as app;
+import 'package:composer_app/state/workspace_group.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// `composer login <url> <code>` from `composer pair` on the test server; each run needs a new
 /// one (scripts/phone-e2e.sh makes it).
 const pairLine = String.fromEnvironment('PAIR_LINE');
+
+/// A second workspace of the same host (the pairing test pairs both and switches).
+const pairLine2 = String.fromEnvironment('PAIR_LINE_2');
+
+String workspaceInUrl(String url) => Uri.parse(url).pathSegments.last;
+
+/// The URL a `composer login` line opens.
+String urlOf(String login) => login.split(' ')[2];
+
+String hostOf(String url) => WorkspaceGroup.hostOf(url);
+
+/// The URLs of the two workspaces the rehearsal server exposes.
+(String, String) workspaceUrls() => (urlOf(pairLine), urlOf(pairLine2));
 
 Future<void> pumpUntil(WidgetTester tester, Finder finder, {int seconds = 20}) async {
   final end = DateTime.now().add(Duration(seconds: seconds));
@@ -61,6 +75,22 @@ Future<void> startPaired(WidgetTester tester) async {
   expect(find.byKey(const Key('pair-code')), findsNothing);
   await tester.tap(find.byKey(const Key('pair')));
   await pumpUntil(tester, find.byKey(const Key('new-chat')));
+}
+
+/// Adds another workspace through the switcher's sheet, pairing with [login].
+Future<void> pairAnother(WidgetTester tester, String login) async {
+  await tester.tap(find.byKey(const Key('switch-server')));
+  await pumpUntil(tester, find.byKey(const Key('add-workspace')));
+  // The sheet is still sliding in when its button first exists.
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(const Key('add-workspace')));
+  await pumpUntil(tester, find.byKey(const Key('server-url')));
+  await tester.enterText(find.byKey(const Key('server-url')), login);
+  await tester.pump();
+  await tester.tap(find.byKey(const Key('pair')));
+  // It pops back to the switcher once pairing went through.
+  await pumpUntilGone(tester, find.byKey(const Key('server-url')), seconds: 30);
+  await tester.pumpAndSettle();
 }
 
 /// New chat from the Chats tab, then [text] sent.

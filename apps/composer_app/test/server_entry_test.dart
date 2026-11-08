@@ -16,7 +16,36 @@ void main() {
     test('loading moves it, keeping name and token', () {
       final entry = ServerEntry.fromJson({'url': 'http://h:7420', 'name': 'h', 'token': 't'});
       expect(entry.url, 'http://h:7420/w/default');
-      expect(entry.toJson(), {'url': 'http://h:7420/w/default', 'name': 'h', 'token': 't'});
+      expect(entry.workspace, '', reason: 'unknown until the server answers');
+      expect(entry.toJson(), {
+        'url': 'http://h:7420/w/default',
+        'name': 'h',
+        'token': 't',
+        'workspace': '',
+        'color': '',
+      });
+    });
+  });
+
+  group('the workspace in a URL', () {
+    test('is its /w/<name>, else default', () {
+      expect(ServerEntry.workspaceIn('https://home.ts.net/w/work'), 'work');
+      expect(ServerEntry.workspaceIn('https://home.ts.net/w/work/'), 'work');
+      expect(ServerEntry.workspaceIn('https://home.ts.net/'), 'default');
+      expect(ServerEntry.workspaceIn('http://h:7420'), 'default');
+    });
+
+    test('is kept by a saved entry', () {
+      final entry = ServerEntry.fromJson({
+        'url': 'https://home.ts.net/w/work',
+        'name': 'home',
+        'token': 't',
+        'workspace': 'work',
+        'color': '#ff8800',
+      });
+      expect(entry.workspace, 'work');
+      expect(entry.color, '#ff8800');
+      expect(ServerEntry.fromJson(entry.toJson()).color, '#ff8800');
     });
   });
 

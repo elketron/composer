@@ -20,6 +20,14 @@ pub struct ServerInfo {
     /// Where projects live (`[projects] dir`), `~` for the home folder. Older servers leave it out.
     #[serde(default)]
     pub projects_dir: String,
+    /// The workspace this server serves (`default` on a home from before workspaces). Older
+    /// servers leave it out.
+    #[serde(default)]
+    pub workspace: String,
+    /// The workspace's colour, `#rrggbb` (its `[desktop] color`, else from its name). Older
+    /// servers leave it out.
+    #[serde(default)]
+    pub workspace_color: String,
 }
 
 /// `GET /api/sites`

@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 
+import '../../state/workspace.dart';
 import '../../theme/composer_theme.dart';
 import '../../theme/tokens.dart' as t;
 import '../home/activity_dot.dart';
 import '../pages/page_navigation.dart';
 import '../store_scope.dart';
+import '../workspace_mark.dart';
 import 'chat_menu.dart';
 import 'chat_view.dart';
 
@@ -23,11 +25,29 @@ class ChatPage extends StatelessWidget {
     final session = chat == null ? null : status.session(chat.session);
     final activity = session == null ? 'idle' : status.activity(session);
     final project = session?.project?.split('/').last;
+    final workspace = Workspace.of(url, info: status.info, entry: store.state.serverFor(url));
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 0,
         title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(session?.agent ?? 'new chat', style: mono(size: 15, color: t.text, weight: FontWeight.w600)),
+          Row(children: [
+            WorkspaceMark(
+              key: const Key('active-workspace'),
+              workspace: workspace,
+              dotSize: 8,
+              style: mono(size: 13, color: t.text, weight: FontWeight.w600),
+            ),
+            const SizedBox(width: 6),
+            Text('·', style: const TextStyle(fontSize: 13, color: t.faint)),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                session?.agent ?? 'new chat',
+                overflow: TextOverflow.ellipsis,
+                style: mono(size: 13, color: t.text, weight: FontWeight.w600),
+              ),
+            ),
+          ]),
           if (chat != null)
             Row(children: [
               ActivityDot(activity, size: 6),
@@ -49,7 +69,7 @@ class ChatPage extends StatelessWidget {
           ),
           ChatMenu(url: url, session: session),
         ],
-        bottom: const PreferredSize(preferredSize: Size.fromHeight(1), child: Divider()),
+        bottom: PreferredSize(preferredSize: const Size.fromHeight(2), child: WorkspaceStrip(workspace: workspace)),
       ),
       body: chat == null
           ? const Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)))

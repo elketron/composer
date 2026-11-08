@@ -14,5 +14,6 @@ model and the `tools` site):
 
 A headless emulator: `emulator -avd <name> -read-only -no-window -no-audio`.
 
-Add a server by running `composer pair --name <device>` on it, then scanning the QR code or pasting
-its link or `composer login` line into "Add server".
+Add a workspace by running `composer pair --name <device>` on it, then scanning the QR code or
+pasting its link or `composer login` line into "Add a workspace". A device pairs one workspace at
+a time; ones on the same host are grouped in the switcher.

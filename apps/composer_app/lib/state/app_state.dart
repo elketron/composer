@@ -48,6 +48,8 @@ class AppState {
 
   ServerEntry? get activeServer => servers.where((s) => s.url == active).firstOrNull;
 
+  ServerEntry? serverFor(String url) => servers.where((s) => s.url == url).firstOrNull;
+
   ServerStatus statusOf(String url) => status[url] ?? ServerStatus.initial;
 
   AppState copyWith({

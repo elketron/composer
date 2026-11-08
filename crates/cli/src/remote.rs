@@ -58,9 +58,13 @@ pub fn pair(home: &WorkspaceHome, name: &str) -> anyhow::Result<()> {
         .quiet_zone(true)
         .build();
     println!("{qr}");
+    println!("workspace: {}  ({base})", home.name());
     println!("phone:     scan, or open {url}");
     println!("computer:  composer login {base} {code}");
-    println!("code {code} works once, for 10 minutes, and pairs a device named `{name}`.");
+    println!(
+        "code {code} works once, for 10 minutes, and pairs a device named `{name}` with workspace `{}`.",
+        home.name()
+    );
     if !served {
         println!();
         println!("Tailscale is not serving composer yet. Expose it to your tailnet (only) with:");

@@ -38,7 +38,15 @@ import 'types.dart';
           [Pair(url: url, code: code, deviceName: deviceName)],
         ),
       PairFailed(:final message) => (s.copyWith(pairing: PairingState(error: message)), const []),
-      PairSucceeded(:final server, :final info) => _paired(s, server.withName(info.name), info),
+      PairSucceeded(:final server, :final info) => _paired(
+          s,
+          server.withInfo(
+            name: info.name,
+            workspace: info.workspace ?? server.workspace,
+            color: info.workspaceColor ?? server.color,
+          ),
+          info,
+        ),
       ServerRemoved(:final url) => _removed(s, url),
       ReconnectRequested(:final url) => (s, [Reconnect(url)]),
       LinkChanged(:final url, :final link, :final error, :final retryAt) => _link(s, url, link, error, retryAt),
@@ -240,12 +248,20 @@ import 'types.dart';
   );
 }
 
-/// Keeps the stored name in step with the server's.
+/// Keeps the stored name and workspace in step with the server's.
 (AppState, List<AppEffect>) _info(AppState s, String url, ServerInfo info) {
   final next = _updateStatus(s, url, (x) => x.copyWith(info: info));
   final entry = s.servers.where((x) => x.url == url).firstOrNull;
-  if (entry == null || entry.name == info.name) return (next, const []);
-  final servers = [for (final x in s.servers) x.url == url ? x.withName(info.name) : x];
+  final workspace = info.workspace ?? '';
+  final color = info.workspaceColor ?? '';
+  if (entry == null ||
+      (entry.name == info.name && entry.workspace == workspace && entry.color == color)) {
+    return (next, const []);
+  }
+  final servers = [
+    for (final x in s.servers)
+      x.url == url ? x.withInfo(name: info.name, workspace: workspace, color: color) : x,
+  ];
   return (next.copyWith(servers: servers), [SaveServers(servers)]);
 }
 

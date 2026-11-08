@@ -19,12 +19,17 @@ use crate::worker::ticket::TicketId;
 
 /// `GET /api/info`: what this server is.
 pub async fn info(State(server): State<Arc<Server>>) -> Json<ServerInfo> {
+    let config = server.config();
+    let workspace = server.home.name().to_string();
+    let color = composer_protocol::WorkspaceColor::for_workspace(&workspace, &config.desktop.color);
     Json(ServerInfo {
         name: server.name(),
         version: env!("CARGO_PKG_VERSION").to_string(),
         model: server.provider.model().to_string(),
-        slots: server.config().agent.slots,
-        projects_dir: server.config().projects.dir.clone(),
+        slots: config.agent.slots,
+        projects_dir: config.projects.dir.clone(),
+        workspace,
+        workspace_color: color.to_hex(),
     })
 }
 

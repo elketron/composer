@@ -4,7 +4,9 @@
     "version": "0.1.0",
     "model": "m",
     "slots": 2,
-    "projects_dir": "~/Projects"
+    "projects_dir": "~/Projects",
+    "workspace": "default",
+    "workspace_color": "#3f9c6b"
   },
   {
     "name": "memory",

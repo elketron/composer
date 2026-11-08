@@ -12,8 +12,10 @@ mod common;
 mod desk;
 pub mod http;
 mod server;
+pub mod workspace;
 
 pub use client::{ClientCommand, ClientRequest};
 pub use common::*;
 pub use desk::{Desk, DeskBy, DeskEntry, DeskTab, Selection};
 pub use server::{CommandResult, ServerMessage};
+pub use workspace::WorkspaceColor;

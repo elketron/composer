@@ -99,7 +99,7 @@ class _AddServerPageState extends State<AddServerPage> {
           ]),
         );
     return Scaffold(
-      appBar: AppBar(title: const Text('Add a server')),
+      appBar: AppBar(title: const Text('Add a workspace')),
       // Top-aligned: the keyboard opening doesn't move what you are looking at.
       body: Align(
         alignment: Alignment.topCenter,
