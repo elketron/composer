@@ -858,6 +858,22 @@ impl Render for Shell {
                                 let text = paths_text(paths.paths().iter().map(|p| p.as_path()));
                                 shell.paste_into_chat(&text, cx);
                             }))
+                            // The panel follows the pointer: hover the chat, type into the chat.
+                            .on_mouse_move(cx.listener(|shell, _, window, cx| {
+                                if shell.overlay.is_some() {
+                                    return;
+                                }
+                                let Some(handle) = shell
+                                    .chat
+                                    .as_ref()
+                                    .map(|chat| chat.read(cx).focus_handle(cx))
+                                else {
+                                    return;
+                                };
+                                if !handle.is_focused(window) {
+                                    window.focus(&handle, cx);
+                                }
+                            }))
                             .child(chat),
                     )
                     .child(
@@ -919,6 +935,25 @@ impl Render for Shell {
                                                 paths.paths().iter().map(|p| p.as_path()),
                                             );
                                             pane.update(cx, |pane, cx| pane.paste(&text, cx));
+                                        }
+                                    }))
+                                    // The panel follows the pointer: hover the stage, type into it.
+                                    .on_mouse_move(cx.listener(|shell, _, window, cx| {
+                                        if shell.overlay.is_some() {
+                                            return;
+                                        }
+                                        let handle = shell
+                                            .shown_pane()
+                                            .map(|pane| pane.read(cx).focus_handle(cx))
+                                            .or_else(|| {
+                                                shell
+                                                    .shown_web()
+                                                    .map(|web| web.read(cx).focus_handle(cx))
+                                            });
+                                        if let Some(handle) = handle
+                                            && !handle.is_focused(window)
+                                        {
+                                            window.focus(&handle, cx);
                                         }
                                     }))
                                     .child(stage_body),
