@@ -102,12 +102,12 @@ wrap_render_handler! {
             // SAFETY: CEF guarantees `buffer` holds width*height BGRA pixels for this call.
             let bytes = unsafe { std::slice::from_raw_parts(buffer, len) }.to_vec();
             if std::env::var_os("COMPOSER_CEF_TRACE").is_some() {
-                eprintln!(
-                    "[cef] paint {}x{} copy {:.2}ms",
+                crate::trace(&format!(
+                    "cef paint {}x{} copy {:.2}ms",
                     width,
                     height,
                     started.elapsed().as_secs_f64() * 1000.0
-                );
+                ));
             }
             let mut s = self.handler.shared.borrow_mut();
             let frame = Some((width as u32, height as u32, bytes));

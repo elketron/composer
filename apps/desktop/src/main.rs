@@ -94,11 +94,14 @@ fn main() {
     let _entered = runtime.enter();
     let handle = runtime.handle().clone();
 
-    gpui_platform::application().run(move |cx: &mut App| {
+    let application = gpui_platform::application();
+    trace("application");
+    application.run(move |cx: &mut App| {
         trace("gpui running");
         cx.text_system()
             .add_fonts(FONTS.iter().map(|f| Cow::Borrowed(*f)).collect())
             .expect("the bundled font loads");
+        trace("fonts");
         // The shell's own keys, few: everything else goes to the focused pane.
         cx.bind_keys([
             KeyBinding::new("ctrl-1", FocusChat, None),
@@ -119,7 +122,9 @@ fn main() {
             KeyBinding::new("ctrl-alt-9", Workspace9, None),
         ]);
         browser_pump::start(cx);
+        trace("cef pump");
         Desktop::init(home, handle, cx);
+        trace("desktop");
         desktop::open(&workspace, cx);
         trace("window opened");
         cx.activate(true);
