@@ -1,4 +1,3 @@
-import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -16,14 +15,12 @@ const _quality = 85;
 /// Camera (phones), photos or any file; what is picked starts uploading to the open chat.
 Future<void> showAttachSheet(BuildContext context, String url) async {
   final store = StoreScope.read(context);
-  final phone = Platform.isAndroid || Platform.isIOS;
   final choice = await showModalBottomSheet<String>(
     context: context,
     backgroundColor: t.surface,
     builder: (context) => SafeArea(
       child: Column(mainAxisSize: MainAxisSize.min, children: [
-        if (phone)
-          ListTile(
+        ListTile(
             key: const Key('attach-camera'),
             leading: const Icon(Icons.photo_camera_outlined),
             title: const Text('Take a photo'),

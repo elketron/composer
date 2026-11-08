@@ -10,15 +10,13 @@ import 'status_dot.dart';
 
 /// A server in the switcher: name, link state, and its address (or why it is offline).
 class ServerTile extends StatelessWidget {
-  const ServerTile({super.key, required this.server, required this.status, required this.selected, required this.onTap, this.shortcut});
+  const ServerTile({super.key, required this.server, required this.status, required this.selected, required this.onTap});
 
   final ServerEntry server;
   final ServerStatus status;
   final bool selected;
   final VoidCallback onTap;
 
-  /// `ctrl 1` etc., shown on desktop.
-  final String? shortcut;
 
   @override
   Widget build(BuildContext context) {
@@ -50,7 +48,6 @@ class ServerTile extends StatelessWidget {
                 ),
               ]),
             ),
-            if (shortcut != null) Text(shortcut!, style: mono(size: 10, color: t.faint)),
           ]),
         ),
       ),

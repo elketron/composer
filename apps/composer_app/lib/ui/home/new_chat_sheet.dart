@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../state/actions.dart';
 import '../../theme/composer_theme.dart';
@@ -7,40 +6,22 @@ import '../../theme/tokens.dart' as t;
 import '../chat/navigation.dart';
 import '../store_scope.dart';
 
-/// Opens New chat for a server: a sheet on phones, a dialog (with a first message) on wide
-/// screens.
-void showNewChat(BuildContext context, String url) => isWide(context)
-    ? showDialog<void>(
-        context: context,
-        builder: (_) => Dialog(
-          alignment: const Alignment(0, -0.6),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 600),
-            child: Padding(
-              padding: const EdgeInsets.only(top: 16),
-              child: NewChatSheet(url: url, parent: context, dialog: true),
-            ),
-          ),
-        ),
-      )
-    : showModalBottomSheet<void>(
-        context: context,
-        isScrollControlled: true,
-        showDragHandle: true,
-        builder: (_) => NewChatSheet(url: url, parent: context),
-      );
+/// Opens New chat for a server, as a sheet.
+void showNewChat(BuildContext context, String url) => showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => NewChatSheet(url: url, parent: context),
+    );
 
 /// Agent and project for a new chat; both start on a sensible choice, so Start is one tap.
 class NewChatSheet extends StatefulWidget {
-  const NewChatSheet({super.key, required this.url, required this.parent, this.dialog = false});
+  const NewChatSheet({super.key, required this.url, required this.parent});
 
   final String url;
 
   /// Where the chat opens (the sheet's own context goes away with it).
   final BuildContext parent;
-
-  /// The wide layout's dialog: also a first message, ctrl-enter starts.
-  final bool dialog;
 
   @override
   State<NewChatSheet> createState() => _NewChatSheetState();
@@ -50,13 +31,6 @@ class _NewChatSheetState extends State<NewChatSheet> {
   String _agent = 'default';
   String? _project;
   bool _picked = false;
-  final _message = TextEditingController();
-
-  @override
-  void dispose() {
-    _message.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -73,8 +47,8 @@ class _NewChatSheetState extends State<NewChatSheet> {
 
     void start(String? project) {
       Navigator.pop(context);
-      StoreScope.read(widget.parent).dispatch(NewSessionRequested(widget.url, agent: _agent, project: project, text: _message.text));
-      if (!isWide(widget.parent)) pushChat(widget.parent, widget.url);
+      StoreScope.read(widget.parent).dispatch(NewSessionRequested(widget.url, agent: _agent, project: project));
+      pushChat(widget.parent, widget.url);
     }
 
     Widget choice(String name, String description) {
@@ -153,28 +127,12 @@ class _NewChatSheetState extends State<NewChatSheet> {
             const SizedBox(height: 6),
             Text('Folders in ${status.info!.projectsDir}', style: const TextStyle(fontSize: 12, color: t.faint)),
           ],
-          if (widget.dialog) ...[
-            const SizedBox(height: 14),
-            Text('FIRST MESSAGE · OPTIONAL', style: mono(size: 10.5, color: t.faint)),
-            const SizedBox(height: 8),
-            CallbackShortcuts(
-              bindings: {const SingleActivator(LogicalKeyboardKey.enter, control: true): () => start(project)},
-              child: TextField(
-                key: const Key('first-message'),
-                controller: _message,
-                autofocus: true,
-                minLines: 2,
-                maxLines: 6,
-                decoration: const InputDecoration(hintText: 'What should it do?'),
-              ),
-            ),
-          ],
           const SizedBox(height: 18),
           FilledButton(
             key: const Key('start-chat'),
             style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(44)),
             onPressed: () => start(project),
-            child: Text(widget.dialog ? 'Start · ctrl-enter' : 'Start chat'),
+            child: const Text('Start chat'),
           ),
         ]),
       ),

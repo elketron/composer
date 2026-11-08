@@ -8,7 +8,6 @@ import '../state/actions.dart';
 import '../state/effects.dart';
 import '../state/server_entry.dart';
 import 'background_keeper.dart';
-import 'layout_store.dart';
 import 'notifier.dart';
 import 'server_api.dart';
 import 'server_connection.dart';
@@ -21,23 +20,15 @@ class EffectRunner {
   final Notifier _notifier;
   final _keeper = BackgroundKeeper();
   final Map<String, ServerConnection> _connections = {};
-  ServerStore? _store;
-  Timer? _layoutSave;
 
-  /// Opened on first use (the keyring check is async).
-  Future<ServerStore> get _servers async => _store ??= await ServerStore.open();
+  final _servers = ServerStore();
 
   void run(AppEffect effect, void Function(AppAction) dispatch) {
     switch (effect) {
       case LoadServers():
         _load(dispatch);
-        LayoutStore.load().then((layout) => dispatch(LayoutLoaded(layout)));
-      case SaveLayout(:final layout):
-        // Dragging saves often: only the last one counts.
-        _layoutSave?.cancel();
-        _layoutSave = Timer(const Duration(milliseconds: 400), () => LayoutStore.save(layout));
       case SaveServers(:final servers):
-        _servers.then((store) => store.save(servers));
+        _servers.save(servers);
       case Pair(:final url, :final code, :final deviceName):
         _pair(url, code, deviceName, dispatch);
       case Connect(:final server):
@@ -147,11 +138,9 @@ class EffectRunner {
           if (result is CommandResultWork) dispatch(WorkReplied(url, work: result.work));
         }
         run().catchError((Object e) => dispatch(WorkReplied(url, error: describeError(e))));
-      case CreateSession(:final url, :final agent, :final project, :final text):
+      case CreateSession(:final url, :final agent, :final project):
         _request(url, ClientCommandSessionCreate(agent: agent, project: project), dispatch).then((result) {
-          if (result is! CommandResultSession) return;
-          dispatch(SessionOpened(url, result.session.id));
-          if (text != null && text.trim().isNotEmpty) dispatch(MessageSubmitted(url, text));
+          if (result is CommandResultSession) dispatch(SessionOpened(url, result.session.id));
         });
     }
   }
@@ -185,8 +174,7 @@ class EffectRunner {
   }
 
   Future<void> _load(void Function(AppAction) dispatch) async {
-    final store = await _servers;
-    dispatch(ServersLoaded(await store.load(), store.kind));
+    dispatch(ServersLoaded(await _servers.load()));
   }
 
   Future<void> _pair(String url, String code, String deviceName, void Function(AppAction) dispatch) async {

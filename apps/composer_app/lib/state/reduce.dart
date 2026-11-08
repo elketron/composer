@@ -22,10 +22,9 @@ import 'types.dart';
           [for (final server in s.servers) if (s.statusOf(server.url).link == LinkState.offline) Reconnect(server.url)],
         ),
       ForegroundChanged(foreground: false) => _pendingApprovals(s.copyWith(foreground: false)),
-      ServersLoaded(:final servers, :final storage) => (
+      ServersLoaded(:final servers) => (
           s.copyWith(
             loaded: true,
-            storage: storage,
             servers: servers,
             status: {for (final server in servers) server.url: ServerStatus.initial},
             active: servers.firstOrNull?.url,
@@ -50,9 +49,8 @@ import 'types.dart';
       HistoryLoaded(:final url, :final session, :final before, :final events, :final more) =>
         _historyLoaded(s, url, session, before, events, more),
       SessionClosed(:final url) => _close(s, url),
-      ViewScrolled(:final url, :final session, :final atBottom, :final pane) => (_scrolled(s, url, session, atBottom, pane), const []),
-      NewSessionRequested(:final url, :final agent, :final project, :final text) =>
-        (s, [CreateSession(url, agent, project: project, text: text)]),
+      ViewScrolled(:final url, :final session, :final atBottom) => (_scrolled(s, url, session, atBottom), const []),
+      NewSessionRequested(:final url, :final agent, :final project) => (s, [CreateSession(url, agent, project: project)]),
       MessageSubmitted(:final url, :final text) => _submit(s, url, text),
       FilesPicked(:final url, :final files) => _picked(s, url, files),
       UploadProgressed(:final url, :final id, :final progress) => (
@@ -139,7 +137,7 @@ import 'types.dart';
           ],
         ),
       CommandFailed(:final message) => (s.copyWith(notice: Notice((s.notice?.id ?? 0) + 1, message)), const []),
-      PageRequested(:final url, :final page) => _withPage(_side(s, url, SideTab.page), url, (p) => _navigate(url, p, page)),
+      PageRequested(:final url, :final page) => _withPage(_reader(s, url, ReaderTab.page), url, (p) => _navigate(url, p, page)),
       PageBack(:final url) => _withPage(s, url, (p) {
           if (p.back.isEmpty) return (p, const []);
           final target = p.back.last;
@@ -182,14 +180,8 @@ import 'types.dart';
         ),
       FollowToggled(:final url) => _withPage(s, url, (p) => (p.copyWith(follow: !p.follow), const [])),
       AppRequested(:final url, :final site) =>
-        _withPage(_side(s, url, SideTab.app), url, (p) => (p.copyWith(appSite: site, error: null), const [])),
-      ReaderClosed(:final url) => _withPage(_side(s, url, null), url, (p) => (PageState(follow: p.follow), const [])),
-      SideTabSelected(:final url, :final tab, :final ticket, :final session, :final project) => tab == SideTab.project && project != null
-          ? (
-              _updateStatus(s, url, (x) => x.copyWith(side: tab, sideProject: project)),
-              [SendCommand(url, ClientCommandProjectOverview(project: project))],
-            )
-          : _sideTab(s, url, tab, ticket, session),
+        _withPage(_reader(s, url, ReaderTab.app), url, (p) => (p.copyWith(appSite: site, error: null), const [])),
+      ReaderClosed(:final url) => _withPage(_reader(s, url, null), url, (p) => (PageState(follow: p.follow), const [])),
       ProjectSearchChanged(:final url, :final query) => (
           _updateStatus(s, url, (x) => x.copyWith(projectSearch: ProjectSearch(query: query, hits: query.trim().isEmpty ? const [] : null))),
           [if (query.trim().isNotEmpty) SearchProjects(url, query)],
@@ -220,11 +212,6 @@ import 'types.dart';
           [RunWork(url, ClientCommandWorkRun(work: work, stage: stage, session: s.status[url]?.chat?.session), project: project)],
         ),
       NewWorkReset(:final url) => (_updateStatus(s, url, (x) => x.copyWith(newWork: const NewWork())), const []),
-      ScopeChanged(:final url, :final project) => (_updateStatus(s, url, (x) => x.copyWith(scope: project)), const []),
-      SideClosed(:final url) => (_side(s, url, null), const []),
-      SessionsToggled() => _layout(s, s.layout.copyWith(sessionsCollapsed: !s.layout.sessionsCollapsed)),
-      SideResized(:final width) => _layout(s, s.layout.copyWith(sideWidth: width)),
-      LayoutLoaded(:final layout) => (s.copyWith(layout: layout), const []),
       SitesLoaded(:final url, :final sites) => (_updateStatus(s, url, (x) => x.copyWith(sites: sites)), const []),
       NoticeShown(:final text) => (s.copyWith(notice: Notice((s.notice?.id ?? 0) + 1, text)), const []),
     };
@@ -270,7 +257,7 @@ import 'types.dart';
     url,
     (x) => x.copyWith(link: link, error: error, retryAt: retryAt, approvals: online ? const [] : null),
   );
-  final chat = next.status[url]?.chat, side = next.status[url]?.sideChat;
+  final chat = next.status[url]?.chat;
   if (!online) return (next, const []);
   return (
     next,
@@ -279,7 +266,6 @@ import 'types.dart';
       // Works waiting at a gate (Needs you).
       SendCommand(url, const ClientCommandPipelineList()),
       if (chat != null) _reattach(url, chat),
-      if (side != null && side.session != chat?.session) _reattach(url, side),
     ],
   );
 }
@@ -292,24 +278,18 @@ AppEffect _reattach(String url, ChatState chat) => chat.loaded
 /// The messages before the oldest shown, once at a time.
 (AppState, List<AppEffect>) _older(AppState s, String url, String session) {
   final status = s.status[url];
-  final chat = [status?.chat, status?.sideChat].firstWhere((c) => c?.session == session, orElse: () => null);
-  if (chat == null || !chat.loaded || !chat.more || chat.loadingOlder) return (s, const []);
-  ChatState mark(ChatState c) => c.session == session ? c.copyWith(loadingOlder: true) : c;
+  final chat = status?.chat;
+  if (chat == null || chat.session != session || !chat.loaded || !chat.more || chat.loadingOlder) return (s, const []);
   return (
-    _updateStatus(s, url, (x) => x.copyWith(chat: x.chat == null ? null : mark(x.chat!), sideChat: x.sideChat == null ? null : mark(x.sideChat!))),
+    _updateStatus(s, url, (x) => x.copyWith(chat: chat.copyWith(loadingOlder: true))),
     [FetchHistory(url, session, chat.firstSeq)],
   );
 }
 
 /// The view came back to the newest line, or scrolled up off it: back down, what piled up is seen.
-/// Only that view: the wide layout can show one session twice, and where each has scrolled to is
-/// its own business (`drafting` is shared input and mirrors; pin state does not).
-AppState _scrolled(AppState s, String url, String session, bool atBottom, ChatPane pane) {
+AppState _scrolled(AppState s, String url, String session, bool atBottom) {
   ChatState? mark(ChatState? c) => c == null || c.session != session ? c : c.copyWith(atBottom: atBottom, newSince: atBottom ? 0 : null);
-  return _updateStatus(s, url, (x) => x.copyWith(
-      chat: pane == ChatPane.main ? mark(x.chat) : x.chat,
-      sideChat: pane == ChatPane.side ? mark(x.sideChat) : x.sideChat,
-    ));
+  return _updateStatus(s, url, (x) => x.copyWith(chat: mark(x.chat)));
 }
 
 /// A chat's last messages (then it attaches for what follows), or older ones put in front.
@@ -341,9 +321,10 @@ AppState _scrolled(AppState s, String url, String session, bool atBottom, ChatPa
   final next = _updateStatus(
     s,
     url,
-    (x) => x.copyWith(chat: x.chat == null ? null : apply(x.chat!), sideChat: x.sideChat == null ? null : apply(x.sideChat!)),
+    (x) => x.copyWith(chat: x.chat == null ? null : apply(x.chat!)),
   );
-  final since = [next.status[url]?.chat, next.status[url]?.sideChat].firstWhere((c) => c?.session == session, orElse: () => null)?.lastSeq;
+  final chat = next.status[url]?.chat;
+  final since = chat?.session == session ? chat?.lastSeq : null;
   // Since the last of them: nothing in between is lost (`events` null: all of it).
   return (next, [if (attach) SendCommand(url, ClientCommandSessionAttach(session: session, since: events == null ? null : since))]);
 }
@@ -358,48 +339,24 @@ AppState _scrolled(AppState s, String url, String session, bool atBottom, ChatPa
       (x) => x.copyWith(
         chat: ChatState(session: session, liveAfter: x.session(session)?.lastSeq ?? 0),
         unread: x.unread.contains(session) ? ({...x.unread}..remove(session)) : null,
-        opened: true,
       ),
     ),
     [
-      if (current != null && current.session != s.status[url]?.sideChat?.session)
-        SendCommand(url, ClientCommandSessionDetach(session: current.session)),
+      if (current != null) SendCommand(url, ClientCommandSessionDetach(session: current.session)),
       FetchHistory(url, session, null),
     ],
   );
 }
 
-/// The side pane shows `tab` (null: closed).
-AppState _side(AppState s, String url, SideTab? tab) => _updateStatus(s, url, (x) => x.copyWith(side: tab));
-
-(AppState, List<AppEffect>) _sideTab(AppState s, String url, SideTab tab, String? ticket, String? session) {
-  final next = _updateStatus(s, url, (x) => x.copyWith(side: tab, sideTicket: ticket ?? x.sideTicket));
-  // A ticket's changes come fresh each time they're shown.
-  if (tab == SideTab.changes && ticket != null) {
-    return _ticketCommand(next, url, ticket, ClientCommandTicketChanges(ticket: ticket));
-  }
-  final status = next.status[url];
-  final old = status?.sideChat?.session;
-  if (tab != SideTab.worker || session == null || status == null || old == session) return (next, const []);
-  // Attached as well (its last messages first; the open chat skips what it has seen), and the
-  // one it replaces let go unless the open chat still shows it.
-  return (
-    _updateStatus(next, url, (x) => x.copyWith(sideChat: ChatState(session: session, liveAfter: x.session(session)?.lastSeq ?? 0))),
-    [
-      if (old != null && old != status.chat?.session) SendCommand(url, ClientCommandSessionDetach(session: old)),
-      FetchHistory(url, session, null),
-    ],
-  );
-}
-
-(AppState, List<AppEffect>) _layout(AppState s, LayoutPrefs layout) => (s.copyWith(layout: layout), [SaveLayout(layout)]);
+/// The reader screen shows `tab` (null: closed).
+AppState _reader(AppState s, String url, ReaderTab? tab) => _updateStatus(s, url, (x) => x.copyWith(reader: tab));
 
 (AppState, List<AppEffect>) _close(AppState s, String url) {
   final current = s.status[url]?.chat;
   if (current == null) return (s, const []);
   return (
     _updateStatus(s, url, (x) => x.copyWith(chat: null)),
-    [if (current.session != s.status[url]?.sideChat?.session) SendCommand(url, ClientCommandSessionDetach(session: current.session))],
+    [SendCommand(url, ClientCommandSessionDetach(session: current.session))],
   );
 }
 
@@ -508,8 +465,8 @@ bool stopped(WorkerState state) => state == WorkerState.done || state == WorkerS
     // Follow the agent, live events of the open session only.
     ServerMessageAgentNavigated(:final session, :final seq, url: final target)
         when page.follow && status.chat?.session == session && seq > status.chat!.liveAfter =>
-      // A closed side pane opens on the page; another tab stays up.
-      _withPage(status.side == null ? _side(next, url, SideTab.page) : next, url, (p) => _navigate(url, p, target)),
+      // A closed reader opens on the page; an app shown stays up.
+      _withPage(status.reader == null ? _reader(next, url, ReaderTab.page) : next, url, (p) => _navigate(url, p, target)),
     _ => (next, const []),
   };
 }
@@ -721,12 +678,10 @@ AppState _event(AppState s, String url, ServerMessage message) => switch (messag
           return x.copyWith(workers: {...x.workers, worker: state}, unread: finished ? {...x.unread, worker} : null);
         }),
       _ when sessionEvent(message) != null => _updateStatus(s, url, (x) {
-          final chat = x.chat, side = x.sideChat;
+          final chat = x.chat;
           // Not before its history: the attach after it replays what came meanwhile.
           final nextChat = chat == null || !chat.loaded ? chat : applyChatEvent(chat, message);
-          final nextSide = side == null || !side.loaded ? side : applyChatEvent(side, message);
-          if (identical(nextChat, chat) && identical(nextSide, side)) return x;
-          return x.copyWith(chat: nextChat, sideChat: nextSide);
+          return identical(nextChat, chat) ? x : x.copyWith(chat: nextChat);
         }),
       _ => s,
     };

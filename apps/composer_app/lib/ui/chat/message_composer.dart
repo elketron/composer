@@ -1,4 +1,3 @@
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -40,7 +39,6 @@ class _MessageComposerState extends State<MessageComposer> {
         StoreScope.read(context).dispatch(DraftChanged(widget.url, drafting: drafting));
       }
     });
-    if (Platform.isLinux || Platform.isWindows || Platform.isMacOS) _focus.requestFocus();
   }
 
   @override

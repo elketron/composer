@@ -53,7 +53,7 @@ class ChatPage extends StatelessWidget {
       ),
       body: chat == null
           ? const Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)))
-          : ChatView(url: url, status: status, chat: chat, header: false),
+          : ChatView(url: url, status: status, chat: chat),
     );
   }
 }

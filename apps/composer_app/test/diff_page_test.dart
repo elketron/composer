@@ -8,7 +8,6 @@ import 'package:composer_app/state/app_state.dart';
 import 'package:composer_app/state/effects.dart';
 import 'package:composer_app/state/reduce.dart';
 import 'package:composer_app/state/server_entry.dart';
-import 'package:composer_app/state/types.dart';
 import 'package:composer_app/theme/composer_theme.dart';
 import 'package:composer_app/ui/chat/diff_page.dart';
 import 'package:composer_app/ui/chat/review_view.dart';
@@ -53,7 +52,7 @@ class Harness {
 
   Harness(ProjectDiff changes) {
     store = Store(AppState.initial, reduce, (effect, dispatch) => sent.add(effect));
-    store.dispatch(const ServersLoaded([home], StorageKind.file));
+    store.dispatch(const ServersLoaded([home]));
     store.dispatch(const ReviewRequested('https://home.ts.net', '0007'));
     store.dispatch(TicketReplied(home.url, '0007', result: CommandResultChanges(changes: changes)));
     sent.clear();

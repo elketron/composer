@@ -69,10 +69,6 @@ class _AppViewState extends State<AppView> {
           key: ValueKey(address),
           initialUrlRequest: URLRequest(url: WebUri(address)),
           initialSettings: InAppWebViewSettings(transparentBackground: false, isInspectable: true),
-          onWebViewCreated: (controller) {
-            // Linux beta: initialUrlRequest can be ignored (flutter_inappwebview#2903).
-            if (Platform.isLinux) controller.loadUrl(urlRequest: URLRequest(url: WebUri(address)));
-          },
           onLoadStop: (_, _) => setState(() => _loading = false),
           onReceivedError: (_, request, error) {
             if (request.isForMainFrame ?? true) setState(() => _error = error.description);

@@ -5,19 +5,13 @@ import 'package:flutter/rendering.dart';
 import '../../state/actions.dart';
 import '../../state/chat_state.dart';
 import '../../state/server_status.dart';
-import '../../state/types.dart';
 import '../../theme/tokens.dart' as t;
-import '../pages/page_navigation.dart';
 import '../../state/chat_items.dart';
 import '../../state/chat_rows.dart';
 import '../store_scope.dart';
 import 'activity_line.dart';
 import 'agent_text.dart';
 import 'approval_card.dart';
-import 'chat_header.dart';
-import 'chat_menu.dart';
-import 'harness_chip.dart';
-import 'project_chip.dart';
 import 'chat_item_view.dart';
 import 'new_content_pill.dart';
 import 'steps_view.dart';
@@ -29,22 +23,11 @@ import 'orchestration_bar.dart';
 /// A session's chat: transcript (newest at the bottom, following the stream), its approvals,
 /// and the composer.
 class ChatView extends StatefulWidget {
-  const ChatView({super.key, required this.url, required this.status, required this.chat, this.onClose, this.header = true, this.compact = false, this.pane = ChatPane.main});
+  const ChatView({super.key, required this.url, required this.status, required this.chat});
 
   final String url;
   final ServerStatus status;
   final ChatState chat;
-  final VoidCallback? onClose;
-
-  /// Phones put the session in the app bar instead.
-  final bool header;
-
-  /// Beside another chat (the side pane's Worker tab): no orchestration strip and no composer,
-  /// which writes to the open chat.
-  final bool compact;
-
-  /// Which view this is: a session shown in both keeps a scroll position per one.
-  final ChatPane pane;
 
   @override
   State<ChatView> createState() => _ChatViewState();
@@ -95,7 +78,7 @@ class _ChatViewState extends State<ChatView> {
     final pixels = _controller.hasClients ? _controller.position.pixels : 0.0;
     final atBottom = _atBottom(n.metrics);
     if (atBottom != widget.chat.atBottom) {
-      StoreScope.read(context).dispatch(ViewScrolled(widget.url, widget.chat.session, atBottom: atBottom, pane: widget.pane));
+      StoreScope.read(context).dispatch(ViewScrolled(widget.url, widget.chat.session, atBottom: atBottom));
     }
     if (!widget.chat.atBottom) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -109,14 +92,13 @@ class _ChatViewState extends State<ChatView> {
   void _backToLatest() {
     final pos = _controller.hasClients ? _controller.position : null;
     if (pos != null) pos.jumpTo(pos.minScrollExtent);
-    StoreScope.read(context).dispatch(ViewScrolled(widget.url, widget.chat.session, atBottom: true, pane: widget.pane));
+    StoreScope.read(context).dispatch(ViewScrolled(widget.url, widget.chat.session, atBottom: true));
   }
 
   @override
   Widget build(BuildContext context) {
     final chat = widget.chat;
     final session = widget.status.session(chat.session);
-    final parent = session?.parent == null ? null : widget.status.session(session!.parent!);
     final busy = session != null && session.state != TurnState.idle;
     final streaming = chat.streaming;
     final approvals = widget.status.approvals.where((a) => a.session == chat.session);
@@ -154,23 +136,7 @@ class _ChatViewState extends State<ChatView> {
     final keys = {for (final (i, (key, _)) in rows.indexed) key: i};
 
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      if (widget.header)
-        ChatHeader(
-          sessionId: chat.session,
-          session: session,
-          parent: parent,
-          onClose: widget.onClose,
-          onBrowse: () => openPage(context, widget.url, 'site://home'),
-          menu: ChatMenu(url: widget.url, session: session),
-          // A worker's project is its worktree: no chips to change it.
-          chips: session == null || session.ticket != null
-              ? null
-              : [
-                  ProjectChip(url: widget.url, project: session.project),
-                  if (session.project != null) HarnessChip(url: widget.url, project: session.project!),
-                ],
-        ),
-      if (!widget.compact) OrchestrationBar(url: widget.url, status: widget.status, session: chat.session),
+      OrchestrationBar(url: widget.url, status: widget.status, session: chat.session),
       Expanded(
         child: rows.isEmpty
             ? Center(child: Text(chat.loaded && chat.lastSeq == 0 ? 'Say something to start.' : '', style: const TextStyle(color: t.faint)))
@@ -179,7 +145,7 @@ class _ChatViewState extends State<ChatView> {
                   onNotification: _onScroll,
                   child: SelectionArea(
                     child: ListView.builder(
-                      key: PageStorageKey('chat-${widget.url}-${chat.session}${widget.compact ? '-side' : ''}'),
+                      key: PageStorageKey('chat-${widget.url}-${chat.session}'),
                       controller: _controller,
                       reverse: true,
                       padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
@@ -208,7 +174,7 @@ class _ChatViewState extends State<ChatView> {
                   ),
               ]),
       ),
-      if (!widget.compact) MessageComposer(key: ValueKey('composer-${widget.url}-${chat.session}'), url: widget.url, busy: busy),
+      MessageComposer(key: ValueKey('composer-${widget.url}-${chat.session}'), url: widget.url, busy: busy),
     ]);
   }
 }

@@ -1,9 +1,8 @@
-// Opening pages and micro apps: in the pane beside the chat on wide screens, as a screen on phones.
+// Opening pages and micro apps: the reader screen (one, whatever it shows).
 
 import 'package:flutter/material.dart';
 
 import '../../state/actions.dart';
-import '../chat/navigation.dart';
 import '../store_scope.dart';
 import 'reader_screen.dart';
 
@@ -20,7 +19,7 @@ void openApp(BuildContext context, String url, String site) {
 }
 
 void _show(BuildContext context, String url) {
-  if (isWide(context) || ModalRoute.of(context)?.settings.name == readerRoute) return;
+  if (ModalRoute.of(context)?.settings.name == readerRoute) return;
   Navigator.of(context).push(
     MaterialPageRoute<void>(settings: const RouteSettings(name: readerRoute), builder: (_) => ReaderScreen(url: url)),
   );

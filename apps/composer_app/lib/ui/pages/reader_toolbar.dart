@@ -21,7 +21,7 @@ class ReaderToolbar extends StatelessWidget {
   Widget build(BuildContext context) {
     final store = StoreScope.read(context);
     final PageState p = status.page;
-    final app = p.appSite != null && status.side == SideTab.app;
+    final app = p.appSite != null && status.reader == ReaderTab.app;
     final shown = app ? 'site://${p.appSite}  ·  app' : (p.page?.url ?? p.loading ?? '');
     final site = app ? p.appSite : (p.page == null ? null : splitSiteUrl(p.page!.url).$1);
     Widget button(IconData icon, String tip, VoidCallback? onPressed, {Color? color, Key? key}) => IconButton(

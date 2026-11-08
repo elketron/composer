@@ -5,7 +5,7 @@ import '../../state/server_status.dart';
 import '../../theme/composer_theme.dart';
 import '../../theme/tokens.dart' as t;
 import '../chat/chat_menu.dart';
-import '../home/section_label.dart';
+import 'section_label.dart';
 import '../store_scope.dart';
 
 /// Per project, the external harnesses config.toml allows there, each with its on / off switch

@@ -5,22 +5,17 @@ import '../../state/types.dart';
 import '../../theme/composer_theme.dart';
 import '../../theme/tokens.dart' as t;
 import '../store_scope.dart';
-import 'navigation.dart';
 import 'review_view.dart';
 
-/// Opens a ticket's review: its changes against the project's branch, Merge and Discard. In
-/// the side pane's Changes tab on wide screens, as its own screen on phones.
+/// Opens a ticket's review: its changes against the project's branch, Merge and Discard, as its
+/// own screen.
 void openReview(BuildContext context, String url, String ticket) {
   final store = StoreScope.read(context);
-  if (isWide(context)) {
-    store.dispatch(SideTabSelected(url, SideTab.changes, ticket: ticket));
-    return;
-  }
   store.dispatch(ReviewRequested(url, ticket));
   Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => ReviewPage(url: url, ticket: ticket)));
 }
 
-/// A ticket's review as its own screen (phones).
+/// A ticket's review as its own screen.
 class ReviewPage extends StatelessWidget {
   const ReviewPage({super.key, required this.url, required this.ticket});
 

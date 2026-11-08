@@ -7,7 +7,6 @@ const _keep = Object();
 class AppState {
   const AppState({
     this.loaded = false,
-    this.storage = StorageKind.keyring,
     this.servers = const [],
     this.status = const {},
     this.active,
@@ -16,14 +15,12 @@ class AppState {
     this.foreground = true,
     this.notifiedApprovals = const {},
     this.tab = PhoneTab.chats,
-    this.layout = const LayoutPrefs(),
   });
 
   static const initial = AppState();
 
   /// The server list has been read from storage.
   final bool loaded;
-  final StorageKind storage;
 
   /// In the order they were added.
   final List<ServerEntry> servers;
@@ -48,8 +45,6 @@ class AppState {
   /// The phone layout's tab.
   final PhoneTab tab;
 
-  /// The wide layout's collapsed session list and side pane width.
-  final LayoutPrefs layout;
 
   ServerEntry? get activeServer => servers.where((s) => s.url == active).firstOrNull;
 
@@ -57,7 +52,6 @@ class AppState {
 
   AppState copyWith({
     bool? loaded,
-    StorageKind? storage,
     List<ServerEntry>? servers,
     Map<String, ServerStatus>? status,
     Object? active = _keep,
@@ -66,11 +60,9 @@ class AppState {
     bool? foreground,
     Set<String>? notifiedApprovals,
     PhoneTab? tab,
-    LayoutPrefs? layout,
   }) =>
       AppState(
         loaded: loaded ?? this.loaded,
-        storage: storage ?? this.storage,
         servers: servers ?? this.servers,
         status: status ?? this.status,
         active: identical(active, _keep) ? this.active : active as String?,
@@ -79,6 +71,5 @@ class AppState {
         foreground: foreground ?? this.foreground,
         notifiedApprovals: notifiedApprovals ?? this.notifiedApprovals,
         tab: tab ?? this.tab,
-        layout: layout ?? this.layout,
       );
 }

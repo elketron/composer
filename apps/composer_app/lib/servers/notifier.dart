@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -8,8 +7,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../state/effects.dart';
 import '../state/types.dart';
 
-/// System notifications: desktop (D-Bus on Linux, toasts on Windows) and Android. Taps and the
-/// Approve / Deny buttons come back on [taps].
+/// Android notifications. Taps and the Approve / Deny buttons come back on [taps].
 class Notifier {
   final _plugin = FlutterLocalNotificationsPlugin();
   late final _taps = StreamController<NotificationTap>.broadcast(onListen: _flushPending);
@@ -35,32 +33,23 @@ class Notifier {
       final ok = await _plugin.initialize(
         settings: const InitializationSettings(
           android: AndroidInitializationSettings('@mipmap/ic_launcher'),
-          linux: LinuxInitializationSettings(defaultActionName: 'Open'),
-          windows: WindowsInitializationSettings(
-            appName: 'composer',
-            appUserModelId: 'dev.composer.app',
-            guid: '5f0a1c2e-7c39-4e57-9a37-2d4c3f6e8b11',
-          ),
-          macOS: DarwinInitializationSettings(),
         ),
         onDidReceiveNotificationResponse: handleResponse,
       );
-      if (Platform.isAndroid) {
-        final android = _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
-        await android?.createNotificationChannel(_channel);
-        await android?.requestNotificationsPermission();
-      }
+      final android = _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+      await android?.createNotificationChannel(_channel);
+      await android?.requestNotificationsPermission();
       if (ok != true) debugPrint('notifications unavailable');
-      if (Platform.isAndroid) unawaited(_launchedBy());
+      unawaited(_launchedBy());
       return ok ?? false;
     } catch (error) {
-      // No notification service (e.g. Linux without a notification daemon): carry on without.
+      // Notifications refused or unavailable: carry on without.
       debugPrint('notifications unavailable: $error');
       return false;
     }
   }
 
-  /// Android: the app was started by tapping a notification (not implemented on Linux).
+  /// The app was started by tapping a notification.
   Future<void> _launchedBy() async {
     try {
       final launch = await _plugin.getNotificationAppLaunchDetails();
@@ -123,23 +112,12 @@ class Notifier {
               ]
             : null,
       ),
-      linux: LinuxNotificationDetails(
-        actions: approval
-            ? const [LinuxNotificationAction(key: 'approve', label: 'Approve'), LinuxNotificationAction(key: 'deny', label: 'Deny')]
-            : const [],
-        urgency: approval ? LinuxNotificationUrgency.critical : LinuxNotificationUrgency.normal,
-      ),
-      windows: WindowsNotificationDetails(
-        actions: approval
-            ? const [WindowsAction(content: 'Approve', arguments: 'approve'), WindowsAction(content: 'Deny', arguments: 'deny')]
-            : const [],
-      ),
     );
     final payload = jsonEncode({'url': note.url, 'session': note.session, 'approval': note.approval, 'page': note.page, 'app': note.app});
     try {
       await _plugin.show(id: idOf(note.key), title: note.title, body: note.body, notificationDetails: details, payload: payload);
     } catch (_) {
-      // No notification service (a desktop without one): the app shows it all anyway.
+      // Not shown (notifications off): the app shows it all anyway.
     }
   }
 
