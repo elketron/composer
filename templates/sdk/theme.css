@@ -28,22 +28,34 @@
   --err:   #e07c7c;
   --info:  #b39ce0;   /* agent / thinking / tool rows */
 
-  --font-ui:   'Inter', system-ui, sans-serif;
+  /* terminal feel: the UI is monospaced, squared off and dense */
+  --font-ui:   'JetBrains Mono', ui-monospace, monospace;
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 
-  --radius-sm: 2px;   /* min: badges, chips, kbd, markers, dots */
-  --radius: 5px;      /* max: buttons, inputs, cards, panels */
-  --gap: 12px;
+  --radius-sm: 0px;   /* badges, chips, kbd, markers, dots */
+  --radius: 0px;      /* buttons, inputs, cards, panels */
+  --gap: 10px;
 }
 
 * { box-sizing: border-box; }
 html, body { margin: 0; background: var(--bg); color: var(--text); }
-body { font: 14px/1.5 var(--font-ui); -webkit-font-smoothing: antialiased; }
+body {
+  font: 13px/1.6 var(--font-ui);
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 code, .mono { font-family: var(--font-mono); font-size: 0.92em; }
+input, textarea, button, select { font-family: inherit; }
 input[type=checkbox] { accent-color: var(--accent); }
 ::selection { background: var(--accent-dim); }
+
+/* thin terminal scrollbars */
+* { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: var(--border-strong); }
+::-webkit-scrollbar-track { background: transparent; }
 
 /* app layout helpers */
 html, body { height: 100%; }

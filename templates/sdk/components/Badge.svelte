@@ -11,8 +11,8 @@
 
 <style>
   .badge {
-    font: 11px var(--font-mono); padding: 1px 7px; border-radius: var(--radius-sm);
-    border: 1px solid currentColor; display: inline-block; line-height: 16px;
+    font: 9.5px var(--font-mono); padding: 0 5px; border-radius: 0; letter-spacing: .08em;
+    text-transform: uppercase; border: 1px solid currentColor; display: inline-block; line-height: 15px;
   }
   .muted { color: var(--muted); }
   .ok { color: var(--ok); }

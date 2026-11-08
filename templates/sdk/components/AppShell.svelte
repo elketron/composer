@@ -27,11 +27,12 @@
 
 <div class="shell">
   <header class="bar">
+    <span class="brand">composer</span>
     <span class="site">{site}</span>
     {#if crumb}<span class="crumb">/ <b>{crumb}</b></span>{/if}
     <div class="right">
-      <span class="chip" title={isConnected() ? 'connected' : 'reconnecting'}>
-        <span class="dot" class:off={!isConnected()}></span>
+      <span class="chip" class:off={!isConnected()} title={isConnected() ? 'connected' : 'reconnecting'}>
+        <span class="dot"></span>
         {session ? `#${session}` : 'no session'}
       </span>
       {@render actions?.()}
@@ -47,23 +48,26 @@
 <style>
   .shell { height: 100%; display: flex; flex-direction: column; }
   .bar {
-    height: 44px; flex: none; display: flex; align-items: center; gap: 12px; padding: 0 14px;
-    border-bottom: 1px solid var(--border); background: var(--surface); font-size: 13px;
+    height: 34px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 12px;
+    border-bottom: 1px solid var(--border); background: var(--surface);
   }
-  .site { font: 600 13px var(--font-mono); }
-  .crumb { font: 12px var(--font-mono); color: var(--faint); }
+  .brand { font: 700 12px var(--font-mono); letter-spacing: .06em; color: var(--text); }
+  .site { font: 11.5px var(--font-mono); color: var(--accent); }
+  .crumb { font: 11px var(--font-mono); color: var(--faint); }
   .crumb b { color: var(--muted); font-weight: 400; }
-  .right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+  .right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
   .chip {
-    font: 12px var(--font-mono); color: var(--muted); border: 1px solid var(--border);
-    border-radius: var(--radius-sm); padding: 2px 10px; display: inline-flex; gap: 6px; align-items: center;
+    font: 10.5px var(--font-mono); color: var(--muted); border: 0; padding: 0;
+    display: inline-flex; gap: 6px; align-items: center;
   }
-  .dot { width: 7px; height: 7px; border-radius: var(--radius-sm); background: var(--ok); }
-  .dot.off { background: var(--faint); }
+  .chip.off { color: var(--faint); }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); }
+  .chip.off .dot { background: var(--faint); }
   main { flex: 1; min-height: 0; overflow: auto; }
   .foot {
-    height: 28px; flex: none; display: flex; align-items: center; gap: 16px; padding: 0 14px;
-    border-top: 1px solid var(--border); font-size: 12px; color: var(--faint);
+    height: 24px; flex: none; display: flex; align-items: center; gap: 14px; padding: 0 12px;
+    border-top: 1px solid var(--border); background: var(--surface);
+    font-size: 10.5px; color: var(--faint);
   }
   .status { margin-left: auto; font-family: var(--font-mono); }
 </style>

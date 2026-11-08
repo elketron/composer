@@ -6,9 +6,9 @@
 
 <style>
   .hint { white-space: nowrap; }
-  .label { margin-left: 5px; }
+  .label { margin-left: 4px; }
   kbd {
-    font: 11px var(--font-mono); color: var(--muted); padding: 1px 5px; border-radius: var(--radius-sm);
+    font: 9.5px var(--font-mono); color: var(--muted); padding: 0 4px; border-radius: 0;
     border: 1px solid var(--border-strong); background: var(--surface);
   }
 </style>
