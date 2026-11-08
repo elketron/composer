@@ -1,4 +1,4 @@
-use composer_protocol::{ApprovalKind, ClientCommand, CommandResult, Seq, ServerMessage};
+use composer_protocol::{ApprovalKind, ClientCommand, CommandResult, DeskTab, Seq, ServerMessage};
 
 use crate::action::Action;
 use crate::effect::Effect;
@@ -1102,6 +1102,20 @@ impl AppState {
     fn reply(&mut self, id: u64, result: CommandResult) -> Vec<Effect> {
         match (self.conn.take_pending(id), result) {
             (Pending::OpenApp { site, session, .. }, CommandResult::AppOpened { opened }) => {
+                // The desktop's stage is this TUI's other half: put the app on the session's desk
+                // (opened by `:app`), and the stage shows it, instead of opening a browser. The
+                // URL says whether it opened on a project or on Home.
+                if self.window.is_some() {
+                    let project = project_in_url(&opened.url);
+                    return self.send(
+                        ClientCommand::DeskOpen {
+                            session,
+                            tab: DeskTab::App { site, project },
+                            focus: true,
+                        },
+                        Pending::Ignore,
+                    );
+                }
                 let url = format!(
                     "{}{}&session={session}",
                     origin(&self.conn.server_url),
@@ -1392,6 +1406,16 @@ fn origin(server_url: &str) -> &str {
         Some(slash) => &server_url[..after + slash],
         None => server_url,
     }
+}
+
+/// The project an app's open URL names (`/w/<ws>/p/<project>/<site>/...`); `None` for Home.
+fn project_in_url(url: &str) -> Option<String> {
+    let parts: Vec<&str> = url.split('/').collect();
+    let at = parts.iter().position(|part| *part == "p")?;
+    parts
+        .get(at + 1)
+        .filter(|part| !part.is_empty())
+        .map(|part| (*part).to_string())
 }
 
 #[cfg(test)]
@@ -2067,6 +2091,88 @@ mod tests {
             "http://h:1/w/default/h/calendar/?app_token=app_x&session=s"
         );
         assert!(!url.contains(&state.conn.token) || state.conn.token.is_empty());
+    }
+
+    #[test]
+    fn a_windows_tui_puts_an_app_on_the_desk_not_in_a_browser() {
+        let (mut state, _) = connected();
+        state.window = Some("w1".into());
+        state.conn.server_url = "http://h:1/w/default".into();
+        state.session.upsert(SessionInfo {
+            project: Some("/p/game".into()),
+            ..info("s", None)
+        });
+        state.reduce(Action::AttachSession("s".into()));
+
+        let open = |state: &mut AppState, url: &str| {
+            let effects = state.reduce(Action::OpenApp(Some("calendar".into())));
+            let commands = sent(&effects);
+            let [(id, _)] = commands
+                .iter()
+                .filter(|(_, c)| matches!(c, ClientCommand::AppOpen { .. }))
+                .collect::<Vec<_>>()
+                .as_slice()
+            else {
+                panic!("{effects:?}")
+            };
+            let id = *id;
+            let effects = state.reduce(Action::Server(ServerMessage::Ok {
+                id,
+                result: CommandResult::AppOpened {
+                    opened: composer_protocol::http::AppOpened {
+                        url: url.into(),
+                        token: Some("app_x".into()),
+                    },
+                },
+            }));
+            let commands = sent(&effects);
+            assert!(
+                effects
+                    .iter()
+                    .all(|e| !matches!(e, Effect::CheckApp { .. } | Effect::OpenBrowser(_))),
+                "the stage shows apps, not a browser: {effects:?}"
+            );
+            commands
+        };
+
+        let desk_tab = |commands: &[(u64, ClientCommand)]| -> (String, DeskTab, bool) {
+            commands
+                .iter()
+                .find_map(|(_, command)| match command {
+                    ClientCommand::DeskOpen {
+                        session,
+                        tab,
+                        focus,
+                    } => Some((session.clone(), tab.clone(), *focus)),
+                    _ => None,
+                })
+                .expect("a desk.open")
+        };
+
+        // On the session's project: the tab names it.
+        let (session, tab, focus) = desk_tab(&open(
+            &mut state,
+            "/w/default/p/game/calendar/?app_token=app_x",
+        ));
+        assert_eq!(session, "s");
+        assert!(focus, "the stage shows the tab it was opened on");
+        assert_eq!(
+            tab,
+            DeskTab::App {
+                site: "calendar".into(),
+                project: Some("game".into())
+            }
+        );
+
+        // On Home: no project.
+        let (_, tab, _) = desk_tab(&open(&mut state, "/w/default/h/calendar/?app_token=app_x"));
+        assert_eq!(
+            tab,
+            DeskTab::App {
+                site: "calendar".into(),
+                project: None
+            }
+        );
     }
 
     #[test]
