@@ -68,6 +68,7 @@ In the TUI, Enter is a new line while you type; send with Escape, then Enter.
 |---|---|
 | `no token in …/state/token` | the server hasn't run that workspace yet: `composer serve` |
 | `CEF didn't start` | its messages are above; from source, run `scripts/fetch-cef.sh` |
+| `cargo run` dies with SIGTRAP at start-up | a half-downloaded `.cef`: run `scripts/fetch-cef.sh` (the app now warns and falls back instead) |
 | a page stays blank | `COMPOSER_CEF_GPU=1` tries the GPU (software rendering is the default) |
 | slow to start | `COMPOSER_DESKTOP_TRACE=1` prints where the time goes |
 | a page misbehaves | `COMPOSER_CEF_DEBUG_PORT=9229`, then Chromium's DevTools on that port; `COMPOSER_CEF_LOG=1` for Chromium's log |
