@@ -129,6 +129,8 @@ fn default_lend() -> Vec<String> {
         "~/.profile",
         "~/.config/fish",
         "~/.config/starship.toml",
+        "~/.config/nvim",
+        "~/.local/share/nvim",
     ]
     .map(String::from)
     .to_vec()

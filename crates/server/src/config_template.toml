@@ -113,7 +113,7 @@ scrollback_kb = 256
 # Your shell config, lent read-only (a terminal's $HOME is otherwise empty; add what your shell's
 # setup reads, plugins and themes included); keep secrets out of these files: the agent could
 # read them too.
-lend = ["~/.zshrc", "~/.zshenv", "~/.zprofile", "~/.p10k.zsh", "~/.oh-my-zsh", "~/.bashrc", "~/.profile", "~/.config/fish", "~/.config/starship.toml"]
+lend = ["~/.zshrc", "~/.zshenv", "~/.zprofile", "~/.p10k.zsh", "~/.oh-my-zsh", "~/.bashrc", "~/.profile", "~/.config/fish", "~/.config/starship.toml", "~/.config/nvim", "~/.local/share/nvim"]
 
 [apps]
 # Apps that are clients of this workspace: opened with its full access (sessions, approvals),
