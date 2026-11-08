@@ -95,6 +95,8 @@ void main() {
     ], active: 'terminal:1'));
     expect(desk.tabs.map((e) => e.id), [page.id, app.id, 'changes:composer']);
     expect(desk.shown?.id, page.id, reason: 'a hidden terminal is not the shown tab');
+    final active = DeskView(Desk(tabs: [page, app], active: app.id));
+    expect(active.shown?.id, app.id, reason: 'the active tab wins');
     expect(desk.unseen, 1);
     expect(DeskView.label(page), 'plans');
     expect(DeskView.label(app), 'board · composer');

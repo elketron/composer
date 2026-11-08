@@ -68,20 +68,19 @@ class _DeskTabScreenState extends State<DeskTabScreen> {
         title: Text(DeskView.label(entry), style: mono(size: 14, color: t.text, weight: FontWeight.w600)),
         bottom: PreferredSize(preferredSize: const Size.fromHeight(2), child: WorkspaceStrip(workspace: workspace)),
       ),
-      body: body,
-      bottomNavigationBar: chat == null
-          ? null
-          : Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (chat.selection case final selection?) SelectionChip(url: widget.url, selection: selection),
-                MessageComposer(
-                  key: ValueKey('desk-composer-${widget.url}-${chat.session}'),
-                  url: widget.url,
-                  busy: session != null && session.state != TurnState.idle,
-                ),
-              ],
-            ),
+      // The bar is in the body, not `bottomNavigationBar`: the keyboard insets the body, and a
+      // bottom bar would be covered by it.
+      body: Column(children: [
+        Expanded(child: body),
+        if (chat != null) ...[
+          if (chat.selection case final selection?) SelectionChip(url: widget.url, selection: selection),
+          MessageComposer(
+            key: ValueKey('desk-composer-${widget.url}-${chat.session}'),
+            url: widget.url,
+            busy: session != null && session.state != TurnState.idle,
+          ),
+        ],
+      ]),
     );
   }
 }

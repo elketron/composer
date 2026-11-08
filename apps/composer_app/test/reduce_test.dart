@@ -77,6 +77,34 @@ void main() {
     expect(reduce(state, InfoReceived(home.url, info)).$2, isEmpty);
   });
 
+  test('the info also stores the workspace and its colour', () {
+    const named = ServerInfo(
+      name: 'home-pc',
+      version: '0.1.0',
+      model: 'qwen',
+      slots: 2,
+      workspace: 'work',
+      workspaceColor: '#ff8800',
+    );
+    final (state, effects) = reduce(loaded([home]), InfoReceived(home.url, named));
+    expect((state.servers.single.workspace, state.servers.single.color), ('work', '#ff8800'));
+    expect(effects.whereType<SaveServers>().single.servers.single.color, '#ff8800');
+    // Nothing changed: no save.
+    expect(reduce(state, const InfoReceived('https://home.ts.net', named)).$2, isEmpty);
+    // The same name, a new colour: still saved.
+    const recoloured = ServerInfo(
+      name: 'home-pc',
+      version: '0.1.0',
+      model: 'qwen',
+      slots: 2,
+      workspace: 'work',
+      workspaceColor: '#123456',
+    );
+    final (next, saved) = reduce(state, const InfoReceived('https://home.ts.net', recoloured));
+    expect(next.servers.single.color, '#123456');
+    expect(saved.whereType<SaveServers>().single.servers.single.color, '#123456');
+  });
+
   test('sessions: listed newest first, updated in place', () {
     var state = reduce(
       loaded([home]),
