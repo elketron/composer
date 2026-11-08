@@ -355,6 +355,13 @@ impl WebPane {
         }
     }
 
+    /// Tells CEF whether the page may take keyboard input (gpui's focus alone is not enough).
+    pub fn browser_focus(&mut self, on: bool) {
+        if let Some(host) = self.host() {
+            host.set_focus(on as _);
+        }
+    }
+
     fn on_mouse_down(&mut self, ev: &MouseDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         window.focus(&self.focus, cx);
         if let Some(host) = self.host() {

@@ -774,8 +774,9 @@ impl Render for Shell {
             .on_action(cx.listener(|shell, _: &FocusStage, window, cx| {
                 if let Some(pane) = shell.shown_pane() {
                     window.focus(&pane.read(cx).focus_handle(cx), cx);
-                } else if let Some(web) = shell.shown_web() {
+                } else if let Some(web) = shell.shown_web().cloned() {
                     window.focus(&web.read(cx).focus_handle(cx), cx);
+                    web.update(cx, |web, _| web.browser_focus(true));
                 }
             }))
             .on_action(cx.listener(|shell, _: &NextTab, _, cx| {
@@ -942,18 +943,18 @@ impl Render for Shell {
                                         if shell.overlay.is_some() {
                                             return;
                                         }
-                                        let handle = shell
-                                            .shown_pane()
-                                            .map(|pane| pane.read(cx).focus_handle(cx))
-                                            .or_else(|| {
-                                                shell
-                                                    .shown_web()
-                                                    .map(|web| web.read(cx).focus_handle(cx))
-                                            });
-                                        if let Some(handle) = handle
-                                            && !handle.is_focused(window)
-                                        {
-                                            window.focus(&handle, cx);
+                                        if let Some(pane) = shell.shown_pane() {
+                                            let handle = pane.read(cx).focus_handle(cx);
+                                            if !handle.is_focused(window) {
+                                                window.focus(&handle, cx);
+                                            }
+                                        } else if let Some(web) = shell.shown_web().cloned() {
+                                            let handle = web.read(cx).focus_handle(cx);
+                                            if !handle.is_focused(window) {
+                                                window.focus(&handle, cx);
+                                                // CEF has its own focus: without it the page sees no keys.
+                                                web.update(cx, |web, _| web.browser_focus(true));
+                                            }
                                         }
                                     }))
                                     .child(stage_body),
