@@ -45,5 +45,4 @@ and pair them with `composer pair --name <device>`.
 
 ## License
 
-Apache License 2.0: see [LICENSE](LICENSE). The vendored `apps/vendor/flutter_inappwebview_linux`
-and the bundled fonts keep their own licenses.
+Apache License 2.0: see [LICENSE](LICENSE). The bundled fonts keep their own licenses.

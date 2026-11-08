@@ -48,23 +48,23 @@ Snapshots always force a draw, so they can't catch a missing repaint: for that, 
 
 ## The Flutter app (`apps/composer_app`)
 
+The phone client (Android; iOS later). The desktop is `apps/desktop` (gpui + CEF), its own Cargo
+workspace; the Flutter app has no Linux, Windows or macOS target.
+
 - Same Flux shape as the TUI: widgets dispatch `AppAction`s, `reduce` (pure) returns the next `AppState`
   plus `AppEffect`s, `EffectRunner` does the IO. Same file rule: a class with behaviour (widgets
   included) gets its own file; plain data types share `types.dart` / `actions.dart` / `effects.dart`.
-- `flutter analyze` and `flutter test` (reducer, parsing). End to end: `integration_test/pairing_test.dart`
-  pairs through the UI with a real server, `chat_test.dart` runs a whole turn with a recipe approval, and
-  `reader_test.dart` covers pages, an app and follow-agent, `review_test.dart` merges a ticket from the
-  palette, `wide_test.dart` walks the desktop frame (side pane tabs, the project view and scope, new work in a
-  pipeline, Worker tab, folded sessions, palette), and `notify_test.dart` approves
-  from a notification (needs a notification daemon that clicks Approve; see their headers); run them inside headless Weston
-  (`weston --backend=headless --renderer=gl --debug`, `WAYLAND_DISPLAY`, `GDK_BACKEND=wayland`).
+- `flutter analyze` and `flutter test` (reducer, parsing). End to end on an Android emulator against a
+  rehearsal server: `scripts/phone-e2e.sh <device> <workspace url> [test...]` pairs each test (a fresh
+  install needs its own pairing code) and forwards the server's port with `adb reverse`; it sets up the
+  scripted model and `tools` site the tests need. Tests: `pairing_test.dart` pairs through the UI,
+  `chat_test.dart` runs a whole turn with a recipe approval, `reader_test.dart` covers pages, an app and
+  follow-agent, `review_test.dart` merges a ticket from the palette, `measure_open_test.dart` measures
+  opening a chat. A headless emulator:
+  `emulator -avd <name> -read-only -no-window -no-audio`.
 - `COMPOSER_APP_DATA=<dir>` keeps the server list in that directory (tests, a second instance).
-- The Linux binary is `composer-app` (not `composer`, the CLI); on Windows it is `composer.exe`.
-- Icons: edit `assets/icon/*.svg`, then `scripts/app-icons.sh` renders the Android, Windows and Linux ones.
-- `flutter test integration_test` leaves the *test* in `build/linux/.../bundle`; run `flutter build linux`
-  before launching the bundle yourself, or it waits for a test runner and never shows a window.
-- Screenshots: launch the bundle in headless Weston (`--debug`) and capture with `weston-screenshooter`
-  while it paints; phone layouts on the Android emulator (`adb exec-out screencap`).
+- Icons: edit `assets/icon/*.svg`, then `scripts/app-icons.sh` renders the Android ones.
+- Screenshots: `adb exec-out screencap -p > shot.png`.
 
 ## Seeing an app
 

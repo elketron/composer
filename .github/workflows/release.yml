@@ -92,34 +92,6 @@ jobs:
           name: android
           path: dist/*.apk
 
-  # WPE WebKit with WPEPlatform (for the micro apps) is too new for Ubuntu: build on Arch.
-  linux:
-    runs-on: ubuntu-latest
-    container: archlinux:latest
-    env:
-      # Flutter unpacks its downloads as root; don't try to restore the archives' owners
-      # (fails in rootless containers, e.g. when trying this job locally with podman).
-      TAR_OPTIONS: --no-same-owner
-    steps:
-      - name: System packages
-        run: |
-          pacman -Syu --noconfirm --needed git base-devel clang cmake ninja pkgconf unzip xz which \
-            gtk3 libepoxy libsecret wpewebkit
-      - uses: actions/checkout@v4
-      - name: Flutter
-        run: |
-          git clone --depth 1 --branch "$FLUTTER_VERSION" https://github.com/flutter/flutter.git /opt/flutter
-          echo /opt/flutter/bin >> "$GITHUB_PATH"
-      - name: Build
-        run: |
-          git config --global --add safe.directory '*'
-          flutter config --no-analytics --enable-linux-desktop
-          scripts/package-linux-app.sh "${VERSION#v}"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: linux
-          path: dist/*.tar.gz
-
   desktop:
     runs-on: ubuntu-latest
     container: archlinux:latest
@@ -136,40 +108,9 @@ jobs:
           name: desktop
           path: dist/*.tar.gz
 
-  windows:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: stable
-          cache: true
-      - name: Build
-        working-directory: apps/composer_app
-        shell: bash
-        run: |
-          v="${VERSION#v}"
-          flutter build windows --release --build-name="${v%%-*}" --build-number="${{ github.run_number }}"
-      - name: Installer
-        working-directory: apps/composer_app
-        shell: pwsh
-        run: |
-          $v = "$env:VERSION".TrimStart('v')
-          if (-not (Get-Command iscc -ErrorAction SilentlyContinue)) { choco install innosetup --no-progress -y }
-          $iscc = (Get-Command iscc -ErrorAction SilentlyContinue).Source
-          if (-not $iscc) { $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" }
-          & $iscc "/DAppVersion=$v" windows\installer.iss
-          New-Item -ItemType Directory -Force ..\..\dist | Out-Null
-          Copy-Item build\installer\*.exe ..\..\dist\
-      - uses: actions/upload-artifact@v4
-        with:
-          name: windows
-          path: dist/*.exe
-
   publish:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [server, android, linux, desktop, windows]
+    needs: [server, android, desktop]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4

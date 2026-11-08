@@ -5,9 +5,8 @@
 | file | what |
 |------|------|
 | `composer-<v>-linux-x86_64.tar.gz` | the `composer` binary (server, TUI, CLI); also for WSL |
-| `composer-app-<v>-android.apk` | the app for Android |
-| `composer-app-<v>-linux-x86_64.tar.gz` | the app for Linux (needs WPE WebKit 2.48+ with WPEPlatform, e.g. Arch's `wpewebkit`; see its README.txt) |
-| `composer-app-<v>-windows-x64-setup.exe` | the app for Windows (Inno Setup installer) |
+| `composer-app-<v>-android.apk` | the phone app (Android) |
+| `composer-desktop-<v>-linux-x86_64.tar.gz` | the desktop app (`apps/desktop`, CEF beside the binary) |
 
 ```sh
 git tag v0.1.0 && git push origin v0.1.0
