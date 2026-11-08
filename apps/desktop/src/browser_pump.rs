@@ -49,7 +49,14 @@ pub fn start(cx: &mut App) {
     cx.spawn(async move |cx| {
         let mut pending: Vec<i64> = Vec::new();
         loop {
+            let started = std::time::Instant::now();
             cef::do_message_loop_work();
+            if std::env::var_os("COMPOSER_CEF_TRACE").is_some() {
+                let ms = started.elapsed().as_secs_f64() * 1000.0;
+                if ms > 3.0 {
+                    eprintln!("[cef] message loop {ms:.1}ms");
+                }
+            }
             let panes: Vec<_> = PANES.with(|p| {
                 let mut p = p.borrow_mut();
                 p.retain(|pane| pane.upgrade().is_some());

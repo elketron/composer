@@ -35,6 +35,10 @@ pub struct Shared {
     pub open_pages: Vec<String>,
     /// Links that leave the workspace, for the OS to open.
     pub open_outside: Vec<String>,
+    /// Wheel delta waiting for the next pump (batched: a trackpad sends hundreds of events a
+    /// second; one CEF wheel call per pump keeps the main thread free and scrolls smoothly).
+    pub wheel: (i32, i32),
+    pub wheel_at: Option<(Point<Pixels>, Modifiers)>,
 }
 
 #[derive(Clone)]
@@ -94,8 +98,17 @@ wrap_render_handler! {
                 return;
             }
             let len = (width * height * 4) as usize;
+            let started = std::time::Instant::now();
             // SAFETY: CEF guarantees `buffer` holds width*height BGRA pixels for this call.
             let bytes = unsafe { std::slice::from_raw_parts(buffer, len) }.to_vec();
+            if std::env::var_os("COMPOSER_CEF_TRACE").is_some() {
+                eprintln!(
+                    "[cef] paint {}x{} copy {:.2}ms",
+                    width,
+                    height,
+                    started.elapsed().as_secs_f64() * 1000.0
+                );
+            }
             let mut s = self.handler.shared.borrow_mut();
             let frame = Some((width as u32, height as u32, bytes));
             if type_ == PaintElementType::from(sys::cef_paint_element_type_t::PET_POPUP) {
@@ -309,6 +322,7 @@ impl WebPane {
 
     /// After CEF's work: new frames become images, links to pages become events.
     pub fn after_pump(&mut self, cx: &mut Context<Self>) {
+        let started = std::time::Instant::now();
         let (pages, outside) = {
             let mut s = self.shared.borrow_mut();
             (
@@ -323,7 +337,11 @@ impl WebPane {
             cx.emit(WebEvent::OpenOutside(url));
         }
         let mut s = self.shared.borrow_mut();
+        let wheel = std::mem::take(&mut s.wheel);
+        let wheel_at = s.wheel_at.take();
         if !s.dirty {
+            drop(s);
+            self.send_wheel(wheel, wheel_at);
             return;
         }
         s.dirty = false;
@@ -343,7 +361,29 @@ impl WebPane {
             self.stale.push(old);
         }
         drop(s);
+        self.send_wheel(wheel, wheel_at);
         cx.notify();
+        if std::env::var_os("COMPOSER_CEF_TRACE").is_some() {
+            eprintln!(
+                "[cef] after_pump {:.1}ms",
+                started.elapsed().as_secs_f64() * 1000.0
+            );
+        }
+    }
+
+    /// One wheel call with the delta gathered since the last pump.
+    fn send_wheel(&mut self, wheel: (i32, i32), at: Option<(Point<Pixels>, Modifiers)>) {
+        let Some((position, modifiers)) = at else {
+            return;
+        };
+        if wheel == (0, 0) {
+            return;
+        }
+        if let Some(host) = self.host() {
+            host.send_mouse_wheel_event(Some(&self.mouse(position, &modifiers)), wheel.0, wheel.1);
+            // CEF's next frame is requested now: don't wait for the pump's fallback.
+            browser_pump::schedule(0);
+        }
     }
 
     fn mouse(&self, pos: Point<Pixels>, mods: &Modifiers) -> MouseEvent {
@@ -397,19 +437,20 @@ impl WebPane {
         }
     }
 
-    fn on_scroll(&mut self, ev: &ScrollEvent, _w: &mut Window, cx: &mut Context<Self>) {
+    fn on_scroll(&mut self, ev: &ScrollEvent, _w: &mut Window, _cx: &mut Context<Self>) {
+        // CEF's wheel delta is in pixels (a line is ~40px).
         let (dx, dy) = match ev.delta {
             ScrollDelta::Pixels(p) => (f32::from(p.x), f32::from(p.y)),
             ScrollDelta::Lines(l) => (l.x * 40.0, l.y * 40.0),
         };
-        if let Some(host) = self.host() {
-            host.send_mouse_wheel_event(
-                Some(&self.mouse(ev.position, &ev.modifiers)),
-                dx as i32,
-                dy as i32,
-            );
+        {
+            let mut s = self.shared.borrow_mut();
+            s.wheel.0 = s.wheel.0.saturating_add(dx as i32);
+            s.wheel.1 = s.wheel.1.saturating_add(dy as i32);
+            s.wheel_at = Some((ev.position, ev.modifiers));
         }
-        cx.notify();
+        // Wake CEF's pump: the accumulated delta goes out in `after_pump`.
+        browser_pump::schedule(0);
     }
 
     /// Non-text keys (and anything with ctrl/alt) go as raw key events; text goes through the IME
