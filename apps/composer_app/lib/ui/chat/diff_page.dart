@@ -4,9 +4,11 @@ import 'package:flutter/material.dart';
 import '../../state/actions.dart';
 import '../../state/diff_lines.dart';
 import '../../state/types.dart';
+import '../../state/workspace.dart';
 import '../../theme/composer_theme.dart';
 import '../../theme/tokens.dart' as t;
 import '../store_scope.dart';
+import '../workspace_mark.dart';
 import 'diff_comment_box.dart';
 import 'review_actions.dart';
 
@@ -46,6 +48,7 @@ class _DiffPageState extends State<DiffPage> {
     final hasSemantic = changes?.files.any((f) => f.semantic != null) ?? false;
     final lines = changes == null ? const <DiffLine>[] : diffViewLines(changes, semantic: _semantic && hasSemantic);
     final closed = review.merged != null || review.discarded;
+    final workspace = Workspace.of(url, info: store.state.statusOf(url).info, entry: store.state.serverFor(url));
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 0,
@@ -71,6 +74,7 @@ class _DiffPageState extends State<DiffPage> {
               ),
             ),
         ],
+        bottom: PreferredSize(preferredSize: const Size.fromHeight(2), child: WorkspaceStrip(workspace: workspace)),
       ),
       body: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         if (review.busy) const LinearProgressIndicator(minHeight: 2),

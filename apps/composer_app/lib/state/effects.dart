@@ -61,6 +61,13 @@ final class FetchHistory extends AppEffect {
   final int? before;
 }
 
+/// `desk.get`: the session's desk; the reply comes back as `DeskLoaded`.
+final class FetchDesk extends AppEffect {
+  const FetchDesk(this.url, this.session);
+  final String url;
+  final String session;
+}
+
 /// A `ticket.*` command; the reply comes back as `TicketReplied`.
 final class TicketCommand extends AppEffect {
   const TicketCommand(this.url, this.ticket, this.command);
@@ -71,13 +78,10 @@ final class TicketCommand extends AppEffect {
 
 /// `session.create`, then open it.
 final class CreateSession extends AppEffect {
-  const CreateSession(this.url, this.agent, {this.project, this.text});
+  const CreateSession(this.url, this.agent, {this.project});
   final String url;
   final String agent;
   final String? project;
-
-  /// Sent as its first message once it is open.
-  final String? text;
 }
 
 /// A system notification; `key` identifies it (to replace or withdraw it).
@@ -147,12 +151,6 @@ final class UploadAttachment extends AppEffect {
   final String session;
   final int id;
   final PickedFile file;
-}
-
-/// Keep the wide layout (collapsed session list, side pane width) for the next run.
-final class SaveLayout extends AppEffect {
-  const SaveLayout(this.layout);
-  final LayoutPrefs layout;
 }
 
 /// `GET /api/projects?q=` (`ProjectsFound`).

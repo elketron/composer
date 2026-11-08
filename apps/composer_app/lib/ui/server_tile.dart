@@ -3,25 +3,25 @@ import 'package:flutter/material.dart';
 import '../state/server_entry.dart';
 import '../state/server_status.dart';
 import '../state/types.dart';
+import '../state/workspace.dart';
 import '../theme/composer_theme.dart';
 import '../theme/tokens.dart' as t;
 import 'format.dart';
 import 'status_dot.dart';
 
-/// A server in the switcher: name, link state, and its address (or why it is offline).
+/// A workspace in the switcher: its colour and name, link state, and its address (or why it is
+/// offline).
 class ServerTile extends StatelessWidget {
-  const ServerTile({super.key, required this.server, required this.status, required this.selected, required this.onTap, this.shortcut});
+  const ServerTile({super.key, required this.server, required this.status, required this.selected, required this.onTap});
 
   final ServerEntry server;
   final ServerStatus status;
   final bool selected;
   final VoidCallback onTap;
 
-  /// `ctrl 1` etc., shown on desktop.
-  final String? shortcut;
-
   @override
   Widget build(BuildContext context) {
+    final workspace = Workspace.of(server.url, info: status.info, entry: server);
     final detail = switch (status.link) {
       LinkState.offline => status.error ?? 'offline',
       // The address tells same-named servers apart.
@@ -33,24 +33,55 @@ class ServerTile extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(t.radius),
         onTap: onTap,
-        child: Padding(
+        child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            border: Border(left: BorderSide(color: selected ? workspace.color.color : Colors.transparent, width: 3)),
+            borderRadius: BorderRadius.circular(t.radius),
+          ),
           child: Row(children: [
-            StatusDot(status.link),
+            Container(
+              width: 10,
+              height: 10,
+              decoration: BoxDecoration(color: workspace.color.color, shape: BoxShape.circle),
+            ),
             const SizedBox(width: 10),
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(server.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                Row(children: [
+                  Flexible(
+                    child: Text(
+                      workspace.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      server.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12, color: t.muted),
+                    ),
+                  ),
+                ]),
                 const SizedBox(height: 2),
-                Text(
-                  detail,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: mono(size: 11, color: status.link == LinkState.offline ? t.err : t.faint),
-                ),
+                Row(children: [
+                  StatusDot(status.link),
+                  const SizedBox(width: 5),
+                  Expanded(
+                    child: Text(
+                      detail,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: mono(size: 11, color: status.link == LinkState.offline ? t.err : t.faint),
+                    ),
+                  ),
+                ]),
               ]),
             ),
-            if (shortcut != null) Text(shortcut!, style: mono(size: 10, color: t.faint)),
           ]),
         ),
       ),

@@ -121,6 +121,11 @@ lend = ["~/.zshrc", "~/.zshenv", "~/.zprofile", "~/.p10k.zsh", "~/.oh-my-zsh", "
 # site, project and data). A site's own `client: true` only asks; it is listed here by you.
 clients = ["chat"]
 
+[desktop]
+# This workspace's colour, `#rrggbb`, in the desktop and the phone (its dot and title bar); empty:
+# one derived from the workspace's name, so its windows are still told apart.
+color = ""
+
 [sandbox]
 # Every recipe, Claude Code run and stdio MCP server runs in a bwrap sandbox: its workspace's sites
 # and its project read-write, these folders read-only, a private /tmp and an empty $HOME. Nothing of

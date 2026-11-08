@@ -1030,6 +1030,8 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
             model: "m".into(),
             slots: 2,
             projects_dir: "~/Projects".into(),
+            workspace: "default".into(),
+            workspace_color: "#3f9c6b".into(),
         }),
         serde_json::to_value(SiteSummary {
             name: "memory".into(),

@@ -12,14 +12,11 @@ import 'reader_toolbar.dart';
 
 /// The page reader of a server: toolbar, then the page or the site's micro app.
 class Reader extends StatelessWidget {
-  const Reader({super.key, required this.url, required this.status, this.onClose, this.show});
+  const Reader({super.key, required this.url, required this.status, this.onClose});
 
   final String url;
   final ServerStatus status;
   final VoidCallback? onClose;
-
-  /// `page` or `app`; null: what the side tab says (the app only when it is `app`).
-  final SideTab? show;
 
   @override
   Widget build(BuildContext context) {
@@ -27,7 +24,7 @@ class Reader extends StatelessWidget {
     final token = state.servers.where((s) => s.url == url).firstOrNull?.token ?? '';
     final p = status.page;
     final Widget body;
-    final app = p.appSite != null && (show ?? status.side) == SideTab.app;
+    final app = p.appSite != null && status.reader == ReaderTab.app;
     if (app) {
       body = AppView(key: ValueKey('app-$url-${p.appSite}'), url: url, token: token, site: p.appSite!, session: status.chat?.session);
     } else if (p.page != null) {

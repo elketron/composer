@@ -4,31 +4,30 @@ import '../../state/actions.dart';
 import '../../state/server_entry.dart';
 import '../../state/server_status.dart';
 import '../../state/types.dart';
+import '../../state/workspace.dart';
 import '../../theme/composer_theme.dart';
 import '../../theme/tokens.dart' as t;
 import '../add_server_page.dart';
 import '../format.dart';
 import '../status_dot.dart';
 import '../store_scope.dart';
-import '../pages/page_navigation.dart';
-import '../wide/project_harnesses.dart';
+import '../workspace_mark.dart';
+import 'project_harnesses.dart';
 import 'section_label.dart';
 
 /// Connections, out of the way of daily use: this server, the others, adding and removing.
 class ServerTab extends StatelessWidget {
-  const ServerTab({super.key, required this.server, required this.status, this.wide = false});
+  const ServerTab({super.key, required this.server, required this.status});
 
   final ServerEntry server;
   final ServerStatus status;
-
-  /// In the wide layout's side pane: with the projects' external harnesses.
-  final bool wide;
 
   @override
   Widget build(BuildContext context) {
     final store = StoreScope.of(context);
     final state = store.state;
     final info = status.info;
+    final workspace = Workspace.of(server.url, info: info, entry: server);
     final offline = status.link == LinkState.offline;
     Widget kv(String key, String value) => Padding(
           padding: const EdgeInsets.only(top: 6),
@@ -38,7 +37,7 @@ class ServerTab extends StatelessWidget {
           ]),
         );
     return ListView(padding: const EdgeInsets.fromLTRB(14, 0, 14, 24), children: [
-      const SectionLabel('This server'),
+      const SectionLabel('This workspace'),
       Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(color: t.surface, border: Border.all(color: t.border), borderRadius: BorderRadius.circular(t.radius)),
@@ -46,11 +45,11 @@ class ServerTab extends StatelessWidget {
           Row(children: [
             StatusDot(status.link),
             const SizedBox(width: 8),
-            Text(server.name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+            WorkspaceMark(workspace: workspace, dotSize: 9, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                offline && status.error != null ? status.error! : linkLabel(status.link),
+                offline && status.error != null ? status.error! : '${server.name} · ${linkLabel(status.link)}',
                 maxLines: 2,
                 style: TextStyle(fontSize: 12, color: offline ? t.err : t.muted),
               ),
@@ -68,20 +67,8 @@ class ServerTab extends StatelessWidget {
           ],
         ]),
       ),
-      if (wide) ...[
-        ProjectHarnesses(url: server.url, status: status),
-        const SectionLabel('Sites'),
-        Wrap(spacing: 6, runSpacing: 6, children: [
-          for (final site in status.sites)
-            ActionChip(
-              key: Key('site-${site.name}'),
-              label: Text(site.appBuilt ? '${site.name} · app' : site.name, style: mono(size: 11.5, color: site.appBuilt ? t.accent : t.muted)),
-              tooltip: (site.description ?? '').isNotEmpty ? site.description : 'site://${site.name}',
-              onPressed: () => site.appBuilt ? openApp(context, server.url, site.name) : openPage(context, server.url, 'site://${site.name}'),
-            ),
-        ]),
-      ],
-      const SectionLabel('Servers'),
+      ProjectHarnesses(url: server.url, status: status),
+      const SectionLabel('Workspaces'),
       Container(
         decoration: BoxDecoration(color: t.surface, border: Border.all(color: t.border), borderRadius: BorderRadius.circular(t.radius)),
         child: Column(children: [
@@ -96,7 +83,11 @@ class ServerTab extends StatelessWidget {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(other.name, style: const TextStyle(fontSize: 14)),
+                      WorkspaceMark(
+                        workspace: Workspace.of(other.url, info: state.statusOf(other.url).info, entry: other),
+                        dotSize: 8,
+                        style: const TextStyle(fontSize: 14),
+                      ),
                       Text(
                         state.statusOf(other.url).link == LinkState.offline
                             ? '${shortUrl(other.url)} · offline'
@@ -120,13 +111,13 @@ class ServerTab extends StatelessWidget {
         style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(42)),
         onPressed: () => AddServerPage.open(context),
         icon: const Icon(Icons.add, size: 18),
-        label: const Text('Add a server'),
+        label: const Text('Add a workspace'),
       ),
       const SizedBox(height: 4),
       TextButton(
         style: TextButton.styleFrom(foregroundColor: t.err),
         onPressed: () => _confirmRemove(context),
-        child: Text('Remove ${server.name} from this device'),
+        child: Text('Remove ${workspace.name} from this device'),
       ),
     ]);
   }

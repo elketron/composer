@@ -22,16 +22,13 @@ import '../store_scope.dart';
 /// sessions, its memory page and its switches. The desktop's Project tab and the phone's project
 /// screen.
 class ProjectOverviewView extends StatefulWidget {
-  const ProjectOverviewView({super.key, required this.url, required this.status, required this.folder, this.actions = true});
+  const ProjectOverviewView({super.key, required this.url, required this.status, required this.folder});
 
   final String url;
   final ServerStatus status;
 
   /// The project's folder.
   final String folder;
-
-  /// New chat here and the like at the bottom (the phone screen has its own).
-  final bool actions;
 
   @override
   State<ProjectOverviewView> createState() => _ProjectOverviewViewState();
@@ -209,28 +206,22 @@ class _ProjectOverviewViewState extends State<ProjectOverviewView> {
             if ((o?.toolRules ?? 0) > 0) Text('${o!.toolRules} tool rule${o.toolRules == 1 ? '' : 's'}', style: mono(size: 11, color: t.faint)),
           ]),
       ],
-      if (widget.actions) ...[
-        const SizedBox(height: 16),
-        Wrap(spacing: 8, runSpacing: 6, children: [
-          FilledButton(
-            key: const Key('project-new-chat'),
-            onPressed: () {
-              store.dispatch(NewSessionRequested(url, project: widget.folder));
-              if (!isWide(context)) pushChat(context, url);
-            },
-            child: const Text('New chat here'),
-          ),
-          OutlinedButton(
-            key: const Key('project-new-work'),
-            onPressed: () => showNewWork(context, url, project: widget.folder),
-            child: const Text('New work here'),
-          ),
-          OutlinedButton(
-            onPressed: () => store.dispatch(ScopeChanged(url, status.scope == widget.folder ? null : widget.folder)),
-            child: Text(status.scope == widget.folder ? 'Show all sessions' : 'Show only its sessions'),
-          ),
-        ]),
-      ],
+      const SizedBox(height: 16),
+      Wrap(spacing: 8, runSpacing: 6, children: [
+        FilledButton(
+          key: const Key('project-new-chat'),
+          onPressed: () {
+            store.dispatch(NewSessionRequested(url, project: widget.folder));
+            pushChat(context, url);
+          },
+          child: const Text('New chat here'),
+        ),
+        OutlinedButton(
+          key: const Key('project-new-work'),
+          onPressed: () => showNewWork(context, url, project: widget.folder),
+          child: const Text('New work here'),
+        ),
+      ]),
     ]);
   }
 }

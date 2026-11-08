@@ -4,17 +4,19 @@ import '../../state/works.dart';
 import '../../state/server_entry.dart';
 import '../../state/server_status.dart';
 import '../../state/types.dart';
+import '../../state/workspace.dart';
 import '../../theme/composer_theme.dart';
 import '../../theme/tokens.dart' as t;
 import '../approval_bar.dart';
+import '../projects/project_list_view.dart';
+import '../projects/project_screen.dart';
 import '../server_list.dart';
 import '../server_list_footer.dart';
 import '../status_dot.dart';
 import '../store_scope.dart';
+import '../workspace_mark.dart';
 import 'chats_tab.dart';
 import 'pages_tab.dart';
-import '../projects/project_list_view.dart';
-import '../projects/project_screen.dart';
 import 'phone_tabs.dart';
 import 'server_tab.dart';
 
@@ -30,6 +32,7 @@ class PhoneHome extends StatelessWidget {
     final state = StoreScope.of(context).state;
     final tab = state.tab;
     final unread = status.sessions.where((s) => status.unread.contains(s.id)).length;
+    final workspace = Workspace.of(server.url, info: status.info, entry: server);
     // Tells same-named servers apart: `my-pc` on `tail1234` (a tailnet's name; not for IPs).
     final host = Uri.parse(server.url).host.split('.');
     final where = host.length > 2 && RegExp('[a-z]').hasMatch(host.first) ? host[1] : '';
@@ -41,18 +44,23 @@ class PhoneHome extends StatelessWidget {
           style: TextButton.styleFrom(foregroundColor: t.text),
           onPressed: () => _openSwitcher(context),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
-            StatusDot(status.link),
-            const SizedBox(width: 8),
-            Flexible(
-              child: Text(server.name, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+            WorkspaceMark(
+              key: const Key('active-workspace'),
+              workspace: workspace,
+              dotSize: 10,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
             ),
             const SizedBox(width: 8),
-            Text(where, style: mono(size: 11, color: t.faint)),
+            StatusDot(status.link),
+            if (where.isNotEmpty) ...[
+              const SizedBox(width: 6),
+              Text(where, style: mono(size: 11, color: t.faint)),
+            ],
             const SizedBox(width: 2),
             const Icon(Icons.expand_more, size: 18, color: t.muted),
           ]),
         ),
-        bottom: const PreferredSize(preferredSize: Size.fromHeight(1), child: Divider()),
+        bottom: PreferredSize(preferredSize: const Size.fromHeight(2), child: WorkspaceStrip(workspace: workspace)),
       ),
       body: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         // Approvals are answered in the Chats list itself; elsewhere the bar points at them.

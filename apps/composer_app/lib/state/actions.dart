@@ -21,9 +21,8 @@ final class ForegroundChanged extends AppAction {
 }
 
 final class ServersLoaded extends AppAction {
-  const ServersLoaded(this.servers, this.storage);
+  const ServersLoaded(this.servers);
   final List<ServerEntry> servers;
-  final StorageKind storage;
 }
 
 final class ServerSelected extends AppAction {
@@ -110,15 +109,48 @@ final class HistoryLoaded extends AppAction {
   final bool more;
 }
 
-/// The chat list stopped at the newest line (true) or the user scrolled up off it (false). The
-/// view that scrolled is the one holding its place: `pane` says which, since a session can be
-/// shown in both panes at once.
+/// The chat list stopped at the newest line (true) or the user scrolled up off it (false).
 final class ViewScrolled extends AppAction {
-  const ViewScrolled(this.url, this.session, {required this.atBottom, this.pane = ChatPane.main});
+  const ViewScrolled(this.url, this.session, {required this.atBottom});
   final String url;
   final String session;
   final bool atBottom;
-  final ChatPane pane;
+}
+
+/// The open chat's desk (a reply to `desk.get`, or a `desk.changed` event).
+final class DeskLoaded extends AppAction {
+  const DeskLoaded(this.url, this.session, this.desk);
+  final String url;
+  final String session;
+  final Desk desk;
+}
+
+/// Put a tab on the open chat's desk (an equal one is focused, not doubled).
+final class DeskTabOpened extends AppAction {
+  const DeskTabOpened(this.url, this.tab, {this.focus = true});
+  final String url;
+  final DeskTab tab;
+  final bool focus;
+}
+
+/// Close a tab of the open chat's desk.
+final class DeskTabClosed extends AppAction {
+  const DeskTabClosed(this.url, this.tab);
+  final String url;
+  final String tab;
+}
+
+/// Show a tab of the open chat's desk.
+final class DeskTabFocused extends AppAction {
+  const DeskTabFocused(this.url, this.tab);
+  final String url;
+  final String tab;
+}
+
+/// Drop the selection chip: the next message goes without it.
+final class SelectionCleared extends AppAction {
+  const SelectionCleared(this.url);
+  final String url;
 }
 
 /// Leave the chat (detach).
@@ -128,15 +160,12 @@ final class SessionClosed extends AppAction {
 }
 
 final class NewSessionRequested extends AppAction {
-  const NewSessionRequested(this.url, {this.agent = 'default', this.project, this.text});
+  const NewSessionRequested(this.url, {this.agent = 'default', this.project});
   final String url;
   final String agent;
 
   /// A name in the projects directory, or a path; null for none.
   final String? project;
-
-  /// A first message, sent once it is open.
-  final String? text;
 }
 
 final class MessageSubmitted extends AppAction {
@@ -409,40 +438,6 @@ final class ProjectsLoaded extends AppAction {
   final List<ProjectSummary> projects;
 }
 
-/// Show `tab` in the side pane (wide screens); for `changes`, the ticket it shows; for
-/// `worker`, the session; for `project`, the project's folder.
-final class SideTabSelected extends AppAction {
-  const SideTabSelected(this.url, this.tab, {this.ticket, this.session, this.project});
-  final String url;
-  final SideTab tab;
-  final String? ticket;
-  final String? session;
-  final String? project;
-}
-
-/// Fold or unfold the session list (wide screens).
-final class SessionsToggled extends AppAction {
-  const SessionsToggled();
-}
-
-/// The side pane was dragged to `width`.
-final class SideResized extends AppAction {
-  const SideResized(this.width);
-  final double width;
-}
-
-/// The saved layout, read at start.
-final class LayoutLoaded extends AppAction {
-  const LayoutLoaded(this.layout);
-  final LayoutPrefs layout;
-}
-
-/// Close the side pane, keeping what it showed (wide screens).
-final class SideClosed extends AppAction {
-  const SideClosed(this.url);
-  final String url;
-}
-
 /// Search the projects (empty: the full list).
 final class ProjectSearchChanged extends AppAction {
   const ProjectSearchChanged(this.url, this.query);
@@ -463,13 +458,6 @@ final class ProjectOverviewRequested extends AppAction {
   const ProjectOverviewRequested(this.url, this.project);
   final String url;
   final String project;
-}
-
-/// Narrow the session list and the palette to a project (its folder); null: all.
-final class ScopeChanged extends AppAction {
-  const ScopeChanged(this.url, this.project);
-  final String url;
-  final String? project;
 }
 
 /// Fetch the sites, agents and projects again (the project counts change).

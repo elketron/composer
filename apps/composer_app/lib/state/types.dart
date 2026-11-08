@@ -5,34 +5,8 @@ import 'package:composer_protocol/composer_protocol.dart';
 /// The phone layout's tabs.
 enum PhoneTab { chats, projects, pages, server }
 
-/// What the side pane beside the chat shows (wide screens). On phones `page` and `app` pick what
-/// the reader screen shows.
-enum SideTab { page, app, changes, worker, project, server }
-
-/// Which view of a session this is: the wide layout can show one session in both, and where each
-/// has scrolled to is its own business.
-enum ChatPane { main, side }
-
-/// How the wide layout was left: kept between runs.
-class LayoutPrefs {
-  const LayoutPrefs({this.sessionsCollapsed = false, this.sideWidth = 460});
-
-  /// The session list folded to a strip.
-  final bool sessionsCollapsed;
-
-  /// The side pane's width, in logical pixels.
-  final double sideWidth;
-
-  LayoutPrefs copyWith({bool? sessionsCollapsed, double? sideWidth}) =>
-      LayoutPrefs(sessionsCollapsed: sessionsCollapsed ?? this.sessionsCollapsed, sideWidth: sideWidth ?? this.sideWidth);
-
-  Map<String, Object?> toJson() => {'sessions_collapsed': sessionsCollapsed, 'side_width': sideWidth};
-
-  factory LayoutPrefs.fromJson(Map<String, Object?> json) => LayoutPrefs(
-        sessionsCollapsed: json['sessions_collapsed'] == true,
-        sideWidth: (json['side_width'] as num?)?.toDouble() ?? 460,
-      );
-}
+/// What the reader screen shows: the page, or the micro app opened over it.
+enum ReaderTab { page, app }
 
 /// A page an agent or app changed lately (the Pages tab).
 class RecentPage {
@@ -82,15 +56,6 @@ class NewWork {
 
 /// A server's WebSocket.
 enum LinkState { connecting, online, offline }
-
-/// Where device tokens are kept.
-enum StorageKind {
-  /// The platform keyring: Secret Service, Android Keystore, Windows Credential Manager.
-  keyring,
-
-  /// A file only you can read (0600), like `composer login` uses: no keyring was available.
-  file,
-}
 
 /// A short message for a snackbar; `id` tells repeats apart.
 class Notice {

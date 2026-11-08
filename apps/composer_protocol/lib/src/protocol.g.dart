@@ -3712,6 +3712,8 @@ class ServerInfo {
     required this.model,
     required this.slots,
     this.projectsDir,
+    this.workspace,
+    this.workspaceColor,
   });
 
   /// `server.name` from config.toml, else the hostname.
@@ -3729,12 +3731,22 @@ class ServerInfo {
   /// Where projects live (`[projects] dir`), `~` for the home folder. Older servers leave it out.
   final String? projectsDir;
 
+  /// The workspace this server serves (`default` on a home from before workspaces). Older
+  /// servers leave it out.
+  final String? workspace;
+
+  /// The workspace's colour, `#rrggbb` (its `[desktop] color`, else from its name). Older
+  /// servers leave it out.
+  final String? workspaceColor;
+
   factory ServerInfo.fromJson(Map<String, Object?> json) => ServerInfo(
         name: json['name'] as String,
         version: json['version'] as String,
         model: json['model'] as String,
         slots: (json['slots'] as num).toInt(),
         projectsDir: json['projects_dir'] == null ? null : json['projects_dir'] as String,
+        workspace: json['workspace'] == null ? null : json['workspace'] as String,
+        workspaceColor: json['workspace_color'] == null ? null : json['workspace_color'] as String,
       );
 
   Map<String, Object?> toJson() => {
@@ -3743,6 +3755,8 @@ class ServerInfo {
         'model': model,
         'slots': slots,
         if (projectsDir != null) 'projects_dir': projectsDir,
+        if (workspace != null) 'workspace': workspace,
+        if (workspaceColor != null) 'workspace_color': workspaceColor,
       };
 }
 

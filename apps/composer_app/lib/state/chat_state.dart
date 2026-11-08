@@ -1,9 +1,11 @@
+import 'package:composer_protocol/composer_protocol.dart';
+
 import 'chat_items.dart';
 import 'types.dart';
 
 const _keep = Object();
 
-/// The open session of a server: its transcript so far.
+/// The open session of a server: its transcript so far, and its desk.
 class ChatState {
   const ChatState({
     required this.session,
@@ -21,11 +23,20 @@ class ChatState {
     this.rowBase = 0,
     this.atBottom = true,
     this.newSince = 0,
+    this.desk = const Desk(),
+    this.selection,
   });
 
   final String session;
   final List<ChatItem> items;
   final Streaming? streaming;
+
+  /// The session's desk: the tabs the agent and the user put beside the chat.
+  final Desk desk;
+
+  /// What the user points at in one of its apps (the chip above the composer); cleared with the
+  /// next message or by hand.
+  final Selection? selection;
 
   /// The last event applied; a re-attach asks for what came after it.
   final int lastSeq;
@@ -75,6 +86,8 @@ class ChatState {
     int? rowBase,
     bool? atBottom,
     int? newSince,
+    Desk? desk,
+    Object? selection = _keep,
   }) =>
       ChatState(
         session: session,
@@ -92,5 +105,7 @@ class ChatState {
         rowBase: rowBase ?? this.rowBase,
         atBottom: atBottom ?? this.atBottom,
         newSince: newSince ?? this.newSince,
+        desk: desk ?? this.desk,
+        selection: identical(selection, _keep) ? this.selection : selection as Selection?,
       );
 }

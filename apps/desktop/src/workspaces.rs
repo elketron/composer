@@ -16,39 +16,15 @@ pub fn list(home: &Path) -> Vec<String> {
     names
 }
 
-/// A workspace's colour: `[desktop] color = "#rrggbb"` in its config, else one from its name.
+/// A workspace's colour: `[desktop] color = "#rrggbb"` in its config, else one from its name,
+/// exactly as `/api/info` reports it (the phone draws the same value).
 pub fn colour(home: &Path, name: &str) -> u32 {
-    std::fs::read_to_string(home.join("workspaces").join(name).join("config.toml"))
+    let configured = std::fs::read_to_string(home.join("workspaces").join(name).join("config.toml"))
         .ok()
         .and_then(|text| text.parse::<toml::Table>().ok())
         .and_then(|t| t.get("desktop")?.get("color")?.as_str().map(str::to_string))
-        .and_then(|hex| u32::from_str_radix(hex.trim_start_matches('#'), 16).ok())
-        .unwrap_or_else(|| from_name(name))
-}
-
-/// Distinct, readable on dark: a hue from the name, fixed saturation and lightness.
-pub fn from_name(name: &str) -> u32 {
-    let hash = name
-        .bytes()
-        .fold(2166136261u32, |h, b| (h ^ b as u32).wrapping_mul(16777619));
-    let hue = (hash % 360) as f32;
-    hsl_to_rgb(hue, 0.55, 0.62)
-}
-
-fn hsl_to_rgb(h: f32, s: f32, l: f32) -> u32 {
-    let c = (1.0 - (2.0 * l - 1.0).abs()) * s;
-    let x = c * (1.0 - ((h / 60.0) % 2.0 - 1.0).abs());
-    let m = l - c / 2.0;
-    let (r, g, b) = match h as u32 / 60 {
-        0 => (c, x, 0.0),
-        1 => (x, c, 0.0),
-        2 => (0.0, c, x),
-        3 => (0.0, x, c),
-        4 => (x, 0.0, c),
-        _ => (c, 0.0, x),
-    };
-    let byte = |v: f32| ((v + m) * 255.0).round() as u32;
-    (byte(r) << 16) | (byte(g) << 8) | byte(b)
+        .unwrap_or_default();
+    composer_protocol::WorkspaceColor::for_workspace(name, &configured).rgb()
 }
 
 #[cfg(test)]
@@ -75,6 +51,7 @@ mod tests {
             ["default", "aaa", "work"],
             "default first; not yet run: left out"
         );
+        let from_name = composer_protocol::WorkspaceColor::from_name;
         assert_eq!(from_name("work"), from_name("work"), "stable");
         assert_ne!(from_name("work"), from_name("default"));
         std::fs::write(
@@ -83,8 +60,6 @@ mod tests {
         )
         .unwrap();
         assert_eq!(colour(home.path(), "work"), 0xff8800);
-        assert_eq!(colour(home.path(), "aaa"), from_name("aaa"));
-        assert_eq!(hsl_to_rgb(0.0, 1.0, 0.5), 0xff0000);
-        assert_eq!(hsl_to_rgb(120.0, 1.0, 0.5), 0x00ff00);
+        assert_eq!(colour(home.path(), "aaa"), from_name("aaa").rgb());
     }
 }

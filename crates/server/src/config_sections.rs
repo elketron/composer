@@ -155,6 +155,16 @@ fn default_clients() -> Vec<String> {
     vec!["chat".into()]
 }
 
+/// `[desktop]`: how a workspace is drawn in the desktop and the phone, so you can tell your
+/// workspaces apart at a glance.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct DesktopConfig {
+    /// The workspace's colour, `#rrggbb`; empty: one derived from its name. Shown as the
+    /// workspace's dot and title bar in the desktop and the phone.
+    #[serde(default)]
+    pub color: String,
+}
+
 /// `[sandbox]`: the world each spawn an agent or a site controls runs in (`bwrap`). The home's
 /// global config sets the machine's paths; a workspace's config may add `binds_ro`, `binds_rw` and
 /// `devices` of its own. Paths are `~/` or absolute; missing ones are skipped.

@@ -1,3 +1,4 @@
+import 'package:composer_protocol/composer_protocol.dart';
 import 'package:flutter/material.dart';
 
 import '../../state/actions.dart';
@@ -5,9 +6,11 @@ import '../../state/page_state.dart';
 import '../../state/server_status.dart';
 import '../../state/site_url.dart';
 import '../../state/types.dart';
+import '../../state/workspace.dart';
 import '../../theme/composer_theme.dart';
 import '../../theme/tokens.dart' as t;
 import '../store_scope.dart';
+import '../workspace_mark.dart';
 
 /// Back, forward, the URL, follow-agent, page / app, close.
 class ReaderToolbar extends StatelessWidget {
@@ -21,9 +24,10 @@ class ReaderToolbar extends StatelessWidget {
   Widget build(BuildContext context) {
     final store = StoreScope.read(context);
     final PageState p = status.page;
-    final app = p.appSite != null && status.side == SideTab.app;
+    final app = p.appSite != null && status.reader == ReaderTab.app;
     final shown = app ? 'site://${p.appSite}  ·  app' : (p.page?.url ?? p.loading ?? '');
     final site = app ? p.appSite : (p.page == null ? null : splitSiteUrl(p.page!.url).$1);
+    final workspace = Workspace.of(url, info: status.info);
     Widget button(IconData icon, String tip, VoidCallback? onPressed, {Color? color, Key? key}) => IconButton(
           key: key,
           tooltip: tip,
@@ -38,12 +42,26 @@ class ReaderToolbar extends StatelessWidget {
       child: Row(children: [
         button(Icons.arrow_back, 'Back', p.back.isEmpty ? null : () => store.dispatch(PageBack(url))),
         button(Icons.arrow_forward, 'Forward', p.forward.isEmpty ? null : () => store.dispatch(PageForward(url))),
+        const SizedBox(width: 4),
+        WorkspaceMark(
+          key: const Key('active-workspace'),
+          workspace: workspace,
+          dotSize: 7,
+          style: mono(size: 11, color: t.muted),
+        ),
         const SizedBox(width: 6),
         Expanded(child: Text(shown, overflow: TextOverflow.ellipsis, style: mono(size: 12, color: t.muted))),
         if (site != null && status.hasApp(site))
           !app
               ? TextButton(key: const Key('open-app'), onPressed: () => store.dispatch(AppRequested(url, site)), child: const Text('App'))
               : TextButton(onPressed: () => store.dispatch(PageRequested(url, 'site://$site')), child: const Text('Page')),
+        if (p.page != null && status.chat != null)
+          button(
+            Icons.dashboard_customize_outlined,
+            'Put on the desk',
+            () => store.dispatch(DeskTabOpened(url, DeskTabPage(url: p.page!.url))),
+            key: const Key('open-on-desk'),
+          ),
         Tooltip(
           message: p.follow ? 'Following the agent: pages it opens show here' : 'Not following the agent',
           child: TextButton.icon(

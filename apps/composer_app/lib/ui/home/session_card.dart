@@ -10,7 +10,7 @@ import 'activity_dot.dart';
 /// A session in the Chats list: agent, state, last message, its project, and for an
 /// orchestrator the workers it runs, one line each.
 class SessionCard extends StatelessWidget {
-  const SessionCard({super.key, required this.status, required this.session, required this.onTap, this.unread = false, this.selected = false, this.onWorker});
+  const SessionCard({super.key, required this.status, required this.session, required this.onTap, this.unread = false, this.onWorker});
 
   final ServerStatus status;
   final SessionInfo session;
@@ -18,9 +18,6 @@ class SessionCard extends StatelessWidget {
 
   /// Finished something you haven't seen.
   final bool unread;
-
-  /// The chat on screen (wide layout).
-  final bool selected;
 
   /// A worker line was tapped; null: the card's tap.
   final void Function(SessionInfo worker)? onWorker;
@@ -34,10 +31,10 @@ class SessionCard extends StatelessWidget {
         : (unread ? 'new · ${ago(session.updated)}' : ago(session.updated));
     final project = session.project?.split('/').last;
     return Material(
-      color: selected ? t.raised : t.surface,
+      color: t.surface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(t.radius),
-        side: BorderSide(color: selected ? t.accent.withValues(alpha: 0.5) : t.border),
+        side: const BorderSide(color: t.border),
       ),
       child: InkWell(
         key: Key('session-${session.id}'),

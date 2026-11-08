@@ -1,4 +1,3 @@
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 
@@ -19,8 +18,6 @@ class AddServerPage extends StatefulWidget {
     return Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AddServerPage()));
   }
 
-  static final canScan = Platform.isAndroid || Platform.isIOS || Platform.isMacOS;
-
   @override
   State<AddServerPage> createState() => _AddServerPageState();
 }
@@ -28,7 +25,7 @@ class AddServerPage extends StatefulWidget {
 class _AddServerPageState extends State<AddServerPage> {
   final _url = TextEditingController();
   final _code = TextEditingController();
-  final _device = TextEditingController(text: Platform.isAndroid ? 'android' : Platform.localHostname);
+  final _device = TextEditingController(text: 'android');
   AppStore? _store;
   bool _waiting = false;
 
@@ -102,7 +99,7 @@ class _AddServerPageState extends State<AddServerPage> {
           ]),
         );
     return Scaffold(
-      appBar: AppBar(title: const Text('Add a server')),
+      appBar: AppBar(title: const Text('Add a workspace')),
       // Top-aligned: the keyboard opening doesn't move what you are looking at.
       body: Align(
         alignment: Alignment.topCenter,
@@ -113,27 +110,17 @@ class _AddServerPageState extends State<AddServerPage> {
               const TextSpan(text: 'On the computer running composer: '),
               TextSpan(text: 'composer pair --name ${_device.text.trim()}', style: mono(size: 13, color: t.text)),
             ])),
-            step(
-              2,
-              TextSpan(
-                text: AddServerPage.canScan
-                    ? 'Scan the QR code it shows, or paste its link below.'
-                    : 'Paste its link, or its composer login line, below.',
-              ),
+            step(2, const TextSpan(text: 'Scan the QR code it shows, or paste its link below.')),
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(44)),
+              onPressed: pairing.busy ? null : _scan,
+              icon: const Icon(Icons.qr_code_scanner, size: 18),
+              label: const Text('Scan QR code'),
             ),
-            if (AddServerPage.canScan) ...[
-              OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(44)),
-                onPressed: pairing.busy ? null : _scan,
-                icon: const Icon(Icons.qr_code_scanner, size: 18),
-                label: const Text('Scan QR code'),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                child: Text('OR', textAlign: TextAlign.center, style: mono(size: 10.5, color: t.faint)),
-              ),
-            ] else
-              const SizedBox(height: 6),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              child: Text('OR', textAlign: TextAlign.center, style: mono(size: 10.5, color: t.faint)),
+            ),
             TextField(
               key: const Key('server-url'),
               controller: _url,

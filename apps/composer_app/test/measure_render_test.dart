@@ -7,7 +7,6 @@ import 'package:composer_app/state/actions.dart';
 import 'package:composer_app/state/app_state.dart';
 import 'package:composer_app/state/reduce.dart';
 import 'package:composer_app/state/server_entry.dart';
-import 'package:composer_app/state/types.dart';
 import 'package:composer_app/ui/chat/chat_view.dart';
 import 'package:composer_app/ui/store_scope.dart';
 import 'package:composer_protocol/composer_protocol.dart';
@@ -46,7 +45,7 @@ void main() {
   Future<double> openChat(WidgetTester tester, int messages) async {
     await tester.binding.setSurfaceSize(const Size(400, 800));
     store = Store(AppState.initial, reduce, (effect, dispatch) {});
-    store.dispatch(const ServersLoaded([home], StorageKind.file));
+    store.dispatch(const ServersLoaded([home]));
     store.dispatch(SessionOpened(home.url, 'a'));
     await tester.pumpWidget(
       StoreScope(
@@ -56,7 +55,7 @@ void main() {
             body: Builder(
               builder: (context) {
                 final status = StoreScope.of(context).state.statusOf(home.url);
-                return ChatView(url: home.url, status: status, chat: status.chat!, header: false, compact: true);
+                return ChatView(url: home.url, status: status, chat: status.chat!);
               },
             ),
           ),

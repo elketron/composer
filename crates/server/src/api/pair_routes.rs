@@ -26,17 +26,29 @@ pub struct PairForm {
 
 /// `GET /pair?code=...` (under the workspace's routes): asks to confirm, so a link preview can't
 /// use up the code. The form posts to the relative `pair`, i.e. this workspace's.
-pub async fn pair_page(Query(params): Query<HashMap<String, String>>) -> Html<String> {
+pub async fn pair_page(
+    State(server): State<Arc<Server>>,
+    Query(params): Query<HashMap<String, String>>,
+) -> Html<String> {
     let code = params.get("code").cloned().unwrap_or_default();
     let code = html_escape(&code);
+    let workspace = server.home.name().to_string();
+    let color = composer_protocol::WorkspaceColor::for_workspace(
+        &workspace,
+        &server.config().desktop.color,
+    );
     page(&format!(
-        "<h1>Pair this device</h1>\
+        "<h1><span style=\"display:inline-block;width:.65em;height:.65em;border-radius:50%;\
+         background:{};margin-right:.4em;vertical-align:baseline\"></span>Pair this device with \
+         <code>{}</code></h1>\
          <p>It gets its own token for composer. You can revoke it with <code>composer devices revoke</code>.</p>\
          <form method=\"post\" action=\"pair\">\
            <label>code<input name=\"code\" value=\"{code}\" autocomplete=\"off\" required></label>\
            <label>device name (optional)<input name=\"name\" placeholder=\"the name given to composer pair\"></label>\
            <button type=\"submit\">Pair</button>\
-         </form>"
+         </form>",
+        color.to_hex(),
+        html_escape(&workspace),
     ))
 }
 

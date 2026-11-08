@@ -16,7 +16,6 @@ import 'package:composer_app/state/app_state.dart';
 import 'package:composer_app/state/effects.dart';
 import 'package:composer_app/state/reduce.dart';
 import 'package:composer_app/state/server_entry.dart';
-import 'package:composer_app/state/types.dart';
 import 'package:composer_app/ui/composer_app.dart';
 import 'package:composer_app/ui/store_scope.dart';
 import 'package:composer_protocol/composer_protocol.dart';
@@ -55,7 +54,7 @@ class Harness {
   /// What the real effect runner dispatches once the keyring read finishes; the harness answers
   /// FetchHistory itself, but the store has to learn its servers and sessions first.
   void load() {
-    store.dispatch(const ServersLoaded([home], StorageKind.file));
+    store.dispatch(const ServersLoaded([home]));
     store.dispatch(ServerEvent(home.url, ServerMessageOk(id: 1, result: CommandResultSessions(sessions: [session('a'), session('b')]))));
   }
 

@@ -94,7 +94,7 @@ class _ComposerAppState extends State<ComposerApp> {
     }
     store.dispatch(SessionOpened(tap.url, session));
     final context = _navigator.currentContext;
-    if (context != null && !isWide(context)) {
+    if (context != null) {
       // Unwinding the page it stands on is not the user closing that chat: the store already
       // let it go with SessionOpened, and the page being pushed owns the chat from now on.
       final navigator = _navigator.currentState!;

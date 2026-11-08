@@ -16,14 +16,13 @@ const info = ServerInfo(name: 'home-pc', version: '0.1.0', model: 'qwen', slots:
 SessionInfo session(String id, String updated) =>
     SessionInfo(id: id, agent: 'default', state: TurnState.idle, lastSeq: 0, updated: updated);
 
-AppState loaded(List<ServerEntry> servers) => reduce(AppState.initial, ServersLoaded(servers, StorageKind.keyring)).$1;
+AppState loaded(List<ServerEntry> servers) => reduce(AppState.initial, ServersLoaded(servers)).$1;
 
 void main() {
   test('loading connects every server and shows the first', () {
-    final (state, effects) = reduce(AppState.initial, const ServersLoaded([home, work], StorageKind.file));
+    final (state, effects) = reduce(AppState.initial, const ServersLoaded([home, work]));
     expect(state.loaded, isTrue);
     expect(state.active, home.url);
-    expect(state.storage, StorageKind.file);
     expect(effects.whereType<Connect>().map((e) => e.server.url), [home.url, work.url]);
   });
 
@@ -121,7 +120,7 @@ void main() {
       ], more: true));
       final chat = state.statusOf(home.url).chat!;
       expect((chat.loaded, chat.firstSeq, chat.more, chat.items.length), (true, 4, true, 1));
-      expect(((effects.single as SendCommand).command as ClientCommandSessionAttach).since, 6, reason: 'what came after them');
+      expect(((effects.whereType<SendCommand>().single).command as ClientCommandSessionAttach).since, 6, reason: 'what came after them');
 
       (state, effects) = reduce(state, SessionOpened(home.url, 'b'));
       expect(((effects[0] as SendCommand).command as ClientCommandSessionDetach).session, 'a');
@@ -162,7 +161,7 @@ void main() {
     test('a server without session.history: the whole chat replays', () {
       var state = reduce(loaded([home]), SessionOpened(home.url, 'a')).$1;
       final (next, effects) = reduce(state, const HistoryLoaded('https://home.ts.net', 'a', null, null));
-      expect(((effects.single as SendCommand).command as ClientCommandSessionAttach).since, isNull);
+      expect(((effects.whereType<SendCommand>().single).command as ClientCommandSessionAttach).since, isNull);
       expect(next.statusOf(home.url).chat!.loaded, isTrue);
     });
 
@@ -402,51 +401,24 @@ void main() {
       expect(reduce(state, done).$2.whereType<TicketCommand>(), hasLength(1));
     });
 
-    test('the side pane: tabs, a worker attached beside the chat, events to both', () {
-      final sessions = ServerEvent(
-        home.url,
-        ServerMessageOk(id: 1, result: CommandResultSessions(sessions: [
-          SessionInfo(id: 'o', agent: 'orchestrator', state: TurnState.idle, lastSeq: 3, updated: ''),
-          SessionInfo(id: 'w', agent: 'worker', ticket: '0007', parent: 'o', state: TurnState.running, lastSeq: 2, updated: ''),
-        ])),
-      );
-      var state = reduce(loaded([home]), sessions).$1;
-      state = withChat(state, 'o');
-      expect(state.statusOf(home.url).opened, isTrue);
-
-      var (beside, attach) = reduce(state, SideTabSelected(home.url, SideTab.worker, session: 'w'));
-      expect((attach.single as FetchHistory).session, 'w');
-      beside = reduce(beside, const HistoryLoaded('https://home.ts.net', 'w', null, [])).$1;
-      expect((beside.statusOf(home.url).side, beside.statusOf(home.url).sideChat?.session), (SideTab.worker, 'w'));
-      state = beside;
-
-      // A worker event reaches the side chat only; the orchestrator's both (if both show it).
-      state = reduce(state, ServerEvent(home.url, const ServerMessageMessageDelta(session: 'w', seq: 3, text: 'hi'))).$1;
-      expect(state.statusOf(home.url).sideChat?.streaming?.content, 'hi');
-      expect(state.statusOf(home.url).chat?.streaming, isNull);
-
-      // Opening the worker as the chat keeps it attached (the side pane still shows it).
-      final (swapped, effects) = reduce(state, SessionOpened(home.url, 'w'));
-      expect(effects.whereType<SendCommand>().map((e) => e.command.runtimeType), [ClientCommandSessionDetach]);
-      expect(effects.whereType<FetchHistory>().single.session, 'w');
-      expect((effects.first as SendCommand).command, isA<ClientCommandSessionDetach>().having((c) => c.session, 'session', 'o'));
-      final closing = reduce(swapped, SessionClosed(home.url)).$2;
-      expect(closing, isEmpty, reason: 'the side pane still shows w');
-
-      // Page / app tabs, closing keeps them, the layout toggles are saved.
+    test('the reader: a page, an app over it, closing; another chat lets the old one go', () {
+      var state = withChat(loaded([home]), 'o');
       state = reduce(state, PageRequested(home.url, 'site://plans')).$1;
-      expect(state.statusOf(home.url).side, SideTab.page);
+      expect(state.statusOf(home.url).reader, ReaderTab.page);
       state = reduce(state, AppRequested(home.url, 'orchestration')).$1;
-      expect(state.statusOf(home.url).side, SideTab.app);
+      expect(state.statusOf(home.url).reader, ReaderTab.app);
       state = reduce(state, PageRequested(home.url, 'site://memory')).$1;
-      expect(state.statusOf(home.url).page.appSite, 'orchestration', reason: 'the app tab stays');
-      state = reduce(state, SideClosed(home.url)).$1;
-      expect((state.statusOf(home.url).side, state.statusOf(home.url).page.appSite), (null, 'orchestration'));
-      final (folded, save) = reduce(state, const SessionsToggled());
-      expect((folded.layout.sessionsCollapsed, (save.single as SaveLayout).layout.sessionsCollapsed), (true, true));
+      expect(state.statusOf(home.url).page.appSite, 'orchestration', reason: 'the app is kept to go back to');
+      state = reduce(state, ReaderClosed(home.url)).$1;
+      expect((state.statusOf(home.url).reader, state.statusOf(home.url).page.appSite), (null, null));
+
+      final (swapped, effects) = reduce(state, SessionOpened(home.url, 'w'));
+      expect((effects.first as SendCommand).command, isA<ClientCommandSessionDetach>().having((c) => c.session, 'session', 'o'));
+      expect(effects.whereType<FetchHistory>().single.session, 'w');
+      expect(reduce(swapped, SessionClosed(home.url)).$2.whereType<SendCommand>().single.command, isA<ClientCommandSessionDetach>());
     });
 
-    test('projects: search (late answers dropped), the overview beside the chat, the scope', () {
+    test('projects: search (late answers dropped), an overview', () {
       const url = 'https://home.ts.net';
       var (state, effects) = reduce(loaded([home]), const ProjectSearchChanged(url, 'ga'));
       expect((effects.single as SearchProjects).query, 'ga');
@@ -457,9 +429,8 @@ void main() {
       state = reduce(state, const ProjectsFound(url, 'gam', [game])).$1;
       expect(state.statusOf(url).projectSearch.hits, [game]);
 
-      (state, effects) = reduce(state, const SideTabSelected(url, SideTab.project, project: '/home/me/Projects/game'));
+      (state, effects) = reduce(state, const ProjectOverviewRequested(url, '/home/me/Projects/game'));
       expect(((effects.single as SendCommand).command as ClientCommandProjectOverview).project, '/home/me/Projects/game');
-      expect((state.statusOf(url).side, state.statusOf(url).sideProject), (SideTab.project, '/home/me/Projects/game'));
       const overview = ProjectOverview(
         name: 'game',
         path: '~/Projects/game',
@@ -473,9 +444,6 @@ void main() {
       state = reduce(state, ServerEvent(url, const ServerMessageOk(id: 3, result: CommandResultProject(overview: overview)))).$1;
       expect(state.statusOf(url).overviews['/home/me/Projects/game'], overview);
 
-      state = reduce(state, const ScopeChanged(url, '/home/me/Projects/game')).$1;
-      expect(state.statusOf(url).scope, '/home/me/Projects/game');
-      expect(reduce(state, const ScopeChanged(url, null)).$1.statusOf(url).scope, isNull);
       expect(reduce(state, const CatalogRequested(url)).$2.single, isA<FetchCatalog>());
     });
 
@@ -703,12 +671,12 @@ void main() {
     });
 
     test('Android keeps running while there are servers', () {
-      expect(reduce(AppState.initial, const ServersLoaded([home, work], StorageKind.keyring)).$2.whereType<KeepAlive>().single.servers, 2);
+      expect(reduce(AppState.initial, const ServersLoaded([home, work])).$2.whereType<KeepAlive>().single.servers, 2);
       expect(reduce(loaded([home]), ServerRemoved(home.url)).$2.whereType<KeepAlive>().single.servers, 0);
     });
   });
   test('the view follows the stream until you scroll up; what lands then waits behind the pill', () {
-    var (s, _) = reduce(AppState.initial, const ServersLoaded([home], StorageKind.file));
+    var (s, _) = reduce(AppState.initial, const ServersLoaded([home]));
     (s, _) = reduce(s, SessionOpened(home.url, 'a'));
     ServerMessage said(int seq, String text) =>
         ServerMessageMessageDone(session: 'a', seq: seq, message: ChatMessage(role: Role.user, content: text));
@@ -734,7 +702,7 @@ void main() {
   test('the pill counts rows: an event that adds no row does not bump it', () {
     ServerMessage said(int seq, String text) =>
         ServerMessageMessageDone(session: 'a', seq: seq, message: ChatMessage(role: Role.user, content: text));
-    var (s, _) = reduce(AppState.initial, const ServersLoaded([home], StorageKind.file));
+    var (s, _) = reduce(AppState.initial, const ServersLoaded([home]));
     (s, _) = reduce(s, SessionOpened(home.url, 'a'));
     (s, _) = reduce(s, HistoryLoaded(home.url, 'a', null, [said(1, 'one')]));
     (s, _) = reduce(s, ViewScrolled(home.url, 'a', atBottom: false));
@@ -756,37 +724,6 @@ void main() {
 
     // Back down at the newest line, and it is seen.
     (s, _) = reduce(s, ViewScrolled(home.url, 'a', atBottom: true));
-    expect(s.status[home.url]!.chat!.newSince, 0);
-  });
-
-  test('each view of a session holds its own place; the other keeps following', () {
-    ServerMessage said(int seq, String text) =>
-        ServerMessageMessageDone(session: 'a', seq: seq, message: ChatMessage(role: Role.user, content: text));
-    var (s, _) = reduce(AppState.initial, const ServersLoaded([home], StorageKind.file));
-    (s, _) = reduce(s, SessionOpened(home.url, 'a'));
-    (s, _) = reduce(s, SideTabSelected(home.url, SideTab.worker, session: 'a'));
-    (s, _) = reduce(s, HistoryLoaded(home.url, 'a', null, [said(1, 'one')]));
-
-    // Scrolled up in the open chat; the side pane beside it is still at the newest line.
-    (s, _) = reduce(s, ViewScrolled(home.url, 'a', atBottom: false));
-    expect(s.status[home.url]!.chat!.atBottom, false);
-    expect(s.status[home.url]!.sideChat!.atBottom, true, reason: 'the other view is still following');
-
-    // What lands is counted for the view that scrolled up, and only for it.
-    (s, _) = reduce(s, ServerEvent(home.url, said(2, 'two')));
-    expect(s.status[home.url]!.chat!.newSince, 1);
-    expect(s.status[home.url]!.sideChat!.newSince, 0, reason: 'the other one shows it already');
-
-    // Back down in the open chat: its own count clears, the side pane's stays.
-    (s, _) = reduce(s, ViewScrolled(home.url, 'a', atBottom: true));
-    expect(s.status[home.url]!.chat!.newSince, 0);
-
-    // The same the other way round.
-    (s, _) = reduce(s, ViewScrolled(home.url, 'a', atBottom: false, pane: ChatPane.side));
-    expect(s.status[home.url]!.sideChat!.atBottom, false);
-    expect(s.status[home.url]!.chat!.atBottom, true, reason: 'the open chat was never unpinned');
-    (s, _) = reduce(s, ServerEvent(home.url, said(3, 'three')));
-    expect(s.status[home.url]!.sideChat!.newSince, 1);
     expect(s.status[home.url]!.chat!.newSince, 0);
   });
 }

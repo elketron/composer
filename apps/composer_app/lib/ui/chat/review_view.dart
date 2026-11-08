@@ -9,15 +9,12 @@ import 'diff_page.dart';
 import 'review_actions.dart';
 
 /// A ticket's branch: where it goes, its commits, the changed files and a button to its diff, with
-/// Merge and Discard below. The phone's review screen and the wide layout's Changes tab.
+/// Merge and Discard below: the review screen's body.
 class ReviewView extends StatelessWidget {
-  const ReviewView({super.key, required this.url, required this.ticket, this.header = false});
+  const ReviewView({super.key, required this.url, required this.ticket});
 
   final String url;
   final String ticket;
-
-  /// Show the branch and target on top (the phone's app bar shows them otherwise).
-  final bool header;
 
   @override
   Widget build(BuildContext context) {
@@ -27,11 +24,6 @@ class ReviewView extends StatelessWidget {
     final ticketReview = changes?.ticket;
     final closed = review.merged != null || review.discarded;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      if (header && ticketReview != null)
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
-          child: Text('${ticketReview.branch} → ${ticketReview.target ?? 'detached HEAD'}', style: mono(size: 12, color: t.muted)),
-        ),
       if (review.busy) const LinearProgressIndicator(minHeight: 2),
       Expanded(
         child: ListView(padding: const EdgeInsets.fromLTRB(12, 8, 12, 12), children: [
