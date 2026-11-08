@@ -19,11 +19,12 @@ pub fn list(home: &Path) -> Vec<String> {
 /// A workspace's colour: `[desktop] color = "#rrggbb"` in its config, else one from its name,
 /// exactly as `/api/info` reports it (the phone draws the same value).
 pub fn colour(home: &Path, name: &str) -> u32 {
-    let configured = std::fs::read_to_string(home.join("workspaces").join(name).join("config.toml"))
-        .ok()
-        .and_then(|text| text.parse::<toml::Table>().ok())
-        .and_then(|t| t.get("desktop")?.get("color")?.as_str().map(str::to_string))
-        .unwrap_or_default();
+    let configured =
+        std::fs::read_to_string(home.join("workspaces").join(name).join("config.toml"))
+            .ok()
+            .and_then(|text| text.parse::<toml::Table>().ok())
+            .and_then(|t| t.get("desktop")?.get("color")?.as_str().map(str::to_string))
+            .unwrap_or_default();
     composer_protocol::WorkspaceColor::for_workspace(name, &configured).rgb()
 }
 

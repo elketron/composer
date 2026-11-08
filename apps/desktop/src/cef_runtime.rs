@@ -6,19 +6,32 @@ use std::path::PathBuf;
 use cef::{args::Args, *};
 
 /// Where the runtime is: `$CEF_PATH`; beside the binary (a package); else the one a development
-/// build used (`.cef`, see fetch-cef.sh).
+/// build used (`.cef`, see fetch-cef.sh). A path without `libcef` is not one: the `cef` crate
+/// leaves a half-downloaded `.cef` behind when fetch-cef.sh wasn't run, and trusting it makes CEF
+/// abort in its resource bundle (SIGTRAP) instead of a useful error.
 fn cef_dir() -> String {
     if let Ok(dir) = std::env::var("CEF_PATH") {
-        return dir;
+        if runtime_in(std::path::Path::new(&dir)) {
+            return dir;
+        }
+        eprintln!(
+            "composer-desktop: CEF_PATH={dir} has no libcef.so; run apps/desktop/scripts/fetch-cef.sh \
+             (falling back to the runtime beside the binary)"
+        );
     }
     let beside = std::env::current_exe()
         .ok()
         .and_then(|exe| exe.parent().map(std::path::Path::to_path_buf))
-        .filter(|dir| dir.join("libcef.so").is_file());
+        .filter(|dir| runtime_in(dir));
     match beside {
         Some(dir) => dir.display().to_string(),
         None => env!("COMPOSER_CEF_DIR").to_string(),
     }
+}
+
+/// Whether `dir` holds a CEF runtime (`libcef.so`, or `libcef.dll` on Windows).
+fn runtime_in(dir: &std::path::Path) -> bool {
+    dir.join("libcef.so").is_file() || dir.join("libcef.dll").is_file()
 }
 
 fn cache_root() -> PathBuf {
@@ -167,5 +180,21 @@ fn forget_dead_caches(root: &std::path::Path) {
         if !alive {
             let _ = std::fs::remove_dir_all(entry.path());
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_runtime_is_a_dir_with_libcef() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(
+            !runtime_in(dir.path()),
+            "an empty (half-downloaded) path is not a runtime"
+        );
+        std::fs::write(dir.path().join("libcef.so"), "").unwrap();
+        assert!(runtime_in(dir.path()));
     }
 }
