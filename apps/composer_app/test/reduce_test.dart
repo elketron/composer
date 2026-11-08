@@ -120,7 +120,7 @@ void main() {
       ], more: true));
       final chat = state.statusOf(home.url).chat!;
       expect((chat.loaded, chat.firstSeq, chat.more, chat.items.length), (true, 4, true, 1));
-      expect(((effects.single as SendCommand).command as ClientCommandSessionAttach).since, 6, reason: 'what came after them');
+      expect(((effects.whereType<SendCommand>().single).command as ClientCommandSessionAttach).since, 6, reason: 'what came after them');
 
       (state, effects) = reduce(state, SessionOpened(home.url, 'b'));
       expect(((effects[0] as SendCommand).command as ClientCommandSessionDetach).session, 'a');
@@ -161,7 +161,7 @@ void main() {
     test('a server without session.history: the whole chat replays', () {
       var state = reduce(loaded([home]), SessionOpened(home.url, 'a')).$1;
       final (next, effects) = reduce(state, const HistoryLoaded('https://home.ts.net', 'a', null, null));
-      expect(((effects.single as SendCommand).command as ClientCommandSessionAttach).since, isNull);
+      expect(((effects.whereType<SendCommand>().single).command as ClientCommandSessionAttach).since, isNull);
       expect(next.statusOf(home.url).chat!.loaded, isTrue);
     });
 

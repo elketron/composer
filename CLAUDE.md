@@ -58,9 +58,10 @@ workspace; the Flutter app has no Linux, Windows or macOS target.
   rehearsal server: `scripts/phone-e2e.sh <device> <workspace url> [test...]` pairs each test (a fresh
   install needs its own pairing code) and forwards the server's port with `adb reverse`; it sets up the
   scripted model and `tools` site the tests need. Tests: `pairing_test.dart` pairs two workspaces
-  of one host and switches between them, `chat_test.dart` runs a whole turn with a recipe approval,
-  `reader_test.dart` covers pages, an app and follow-agent, `review_test.dart` merges a ticket from
-  the chat menu, `measure_open_test.dart` measures opening a chat. A headless emulator:
+  of one host and switches between them, `desk_test.dart` opens the agent's page from the desk and
+  sends from the bar, `chat_test.dart` runs a whole turn with a recipe approval, `reader_test.dart`
+  covers pages, an app and follow-agent, `review_test.dart` merges a ticket from the chat menu,
+  `measure_open_test.dart` measures opening a chat. A headless emulator:
   `emulator -avd <name> -read-only -no-window -no-audio`.
 - `COMPOSER_APP_DATA=<dir>` keeps the server list in that directory (tests, a second instance).
 - Icons: edit `assets/icon/*.svg`, then `scripts/app-icons.sh` renders the Android ones.

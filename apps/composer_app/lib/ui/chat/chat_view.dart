@@ -18,6 +18,7 @@ import 'steps_view.dart';
 import 'worker_card.dart';
 import 'message_composer.dart';
 import 'older_messages.dart';
+import 'selection_chip.dart';
 import 'orchestration_bar.dart';
 
 /// A session's chat: transcript (newest at the bottom, following the stream), its approvals,
@@ -174,6 +175,7 @@ class _ChatViewState extends State<ChatView> {
                   ),
               ]),
       ),
+      if (chat.selection case final selection?) SelectionChip(url: widget.url, selection: selection),
       MessageComposer(key: ValueKey('composer-${widget.url}-${chat.session}'), url: widget.url, busy: busy),
     ]);
   }

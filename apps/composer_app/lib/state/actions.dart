@@ -117,6 +117,42 @@ final class ViewScrolled extends AppAction {
   final bool atBottom;
 }
 
+/// The open chat's desk (a reply to `desk.get`, or a `desk.changed` event).
+final class DeskLoaded extends AppAction {
+  const DeskLoaded(this.url, this.session, this.desk);
+  final String url;
+  final String session;
+  final Desk desk;
+}
+
+/// Put a tab on the open chat's desk (an equal one is focused, not doubled).
+final class DeskTabOpened extends AppAction {
+  const DeskTabOpened(this.url, this.tab, {this.focus = true});
+  final String url;
+  final DeskTab tab;
+  final bool focus;
+}
+
+/// Close a tab of the open chat's desk.
+final class DeskTabClosed extends AppAction {
+  const DeskTabClosed(this.url, this.tab);
+  final String url;
+  final String tab;
+}
+
+/// Show a tab of the open chat's desk.
+final class DeskTabFocused extends AppAction {
+  const DeskTabFocused(this.url, this.tab);
+  final String url;
+  final String tab;
+}
+
+/// Drop the selection chip: the next message goes without it.
+final class SelectionCleared extends AppAction {
+  const SelectionCleared(this.url);
+  final String url;
+}
+
 /// Leave the chat (detach).
 final class SessionClosed extends AppAction {
   const SessionClosed(this.url);

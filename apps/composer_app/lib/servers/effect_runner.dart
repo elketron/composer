@@ -88,6 +88,10 @@ class EffectRunner {
             onError: (Object e) => dispatch(SearchLoaded(url, query, const [], error: describeError(e))),
           );
         }
+      case FetchDesk(:final url, :final session):
+        _request(url, ClientCommandDeskGet(session: session), dispatch).then((result) {
+          if (result is CommandResultDesk) dispatch(DeskLoaded(url, session, result.desk));
+        });
       case FetchHistory(:final url, :final session, :final before):
         final connection = _connections[url];
         // MEASURE(0053) harness: debug only, so a shipped app prints nothing on the normal path.

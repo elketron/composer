@@ -17,7 +17,7 @@ device=${1:?usage: phone-e2e.sh <device> <workspace url> [test...]}
 server=${2:?usage: phone-e2e.sh <device> <workspace url> [test...]}
 shift 2
 tests=("$@")
-[ ${#tests[@]} -eq 0 ] && tests=(pairing chat reader)
+[ ${#tests[@]} -eq 0 ] && tests=(pairing desk chat reader)
 composer=${COMPOSER:-composer}
 port=$(sed -E 's#^[a-z]+://[^:/]+:([0-9]+).*#\1#' <<<"$server")
 home=${COMPOSER_HOME:-$HOME/.composer}

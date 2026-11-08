@@ -1,5 +1,7 @@
+import 'package:composer_protocol/composer_protocol.dart';
 import 'package:flutter/material.dart';
 
+import '../../state/desk_view.dart';
 import '../../state/workspace.dart';
 import '../../theme/composer_theme.dart';
 import '../../theme/tokens.dart' as t;
@@ -9,6 +11,7 @@ import '../store_scope.dart';
 import '../workspace_mark.dart';
 import 'chat_menu.dart';
 import 'chat_view.dart';
+import 'desk_sheet.dart';
 
 /// A chat as its own page (phones): agent, state and project on top; ⋮ for the project,
 /// compacting and stopping.
@@ -26,6 +29,7 @@ class ChatPage extends StatelessWidget {
     final activity = session == null ? 'idle' : status.activity(session);
     final project = session?.project?.split('/').last;
     final workspace = Workspace.of(url, info: status.info, entry: store.state.serverFor(url));
+    final unseen = DeskView(chat?.desk ?? const Desk()).unseen;
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 0,
@@ -62,6 +66,18 @@ class ChatPage extends StatelessWidget {
             ]),
         ]),
         actions: [
+          IconButton(
+            key: const Key('desk'),
+            tooltip: 'Desk',
+            onPressed: () => showDesk(context, url),
+            icon: Badge(
+              isLabelVisible: unseen > 0,
+              backgroundColor: t.accent,
+              textColor: t.bg,
+              label: Text('$unseen', style: mono(size: 9, color: t.bg)),
+              child: const Icon(Icons.dashboard_outlined, size: 20, color: t.muted),
+            ),
+          ),
           IconButton(
             tooltip: 'Pages',
             onPressed: () => openPage(context, url, status.page.page?.url ?? 'site://home'),

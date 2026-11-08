@@ -61,6 +61,13 @@ final class FetchHistory extends AppEffect {
   final int? before;
 }
 
+/// `desk.get`: the session's desk; the reply comes back as `DeskLoaded`.
+final class FetchDesk extends AppEffect {
+  const FetchDesk(this.url, this.session);
+  final String url;
+  final String session;
+}
+
 /// A `ticket.*` command; the reply comes back as `TicketReplied`.
 final class TicketCommand extends AppEffect {
   const TicketCommand(this.url, this.ticket, this.command);

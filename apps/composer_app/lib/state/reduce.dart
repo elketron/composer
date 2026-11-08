@@ -58,6 +58,14 @@ import 'types.dart';
         _historyLoaded(s, url, session, before, events, more),
       SessionClosed(:final url) => _close(s, url),
       ViewScrolled(:final url, :final session, :final atBottom) => (_scrolled(s, url, session, atBottom), const []),
+      DeskLoaded(:final url, :final session, :final desk) => _deskLoaded(s, url, session, desk),
+      DeskTabOpened(:final url, :final tab, :final focus) =>
+        _deskCommand(s, url, (session) => ClientCommandDeskOpen(session: session, tab: tab, focus: focus)),
+      DeskTabClosed(:final url, :final tab) =>
+        _deskCommand(s, url, (session) => ClientCommandDeskClose(session: session, tab: tab)),
+      DeskTabFocused(:final url, :final tab) =>
+        _deskCommand(s, url, (session) => ClientCommandDeskFocus(session: session, tab: tab)),
+      SelectionCleared(:final url) => _selectionCleared(s, url),
       NewSessionRequested(:final url, :final agent, :final project) => (s, [CreateSession(url, agent, project: project)]),
       MessageSubmitted(:final url, :final text) => _submit(s, url, text),
       FilesPicked(:final url, :final files) => _picked(s, url, files),
@@ -281,7 +289,10 @@ import 'types.dart';
       FetchCatalog(url),
       // Works waiting at a gate (Needs you).
       SendCommand(url, const ClientCommandPipelineList()),
-      if (chat != null) _reattach(url, chat),
+      if (chat != null) ...[
+        _reattach(url, chat),
+        FetchDesk(url, chat.session),
+      ],
     ],
   );
 }
@@ -290,6 +301,27 @@ import 'types.dart';
 AppEffect _reattach(String url, ChatState chat) => chat.loaded
     ? SendCommand(url, ClientCommandSessionAttach(session: chat.session, since: chat.lastSeq))
     : FetchHistory(url, chat.session, null);
+
+/// The open chat's desk, if it is that session's.
+(AppState, List<AppEffect>) _deskLoaded(AppState s, String url, String session, Desk desk) {
+  final chat = s.status[url]?.chat;
+  if (chat == null || chat.session != session) return (s, const []);
+  return (_updateStatus(s, url, (x) => x.copyWith(chat: x.chat?.copyWith(desk: desk))), const []);
+}
+
+/// A desk command for the open chat's session (the reply, and the change, come as events).
+(AppState, List<AppEffect>) _deskCommand(AppState s, String url, ClientCommand Function(String session) command) {
+  final chat = s.status[url]?.chat;
+  return chat == null ? (s, const []) : (s, [SendCommand(url, command(chat.session))]);
+}
+
+/// The chip goes now (the server clears it too); the message sent after it has no selection.
+(AppState, List<AppEffect>) _selectionCleared(AppState s, String url) {
+  final chat = s.status[url]?.chat;
+  if (chat == null) return (s, const []);
+  final next = _updateStatus(s, url, (x) => x.copyWith(chat: x.chat?.copyWith(selection: null)));
+  return (next, [SendCommand(url, ClientCommandSelectionClear(session: chat.session))]);
+}
 
 /// The messages before the oldest shown, once at a time.
 (AppState, List<AppEffect>) _older(AppState s, String url, String session) {
@@ -342,7 +374,14 @@ AppState _scrolled(AppState s, String url, String session, bool atBottom) {
   final chat = next.status[url]?.chat;
   final since = chat?.session == session ? chat?.lastSeq : null;
   // Since the last of them: nothing in between is lost (`events` null: all of it).
-  return (next, [if (attach) SendCommand(url, ClientCommandSessionAttach(session: session, since: events == null ? null : since))]);
+  return (
+    next,
+    [
+      if (attach) SendCommand(url, ClientCommandSessionAttach(session: session, since: events == null ? null : since)),
+      // Its desk comes with the chat (the agent may have put tabs on it meanwhile).
+      if (attach) FetchDesk(url, session),
+    ],
+  );
 }
 
 (AppState, List<AppEffect>) _open(AppState s, String url, String session) {
@@ -693,6 +732,10 @@ AppState _event(AppState s, String url, ServerMessage message) => switch (messag
           final finished = stopped(state) && x.chat?.session != worker;
           return x.copyWith(workers: {...x.workers, worker: state}, unread: finished ? {...x.unread, worker} : null);
         }),
+      ServerMessageDeskChanged(:final session, :final desk) => _deskLoaded(s, url, session, desk).$1,
+      ServerMessageSelectionChanged(:final session, :final selection)
+          when s.status[url]?.chat?.session == session =>
+        _updateStatus(s, url, (x) => x.copyWith(chat: x.chat?.copyWith(selection: selection))),
       _ when sessionEvent(message) != null => _updateStatus(s, url, (x) {
           final chat = x.chat;
           // Not before its history: the attach after it replays what came meanwhile.

@@ -1,3 +1,4 @@
+import 'package:composer_protocol/composer_protocol.dart';
 import 'package:flutter/material.dart';
 
 import '../../state/actions.dart';
@@ -54,6 +55,13 @@ class ReaderToolbar extends StatelessWidget {
           !app
               ? TextButton(key: const Key('open-app'), onPressed: () => store.dispatch(AppRequested(url, site)), child: const Text('App'))
               : TextButton(onPressed: () => store.dispatch(PageRequested(url, 'site://$site')), child: const Text('Page')),
+        if (p.page != null && status.chat != null)
+          button(
+            Icons.dashboard_customize_outlined,
+            'Put on the desk',
+            () => store.dispatch(DeskTabOpened(url, DeskTabPage(url: p.page!.url))),
+            key: const Key('open-on-desk'),
+          ),
         Tooltip(
           message: p.follow ? 'Following the agent: pages it opens show here' : 'Not following the agent',
           child: TextButton.icon(

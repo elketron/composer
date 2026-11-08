@@ -12,7 +12,7 @@ import '../../theme/tokens.dart' as t;
 /// one-time code, in it once), and that sets the cookie for this webview, so the app's API calls,
 /// `send()` and live updates work as in a browser. The workspace token never goes in an app's URL.
 class AppView extends StatefulWidget {
-  const AppView({super.key, required this.url, required this.token, required this.site, this.session});
+  const AppView({super.key, required this.url, required this.token, required this.site, this.session, this.project});
 
   final String url;
   final String token;
@@ -21,14 +21,20 @@ class AppView extends StatefulWidget {
   /// The open chat's session: the app's `send()` goes there.
   final String? session;
 
+  /// The project the app is opened on (a desk app tab); null: the workspace's Home.
+  final String? project;
+
   /// Asks the server to open the app: the address to load.
   Future<String> open() async {
     final base = Uri.parse(url);
     final client = HttpClient();
     try {
       // Opened from the chat's session: the one the app's messages go to.
+      final path = project == null
+          ? '${base.path}/api/apps/$site/open'
+          : '${base.path}/api/projects/$project/apps/$site/open';
       final open = base.replace(
-        path: '${base.path}/api/apps/$site/open',
+        path: path,
         queryParameters: session == null ? null : {'session': session},
       );
       final request = await client.postUrl(open);
