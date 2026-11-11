@@ -377,7 +377,7 @@ orchestration's sessions under the chat header, and stays put while the composer
 ## Micro apps (Svelte)
 
 - Belong to a site, live in `<site>/ui/`, each a standalone Svelte app.
-- Created by `new_app <site>`: copies `~/.composer/templates/app` into `<site>/ui/` and adds a `ui-build` recipe (`bun install && bun run build`) to the site's justfile, so building goes through the approval flow. The scaffold imports theme, components (`AppShell`, `Button`, `Kbd`, `Badge`) and the client from `$sdk` (a Vite alias to `~/.composer/templates/sdk`), so fixes land in every app on its next build.
+- Created by `new_app <site>`: copies `~/.composer/templates/app` into `<site>/ui/` and adds a `ui-build` recipe (`bun install && bun run build`) to the site's justfile, so building goes through the approval flow. The scaffold imports theme, components (`AppShell`, `Button`, `Kbd`, `Badge`, and `Threads`, the comment shell: see workflows.md, "Threads") and the client from `$sdk` (a Vite alias to `~/.composer/templates/sdk`), so fixes land in every app on its next build.
 - **Served sandboxed, under its own token** (security review, 2026-11): an app's code is untrusted (an agent can
   write it), and the workspace's cookie lives in the same browser. So an app opened on a project or on Home is served
   at `<base>/a/<app token>/` from `<site>/ui/dist` (a project-local app from its folder), and every answer under that

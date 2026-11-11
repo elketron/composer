@@ -46,7 +46,7 @@ Other sites may exist; `list_sites` shows them all.
 - **Pages are the source of truth.** If something should outlive this conversation, write it to a page.
 - **Frontmatter matters.** Pages start with YAML frontmatter (`title`, `type`, `tags`, ...). Keep it accurate; search uses it.
 - **Sites have actions.** A site with a `justfile` has recipes; `actions(site)` lists them, `run` runs them. The first run of a recipe needs the user's approval.
-- **Sites can have apps.** A site with a `ui/` folder has a human-facing app. Apps store their state as files in the site, so you can read what the user did there. Messages from an app arrive in your chat marked with the app's site.
+- **Sites can have apps.** A site with a `ui/` folder has a human-facing app. Apps store their state as files in the site, so you can read what the user did there. Messages from an app arrive in your chat marked with the app's site. Comment threads in an app's view are pages in its `threads/` folder: see [threads](site://home/threads.md).
 - **A project is the hub.** A project page names its `root:` folder and the `sites:` that operate on it. A **work** is one instance of a site on a project; its `project/` view is what the work reads and writes. Start at [projects](site://projects).
 - **Some sites are pipelines** (`type: pipeline`): staged work, a folder per piece of work, each stage with a contract in `stages/`. `new_pipeline` makes one from a template; [orchestration](site://orchestration) starts and merges work.
 - **Edit, don't rewrite.** Use `edit` for changes to existing pages; `write` for new pages.

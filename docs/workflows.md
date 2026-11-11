@@ -169,7 +169,7 @@ in Claude's artifacts: the viewer is fixed, the agent only writes data.
 
 | part | what it is | written |
 |---|---|---|
-| shell | comment threads anchored to things, reply, resolve, versions, live reload, the hand-off to the chat | once, by composer |
+| shell | comment threads anchored to things, reply, resolve, live reload, the hand-off to the chat (built: the sdk's `Threads`); versions later | once, by composer |
 | view type | a renderer for one kind of object, which names its anchors (a scene, a part, a hunk, a board) | once per workflow |
 | instance | the work's files | by the agent, every time |
 
@@ -180,6 +180,52 @@ in Claude's artifacts: the viewer is fixed, the agent only writes data.
 - Today's micro apps are each their own Svelte code with one-shot feedback (`select()` puts a chip on
   the next message; `send()` posts text). They keep working; the shell is where new ones go.
 
+#### Threads (built, phase 4)
+
+One markdown page per thread in a `threads/` folder of the site, or of the work folder when the view is
+opened on a work. The agent reads them with `open`/`search` (`type:thread status:open site:<site>`),
+replies by appending a section with `edit`, and resolves by setting `status: resolved`: no new tool.
+Its conventions are in `site://home/threads.md` (seed) and in each view type's `index.md`.
+
+```markdown
+---
+type: thread
+title: "mockup login: the button is too small"
+anchor: mockup/login                    # the view's element id (data-anchor)
+anchor_label: mockup login              # for people (data-anchor-label)
+status: open                            # open | resolved
+created: 2026-11-11T14:02:00Z
+updated: 2026-11-11T14:05:00Z
+---
+### you · 2026-11-11T14:02:00Z
+
+The button is too small on a phone.
+
+### default · 2026-11-11T14:05:00Z
+
+Made it full width below 600px.
+```
+
+- A message starts at a line `### <author> · <time>` (`you`, or the agent's name; UTC, seconds) and
+  runs to the next one. Values that YAML would misread are written as JSON strings.
+- Anchor ids are paths: `a/b` is a part of `a`, and a pin on `a` counts the open threads of both.
+- File names: `threads/<date>-<label slug>-<4 random>.md`.
+- **The sdk.** `threads.ts` holds the pure functions (`parseThread`, `formatThread`, `appendMessage`,
+  `setStatus`, `openCount`, `threadUrl`, `agentMessage`; `bun test` in `templates/sdk`), and
+  `components/Threads.svelte` the UI: comment mode (hover highlights `[data-anchor]` elements, a click
+  picks one), pins with the open count, a panel (messages, reply, send to agent, resolve, reopen, the
+  list), live through `onChange(<root>/threads/*)`. It writes with `putPage` and the page's hash; a
+  write refused because the agent changed the page meanwhile is re-read and applied again.
+- **To the agent.** "Send to agent" writes the thread, then `send()`s `Comment on <anchor_label>
+  (thread <url>): <text>` with the thread page (and the view's `attach(anchor)` pages); the session gets
+  it as a user message from the app's site. A plain comment is only stored. A reply reopens a
+  resolved thread.
+- **A view's own anchors.** A view can start a thread on something it picks itself (the mockups view: a
+  rectangle dragged on the preview, `mockup/<name>/region/<x>,<y>,<w>,<h>` in percent of the page) with
+  `shell.comment({ id, label })`, and renders an element with that `data-anchor` so the pin shows there.
+- **Later.** Versions in the shell (the mockups view keeps its own); threads on a work's folder are
+  supported (`root`) but no view uses them yet.
+
 ## One gesture
 
 Point at something and say something. The agent gets it with the thing attached, answers in place, and
@@ -187,7 +233,7 @@ resolves it.
 
 | view | anchored to | exists as |
 |---|---|---|
-| view type | an element the renderer named | proposal (the shell) |
+| view type | an element the renderer named | built (the shell: `Threads` in the sdk; mockups) |
 | application | pixels on the screen | wayai annotations (`annotations`, `reply_annotation`) |
 | a diff in the terminal | a hunk or a line | Hunk notes ([tui-mode.md](tui-mode.md)) |
 
@@ -388,6 +434,10 @@ switches its workflow.
 **Done when:** a comment on one mockup reaches the agent naming that mockup, the agent changes it,
 answers in the thread and resolves it, and the view reloads.
 
+Built (2026-11-11): the shell (see Threads above), the app template marks its page list as anchors, and
+a mockups site with card and region anchors (delivered for the owner's workspace, not in the seed).
+Checked with a scripted model; a real agent doing the change, the reply and the resolve is not yet run.
+
 ### Phase 5: a model per workflow
 
 - Named providers; `model:` on a workflow, applied to spawned work first.
@@ -426,7 +476,7 @@ nothing a browser tab can't.
    frees wayai's one screen.
 7. **Is a workflow a new `type:` or any site with `app:` / `mcp:` / `view:`?** The examples use
    `type: workflow`; pipelines are `type: pipeline` today.
-8. **Where are threads stored?** A file per thread beside the work, or one file per work.
+8. **Where are threads stored?** Decided (phase 4): a file per thread, in `threads/` beside the work.
 9. **Bundles per workspace.** Files are shared and every workspace sees every bundle; a workspace can
    turn one off with `enabled = false`. Whether that default should be the other way round.
 10. **Mid-turn switches.** A switch applies from the next turn; what a running turn does when the user

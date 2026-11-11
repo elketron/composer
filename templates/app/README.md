@@ -13,3 +13,6 @@ The human-facing app of `site://__SITE__`, built with Svelte and the shared comp
   project); its recipes get `PROJECT_ROOT`, `PROJECT_NAME` and `APP_DATA` (that same folder).
 - State the agent should see belongs in files of the site (`putPage` / `putFile`), not in the app.
 - `send(text, { pages, images })` puts a message in the chat of the session that opened the app.
+- Comments on what the app shows: mark elements with `data-anchor="<id>"` and `data-anchor-label`, and
+  mount `<Threads>` once (`bind:picking` is the comment mode, `bind:open` the panel). Threads are pages in
+  the site's `threads/`; the agent's side is `site://home/threads.md`.

@@ -1,9 +1,11 @@
 <!--
   Starter app: this site's pages (live), a preview, and a message box to the agent.
   Replace it with what the site needs; keep AppShell for the shared look.
+  Comments: elements with `data-anchor` (an id) and `data-anchor-label` can be commented on with
+  <Threads> (threads are pages in this site's threads/; see site://home/threads.md).
 -->
 <script lang="ts">
-  import { AppShell, Button, Kbd, onChange, page, project, search, send, session, site, type Page, type Project, type SearchHit } from '$sdk';
+  import { AppShell, Button, Kbd, Threads, onChange, page, project, search, send, session, site, type Page, type Project, type SearchHit } from '$sdk';
 
   let pages: SearchHit[] = $state([]);
   let selected = $state(0);
@@ -11,12 +13,16 @@
   let message = $state('');
   let notice = $state('');
   let input: HTMLTextAreaElement | undefined = $state();
+  let commenting = $state(false);
+  let threadsOpen = $state(false);
   // The project this app was opened on (null on Home): its name, folder, branch, tags.
   let opened: Project | null = $state(null);
   project().then((p) => (opened = p));
 
   async function loadPages() {
-    pages = (await search(`site:${site}`)).sort((a, b) => a.url.localeCompare(b.url));
+    pages = (await search(`site:${site}`))
+      .filter((hit) => !hit.url.includes('/threads/'))
+      .sort((a, b) => a.url.localeCompare(b.url));
     selected = Math.min(selected, Math.max(pages.length - 1, 0));
   }
 
@@ -44,9 +50,9 @@
   }
 
   function onkeydown(event: KeyboardEvent) {
-    const typing = event.target instanceof HTMLTextAreaElement;
+    const typing = event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLInputElement;
     if (typing) {
-      if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) submit();
+      if (event.target === input && event.key === 'Enter' && (event.metaKey || event.ctrlKey)) submit();
       if (event.key === 'Escape') input?.blur();
       return;
     }
@@ -63,13 +69,15 @@
 
 <AppShell crumb={opened ? `${opened.name} · pages` : 'pages'} status={pages[selected]?.url ?? ''}>
   {#snippet actions()}
+    <Button variant={commenting ? 'primary' : 'ghost'} onclick={() => (commenting = !commenting)}>Comment</Button>
+    <Button variant="ghost" onclick={() => (threadsOpen = !threadsOpen)}>Threads</Button>
     <Button variant="primary" kbd="⌘↵" onclick={submit} disabled={!session || !message.trim()}>Send to agent</Button>
   {/snippet}
 
   <div class="layout">
     <ul class="list">
       {#each pages as hit, i (hit.url)}
-        <li class:sel={i === selected}>
+        <li class:sel={i === selected} data-anchor={hit.url} data-anchor-label={hit.title}>
           <button onclick={() => (selected = i)}>
             {hit.title}
             <span>{hit.url.replace(`site://${site}/`, '')}</span>
@@ -100,6 +108,8 @@
     <Kbd keys="⌘↵" label="send" />
   {/snippet}
 </AppShell>
+
+<Threads bind:picking={commenting} bind:open={threadsOpen} attach={(anchor) => [anchor]} />
 
 <style>
   .layout { display: grid; grid-template-columns: 260px 1fr 300px; height: 100%; }
