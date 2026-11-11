@@ -396,6 +396,46 @@ impl Shell {
         self.webs.get(&self.shown_entry()?.id)
     }
 
+    /// The keyboard follows the stage's shown tab. When the tab changes (ctrl+tab, a pick in the
+    /// palette, the agent) while a pane now hidden has the keyboard, the shown pane takes it;
+    /// otherwise no pane, and none of the desktop's own keys, work until the pointer moves.
+    fn keep_stage_focus(&self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.overlay.is_some() {
+            return;
+        }
+        let shown_term = self.shown_pane();
+        let shown_web = self.shown_web();
+        let Some(handle) = shown_term
+            .map(|pane| pane.read(cx).focus_handle(cx))
+            .or_else(|| shown_web.map(|web| web.read(cx).focus_handle(cx)))
+        else {
+            return;
+        };
+        if handle.is_focused(window) {
+            return;
+        }
+        let shown_tab = stage_tabs::shown(&self.store.desk);
+        let stray = self
+            .panes
+            .values()
+            .filter(|pane| Some(pane.entity_id()) != shown_term.map(|p| p.entity_id()))
+            .map(|pane| pane.read(cx).focus_handle(cx))
+            .chain(
+                self.webs
+                    .hidden(shown_tab)
+                    .map(|web| web.read(cx).focus_handle(cx)),
+            )
+            .any(|hidden| hidden.is_focused(window));
+        if !stray {
+            return;
+        }
+        window.focus(&handle, cx);
+        if let Some(web) = shown_web.cloned() {
+            // CEF has its own focus: without it the page sees no keys.
+            web.update(cx, |web, _| web.browser_focus(true));
+        }
+    }
+
     fn sync_web_visibility(&self, cx: &mut Context<Self>) {
         let shown = stage_tabs::shown(&self.store.desk);
         for (pane, visible) in self.webs.visibility(shown, self.window_visible) {
@@ -832,6 +872,7 @@ impl Render for Shell {
         self.active = window.is_window_active();
         self.load_shown(cx);
         self.sync_web_visibility(cx);
+        self.keep_stage_focus(window, cx);
         let shown = stage_tabs::shown(&self.store.desk).map(str::to_string);
         let live_app = stage_tabs::live_app(self.session_site(), &self.sites).map(str::to_string);
         let tabs = self.store.desk.tabs.iter().map(|entry| {

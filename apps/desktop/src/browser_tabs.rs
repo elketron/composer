@@ -48,6 +48,14 @@ impl<P> BrowserTabs<P> {
             .map(move |(id, pane)| (pane, window_visible && shown == Some(id.as_str())))
     }
 
+    /// The panes of the tabs not shown: none of them may keep the keyboard.
+    pub fn hidden<'a>(&'a self, shown: Option<&'a str>) -> impl Iterator<Item = &'a P> {
+        self.panes
+            .iter()
+            .filter(move |(id, _)| shown != Some(id.as_str()))
+            .map(|(_, pane)| pane)
+    }
+
     /// Only the tabs still on the desk keep their panes.
     pub fn keep(&mut self, tabs: &HashSet<&str>) {
         self.panes.retain(|id, _| tabs.contains(id.as_str()));
@@ -104,5 +112,21 @@ mod tests {
         assert_eq!(states(Some("animation"), false), [(1, false), (2, false)]);
         assert_eq!(states(Some("terminal"), true), [(1, false), (2, false)]);
         assert_eq!(states(None, true), [(1, false), (2, false)]);
+    }
+
+    #[test]
+    fn hidden_is_every_pane_but_the_shown_one() {
+        let mut tabs = BrowserTabs::default();
+        tabs.arrived("app".into(), 1);
+        tabs.arrived("page".into(), 2);
+        let hidden = |shown| {
+            let mut panes: Vec<_> = tabs.hidden(shown).copied().collect();
+            panes.sort();
+            panes
+        };
+        assert_eq!(hidden(Some("app")), [2]);
+        assert_eq!(hidden(Some("page")), [1]);
+        assert_eq!(hidden(Some("terminal")), [1, 2]);
+        assert_eq!(hidden(None), [1, 2]);
     }
 }
