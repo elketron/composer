@@ -68,6 +68,7 @@ async fn an_agent_sees_what_an_app_keeps() {
             server: server.clone(),
             session: server.sessions.get(session.id()).unwrap(),
             agent: Arc::new(AgentDefinition::load(&server.web, agent).unwrap()),
+            site: None,
             cancel: CancellationToken::new(),
         };
         let (server, url) = (server.clone(), url.to_string());

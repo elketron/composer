@@ -94,6 +94,11 @@ impl HttpTransport {
                 self.name
             ));
         }
+        if status == reqwest::StatusCode::UNAUTHORIZED {
+            // Its token may have changed (a restart): the next use connects again, which reads
+            // `bearer_file` again.
+            self.alive.store(false, Ordering::SeqCst);
+        }
         if !status.is_success() {
             let body = response.text().await.unwrap_or_default();
             let body: String = body.chars().take(300).collect();

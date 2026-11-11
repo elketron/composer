@@ -3,6 +3,7 @@ import 'package:composer_protocol/composer_protocol.dart';
 import 'chat_state.dart';
 import 'page_state.dart';
 import 'types.dart';
+import 'workflows.dart';
 
 const _keep = Object();
 
@@ -79,6 +80,17 @@ class ServerStatus {
 
   /// The New work dialog's request.
   final NewWork newWork;
+
+  /// The sites that are workflows (an application and/or MCP servers).
+  List<SiteSummary> get workflows => workflowsOf(sites);
+
+  SiteSummary? site(String? name) => name == null ? null : sites.where((s) => s.name == name).firstOrNull;
+
+  /// The sessions in a workflow now (workers are counted with their orchestrator).
+  List<SessionInfo> sessionsIn(String site) => sessions.where((s) => s.site == site && s.parent == null).toList();
+
+  /// The application the live view of [session] shows, or null: no live view for it.
+  String? liveViewOf(SessionInfo? session) => liveViewApp(info: info, site: site(session?.site));
 
   bool hasApp(String site) => sites.any((s) => s.name == site && s.appBuilt);
 

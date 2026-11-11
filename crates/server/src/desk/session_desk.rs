@@ -49,6 +49,7 @@ impl SessionDesk {
                 format!("terminal:{id}")
             }
             DeskTab::Changes { project } => format!("changes:{}", ProjectName::new(project)?),
+            DeskTab::LiveView => "live".to_string(),
         })
     }
 
@@ -164,6 +165,27 @@ mod tests {
         desk.close(&cad).unwrap();
         assert_eq!(desk.desk(), &Desk::default());
         assert!(desk.close("app:nope").unwrap_err().contains("no tab"));
+    }
+
+    #[test]
+    fn the_live_view_is_one_tab_per_desk() {
+        assert_eq!(SessionDesk::key(&DeskTab::LiveView).unwrap(), "live");
+        let mut desk = SessionDesk::default();
+        // The agent's unfocused open is unseen; the user's later open shows it and it is seen.
+        let id = desk.open(DeskTab::LiveView, false, DeskBy::Agent).unwrap();
+        assert!(desk.desk().tabs[0].unseen);
+        assert_eq!(desk.desk().active, None);
+        desk.open(DeskTab::LiveView, true, DeskBy::User).unwrap();
+        assert_eq!(desk.desk().tabs.len(), 1);
+        assert!(!desk.desk().tabs[0].unseen);
+        assert_eq!(desk.desk().active.as_deref(), Some(id.as_str()));
+        // Its wire form.
+        assert_eq!(
+            serde_json::to_string(&DeskTab::LiveView).unwrap(),
+            r#"{"kind":"live_view"}"#
+        );
+        let back: DeskTab = serde_json::from_str(r#"{"kind":"live_view"}"#).unwrap();
+        assert_eq!(back, DeskTab::LiveView);
     }
 
     #[test]

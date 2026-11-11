@@ -372,13 +372,36 @@ orchestration's sessions under the chat header, and stays put while the composer
 - **Open in nvim:** TUI suspends (leaves alternate screen), runs `nvim <file>[+line]`, restores on exit. Remote: temp-file round trip.
 - **Approval popup:** shows recipe body; `y` approve, `n` deny, `e` view in nvim.
 - **Workflow views** (built-in, registered by name, shown in the page viewer pane): changes view, later more.
-- Opening a micro app passes `?session=<id>&token=<t>`.
+- Opening a micro app: `app.open` / `POST .../apps/<site>/open` gives `<base>/a/<app token>/` (see Micro apps).
 
 ## Micro apps (Svelte)
 
 - Belong to a site, live in `<site>/ui/`, each a standalone Svelte app.
 - Created by `new_app <site>`: copies `~/.composer/templates/app` into `<site>/ui/` and adds a `ui-build` recipe (`bun install && bun run build`) to the site's justfile, so building goes through the approval flow. The scaffold imports theme, components (`AppShell`, `Button`, `Kbd`, `Badge`) and the client from `$sdk` (a Vite alias to `~/.composer/templates/sdk`), so fixes land in every app on its next build.
-- Served by the server at `/<site>/` from `<site>/ui/dist`. Opening with `?token=` sets an HttpOnly, SameSite=Strict cookie that authenticates the app's assets and API calls; the client removes the token from the address bar.
+- **Served sandboxed, under its own token** (security review, 2026-11): an app's code is untrusted (an agent can
+  write it), and the workspace's cookie lives in the same browser. So an app opened on a project or on Home is served
+  at `<base>/a/<app token>/` from `<site>/ui/dist` (a project-local app from its folder), and every answer under that
+  prefix carries `Content-Security-Policy: sandbox allow-scripts allow-forms allow-popups allow-modals
+  allow-downloads` (no `allow-same-origin`): the page has an opaque origin, its requests and its socket say
+  `Origin: null` and, being cross-site, carry no SameSite=Strict cookie. Popups inherit the sandbox; downloads are
+  for an app's exports. The token is in the path, so the app's relative URLs (`api/...`, `ws`) carry it without a
+  cookie or a header; the server answers `Origin: null` there (CORS `Access-Control-Allow-Origin: null`, preflights
+  included) and nothing authenticates there but the path's token. The server tells the page its site, project and
+  session in `<meta name="composer-app">` (a sandboxed page has no storage). The old `/h/<site>/?app_token=` and
+  `/p/<project>/<site>/?app_token=` URLs redirect to the new form (only with that app's token); nothing else is
+  served there. A site named `a`, `h` or `p` can't be a client app.
+- **The Origin rule** (`api/auth.rs` `origin_refused`, one place): a request with an `Origin` is accepted from our own
+  origin; `Origin: null` only on an app's routes; everywhere else (the workspace's API, `/ws`, the viewer proxy,
+  pairing) it is refused, whatever cookie comes with it.
+- **Client apps** (`[apps] clients`, the chat): full clients of the workspace by design, served unsandboxed at
+  `<base>/<site>/` with the workspace's cookie (`?once=` / `?token=` sets it). Their `ui/dist` is files an agent can
+  write, so one is served only as the user approved it: `composer app approve <site>` records each file's hash
+  (`state/client_apps.json`); every file served must be one of them with the same bytes, and the page checks the
+  whole build. A changed build answers a page saying so, with the command. Only the user's command approves (no
+  agent tool, no app, no socket command reaches it). The stock chat ships no build, so there is nothing to approve at
+  `init`/`update`: after building it, approve it once.
+- An app built with an sdk before 3 doesn't know these routes: it is refused with a page saying to rebuild it
+  (`just ui-build` in the site, or `composer app rebuild`).
 - sdk client: `page`, `putPage` (hash check), `file`, `putFile` (`/api/files/...`, any bytes), `search`, `send(text, {pages, images})`, `onChange(patterns, cb)`, `isConnected()`, `site`, `session`.
 - Approving `ui-build` approves the recipe, not the app's code: a build runs `vite.config` and packages the agent may have edited (as with any approved recipe that runs project code).
 - **Shared workspace:** app state is stored as files in the site, never hidden in the app. Example:
@@ -454,7 +477,9 @@ Every session event has a monotonically increasing `seq` and is appended to `tra
 | `GET /api/launcher` | the `[[launcher]]` entries of config.toml (apps show one launch button per entry) |
 | `POST /api/launcher/{name}` | spawn that entry on the desktop: `command <args...> <folder>`, working in the folder, answering with its pid |
 | `POST /api/sessions/{id}/messages` | app push (`text`, `pages`, `images`) |
-| `GET /{site}/` | built micro app |
+| `GET /{site}/` | a client app (`[apps] clients`), its approved build only |
+| `GET /a/{app token}/...` | an app, sandboxed; its API (`api/...`) and socket (`ws`) under the same prefix |
+| `POST /api/web-session` | a new browser session of the caller's kind: `{cookie_name, value, path}` (the desktop's panes, the phone's live view set it as the cookie) |
 
 | `GET /api/sessions/{id}/project/diff` | git status + diff of the active project (changes view on remote clients) |
 
@@ -1047,6 +1072,23 @@ enabled = true
 - A server starts at the first turn that needs it (an agent listing it), and stays up. When it exits or
   fails, the next use connects again; the failure is the call's result and the server's state.
   `notifications/tools/list_changed` refreshes its tools.
+
+### Bundles (`.mcpb`)
+
+An MCP Bundle (a zip with a `manifest.json` that says how to start a local server) is installed by putting
+the file in `<home>/mcps/`; every workspace sees it. Composer unpacks it to `<home>/state/mcps/<name>/`
+(again only when the file's hash changed) and starts the server there, in the workspace's sandbox.
+
+- The name is the manifest's `name` as a slug (`Blender` → `blender`; the file name when that is empty).
+  `command`, `args` and `env` come from `server.mcp_config` (the `linux` platform override on top);
+  `${__dirname}`, `${HOME}` and `${user_config.KEY}` are filled in. A `uv` bundle gets a shared
+  `UV_CACHE_DIR` so it doesn't download its dependencies on every start.
+- Without an `[mcp.<name>]` entry the bundle registers itself with an empty `allow`: **every tool call asks
+  for approval** until you allow it. An entry without `command` or `url` overlays the bundle: its `allow`,
+  `enabled`, `env`, binds and `[mcp.<name>.config]` (the manifest's `user_config` values) apply to it. An
+  entry with its own `command` or `url` wins, and the bundle is ignored (logged).
+- A required setting that is not set leaves the server `failed` in `mcp.list`, saying which. A bundle that
+  cannot be read is skipped with a warning.
 
 ### Tools for agents
 

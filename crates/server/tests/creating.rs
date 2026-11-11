@@ -16,11 +16,20 @@ use support::*;
 /// result text and whether it failed.
 async fn run_tools(
     config: Config,
+    site: &str,
     calls: Vec<ModelToolCall>,
 ) -> (tempfile::TempDir, Vec<(String, bool)>) {
-    let mut scripts: Vec<Vec<ModelEvent>> =
-        calls.into_iter().map(|c| vec![finished(vec![c])]).collect();
-    let count = scripts.len();
+    // Enter the site first: its verbs exist only inside.
+    let mut scripts: Vec<Vec<ModelEvent>> = vec![
+        vec![finished(vec![tool_call(
+            "enter",
+            "enter_site",
+            json!({ "site": site }),
+        )])],
+        vec![ModelEvent::Content("in site".into()), finished(vec![])],
+    ];
+    let count = calls.len();
+    scripts.extend(calls.into_iter().map(|c| vec![finished(vec![c])]));
     scripts.push(vec![ModelEvent::Content("done".into()), finished(vec![])]);
     let (dir, server, _p, addr) = start_with(config, scripts).await;
     let mut socket = connect(addr, &server.token).await;
@@ -53,18 +62,16 @@ async fn run_tools(
         },
     )
     .await;
-    send(
-        &mut socket,
-        3,
-        ClientCommand::MessageSend {
-            session: session.id.clone(),
-            text: "make it".into(),
-            pages: vec![],
-            images: vec![],
-            attachments: vec![],
-        },
-    )
-    .await;
+    let message = |text: &str| ClientCommand::MessageSend {
+        session: session.id.clone(),
+        text: text.into(),
+        pages: vec![],
+        images: vec![],
+        attachments: vec![],
+    };
+    send(&mut socket, 3, message("enter the site")).await;
+    until(&mut socket, |e| matches!(e, ServerMessage::TurnDone { .. })).await;
+    send(&mut socket, 4, message("make it")).await;
     let events = until(&mut socket, |e| matches!(e, ServerMessage::TurnDone { .. })).await;
     let results: Vec<(String, bool)> = events
         .into_iter()
@@ -83,6 +90,7 @@ async fn run_tools(
 async fn new_site_writes_a_homepage_and_lists_it_on_home() {
     let (dir, results) = run_tools(
         Config::defaults(),
+        "home",
         vec![
             tool_call(
                 "a",
@@ -154,6 +162,7 @@ async fn new_project_makes_the_folder_and_registers_it() {
     let template = |site: &str| json!({ "name": "lamp", "about": "a desk lamp", "template": site });
     let (dir, results) = run_tools(
         config,
+        "projects",
         vec![
             tool_call("a", "new_project", json!({ "name": "notes", "about": "plain | notes" })),
             tool_call("b", "new_project", json!({ "name": "notes", "about": "again" })),
@@ -188,7 +197,8 @@ async fn new_project_makes_the_folder_and_registers_it() {
         results[5].0
     );
     assert!(
-        results[0].0.contains("registered it in the memory index")
+        results[0].0.contains("listed it in the projects index")
+            && results[0].0.contains("linked it from memory")
             && results[0].0.contains("now this session's active project"),
         "{}",
         results[0].0
@@ -206,33 +216,45 @@ async fn new_project_makes_the_folder_and_registers_it() {
     assert!(!projects.path().join("taken").exists());
     assert!(!projects.path().parent().unwrap().join("out").exists());
 
-    let memory = dir.path().join("sites/memory");
-    let page = std::fs::read_to_string(memory.join("projects/lamp.md")).unwrap();
+    let page = std::fs::read_to_string(dir.path().join("sites/projects/lamp.md")).unwrap();
     assert!(
-        page.contains("kind: project\n") && page.contains("workflow: plans\n"),
+        page.contains("type: project\n") && page.contains("sites: [plans]\n"),
         "{page}"
     );
     assert!(
-        page.contains(&format!("path: {}/lamp\n", projects.path().display())),
+        page.contains(&format!("root: {}/lamp\n", projects.path().display())),
         "{page}"
     );
-    let index = std::fs::read_to_string(memory.join("index.md")).unwrap();
+    let index = std::fs::read_to_string(dir.path().join("sites/memory/index.md")).unwrap();
     assert!(
         index.contains("## Projects registry\n\n| project | path | status | what it is |"),
         "{index}"
     );
     assert!(
-        index.contains("| [notes](projects/notes.md) | `"),
+        index.contains("| [notes](site://projects/notes) | `"),
         "{index}"
     );
     assert!(
-        index.contains("| active | plain / notes |\n| [lamp](projects/lamp.md)"),
+        index.contains("| active | plain / notes |\n| [lamp](site://projects/lamp)"),
         "{index}"
     );
     assert!(
-        index.contains("- [notes](projects/notes.md)\n- [lamp](projects/lamp.md)\n"),
+        index.contains("- [notes](site://projects/notes)\n- [lamp](site://projects/lamp)\n"),
         "{index}"
     );
     let registry = index.find("## Projects registry").unwrap();
     assert!(registry < index.find("## Pages").unwrap(), "{index}");
+
+    let projects_index =
+        std::fs::read_to_string(dir.path().join("sites/projects/index.md")).unwrap();
+    assert!(
+        projects_index.contains("| [notes](notes.md) |"),
+        "{projects_index}"
+    );
+    assert!(
+        projects_index.contains("| [lamp](lamp.md) |"),
+        "{projects_index}"
+    );
+    let home = std::fs::read_to_string(dir.path().join("sites/home/index.md")).unwrap();
+    assert!(home.contains("| [projects](site://projects) |"), "{home}");
 }

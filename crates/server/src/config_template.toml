@@ -162,14 +162,38 @@ inline_max_kb = 100
 # folder = "myproject/blockouts"
 # args = ["--class", "blender"]
 
+# Applications a site's `app:` (its index.md frontmatter) starts when a session enters the site.
+# The command lives here, not in the page, so declaring it is your approval. It is started
+# through the `launch` tool of the MCP server `mcp` (default "wayai"), in the session's project.
+# [applications.blender]
+# command = "blender"
+# args = []
+# env = {}
+# mcp = "wayai"
+
+# wayai's live view, served to your other devices at `<workspace>/view` behind the workspace's
+# token (view only: nothing a device sends reaches the application). Without `url` it is taken from
+# `[mcp.wayai]`'s `url` (same address, path /view). Loopback addresses only.
+# wayai asks for a bearer token, which it keeps in a file: `bearer_file` names it (`~/` is your
+# home). The proxy reads it for every request and sends `Authorization: Bearer <token>` to the
+# viewer (never to the client). Without it here, `[mcp.wayai]`'s `bearer_file` is used when the
+# viewer is at that server's address.
+# [viewer]
+# url = "http://127.0.0.1:7878/view"
+# bearer_file = "~/.local/share/wayai/token"
+
 # MCP servers whose tools your agents may use. An agent gets a server's tools by listing them in
 # its `tools:` (`github__*`, or one: `github__get_issue`); calls outside `allow` ask you first
 # ("always" remembers the tool). `${VAR}` comes from composer's environment.
+# A site (a workflow) whose index.md says `mcp: [github]` gives the server's tools to a session
+# in it only when the server lists that site here: `sites = ["coding"]`. Without `sites` no site
+# may grant it, whatever its page says (agents can write pages, not this file).
 # [mcp.github]
 # command = "github-mcp-server"
 # args = ["stdio"]
 # env = { GITHUB_PERSONAL_ACCESS_TOKEN = "${GITHUB_TOKEN}" }
 # allow = ["get_*", "list_*", "search_*"]
+# sites = ["coding"]
 # A stdio server runs in the workspace's sandbox (its sites, the toolchains, an empty `$HOME`);
 # give it what else it needs, checked like `[sandbox]` binds:
 # binds_ro = ["~/.config/github-mcp"]
@@ -178,3 +202,18 @@ inline_max_kb = 100
 # [mcp.docs]
 # url = "https://example.com/mcp"
 # headers = { Authorization = "Bearer ${DOCS_TOKEN}" }
+#
+# An HTTP server whose token is in a file (wayai): `bearer_file` is read at every connect and
+# sent as `Authorization: Bearer <token>`; a file that cannot be read fails the connect. An
+# `Authorization` in `headers` wins. The file is outside every agent's sandbox unless you bind it.
+# [mcp.wayai]
+# url = "http://127.0.0.1:7878/mcp"
+# bearer_file = "~/.local/share/wayai/token"
+#
+# An MCP bundle (`<home>/mcps/blender.mcpb`) is a server of its own name; its tools ask until allowed.
+# [mcp.blender]
+# allow = ["get_*"]
+# sites = ["3d"]                 # the sites whose `mcp: [blender]` grants its tools
+# Its unpacked code is read-only to it; it may write in the folder `$COMPOSER_BUNDLE_STATE` names
+# (`<home>/state/mcps/.run/blender/`), where a `uv` bundle's environment and cache also live.
+# config = { api_key = "..." }   # the bundle's settings

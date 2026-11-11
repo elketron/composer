@@ -31,7 +31,10 @@ impl Tool for OpenTool {
          an image file in your active project (a screenshot you took: `/abs/path.png`, `~/x.png`, \
          or a path relative to the project). And an app's work data, what it shows for a \
          project (read-only): `data://<project>/<app>/<path>` (a file; a folder lists its files), \
-         `data://<project>/` (which apps keep data there), `data://@home/<app>/...` (on Home)."
+         `data://<project>/` (which apps keep data there), `data://@home/<app>/...` (on Home). \
+         A `type: tui` page starts its terminal program on the session's desk; its control \
+         adapter (for Hunk, the `hunk` tool) drives it. A site folder lists its files, and a \
+         page's output starts with the `hash` to pass to `edit`."
     }
 
     fn parameters(&self) -> Value {
@@ -65,10 +68,17 @@ impl Tool for OpenTool {
         let url = context.url(&args.url)?;
         context.check_read(&url)?;
         let server = &context.server;
-        let page = server
-            .web
-            .read_page(&url)
-            .map_err(|e| format!("{e}. Use `search` to find pages, or `list_sites`."))?;
+        let page = match server.web.read_page(&url) {
+            Ok(page) => page,
+            Err(error) => {
+                if let Some(listing) = directory(context, &url) {
+                    return Ok(listing);
+                }
+                return Err(format!(
+                    "{error}. Use `search` to find pages, or `list_sites`."
+                ));
+            }
+        };
 
         let session = context.session.id().to_string();
         let canonical = page.url.to_string();
@@ -80,7 +90,16 @@ impl Tool for OpenTool {
                 url: canonical,
             });
 
-        let mut header = format!("url: {}", page.url);
+        // A TUI page is a capability, not just text: opening it starts its program on the
+        // session's desk. Its control adapter (the `hunk` tool) is how the agent drives it.
+        if page.frontmatter.get_str("type").as_deref() == Some("tui") {
+            let tui = crate::tui::TuiPage::parse(&page)?;
+            let started = tui.open(context, &page)?;
+            return Ok(format!("url: {}\n\n{started}\n\n{}", page.url, page.raw));
+        }
+
+        let hash = crate::content_hash(page.raw.as_bytes());
+        let mut header = format!("url: {}\nhash: {}", page.url, &hash[..12]);
         if let Some(error) = &page.frontmatter_error {
             header.push_str(&format!(
                 "\nwarning: invalid frontmatter ({error}); fix it with `edit`"
@@ -97,6 +116,42 @@ impl Tool for OpenTool {
         }
         Ok(format!("{header}\n\n{}", page.raw))
     }
+}
+
+/// A site folder `open` was asked for: list what is in it, so the model can pick a page or file.
+fn directory(context: &ToolContext, url: &SiteUrl) -> Option<String> {
+    let site = context.server.web.root().join(url.site());
+    let path = site.join(url.path());
+    if !path.is_dir() || context.server.web.check(&path).is_err() {
+        return None;
+    }
+    let mut entries: Vec<String> = Vec::new();
+    for entry in std::fs::read_dir(&path).ok()?.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.starts_with('.') {
+            continue;
+        }
+        let path = entry.path();
+        if path.is_dir() {
+            entries.push(format!("{name}/"));
+        } else if let Ok(meta) = entry.metadata() {
+            entries.push(format!("{name} ({} KB)", meta.len().div_ceil(1024)));
+        } else {
+            entries.push(name);
+        }
+    }
+    entries.sort();
+    let total = entries.len();
+    entries.truncate(200);
+    let mut text = format!(
+        "{url}: a folder ({total} entr{}). Open one by its site URL:\n",
+        if total == 1 { "y" } else { "ies" }
+    );
+    text.push_str(&entries.join("\n"));
+    if total > entries.len() {
+        text.push_str(&format!("\n… {} more", total - entries.len()));
+    }
+    Some(text)
 }
 
 /// Text beyond this is cut when an app's data file is read.

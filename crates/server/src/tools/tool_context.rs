@@ -3,7 +3,7 @@ use std::sync::Arc;
 use composer_core::SiteUrl;
 use tokio_util::sync::CancellationToken;
 
-use crate::agent::AgentDefinition;
+use crate::agent::{AgentDefinition, Site};
 use crate::server::Server;
 use crate::session::Session;
 
@@ -13,6 +13,8 @@ pub struct ToolContext {
     pub server: Arc<Server>,
     pub session: Arc<Session>,
     pub agent: Arc<AgentDefinition>,
+    /// The site the agent entered, if any: its tools are available too.
+    pub site: Option<Arc<Site>>,
     /// Cancelled when the user cancels the turn.
     pub cancel: CancellationToken,
 }

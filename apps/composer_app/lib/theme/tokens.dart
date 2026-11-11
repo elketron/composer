@@ -29,9 +29,15 @@ const err = Color(0xFFE07C7C);
 /// The agent: tool rows, thinking.
 const info = Color(0xFFB39CE0);
 
-// Corners: 2px for small things (badges, dots, markers), 5px for everything else.
-const radiusSm = 2.0;
-const radius = 5.0;
+// Corners (phone only; the TUI stays square). Cards and sheets 5, buttons, inputs and chips 4,
+// small labels 3, status dots 2. The live view and the bottom bar are square, edge to edge.
+const radiusDot = 2.0;
+const radiusSm = 3.0;
+const radiusControl = 4.0;
+const radiusCard = 5.0;
+
+/// Message bubbles, cards and everything not named above.
+const radius = radiusCard;
 
 const fontUi = 'Inter';
 const fontMono = 'JetBrainsMono';

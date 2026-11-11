@@ -11,9 +11,10 @@ mod support;
 use composer_core::SiteUrl;
 use composer_protocol::{ApprovalDecision, ApprovalKind, ChangedBy, ClientCommand, ServerMessage};
 use composer_server::Config;
-use composer_server::pipeline::learning::{edit_diff, keep_agent_output};
+use composer_server::pipeline::learning::{edit_diff, gate_approved, keep_agent_output};
 use composer_server::pipeline::{Work, pipeline};
 use composer_server::provider::ModelEvent;
+use composer_server::worker::ticket::set_field;
 use serde_json::json;
 use support::*;
 
@@ -70,6 +71,7 @@ async fn recurring_edits_propose_an_amendment() {
         .await;
         let work = Work::load(pipeline(&server, "flow").unwrap(), name).unwrap();
         let output = flow.join(name).join("01_draft/draft.md");
+        std::fs::create_dir_all(output.parent().unwrap()).unwrap();
         std::fs::write(
             &output,
             "# Draft\n\nThis note, which was written today, is about many things.\n\nMore.\n",
@@ -91,14 +93,15 @@ async fn recurring_edits_propose_an_amendment() {
                 "{diff}"
             );
         }
-        let url = SiteUrl::new("flow", &format!("{name}/01_draft/_stage.md")).unwrap();
-        let raw = server
-            .web
-            .read_page(&url)
-            .unwrap()
-            .raw
-            .replace("status: waiting", "status: approved");
+        // Approve the gate on the work's page, then record what you changed (the board writes
+        // the page; the next run asks the server to record the edit).
+        let url = SiteUrl::new("flow", &format!("{name}/index.md")).unwrap();
+        let raw = server.web.read_page(&url).unwrap().raw;
+        let raw = set_field(&raw, "stage", "01_draft");
+        let raw = set_field(&raw, "status", "approved");
+        let raw = set_field(&raw, "done", "[\"01_draft\"]");
         server.write_page(&url, &raw, ChangedBy::App).unwrap();
+        gate_approved(&server, &work, "01_draft");
     }
 
     // The second edited work asks the model, which proposes amending the contract.
@@ -133,14 +136,16 @@ async fn recurring_edits_propose_an_amendment() {
             && !prompt.contains("work=\\\"c\\\""),
         "{prompt}"
     );
-    let stage =
-        |name: &str| std::fs::read_to_string(flow.join(name).join("01_draft/_stage.md")).unwrap();
-    assert!(
-        stage("a").contains("edited: true") && stage("a").contains("learned: \"proposed\""),
-        "{}",
-        stage("a")
+    let state = |name: &str| Work::load(pipeline(&server, "flow").unwrap(), name).unwrap();
+    assert_eq!(
+        state("a").stage_field("01_draft", "edited").as_deref(),
+        Some("true")
     );
-    assert!(!stage("c").contains("edited: true"));
+    assert_eq!(
+        state("a").stage_field("01_draft", "learned").as_deref(),
+        Some("proposed")
+    );
+    assert_eq!(state("c").stage_field("01_draft", "edited"), None);
 
     // The proposal is a page too; approving it amends the contract.
     let proposals: Vec<_> = std::fs::read_dir(flow.join("_proposals"))

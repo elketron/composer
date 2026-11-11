@@ -6,8 +6,9 @@ import '../../theme/composer_theme.dart';
 import '../../theme/tokens.dart' as t;
 import '../format.dart';
 import 'activity_dot.dart';
+import 'workflow_tag.dart';
 
-/// A session in the Chats list: agent, state, last message, its project, and for an
+/// A session in the Inbox: agent, state, last message, its project, and for an
 /// orchestrator the workers it runs, one line each.
 class SessionCard extends StatelessWidget {
   const SessionCard({super.key, required this.status, required this.session, required this.onTap, this.unread = false, this.onWorker});
@@ -90,7 +91,10 @@ class SessionCard extends StatelessWidget {
               ),
             if (session.parent == null) ...[
               const SizedBox(height: 7),
-              Row(children: [_Chip(project ?? 'no project')]),
+              Row(children: [
+                _Chip(project ?? 'no project'),
+                if (session.site != null) ...[const SizedBox(width: 6), WorkflowTag(session.site!, key: Key('workflow-tag-${session.id}'))],
+              ]),
             ],
           ]),
         ),

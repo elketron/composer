@@ -71,6 +71,7 @@ async fn the_agent_puts_things_on_the_stage() {
         server: server.clone(),
         session: session.clone(),
         agent: Arc::new(AgentDefinition::load(&server.web, "stager").unwrap()),
+        site: None,
         cancel: CancellationToken::new(),
     };
     let tool = |name: &'static str, args: Value| {
@@ -155,4 +156,48 @@ async fn the_agent_puts_things_on_the_stage() {
         .unwrap();
     assert_eq!(response["apps"][0]["site"], "cad");
     assert_eq!(response["apps"][0]["tile_text"], "2 parts changed");
+}
+
+#[tokio::test]
+async fn the_agent_puts_the_live_view_on_the_stage_when_there_is_one() {
+    let mut with = Config::defaults();
+    with.viewer.url = "http://127.0.0.1:9/view".into();
+    for (config, viewer) in [(Config::defaults(), false), (with, true)] {
+        let (_dir, server, _provider, _addr) = start_with(config, vec![]).await;
+        server
+            .write_page(
+                &SiteUrl::new("agents", "stager.md").unwrap(),
+                "---\ntitle: stager\ntype: agent\nname: stager\ntools: [desk]\nsites: all\n---\nShows.\n",
+                ChangedBy::External,
+            )
+            .unwrap();
+        let session = server.sessions.create("stager", None).unwrap();
+        let context = ToolContext {
+            server: server.clone(),
+            session: session.clone(),
+            agent: Arc::new(AgentDefinition::load(&server.web, "stager").unwrap()),
+            site: None,
+            cancel: CancellationToken::new(),
+        };
+        let result = server
+            .tools
+            .call_value(&context, "desk", json!({ "live": true }))
+            .await;
+        if viewer {
+            assert!(
+                !result.is_error && result.text.contains("live"),
+                "{}",
+                result.text
+            );
+            let desk = session.desk();
+            assert!(desk.tabs[0].unseen && desk.active.is_none(), "{desk:?}");
+        } else {
+            assert!(
+                result.is_error && result.text.contains("[viewer]"),
+                "{}",
+                result.text
+            );
+            assert!(session.desk().tabs.is_empty());
+        }
+    }
 }

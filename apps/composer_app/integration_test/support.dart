@@ -42,6 +42,18 @@ Future<void> pumpUntilGone(WidgetTester tester, Finder finder, {int seconds = 20
   fail('timed out waiting for $finder to go');
 }
 
+/// How many seconds a test stands still at each [shot]; 0 (the default) skips them. A script that
+/// watches the test's output takes a screenshot of the emulator at every `SHOT <name>` line.
+const shotPause = int.fromEnvironment('SHOT_PAUSE');
+
+/// A moment to photograph: prints `SHOT <name>` and waits [shotPause] seconds (not at all by default).
+Future<void> shot(WidgetTester tester, String name) async {
+  if (shotPause == 0) return;
+  // ignore: avoid_print
+  print('SHOT $name');
+  await settle(tester, seconds: shotPause);
+}
+
 /// Lets real time pass while painting (and screenshots get taken).
 Future<void> settle(WidgetTester tester, {required int seconds}) async {
   for (var i = 0; i < seconds * 5; i++) {
@@ -61,7 +73,7 @@ Finder richText(String text) => find.byWidgetPredicate(
     );
 
 /// Starts the app (a fresh install: no servers) and pairs it with [pairLine]; done once the
-/// Chats tab shows.
+/// Inbox tab shows.
 Future<void> startPaired(WidgetTester tester) async {
   expect(pairLine, isNotEmpty, reason: 'pass --dart-define=PAIR_LINE=...');
   app.main();
@@ -93,15 +105,20 @@ Future<void> pairAnother(WidgetTester tester, String login) async {
   await tester.pumpAndSettle();
 }
 
-/// New chat from the Chats tab, then [text] sent.
-Future<void> sendInNewChat(WidgetTester tester, String text) async {
-  await tester.tap(find.byKey(const Key('new-chat')));
+/// The New chat sheet's Start, tapped once the sheet is up; the chat page is open and empty after.
+Future<void> startChat(WidgetTester tester) async {
   await pumpUntil(tester, find.byKey(const Key('start-chat')));
   // The sheet is still sliding in when its button first exists.
   await tester.pumpAndSettle();
   await tester.tap(find.byKey(const Key('start-chat')));
   await pumpUntil(tester, find.byKey(const Key('message')));
   await pumpUntil(tester, find.text('Say something to start.'));
+}
+
+/// New chat from the Inbox tab, then [text] sent.
+Future<void> sendInNewChat(WidgetTester tester, String text) async {
+  await tester.tap(find.byKey(const Key('new-chat')));
+  await startChat(tester);
   await tester.enterText(find.byKey(const Key('message')), text);
   await tester.pump();
   await tester.tap(find.byKey(const Key('send')));

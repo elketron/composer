@@ -1,6 +1,7 @@
 ---
 title: Plans
 type: index
+tools: []
 ---
 # Plans
 
@@ -17,7 +18,7 @@ One page per plan: `<name>.md`, or `<name>/index.md` with sub-pages for large pl
 title: Server API
 type: plan
 status: active        # draft | active | done | dropped
-project: composer     # matches site://memory/projects/<project>
+project: site://projects/composer   # the project hub it belongs to
 tags: [api]
 updated: 2026-10-18
 ---
@@ -39,6 +40,8 @@ One or two sentences: what done looks like.
 ## Rules
 
 - Update `status` and tick steps as work progresses.
-- Link each step that became a ticket to that ticket.
+- Link each step that became a ticket to that ticket, and each longer run of work to its work in
+  the pipeline site. The output itself is in the project's `project/` view, not in the plan.
 - Record decisions with their reason, so later work doesn't re-litigate them.
-- When a plan is `done`, move lasting knowledge into [memory](site://memory).
+- When a plan is `done`, move lasting knowledge into [memory](site://memory) or the
+  [project page](site://projects), then close it.

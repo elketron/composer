@@ -25,7 +25,7 @@ pub struct McpClient {
 
 impl McpClient {
     /// Starts or reaches the server, does the handshake and lists its tools. A stdio server
-    /// starts in `sandbox` (with its own `binds_*` added), in the workspace's sites, with
+    /// starts in `sandbox` (with its own `binds_*` added), in the workspace's sites (or its `cwd`), with
     /// `workspace`'s variables set (its own `env` on top).
     pub async fn connect(
         name: &str,
@@ -33,6 +33,9 @@ impl McpClient {
         workspace: &BTreeMap<String, String>,
         sandbox: &SandboxSpec,
     ) -> Result<Self, String> {
+        if let Some(problem) = &config.problem {
+            return Err(problem.clone());
+        }
         let transport: Box<dyn Transport> = if !config.command.is_empty() {
             let mut env = workspace.clone();
             for (key, value) in &config.env {
@@ -45,8 +48,17 @@ impl McpClient {
             for bind in &config.binds_rw {
                 spec = spec.with_rw(expand_home(&expand(bind, workspace)?));
             }
-            let sites = spec.sites().to_path_buf();
-            let mut command = spec.in_dir(sites).command(&config.command)?;
+            let dir = if config.cwd.is_empty() {
+                spec.sites().to_path_buf()
+            } else {
+                let cwd = expand_home(&expand(&config.cwd, workspace)?);
+                // A bundle's code is bound read-only (its own `binds_ro`); it writes elsewhere.
+                if !config.cwd_read_only {
+                    spec = spec.with_rw(cwd.clone());
+                }
+                cwd
+            };
+            let mut command = spec.in_dir(dir).command(&config.command)?;
             command.args(&config.args).envs(&env);
             Box::new(StdioTransport::spawn(
                 name,
@@ -55,11 +67,22 @@ impl McpClient {
                 CALL_TIMEOUT,
             )?)
         } else if !config.url.is_empty() {
-            let headers = config
+            let mut headers: BTreeMap<String, String> = config
                 .headers
                 .iter()
                 .map(|(k, v)| Ok((k.clone(), expand(v, workspace)?)))
                 .collect::<Result<_, String>>()?;
+            // `bearer_file`: read now, at every connect (the server may have restarted with a new
+            // token; a 401 ends the connection, so the next use connects and reads again). An
+            // `Authorization` the user wrote in `headers` wins.
+            let own_authorization = headers
+                .keys()
+                .any(|name| name.eq_ignore_ascii_case("authorization"));
+            if !config.bearer_file.trim().is_empty() && !own_authorization {
+                let file = expand_home(&expand(config.bearer_file.trim(), workspace)?);
+                let token = crate::viewer_upstream::read_bearer(&file)?;
+                headers.insert("Authorization".into(), format!("Bearer {token}"));
+            }
             Box::new(HttpTransport::new(
                 name,
                 &config.url,

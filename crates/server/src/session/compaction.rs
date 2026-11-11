@@ -167,11 +167,12 @@ async fn save_memory(
     let mut restricted = agent.clone();
     restricted.tools = Some(MEMORY_TOOLS.iter().map(|t| t.to_string()).collect());
     let restricted = Arc::new(restricted);
-    let tools = server.tools.specs_for(&restricted);
+    let tools = server.tools.specs_for(&restricted, None);
     let context = ToolContext {
         server: server.clone(),
         session: session.clone(),
         agent: restricted,
+        site: None,
         cancel: cancel.clone(),
     };
 

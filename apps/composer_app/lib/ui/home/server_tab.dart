@@ -12,6 +12,8 @@ import '../format.dart';
 import '../status_dot.dart';
 import '../store_scope.dart';
 import '../workspace_mark.dart';
+import '../projects/project_list_view.dart';
+import '../projects/project_screen.dart';
 import 'project_harnesses.dart';
 import 'section_label.dart';
 
@@ -66,6 +68,26 @@ class ServerTab extends StatelessWidget {
             if ((info.projectsDir ?? '').isNotEmpty) kv('projects', info.projectsDir!),
           ],
         ]),
+      ),
+      const SectionLabel('Projects'),
+      OutlinedButton.icon(
+        key: const Key('open-projects'),
+        style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(44), alignment: Alignment.centerLeft),
+        onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
+          builder: (_) => Scaffold(
+            appBar: AppBar(title: const Text('Projects')),
+            body: ListenableBuilder(
+              listenable: store,
+              builder: (page, _) => ProjectListView(
+                url: server.url,
+                status: store.state.statusOf(server.url),
+                onPick: (p) => ProjectScreen.open(page, server.url, p.folder ?? p.path),
+              ),
+            ),
+          ),
+        )),
+        icon: const Icon(Icons.folder_outlined, size: 18),
+        label: Text('Projects (${status.projects.length})'),
       ),
       ProjectHarnesses(url: server.url, status: status),
       const SectionLabel('Workspaces'),

@@ -142,6 +142,8 @@ pub enum Pending {
     Models,
     /// `model.set`: say what it uses now.
     ModelSet,
+    /// `site.set`: say what happened, the site's application included.
+    SiteSet,
     /// `project.overview` for the project view.
     Overview,
     /// `mcp.list`: say how the servers are.

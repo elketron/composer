@@ -50,6 +50,10 @@ impl Component for StatusBar {
                     .map(short_path)
                     .unwrap_or_else(|| "no project".into());
                 left.push(Span::styled(project, theme::muted()));
+                if let Some(site) = info.and_then(|i| i.site.as_deref()) {
+                    left.push(sep());
+                    left.push(Span::styled(format!("site {site}"), theme::muted()));
+                }
                 left.push(sep());
                 let ctx = info.map(|i| i.context_tokens).unwrap_or(0);
                 let ctx_style = if ctx > state.conn.context_limit * 9 / 10 {
@@ -122,5 +126,55 @@ fn kilo(n: u32) -> String {
         format!("{}K", n / 1000)
     } else {
         n.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use composer_protocol::{SessionInfo, TurnState};
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
+
+    use super::*;
+    use crate::store::types::Startup;
+
+    fn bar(site: Option<&str>) -> String {
+        let mut state = AppState::new(Startup::default(), 160_000);
+        state.conn.state = ConnState::Connected;
+        state.session.upsert(SessionInfo {
+            id: "s1".into(),
+            agent: "default".into(),
+            project: None,
+            site: site.map(Into::into),
+            ticket: None,
+            parent: None,
+            worker: None,
+            state: TurnState::Idle,
+            last_seq: 0,
+            context_tokens: 0,
+            model: None,
+            preview: None,
+            updated: String::new(),
+        });
+        state.session.current = Some("s1".into());
+        let mut terminal = Terminal::new(TestBackend::new(100, 1)).unwrap();
+        terminal
+            .draw(|frame| StatusBar.render(frame, frame.area(), &state))
+            .unwrap();
+        terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect()
+    }
+
+    #[test]
+    fn the_site_shows_next_to_the_project_only_when_set() {
+        let inside = bar(Some("3d"));
+        assert!(inside.contains("no project │ site 3d │ ctx"), "{inside}");
+        let outside = bar(None);
+        assert!(!outside.contains("site "), "{outside}");
     }
 }

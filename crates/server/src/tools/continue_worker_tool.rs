@@ -19,7 +19,8 @@ impl Tool for ContinueWorkerTool {
          worker that is making progress; one going in circles needs a better hint, or the user. \
          Also sends a worker that finished (or stopped) back to its ticket with its context: \
          review findings to fix, a question about its Result. Prefer it to a new fix ticket: it \
-         already knows the code."
+         already knows the code. A worker still running gets the note queued: it goes on with it \
+         when that run finishes."
     }
 
     fn parameters(&self) -> Value {

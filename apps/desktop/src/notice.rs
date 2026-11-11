@@ -40,6 +40,20 @@ impl Notice {
         }
     }
 
+    /// What `site.set` answered: the sentence it replied with, or why it failed.
+    pub fn workflow(reply: Result<String, String>) -> Self {
+        match reply {
+            Ok(text) => Self {
+                summary: "Workflow",
+                body: text,
+            },
+            Err(why) => Self {
+                summary: "Workflow not changed",
+                body: why,
+            },
+        }
+    }
+
     /// Shown by the desktop's notification service (off the window's thread: it may block).
     pub fn show(self) {
         std::thread::spawn(move || {
@@ -58,6 +72,15 @@ mod tests {
 
     fn message(json: serde_json::Value) -> ServerMessage {
         serde_json::from_value(json).unwrap()
+    }
+
+    #[test]
+    fn a_workflow_switch_says_what_happened_or_why_not() {
+        let said = "Entered 3d (3D). Started the blender application.";
+        assert_eq!(Notice::workflow(Ok(said.into())).body, said);
+        let refused = Notice::workflow(Err("no site `x`".into()));
+        assert_eq!(refused.summary, "Workflow not changed");
+        assert_eq!(refused.body, "no site `x`");
     }
 
     #[test]

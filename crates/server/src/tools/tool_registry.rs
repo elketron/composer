@@ -3,7 +3,7 @@ use std::sync::Arc;
 use composer_protocol::ToolInfo;
 use serde_json::Value;
 
-use crate::agent::AgentDefinition;
+use crate::agent::{AgentDefinition, Site};
 use crate::mcp_clients::McpServers;
 use crate::provider::{ModelToolCall, ToolSpec};
 use crate::server::Server;
@@ -12,7 +12,10 @@ use crate::tools::answer_approval_tool::AnswerApprovalTool;
 use crate::tools::continue_worker_tool::ContinueWorkerTool;
 use crate::tools::desk_tool::DeskTool;
 use crate::tools::edit_tool::EditTool;
+use crate::tools::enter_site_tool::EnterSiteTool;
 use crate::tools::finish_tool::FinishTool;
+use crate::tools::hunk_tool::HunkTool;
+use crate::tools::leave_site_tool::LeaveSiteTool;
 use crate::tools::list_sites_tool::ListSitesTool;
 use crate::tools::merge_ticket_tool::MergeTicketTool;
 use crate::tools::new_app_tool::NewAppTool;
@@ -53,6 +56,8 @@ impl ToolRegistry {
                 Arc::new(WriteTool),
                 Arc::new(EditTool),
                 Arc::new(SetProjectTool),
+                Arc::new(EnterSiteTool),
+                Arc::new(LeaveSiteTool),
                 Arc::new(ActionsTool),
                 Arc::new(RunTool),
                 Arc::new(NewSiteTool),
@@ -74,21 +79,27 @@ impl ToolRegistry {
                 Arc::new(SelectionTool),
                 Arc::new(TerminalReadTool),
                 Arc::new(TerminalSendTool),
+                Arc::new(HunkTool),
                 Arc::new(FinishTool),
             ],
         }
     }
 
-    pub fn specs_for(&self, agent: &AgentDefinition) -> Vec<ToolSpec> {
+    pub fn specs_for(&self, agent: &AgentDefinition, site: Option<&Site>) -> Vec<ToolSpec> {
         self.tools
             .iter()
-            .filter(|t| agent.allows_tool(t.name()))
+            .filter(|t| Self::allowed(agent, site, t.name()))
             .map(|t| ToolSpec {
                 name: t.name().to_string(),
                 description: t.description().to_string(),
                 parameters: t.parameters(),
             })
             .collect()
+    }
+
+    /// The agent's base `tools:` plus the tools of the site it entered.
+    fn allowed(agent: &AgentDefinition, site: Option<&Site>, tool: &str) -> bool {
+        agent.allows_tool(tool) || site.is_some_and(|site| site.allows_tool(tool))
     }
 
     /// The native tools `agent` lists, then the MCP tools it lists (servers it can reach).
@@ -99,29 +110,43 @@ impl ToolRegistry {
         server: &Server,
         session: &str,
         agent: &AgentDefinition,
+        site: Option<&Site>,
     ) -> Vec<ToolSpec> {
-        let mut specs = self.specs_for(agent);
+        let mut specs = self.specs_for(agent, site);
         match &server.parent {
-            Some(parent) if !agent.mcp_servers().is_empty() => match parent.tools(session).await {
-                Ok(tools) => specs.extend(tools.into_iter().filter(|t| t.name.contains("__")).map(
-                    |t| ToolSpec {
-                        name: t.name,
-                        description: t.description,
-                        parameters: t.parameters,
-                    },
-                )),
-                Err(e) => tracing::warn!("MCP tools from the parent: {e}"),
-            },
+            Some(parent)
+                if !agent.mcp_servers().is_empty()
+                    || site.is_some_and(|site| !site.mcp.is_empty()) =>
+            {
+                match parent.tools(session).await {
+                    Ok(tools) => specs.extend(
+                        tools
+                            .into_iter()
+                            .filter(|t| t.name.contains("__"))
+                            .map(|t| ToolSpec {
+                                name: t.name,
+                                description: t.description,
+                                parameters: t.parameters,
+                            }),
+                    ),
+                    Err(e) => tracing::warn!("MCP tools from the parent: {e}"),
+                }
+            }
             Some(_) => {}
-            None => specs.extend(server.mcp().specs_for(agent).await),
+            None => specs.extend(server.mcp().specs_for(agent, site).await),
         }
         specs
     }
 
     /// The same, for the protocol (`tool.list`, answered by the parent).
-    pub async fn infos_for(&self, mcp: &McpServers, agent: &AgentDefinition) -> Vec<ToolInfo> {
-        let mut specs = self.specs_for(agent);
-        specs.extend(mcp.specs_for(agent).await);
+    pub async fn infos_for(
+        &self,
+        mcp: &McpServers,
+        agent: &AgentDefinition,
+        site: Option<&Site>,
+    ) -> Vec<ToolInfo> {
+        let mut specs = self.specs_for(agent, site);
+        specs.extend(mcp.specs_for(agent, site).await);
         specs
             .into_iter()
             .map(|spec| ToolInfo {
@@ -142,14 +167,15 @@ impl ToolRegistry {
 
     /// Runs a call with parsed arguments (models, and harnesses through `tool.call`).
     pub async fn call_value(&self, context: &ToolContext, name: &str, args: Value) -> CallResult {
-        let Some(tool) = self
-            .tools
-            .iter()
-            .find(|t| t.name() == name && context.agent.allows_tool(t.name()))
-        else {
+        let Some(tool) = self.tools.iter().find(|t| {
+            t.name() == name && Self::allowed(&context.agent, context.site.as_deref(), t.name())
+        }) else {
             if let Some(parent) = &context.server.parent
                 && name.contains("__")
-                && context.agent.allows_mcp_tool(name)
+                && context
+                    .server
+                    .mcp()
+                    .allows(&context.agent, context.site.as_deref(), name)
             {
                 return parent
                     .call_tool(context.session.id(), name, args)

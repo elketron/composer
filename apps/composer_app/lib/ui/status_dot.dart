@@ -19,7 +19,7 @@ class StatusDot extends StatelessWidget {
             LinkState.connecting => t.warn,
             LinkState.offline => t.err,
           },
-          borderRadius: BorderRadius.circular(t.radiusSm),
+          borderRadius: BorderRadius.circular(t.radiusDot),
         ),
       );
 }

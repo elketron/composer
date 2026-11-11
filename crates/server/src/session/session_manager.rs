@@ -50,6 +50,7 @@ impl SessionManager {
             id: id.clone(),
             agent: agent.to_string(),
             project,
+            site: None,
             ticket: None,
             parent: None,
             worker: None,

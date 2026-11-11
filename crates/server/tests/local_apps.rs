@@ -102,7 +102,7 @@ async fn a_project_local_app_runs_once_allowed() {
         "probe:\n    echo seen > \"$APP_DATA/probe.txt\"\n",
     );
     write(&app.join("ui/dist/index.html"), "<p>the viewer</p>");
-    write(&app.join("ui/dist/assets/a.js"), "d=\"composer-sdk:2\"");
+    write(&app.join("ui/dist/assets/a.js"), "d=\"composer-sdk:3\"");
     let mut config = Config::defaults();
     config.projects.dir = root.display().to_string();
     let (dir, server, _provider, addr) = start_with(config, vec![]).await;
@@ -147,12 +147,12 @@ async fn a_project_local_app_runs_once_allowed() {
         .as_str()
         .unwrap()
         .to_string();
-    let (status, page) = call(addr, Method::GET, "/p/game/viewer/", &me, None).await;
+    let (status, page) = call(addr, Method::GET, &format!("/a/{me}/"), &me, None).await;
     assert_eq!((status, page.contains("the viewer")), (200, true), "{page}");
     let (status, body) = call(
         addr,
         Method::POST,
-        "/p/game/viewer/api/actions/viewer/probe",
+        &format!("/a/{me}/api/actions/viewer/probe"),
         &me,
         Some(json!({ "args": [] })),
     )
@@ -171,7 +171,7 @@ async fn a_project_local_app_runs_once_allowed() {
     let (status, body) = call(
         addr,
         Method::PUT,
-        "/p/game/viewer/api/pages/viewer/x.md",
+        &format!("/a/{me}/api/pages/viewer/x.md"),
         &me,
         Some(json!({ "content": "x" })),
     )

@@ -2,6 +2,11 @@
 title: Video
 type: pipeline
 needs_project: false
+stages:
+  - { id: 01_research, file: stages/01_research.md, needs: [] }
+  - { id: 02_script, file: stages/02_script.md, needs: [01_research] }
+  - { id: 03_storyboard, file: stages/03_storyboard.md, needs: [02_script] }
+  - { id: 04_production, file: stages/04_production.md, needs: [03_storyboard] }
 ---
 # Video
 
@@ -26,7 +31,7 @@ markdown; anything big (Remotion code, footage, renders) goes to a project, the 
 |------|-------|
 | `_config/` | `voice.md` (how it sounds), `structure.md` (scenes, timing); a work's own `_config/` file wins |
 | `stages/` | the stage contracts |
-| `<work>/index.md` | the video: its project, brief and stages |
-| `<work>/NN_stage/` | what the stage wrote, and `_stage.md` (its state) |
+| `<work>/index.md` | the video: its project, brief, state and the stages it is running |
+| `<work>/NN_stage/` | what the stage wrote |
 
 ## Works

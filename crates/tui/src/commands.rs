@@ -4,7 +4,7 @@ use crate::action::Action;
 use crate::store::types::PickerKind;
 
 /// Every command, as shown by help: (usage, what it does).
-pub const COMMANDS: [(&str, &str); 23] = [
+pub const COMMANDS: [(&str, &str); 24] = [
     (
         ":new [agent]",
         "start a new session (default agent, or e.g. orchestrator)",
@@ -70,6 +70,10 @@ pub const COMMANDS: [(&str, &str); 23] = [
     (
         ":app [site]",
         "open a site's app in the browser (default: the page's site)",
+    ),
+    (
+        ":workflow [site]",
+        "enter a workflow site for this session (its page, tools and app; alias :site); no name leaves it",
     ),
     (":compact", "save memory, then summarize older messages now"),
     (":follow", "toggle following the agent's pages (F)"),
@@ -208,6 +212,11 @@ pub fn parse_command(line: &str) -> Result<Action, String> {
                 .trim_end_matches('/')
                 .to_string()
         }))),
+        "workflow" | "site" => Ok(Action::SetSite(arg.map(|s| {
+            s.trim_start_matches("site://")
+                .trim_end_matches('/')
+                .to_string()
+        }))),
         "back" => Ok(Action::JumpBack),
         "help" | "h" => Ok(Action::ToggleHelp),
         "" => Err(String::new()),
@@ -298,6 +307,16 @@ mod tests {
             Action::SetProject(Some("game".into()))
         );
         assert_eq!(parse_command("scope").unwrap(), Action::Scope(None));
+        assert_eq!(
+            parse_command("workflow 3d").unwrap(),
+            Action::SetSite(Some("3d".into()))
+        );
+        assert_eq!(
+            parse_command("site site://3d/").unwrap(),
+            Action::SetSite(Some("3d".into()))
+        );
+        assert_eq!(parse_command("workflow").unwrap(), Action::SetSite(None));
+        assert_eq!(parse_command("site  ").unwrap(), Action::SetSite(None));
         assert!(parse_command("attach").is_err());
         assert!(parse_command("frobnicate").is_err());
     }

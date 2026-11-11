@@ -1,0 +1,466 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>composer — the project hub</title>
+<style>
+  :root {
+    --bg: #0c0d0f; --surface: #121317; --raised: #191b20; --overlay: #1f2228;
+    --border: #24272d; --border-strong: #363a42;
+    --text: #d5d8de; --muted: #868c96; --faint: #50555e;
+    --accent: #8fb3e8; --accent-dim: #8fb3e81f;
+    --ok: #8cc29a; --warn: #d6b06a; --err: #e07c7c; --info: #b39ce0;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); }
+  body {
+    font: 13px/1.55 "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    -webkit-font-smoothing: antialiased;
+    padding: 32px 28px 80px;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .wrap { max-width: 1240px; margin: 0 auto; }
+  header { border-bottom: 1px solid var(--border); padding-bottom: 22px; margin-bottom: 26px; }
+  .brand { color: var(--accent); font-size: 11px; letter-spacing: .18em; text-transform: uppercase; }
+  h1 { font-size: 26px; line-height: 1.15; margin: 10px 0 8px; letter-spacing: -.02em; font-weight: 600; }
+  h1 span { color: var(--muted); font-weight: 400; }
+  .sub { color: var(--muted); max-width: 820px; margin: 0; }
+  nav { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+  nav a { border: 1px solid var(--border); padding: 4px 9px; font-size: 11px; color: var(--muted); }
+  nav a:hover { border-color: var(--border-strong); color: var(--text); text-decoration: none; }
+  .legend { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 16px; font-size: 11px; color: var(--muted); }
+  .legend i { display: inline-block; width: 8px; height: 8px; margin-right: 6px; vertical-align: 0px; }
+  section { margin: 34px 0 0; }
+  .panel { border: 1px solid var(--border); background: var(--surface); padding: 20px 22px 16px; }
+  h2 { font-size: 15px; margin: 0 0 4px; letter-spacing: .01em; }
+  h2 .n { color: var(--faint); margin-right: 10px; font-weight: 400; }
+  .lede { color: var(--muted); margin: 0 0 16px; max-width: 900px; }
+  .lede b { color: var(--text); font-weight: 500; }
+  svg { width: 100%; height: auto; display: block; }
+
+  /* svg shapes and text */
+  .box { fill: var(--surface); stroke: var(--border); stroke-width: 1; }
+  .box.site { fill: var(--surface); }
+  .box.project { stroke: var(--accent); }
+  .box.hot { fill: #151b24; stroke: var(--accent); }
+  .box.ok { stroke: var(--ok); }
+  .box.warn { stroke: var(--warn); }
+  .box.err { stroke: var(--err); }
+  .kicker { fill: var(--muted); font-size: 10px; letter-spacing: .14em; }
+  .title { fill: var(--text); font-size: 15px; font-weight: 600; }
+  .mono { fill: var(--text); font-size: 11px; }
+  .mono.dim, .dim { fill: var(--muted); }
+  .mono.faint, .faint { fill: var(--faint); }
+  .mono.accent, .accent { fill: var(--accent); }
+  .mono.ok { fill: var(--ok); }
+  .mono.warn { fill: var(--warn); }
+  .mono.err { fill: var(--err); }
+  .link { stroke: var(--border-strong); stroke-width: 1.5; fill: none; }
+  .link.accent { stroke: var(--accent); }
+  .link.ok { stroke: var(--ok); }
+  .link.warn { stroke: var(--warn); }
+  .link.err { stroke: var(--err); }
+
+  .note { color: var(--faint); font-size: 11px; margin: 12px 0 0; }
+  .note b { color: var(--muted); font-weight: 500; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .card { border: 1px solid var(--border); background: var(--surface); padding: 16px 18px; }
+  .card h3 { margin: 0 0 6px; font-size: 13px; }
+  .card p { margin: 0; color: var(--muted); font-size: 12px; }
+  .card .tag { display: inline-block; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); margin-bottom: 8px; }
+  .card.read { border-top: 2px solid var(--muted); }
+  .card.write { border-top: 2px solid var(--warn); }
+  .card.worktree { border-top: 2px solid var(--accent); }
+  code, .mono { font-family: inherit; }
+  .k { color: var(--accent); }
+  .dim { color: var(--muted); }
+  .faint { color: var(--faint); }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--faint); font-weight: 400; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; }
+  td:first-child { color: var(--muted); white-space: nowrap; }
+  pre { margin: 0; background: var(--bg); border: 1px solid var(--border); padding: 12px 14px; overflow: auto; font-size: 12px; color: var(--text); }
+  pre .c { color: var(--faint); }
+  pre .a { color: var(--accent); }
+  .flow { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+  footer { margin-top: 36px; padding-top: 14px; border-top: 1px solid var(--border); color: var(--faint); font-size: 11px; }
+  @media (max-width: 820px) { .grid2, .grid3, .flow { grid-template-columns: 1fr; } body { padding: 20px 14px 60px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="brand">composer / design</div>
+  <h1>The project hub <span>— sites operate on a project</span></h1>
+  <p class="sub">
+    A project is a folder and a page. A site is a capability that operates on it. A work is one
+    instance of a site on a project. The project page is the hub; inside every work,
+    <span class="k">project/</span> is the same project for the agent and the app.
+  </p>
+  <nav>
+    <a href="#shape">01 · the shape</a>
+    <a href="#work">02 · a work</a>
+    <a href="#flow">03 · the worktree / diff flow</a>
+    <a href="#source">04 · local vs work</a>
+    <a href="#parity">05 · agent ↔ app</a>
+    <a href="#modes">06 · modes</a>
+    <a href="#page">07 · the project page</a>
+  </nav>
+  <div class="legend">
+    <span><i style="background:#8fb3e8"></i>project / project view</span>
+    <span><i style="background:#b39ce0"></i>site (capability)</span>
+    <span><i style="background:#8cc29a"></i>work / review</span>
+    <span><i style="background:#d6b06a"></i>worktree / write</span>
+    <span><i style="background:#50555e"></i>file or flow</span>
+  </div>
+</header>
+
+<!-- 01 · THE SHAPE -->
+<section id="shape">
+  <div class="panel">
+    <h2><span class="n">01</span>The shape</h2>
+    <p class="lede">
+      One project, three sites. Each site has its own works. The project page lists the sites;
+      a site can be used on many projects; <b>a work is the instance that ties one site to one project.</b>
+    </p>
+    <svg viewBox="0 0 1200 580" role="img" aria-label="Project A is the hub. Coding, video and 3D sites operate on it, each with its own works.">
+      <defs>
+        <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#50555e"/></marker>
+        <marker id="aa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#8fb3e8"/></marker>
+      </defs>
+
+      <rect x="40" y="60" width="340" height="238" class="box project"/>
+      <text x="64" y="92" class="kicker">PROJECT</text>
+      <text x="64" y="122" class="title">project A</text>
+      <text x="64" y="150" class="mono">site://projects/A.md</text>
+      <text x="64" y="180" class="mono dim">root   ~/Projects/A</text>
+      <text x="64" y="204" class="mono dim">sites  coding · video · 3d</text>
+      <text x="64" y="228" class="mono dim">tags   game</text>
+      <text x="64" y="266" class="mono accent">the hub</text>
+      <text x="64" y="284" class="mono faint">the page lists the sites</text>
+
+      <!-- bus -->
+      <path d="M 380 140 H 470" class="link"/>
+      <path d="M 470 105 V 425" class="link"/>
+      <path d="M 470 105 H 560" class="link" marker-end="url(#a)"/>
+      <path d="M 470 265 H 560" class="link" marker-end="url(#a)"/>
+      <path d="M 470 425 H 560" class="link" marker-end="url(#a)"/>
+      <text x="470" y="92" text-anchor="middle" class="mono faint">operates on</text>
+
+      <!-- coding -->
+      <rect x="560" y="40" width="590" height="130" class="box site"/>
+      <rect x="560" y="40" width="4" height="130" fill="#b39ce0"/>
+      <text x="584" y="70" class="kicker">SITE · CAPABILITY</text>
+      <text x="584" y="100" class="title">coding</text>
+      <text x="584" y="122" class="mono">site://coding</text>
+      <text x="584" y="146" class="mono dim">project: required   ·   project_mode: worktree</text>
+      <text x="584" y="164" class="mono dim">works: save-system, inventory</text>
+
+      <!-- video -->
+      <rect x="560" y="200" width="590" height="130" class="box site"/>
+      <rect x="560" y="200" width="4" height="130" fill="#b39ce0"/>
+      <text x="584" y="230" class="kicker">SITE · CAPABILITY</text>
+      <text x="584" y="260" class="title">video</text>
+      <text x="584" y="282" class="mono">site://video</text>
+      <text x="584" y="306" class="mono dim">project: required   ·   project_mode: write</text>
+      <text x="584" y="324" class="mono dim">works: trailer</text>
+
+      <!-- 3d -->
+      <rect x="560" y="360" width="590" height="130" class="box site"/>
+      <rect x="560" y="360" width="4" height="130" fill="#b39ce0"/>
+      <text x="584" y="390" class="kicker">SITE · CAPABILITY</text>
+      <text x="584" y="420" class="title">3d</text>
+      <text x="584" y="442" class="mono">site://3d</text>
+      <text x="584" y="466" class="mono dim">project: required   ·   project_mode: write</text>
+      <text x="584" y="484" class="mono dim">works: crashed-ship</text>
+
+      <text x="40" y="548" class="mono faint">the project page is the hub · a site is a capability · a work is one instance of a site on a project</text>
+    </svg>
+  </div>
+</section>
+
+<!-- 02 · A WORK -->
+<section id="work">
+  <div class="panel">
+    <h2><span class="n">02</span>A work: <span class="k">project/</span> is the project</h2>
+    <p class="lede">
+      The work folder is the paper trail. <b>project/</b> is a view of the real folder: a symlink.
+      The mode picks the target — the project root, or the ticket's worktree.
+    </p>
+    <svg viewBox="0 0 1200 560" role="img" aria-label="A work folder with index.md, project/ and stage folders. project/ is a symlink to the project root or the ticket worktree.">
+      <defs>
+        <marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#8fb3e8"/></marker>
+        <marker id="bc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#d6b06a"/></marker>
+      </defs>
+
+      <rect x="40" y="40" width="440" height="360" class="box"/>
+      <text x="64" y="72" class="kicker">WORK</text>
+      <text x="64" y="102" class="title">site://coding/game-save/</text>
+
+      <text x="64" y="144" class="mono">index.md</text>
+      <text x="250" y="144" class="mono dim">brief · stage · state</text>
+
+      <rect x="60" y="162" width="140" height="30" class="box hot"/>
+      <text x="72" y="182" class="mono">project/</text>
+      <text x="250" y="182" class="mono accent">the project's folder</text>
+
+      <text x="64" y="222" class="mono">01_spec/</text>
+      <text x="250" y="222" class="mono dim">what the stage wrote</text>
+      <text x="64" y="248" class="mono">02_plan/</text>
+      <text x="250" y="248" class="mono dim">paper trail</text>
+      <text x="64" y="274" class="mono">_config/</text>
+      <text x="250" y="274" class="mono dim">rules for this work</text>
+      <text x="64" y="300" class="mono">outputs…</text>
+      <text x="250" y="300" class="mono dim">pages, or project files</text>
+
+      <text x="64" y="348" class="mono faint">project/ is not a copy: it is the same files, live.</text>
+      <text x="64" y="368" class="mono faint">the work's own files are the paper trail; the project is the thing.</text>
+
+      <!-- project root -->
+      <rect x="760" y="70" width="360" height="110" class="box project"/>
+      <text x="784" y="100" class="kicker">PROJECT ROOT</text>
+      <text x="784" y="128" class="title">~/Projects/A</text>
+      <text x="784" y="150" class="mono dim">git · main</text>
+
+      <!-- worktree -->
+      <rect x="760" y="270" width="360" height="110" class="box warn"/>
+      <text x="784" y="300" class="kicker">WORKTREE · ticket/&lt;id&gt;</text>
+      <text x="784" y="328" class="title">state/worktrees/&lt;id&gt;</text>
+      <text x="784" y="350" class="mono dim">or a feature branch in the same repo</text>
+
+      <!-- links -->
+      <path d="M 200 177 H 560" class="link accent"/>
+      <path d="M 560 125 V 325" class="link accent"/>
+      <path d="M 560 125 H 760" class="link accent" marker-end="url(#b)"/>
+      <path d="M 560 325 H 760" class="link" stroke-dasharray="6 4" marker-end="url(#bc)"/>
+      <text x="575" y="112" class="mono accent">read / write</text>
+      <text x="575" y="312" class="mono warn">worktree</text>
+
+      <text x="40" y="460" class="mono faint">the mode is on the work (or its stage, or the site): read · write · worktree</text>
+      <text x="40" y="480" class="mono faint">read refuses writes; write edits the project in place; worktree writes the branch</text>
+    </svg>
+  </div>
+</section>
+
+<!-- 03 · THE FLOW -->
+<section id="flow">
+  <div class="panel">
+    <h2><span class="n">03</span>The worktree / diff flow</h2>
+    <p class="lede">
+      This is the review loop. The agent and the app see the <b>same worktree</b>: the app's file
+      tree and its diff are the same branch. That is what makes review before approval possible.
+    </p>
+    <svg viewBox="0 0 1200 760" role="img" aria-label="run_stage creates a ticket and worktree; the work's project/ points at it; the agent and app work on it; changes shows the diff; review approves and merges, or sends it back.">
+      <defs>
+        <marker id="c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#50555e"/></marker>
+        <marker id="cg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#8cc29a"/></marker>
+        <marker id="cw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#d6b06a"/></marker>
+        <marker id="cr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#e07c7c"/></marker>
+      </defs>
+
+      <!-- row 1 -->
+      <rect x="30" y="20" width="210" height="62" class="box"/>
+      <text x="48" y="45" class="kicker">TRIGGER</text>
+      <text x="48" y="66" class="mono">human / app / agent</text>
+
+      <rect x="300" y="20" width="210" height="62" class="box"/>
+      <text x="318" y="45" class="kicker">START</text>
+      <text x="318" y="66" class="mono">run_stage</text>
+
+      <rect x="570" y="20" width="260" height="62" class="box warn"/>
+      <text x="588" y="45" class="kicker">CREATES</text>
+      <text x="588" y="66" class="mono">ticket + worktree</text>
+
+      <rect x="890" y="20" width="280" height="62" class="box hot"/>
+      <text x="908" y="45" class="kicker">POINTS AT</text>
+      <text x="908" y="66" class="mono">work / project/</text>
+
+      <path d="M 240 51 H 300" class="link" marker-end="url(#c)"/>
+      <path d="M 510 51 H 570" class="link" marker-end="url(#c)"/>
+      <path d="M 830 51 H 890" class="link" marker-end="url(#c)"/>
+
+      <!-- row 2: agent + app -->
+      <path d="M 1030 82 V 118" class="link"/>
+      <path d="M 330 118 H 930" class="link"/>
+      <path d="M 330 118 V 170" class="link" marker-end="url(#c)"/>
+      <path d="M 930 118 V 170" class="link" marker-end="url(#c)"/>
+      <text x="620" y="108" text-anchor="middle" class="mono faint">the same worktree</text>
+
+      <rect x="120" y="170" width="420" height="92" class="box"/>
+      <text x="144" y="198" class="kicker">AGENT</text>
+      <text x="144" y="222" class="mono">open / write / edit</text>
+      <text x="144" y="242" class="mono accent">site://coding/game-save/project/…</text>
+
+      <rect x="720" y="170" width="420" height="92" class="box"/>
+      <text x="744" y="198" class="kicker">APP</text>
+      <text x="744" y="222" class="mono">projectFile(path, work)</text>
+      <text x="744" y="242" class="mono accent">putProjectFile(path, body, work)</text>
+
+      <!-- row 3: changes -->
+      <path d="M 330 262 V 310 H 560" class="link" marker-end="url(#c)"/>
+      <path d="M 930 262 V 310 H 700" class="link" marker-end="url(#c)"/>
+
+      <rect x="360" y="310" width="540" height="86" class="box"/>
+      <text x="384" y="338" class="kicker">CHANGES</text>
+      <text x="384" y="362" class="mono">diff of the worktree vs the ticket base</text>
+      <text x="384" y="382" class="mono faint">the same branch merge_ticket would land</text>
+
+      <!-- row 4: review -->
+      <path d="M 630 396 V 440" class="link" marker-end="url(#c)"/>
+      <rect x="380" y="440" width="500" height="74" class="box"/>
+      <text x="404" y="468" class="kicker">REVIEW</text>
+      <text x="404" y="492" class="mono">inspect files + diff · edit in place (if the work allows)</text>
+
+      <!-- row 5: branches -->
+      <path d="M 520 514 V 560 H 280" class="link ok" marker-end="url(#cg)"/>
+      <path d="M 740 514 V 560 H 960" class="link err" marker-end="url(#cr)"/>
+
+      <rect x="70" y="560" width="420" height="92" class="box ok"/>
+      <text x="94" y="588" class="kicker">APPROVE</text>
+      <text x="94" y="612" class="mono">merge_ticket</text>
+      <text x="94" y="632" class="mono faint">worktree removed · link back to project root</text>
+
+      <rect x="720" y="560" width="420" height="92" class="box err"/>
+      <text x="744" y="588" class="kicker">SEND BACK</text>
+      <text x="744" y="612" class="mono">message_agent</text>
+      <text x="744" y="632" class="mono faint">the same worktree; the agent revises</text>
+
+      <text x="40" y="716" class="mono faint">the file tree and the diff are the same worktree · the worktree source (local state vs feature branch) does not change the view</text>
+    </svg>
+  </div>
+</section>
+
+<!-- 04 · LOCAL VS WORK -->
+<section id="source">
+  <div class="panel">
+    <h2><span class="n">04</span>Local vs work: the worktree source</h2>
+    <p class="lede">
+      The app and the agent never care where the worktree came from. <b>ticket_worktree</b> is the
+      source; <b>project/</b> is the path they use.
+    </p>
+    <svg viewBox="0 0 1200 360" role="img" aria-label="Local worktree under state and a feature branch both feed work/project, which both the app and the agent use.">
+      <defs>
+        <marker id="d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#50555e"/></marker>
+      </defs>
+
+      <rect x="40" y="30" width="300" height="82" class="box"/>
+      <text x="64" y="58" class="kicker">LOCAL</text>
+      <text x="64" y="82" class="mono">state/worktrees/&lt;ticket&gt;</text>
+      <text x="64" y="100" class="mono faint">a git worktree</text>
+
+      <rect x="40" y="210" width="300" height="82" class="box"/>
+      <text x="64" y="238" class="kicker">WORK</text>
+      <text x="64" y="262" class="mono">feature branch</text>
+      <text x="64" y="280" class="mono faint">the same repository</text>
+
+      <rect x="470" y="120" width="300" height="90" class="box hot"/>
+      <text x="494" y="150" class="kicker">THE WORK</text>
+      <text x="494" y="176" class="mono">work / project/</text>
+      <text x="494" y="196" class="mono faint">one path for both</text>
+
+      <rect x="900" y="105" width="260" height="120" class="box project"/>
+      <text x="924" y="135" class="kicker">CONSUMERS</text>
+      <text x="924" y="162" class="mono">agent · open/write</text>
+      <text x="924" y="184" class="mono">app · projectFile</text>
+      <text x="924" y="206" class="mono faint">+ changes</text>
+
+      <path d="M 340 71 C 400 71, 410 140, 470 150" class="link" marker-end="url(#d)"/>
+      <path d="M 340 251 C 400 251, 410 190, 470 180" class="link" marker-end="url(#d)"/>
+      <path d="M 770 165 H 900" class="link accent" marker-end="url(#d)"/>
+
+      <text x="40" y="340" class="mono faint">the source is a ticket_worktree detail; the app and the agent use the worktree path, so both are the same shape</text>
+    </svg>
+  </div>
+</section>
+
+<!-- 05 · PARITY -->
+<section id="parity">
+  <div class="panel">
+    <h2><span class="n">05</span>Agent ↔ app parity</h2>
+    <p class="lede">Same work, same paths, same mode. The app is not a second story about the project.</p>
+    <table>
+      <thead><tr><th>what</th><th>agent</th><th>app</th></tr></thead>
+      <tbody>
+        <tr><td>work page</td><td><code>open site://…/index.md</code></td><td><code>page('index.md')</code></td></tr>
+        <tr><td>the work's project</td><td><code>open …/project/src/main.rs</code></td><td><code>projectFile('src/main.rs', work)</code></td></tr>
+        <tr><td>work output</td><td><code>write</code> / <code>edit</code></td><td><code>putPage(…)</code></td></tr>
+        <tr><td>project output</td><td><code>write</code> / <code>edit</code> under <code>project/</code></td><td><code>putProjectFile(…)</code> or <code>putPage('project/…')</code></td></tr>
+        <tr><td>diff</td><td><code>changes</code></td><td><code>changes</code></td></tr>
+        <tr><td>approve</td><td><code>merge_ticket</code></td><td><code>ticket.merge</code></td></tr>
+        <tr><td>send back</td><td><code>message_agent</code></td><td>a message in the work chat</td></tr>
+      </tbody>
+    </table>
+    <p class="note"><b>Without a work</b>, the app's <code>projectFile(path)</code> is the project's main folder (the app's own assets). <b>With a work</b>, it follows the work's <code>project/</code>, so review sees the worktree.</p>
+  </div>
+</section>
+
+<!-- 06 · MODES -->
+<section id="modes">
+  <div class="panel">
+    <h2><span class="n">06</span>The three modes</h2>
+    <p class="lede">The site gives the default; the work or the stage can override it.</p>
+    <div class="grid3">
+      <div class="card read">
+        <div class="tag">read · default</div>
+        <h3>project/ → project root</h3>
+        <p>Reads the project. A write through <code>project/</code> is refused with the reason.</p>
+      </div>
+      <div class="card write">
+        <div class="tag">write</div>
+        <h3>project/ → project root</h3>
+        <p>Writes the project in place: video renders, 3D assets, design outputs.</p>
+      </div>
+      <div class="card worktree">
+        <div class="tag">worktree</div>
+        <h3>project/ → ticket worktree</h3>
+        <p>Writes code on <code>ticket/&lt;id&gt;</code>; review the diff; merge lands the branch.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 07 · THE PAGE -->
+<section id="page">
+  <div class="panel">
+    <h2><span class="n">07</span>The project page is the hub</h2>
+    <div class="flow">
+      <div>
+        <p class="lede" style="margin-bottom:10px">The page is the data; the <b>projects</b> site's app is the hub.</p>
+<pre><span class="c"># site://projects/A.md</span>
+<span class="a">type:</span> project
+<span class="a">root:</span> ~/Projects/A
+<span class="a">sites:</span> [coding, video, 3d]
+<span class="a">tags:</span> [game]
+<span class="a">status:</span> active
+
+<span class="c"># body: what it is, decisions, state</span></pre>
+      </div>
+      <div>
+        <p class="lede" style="margin-bottom:10px">The hub's <code>project.overview</code>:</p>
+<pre>project A
+├── page      site://projects/A.md
+├── root      ~/Projects/A
+├── sites
+│   ├── coding   works: save-system, inventory
+│   ├── video    works: trailer
+│   └── 3d       works: crashed-ship
+├── branches  ticket/… waiting to merge
+├── memory    the page body
+└── switches  harness, tool rules</pre>
+      </div>
+    </div>
+    <p class="note"><b>new_project</b> writes <code>site://projects/&lt;name&gt;.md</code>, registers it in the projects index, and claims the folder. Old <code>site://memory/projects/&lt;name&gt;.md</code> pages are read as a fallback.</p>
+  </div>
+</section>
+
+<footer>
+  design: <a href="project-hub.md">docs/project-hub.md</a> · plan: <a href="lean-orchestration.md">docs/lean-orchestration.md</a>
+</footer>
+
+</div>
+</body>
+</html>

@@ -8,7 +8,7 @@ const sdk =
   process.env.COMPOSER_SDK ?? fileURLToPath(new URL('../../../templates/sdk', import.meta.url));
 
 export default defineConfig({
-  // Served by the composer server at /orchestration/.
+  // Served by the composer server at <workspace>/a/<app token>/: keep URLs relative.
   base: './',
   plugins: [svelte()],
   resolve: {

@@ -148,3 +148,41 @@ async fn a_sessions_desk_comes_back_with_it() {
     .unwrap();
     assert_eq!(again.sessions.get(&id).unwrap().desk(), moved);
 }
+
+#[tokio::test]
+async fn the_live_view_opens_by_hand_only_with_a_viewer() {
+    let open = |id: &str| ClientCommand::DeskOpen {
+        session: id.to_string(),
+        tab: DeskTab::LiveView,
+        focus: true,
+    };
+    // No viewer: refused, and says how to get one.
+    let (_dir, server, _provider, addr) = start(vec![]).await;
+    let id = server
+        .sessions
+        .create("default", None)
+        .unwrap()
+        .id()
+        .to_string();
+    let mut client = connect(addr, &server.token).await;
+    let refused = desk(&mut client, 1, open(&id)).await.unwrap_err();
+    assert!(refused.contains("[viewer]"), "{refused}");
+    assert_eq!(server.sessions.get(&id).unwrap().desk(), Desk::default());
+
+    // With one: a tab `live`, shown; again, not doubled.
+    let mut config = Config::defaults();
+    config.viewer.url = "http://127.0.0.1:9/view".into();
+    let (_dir, server, _provider, addr) = start_with(config, vec![]).await;
+    let id = server
+        .sessions
+        .create("default", None)
+        .unwrap()
+        .id()
+        .to_string();
+    let mut client = connect(addr, &server.token).await;
+    desk(&mut client, 1, open(&id)).await.unwrap();
+    let now = desk(&mut client, 2, open(&id)).await.unwrap();
+    assert_eq!(ids(&now), ["live"]);
+    assert_eq!(now.active.as_deref(), Some("live"));
+    assert_eq!(now.tabs[0].tab, DeskTab::LiveView);
+}

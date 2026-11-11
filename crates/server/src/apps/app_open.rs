@@ -1,21 +1,24 @@
 use composer_core::SiteUrl;
 use composer_protocol::http::AppOpened;
 
-use crate::api::encode_segment;
+use crate::api::{APP_PREFIX, Credential, encode_segment};
 use crate::apps::{
     AppGrant, AppManifest, AttachReason, GrantedProject, attached_apps, find_project_by, is_client,
 };
 use crate::server::Server;
 
 /// Opens `site`'s app on `project` (`None`: on Home), from `session` (the one its messages go
-/// to): the URL that loads it, with what it needs once in the URL. On a project and on Home an app gets a token of its own (`app_token`); a
-/// client app on Home (listed in `[apps] clients`: the chat app) gets a one-time code that becomes
-/// the workspace's cookie (`once`): never the workspace token itself.
+/// to): the URL that loads it. On a project and on Home an app gets a token of its own, and is
+/// served (sandboxed) under it: `<base>/a/<token>/`, its API under that too; a
+/// client app on Home (listed in `[apps] clients`: the chat app) gets a one-time code (`once`)
+/// that opens a browser session of `minter`'s kind, `minter` being the credential that asks: a
+/// paired device gets a device's session, never the workspace token or the local user's access.
 pub fn open_app(
     server: &Server,
     site: &str,
     project: Option<&str>,
     session: Option<&str>,
+    minter: &Credential,
 ) -> Result<AppOpened, String> {
     let base = server.route_base();
     // The session it is opened from: the one its messages go to (ticket 0172).
@@ -33,10 +36,11 @@ pub fn open_app(
     let Some(name) = project else {
         home_manifest(server, site)?;
         if is_client(server, site) {
-            let code = server.once_codes.mint();
+            let code = server.once_codes.mint(minter.clone());
             return Ok(AppOpened {
                 url: format!("{base}/{}/?once={code}", encode_segment(site)),
                 token: None,
+                project: None,
             });
         }
         let token = server.app_tokens.mint(AppGrant {
@@ -46,8 +50,9 @@ pub fn open_app(
             session: session.clone(),
         });
         return Ok(AppOpened {
-            url: format!("{base}/h/{}/?app_token={token}", encode_segment(site)),
+            url: format!("{base}{APP_PREFIX}/{token}/"),
             token: Some(token),
+            project: None,
         });
     };
     // By its name or its folder (a client knows its session's project as a folder).
@@ -76,12 +81,9 @@ pub fn open_app(
         session,
     });
     Ok(AppOpened {
-        url: format!(
-            "{base}/p/{}/{}/?app_token={token}",
-            encode_segment(project.as_str()),
-            encode_segment(site)
-        ),
+        url: format!("{base}{APP_PREFIX}/{token}/"),
         token: Some(token),
+        project: Some(project.to_string()),
     })
 }
 

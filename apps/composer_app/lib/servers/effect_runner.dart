@@ -9,6 +9,7 @@ import '../state/effects.dart';
 import '../state/server_entry.dart';
 import 'background_keeper.dart';
 import 'notifier.dart';
+import 'preference_store.dart';
 import 'server_api.dart';
 import 'server_connection.dart';
 import 'server_store.dart';
@@ -22,6 +23,7 @@ class EffectRunner {
   final Map<String, ServerConnection> _connections = {};
 
   final _servers = ServerStore();
+  final _preferences = PreferenceStore();
 
   void run(AppEffect effect, void Function(AppAction) dispatch) {
     switch (effect) {
@@ -39,7 +41,17 @@ class EffectRunner {
       case Reconnect(:final url):
         _connections[url]?.retryNow();
       case SendCommand(:final url, :final command):
-        _request(url, command, dispatch);
+        // A sentence for the user (`site.set`, `app.allow`) is shown as a notice; failures already are.
+        _request(url, command, dispatch).then((result) {
+          if (result is CommandResultNote) dispatch(NoticeShown(result.text));
+        });
+      case LoadPreferences():
+        _preferences.loadLiveViewSize().then(
+              (size) => dispatch(PreferencesLoaded(liveViewSize: size)),
+              onError: (_) {},
+            );
+      case SaveLiveViewSize(:final size):
+        _preferences.saveLiveViewSize(size).catchError((_) {});
       case Notify():
         _notifier.show(effect);
       case CancelNotification(:final key):
@@ -142,9 +154,11 @@ class EffectRunner {
           if (result is CommandResultWork) dispatch(WorkReplied(url, work: result.work));
         }
         run().catchError((Object e) => dispatch(WorkReplied(url, error: describeError(e))));
-      case CreateSession(:final url, :final agent, :final project):
+      case CreateSession(:final url, :final agent, :final project, :final site):
         _request(url, ClientCommandSessionCreate(agent: agent, project: project), dispatch).then((result) {
-          if (result is CommandResultSession) dispatch(SessionOpened(url, result.session.id));
+          if (result is! CommandResultSession) return;
+          dispatch(SessionOpened(url, result.session.id));
+          if (site != null) dispatch(SiteChosen(url, site, session: result.session.id));
         });
     }
   }

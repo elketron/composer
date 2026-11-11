@@ -274,6 +274,12 @@ impl AppState {
                 None => vec![],
             },
 
+            Action::SetSite(site) => match self.session.current.clone() {
+                Some(session) => {
+                    self.send(ClientCommand::SiteSet { session, site }, Pending::SiteSet)
+                }
+                None => vec![],
+            },
             Action::SetModel(model) => match self.session.current.clone() {
                 Some(session) => self.send(
                     ClientCommand::ModelSet { session, model },
@@ -1104,20 +1110,25 @@ impl AppState {
             (Pending::OpenApp { site, session, .. }, CommandResult::AppOpened { opened }) => {
                 // The desktop's stage is this TUI's other half: put the app on the session's desk
                 // (opened by `:app`), and the stage shows it, instead of opening a browser. The
-                // URL says whether it opened on a project or on Home.
+                // answer says whether it opened on a project or on Home.
                 if self.window.is_some() {
-                    let project = project_in_url(&opened.url);
                     return self.send(
                         ClientCommand::DeskOpen {
                             session,
-                            tab: DeskTab::App { site, project },
+                            tab: DeskTab::App {
+                                site,
+                                project: opened.project,
+                            },
                             focus: true,
                         },
                         Pending::Ignore,
                     );
                 }
+                // The server knows the session it was opened from; `session` in the URL is for a
+                // client app (the chat), which reads it from there.
+                let join = if opened.url.contains('?') { '&' } else { '?' };
                 let url = format!(
-                    "{}{}&session={session}",
+                    "{}{}{join}session={session}",
                     origin(&self.conn.server_url),
                     opened.url
                 );
@@ -1163,6 +1174,11 @@ impl AppState {
             ) => {
                 self.catalog.models = models;
                 self.catalog.default_model = default_model;
+                vec![]
+            }
+            (Pending::SiteSet, CommandResult::Note { text }) => {
+                // The session's `site` follows from its `session.updated`.
+                self.ui.flash(text, FlashLevel::Info);
                 vec![]
             }
             (Pending::ModelSet, CommandResult::Session { session }) => {
@@ -1408,16 +1424,6 @@ fn origin(server_url: &str) -> &str {
     }
 }
 
-/// The project an app's open URL names (`/w/<ws>/p/<project>/<site>/...`); `None` for Home.
-fn project_in_url(url: &str) -> Option<String> {
-    let parts: Vec<&str> = url.split('/').collect();
-    let at = parts.iter().position(|part| *part == "p")?;
-    parts
-        .get(at + 1)
-        .filter(|part| !part.is_empty())
-        .map(|part| (*part).to_string())
-}
-
 #[cfg(test)]
 mod tests {
     use composer_protocol::http::McpServerInfo;
@@ -1431,6 +1437,7 @@ mod tests {
             id: id.into(),
             agent: "default".into(),
             project: None,
+            site: None,
             ticket: None,
             parent: parent.map(Into::into),
             worker: None,
@@ -1476,6 +1483,61 @@ mod tests {
             attachments: vec![],
             source: None,
         }
+    }
+
+    #[test]
+    fn workflow_sends_site_set_and_flashes_the_outcome() {
+        let (mut state, _) = connected();
+        // No session shown yet: nothing to switch.
+        assert!(state.reduce(Action::SetSite(Some("3d".into()))).is_empty());
+        state.session.upsert(info("s1", None));
+        state.session.current = Some("s1".into());
+
+        let effects = state.reduce(Action::SetSite(Some("3d".into())));
+        let [(id, ref command)] = sent(&effects)[..] else {
+            panic!("{effects:?}")
+        };
+        assert_eq!(
+            *command,
+            ClientCommand::SiteSet {
+                session: "s1".into(),
+                site: Some("3d".into())
+            }
+        );
+        state.reduce(Action::Server(ServerMessage::Ok {
+            id,
+            result: CommandResult::Note {
+                text: "Entered 3d (3D). Started the blender application.".into(),
+            },
+        }));
+        let flash = state.ui.flash.as_ref().unwrap();
+        assert_eq!(
+            flash.text,
+            "Entered 3d (3D). Started the blender application."
+        );
+        assert_eq!(flash.level, FlashLevel::Info);
+
+        // No name leaves; a refusal is the error flash.
+        let effects = state.reduce(Action::SetSite(None));
+        let [(id, ref command)] = sent(&effects)[..] else {
+            panic!("{effects:?}")
+        };
+        assert_eq!(
+            *command,
+            ClientCommand::SiteSet {
+                session: "s1".into(),
+                site: None
+            }
+        );
+        state.reduce(Action::Server(ServerMessage::Error {
+            id: Some(id),
+            message: "no site `nope`".into(),
+        }));
+        let flash = state.ui.flash.as_ref().unwrap();
+        assert_eq!(
+            (flash.text.as_str(), flash.level),
+            ("no site `nope`", FlashLevel::Error)
+        );
     }
 
     #[test]
@@ -1817,10 +1879,12 @@ mod tests {
         let (mut state, _) = connected();
         state.session.upsert(SessionInfo {
             project: Some("/p/game".into()),
+            site: None,
             ..info("a", None)
         });
         state.session.upsert(SessionInfo {
             project: Some("/p/notes".into()),
+            site: None,
             ..info("b", None)
         });
         let nudge = || {
@@ -2031,6 +2095,7 @@ mod tests {
         state.conn.server_url = "http://h:1/w/default".into();
         state.session.upsert(SessionInfo {
             project: Some("/p/game".into()),
+            site: None,
             ..info("s", None)
         });
         state.reduce(Action::AttachSession("s".into()));
@@ -2077,8 +2142,9 @@ mod tests {
             id: *id,
             result: CommandResult::AppOpened {
                 opened: composer_protocol::http::AppOpened {
-                    url: "/w/default/h/calendar/?app_token=app_x".into(),
+                    url: "/w/default/a/app_x/".into(),
                     token: Some("app_x".into()),
+                    project: None,
                 },
             },
         }));
@@ -2086,10 +2152,7 @@ mod tests {
             panic!("{effects:?}")
         };
         assert_eq!(site, "calendar");
-        assert_eq!(
-            url,
-            "http://h:1/w/default/h/calendar/?app_token=app_x&session=s"
-        );
+        assert_eq!(url, "http://h:1/w/default/a/app_x/?session=s");
         assert!(!url.contains(&state.conn.token) || state.conn.token.is_empty());
     }
 
@@ -2100,11 +2163,12 @@ mod tests {
         state.conn.server_url = "http://h:1/w/default".into();
         state.session.upsert(SessionInfo {
             project: Some("/p/game".into()),
+            site: None,
             ..info("s", None)
         });
         state.reduce(Action::AttachSession("s".into()));
 
-        let open = |state: &mut AppState, url: &str| {
+        let open = |state: &mut AppState, project: Option<&str>| {
             let effects = state.reduce(Action::OpenApp(Some("calendar".into())));
             let commands = sent(&effects);
             let [(id, _)] = commands
@@ -2120,8 +2184,9 @@ mod tests {
                 id,
                 result: CommandResult::AppOpened {
                     opened: composer_protocol::http::AppOpened {
-                        url: url.into(),
+                        url: "/w/default/a/app_x/".into(),
                         token: Some("app_x".into()),
+                        project: project.map(Into::into),
                     },
                 },
             }));
@@ -2150,10 +2215,7 @@ mod tests {
         };
 
         // On the session's project: the tab names it.
-        let (session, tab, focus) = desk_tab(&open(
-            &mut state,
-            "/w/default/p/game/calendar/?app_token=app_x",
-        ));
+        let (session, tab, focus) = desk_tab(&open(&mut state, Some("game")));
         assert_eq!(session, "s");
         assert!(focus, "the stage shows the tab it was opened on");
         assert_eq!(
@@ -2165,7 +2227,7 @@ mod tests {
         );
 
         // On Home: no project.
-        let (_, tab, _) = desk_tab(&open(&mut state, "/w/default/h/calendar/?app_token=app_x"));
+        let (_, tab, _) = desk_tab(&open(&mut state, None));
         assert_eq!(
             tab,
             DeskTab::App {
@@ -2190,8 +2252,9 @@ mod tests {
             id: *id,
             result: CommandResult::AppOpened {
                 opened: composer_protocol::http::AppOpened {
-                    url: "/h/orchestration/?app_token=app_x".into(),
+                    url: "/a/app_x/".into(),
                     token: Some("app_x".into()),
+                    project: None,
                 },
             },
         }));
@@ -2207,6 +2270,8 @@ mod tests {
             app_built,
             description: String::new(),
             pages: 0,
+            app: None,
+            mcp: Vec::new(),
         };
         let mut check = |sites| {
             state.reduce(Action::AppChecked {

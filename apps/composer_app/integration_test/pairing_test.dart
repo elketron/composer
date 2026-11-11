@@ -15,7 +15,7 @@ void main() {
     await tester.tap(find.byKey(const Key('tab-server')));
     await pumpUntil(tester, find.textContaining('online'));
     expect(find.textContaining(' in use'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('tab-chats')));
+    await tester.tap(find.byKey(const Key('tab-inbox')));
 
     if (pairLine2.isEmpty) return;
     final (first, second) = workspaceUrls();

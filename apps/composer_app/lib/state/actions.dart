@@ -2,6 +2,8 @@
 
 import 'package:composer_protocol/composer_protocol.dart';
 
+import 'frame_size.dart';
+import 'live_view_size.dart';
 import 'server_entry.dart';
 import 'types.dart';
 
@@ -160,9 +162,12 @@ final class SessionClosed extends AppAction {
 }
 
 final class NewSessionRequested extends AppAction {
-  const NewSessionRequested(this.url, {this.agent = 'default', this.project});
+  const NewSessionRequested(this.url, {this.agent = 'default', this.project, this.site});
   final String url;
   final String agent;
+
+  /// A workflow (site) to enter once the session exists; null for none.
+  final String? site;
 
   /// A name in the projects directory, or a path; null for none.
   final String? project;
@@ -506,4 +511,36 @@ final class WorkRunRequested extends AppAction {
   final String work;
   final String? stage;
   final String? project;
+}
+
+/// Enter a workflow (`site.set`), or leave it (`site` null). For `session`, else the open chat's.
+final class SiteChosen extends AppAction {
+  const SiteChosen(this.url, this.site, {this.session});
+  final String url;
+  final String? site;
+  final String? session;
+}
+
+/// The device's saved preferences were read (null: nothing saved).
+final class PreferencesLoaded extends AppAction {
+  const PreferencesLoaded({this.liveViewSize});
+  final LiveViewSize? liveViewSize;
+}
+
+/// The live view was dragged to a size (the nearest of the three).
+final class LiveViewResized extends AppAction {
+  const LiveViewResized(this.size);
+  final LiveViewSize size;
+}
+
+/// The live view's page reported the size of the application's screen (the first frame, or a
+/// change of resolution): the view's heights follow its shape.
+final class LiveViewFrameSized extends AppAction {
+  const LiveViewFrameSized(this.frame);
+  final FrameSize frame;
+}
+
+/// The handle was tapped: the live view steps to the next size.
+final class LiveViewStepped extends AppAction {
+  const LiveViewStepped();
 }

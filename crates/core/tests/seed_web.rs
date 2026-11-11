@@ -37,11 +37,22 @@ fn lists_sites() {
     let names: Vec<_> = sites.iter().map(|s| s.name.as_str()).collect();
     assert_eq!(
         names,
-        ["agents", "chat", "home", "memory", "orchestration", "plans"]
+        [
+            "agents",
+            "chat",
+            "home",
+            "memory",
+            "orchestration",
+            "plans",
+            "projects"
+        ]
     );
     let orch = sites.iter().find(|s| s.name == "orchestration").unwrap();
     assert!(orch.has_justfile && orch.has_index && orch.has_ui);
     assert_eq!(orch.title, "Orchestration");
+    let projects = sites.iter().find(|s| s.name == "projects").unwrap();
+    assert!(projects.has_index);
+    assert_eq!(projects.title, "Projects");
 }
 
 #[test]

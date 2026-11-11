@@ -15,14 +15,14 @@ impl Tool for ActionsTool {
 
     fn description(&self) -> &'static str {
         "List a site's actions: the recipes in its justfile, with their parameters and \
-         whether the user already approved them. Run one with `run`."
+         whether the user already approved them. Run one with `run`. Without `site`, the site \
+         you are in."
     }
 
     fn parameters(&self) -> Value {
         json!({
             "type": "object",
-            "properties": { "site": { "type": "string", "description": "site name, e.g. orchestration" } },
-            "required": ["site"]
+            "properties": { "site": { "type": "string", "description": "site name, e.g. orchestration; default: the site you are in" } }
         })
     }
 
@@ -30,11 +30,28 @@ impl Tool for ActionsTool {
         let args: ActionsArgs = serde_json::from_value(args).map_err(|e| e.to_string())?;
         let site = args
             .site
-            .trim_start_matches("site://")
-            .trim_end_matches('/')
-            .to_string();
+            .as_deref()
+            .map(str::trim)
+            .filter(|site| !site.is_empty())
+            .map(|site| {
+                site.trim_start_matches("site://")
+                    .trim_end_matches('/')
+                    .to_string()
+            })
+            .or_else(|| context.site.as_ref().map(|site| site.name.clone()))
+            .ok_or_else(|| "which site? pass `site`, or enter one first".to_string())?;
         context.check_read(&context.url(&format!("site://{site}"))?)?;
-        let justfile = Justfile::load(&context.server.web.root().join(&site)).await?;
+        let site_dir = context.server.web.root().join(&site);
+        if !site_dir.is_dir() {
+            return Err(format!("site://{site} is not a site"));
+        }
+        let justfile = match Justfile::load(&site_dir).await {
+            Ok(justfile) => justfile,
+            Err(error) if error.contains("no justfile") => {
+                return Ok(format!("site://{site} has no actions (no justfile)"));
+            }
+            Err(error) => return Err(error),
+        };
         let mut lines = vec![format!("site://{site} actions (run with `run`):")];
         for recipe in justfile.recipes().into_iter().filter(|r| !r.private) {
             let approved = context.server.approvals.is_approved(

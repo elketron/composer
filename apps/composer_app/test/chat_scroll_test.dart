@@ -79,7 +79,16 @@ line a11
 line a12''';
 
 void main() {
+  // The same behaviour in both chat orders (lib/state/chat_order.dart).
+  group('newest at the bottom', () => suite(newestFirst: false));
+  group('newest first', () => suite(newestFirst: true));
+}
+
+void suite({required bool newestFirst}) {
   late AppStore store;
+
+  /// Dragging away from the newest line: down in the conventional list, up in the newest-first one.
+  final away = newestFirst ? -1.0 : 1.0;
 
   Future<void> openChat(WidgetTester tester) async {
     await tester.binding.setSurfaceSize(const Size(400, 800));
@@ -100,6 +109,7 @@ void main() {
                   url: home.url,
                   status: status,
                   chat: chat,
+                  newestFirst: newestFirst,
                 );
               },
             ),
@@ -134,7 +144,7 @@ void main() {
     store.dispatch(ServerEvent(home.url, delta(14, stream1)));
     await frame(tester);
 
-    await tester.drag(find.byType(ListView), const Offset(0, 150));
+    await tester.drag(find.byType(ListView), Offset(0, 150 * away));
     await frame(tester);
     final held = y(tester, const ValueKey('row-8'));
     expect(held, greaterThan(0), reason: 'the marker is on screen to be held');
@@ -172,10 +182,12 @@ void main() {
 
     store.dispatch(ServerEvent(home.url, delta(15, stream2)));
     await frame(tester);
+    // Conventional: the stream grows upwards, so the older rows slide up with it. Newest first:
+    // it grows downwards, pushing the older rows down.
     expect(
       y(tester, const ValueKey('row-11')),
-      lessThan(before),
-      reason: 'the stream grows: the view slides up with it',
+      newestFirst ? greaterThan(before) : lessThan(before),
+      reason: 'the stream grows: the older rows make room for it',
     );
     expect(find.textContaining('line a12'), findsWidgets);
 
@@ -195,7 +207,7 @@ void main() {
     store.dispatch(ServerEvent(home.url, turn('running', 13)));
     store.dispatch(ServerEvent(home.url, delta(14, stream1)));
     await frame(tester);
-    await tester.drag(find.byType(ListView), const Offset(0, 300));
+    await tester.drag(find.byType(ListView), Offset(0, 300 * away));
     await frame(tester);
     expect(
       find.byKey(const Key('new-content')),

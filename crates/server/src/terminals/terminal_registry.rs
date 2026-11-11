@@ -67,6 +67,51 @@ impl Terminals {
         Ok((id, Vec::new()))
     }
 
+    /// Starts a `type: tui` page's program in a terminal on `session`'s desk. It is a client
+    /// (like the desktop TUI), so it runs outside the agent's sandbox; the page has already
+    /// checked the program against its `control:` adapter.
+    pub fn open_tui(
+        &self,
+        server: &Arc<Server>,
+        session: &Arc<Session>,
+        command: &[String],
+        cwd: &Path,
+        cols: u16,
+        rows: u16,
+    ) -> Result<String, String> {
+        let Some(program) = command.first() else {
+            return Err("a TUI page has an empty command".into());
+        };
+        let id = format!("t{:08x}", rand::random::<u32>());
+        let terminal = spawn_tui(
+            server,
+            session,
+            &id,
+            program,
+            &command[1..],
+            cwd,
+            cols,
+            rows,
+        )?;
+        self.open
+            .lock()
+            .expect("terminals lock")
+            .insert(id.clone(), terminal.clone());
+        read_into(server, terminal);
+        self.reap_later(server);
+        let desk = session.change_desk(|desk| {
+            desk.open(DeskTab::Terminal { id: id.clone() }, true, DeskBy::Agent)
+                .map(|_| ())
+        })?;
+        server.hub.send(ServerMessage::DeskChanged {
+            session: session.id().to_string(),
+            desk,
+            by: DeskBy::Agent,
+            opened: Some(format!("terminal:{id}")),
+        });
+        Ok(id)
+    }
+
     /// Starts the TUI for desktop window `window` in a terminal of its own (ticket 0177): not in
     /// the sandbox (decision 2026-11-06: the TUI is a client, with the workspace's token, not an
     /// agent). Its id.
@@ -279,6 +324,52 @@ fn spawn(
 )]
 fn builder(program: &std::ffi::OsStr) -> CommandBuilder {
     CommandBuilder::new(program)
+}
+
+/// A `type: tui` page's program, outside the sandbox: it is the user's live view, the same trust
+/// as a desktop window. The agent uses the program's control adapter, not this terminal.
+#[allow(
+    clippy::disallowed_methods,
+    clippy::too_many_arguments,
+    reason = "a TUI page's program is the user's client, not an agent shell; the page's control \
+              adapter chose it, and the spawn needs the terminal's identity and size"
+)]
+fn spawn_tui(
+    server: &Arc<Server>,
+    session: &Session,
+    id: &str,
+    program: &str,
+    args: &[String],
+    cwd: &Path,
+    cols: u16,
+    rows: u16,
+) -> Result<Arc<Terminal>, String> {
+    let pair = native_pty_system()
+        .openpty(size(cols, rows))
+        .map_err(|e| format!("a terminal: {e}"))?;
+    let mut command = builder(std::ffi::OsStr::new(program));
+    command.args(args.iter());
+    command.env("TERM", "xterm-256color");
+    command.env("COLORTERM", "truecolor");
+    command.cwd(cwd);
+    let child = pair
+        .slave
+        .spawn_command(command)
+        .map_err(|e| format!("starting {program}: {e}"))?;
+    drop(pair.slave);
+    let writer = pair.master.take_writer().map_err(|e| e.to_string())?;
+    let cap = server.config().terminals.scrollback_kb * 1024;
+    Ok(Arc::new(Terminal {
+        id: id.to_string(),
+        session: session.id().to_string(),
+        window: None,
+        cwd: cwd.to_path_buf(),
+        master: Mutex::new(pair.master),
+        writer: Mutex::new(writer),
+        child: Mutex::new(child),
+        scrollback: Mutex::new(Scrollback::new(cap)),
+        last_used: Mutex::new(Instant::now()),
+    }))
 }
 
 /// Reads its output on a thread of its own: into the scrollback and to the session's clients;

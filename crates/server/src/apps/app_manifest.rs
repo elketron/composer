@@ -10,6 +10,9 @@ const KEYS: [&str; 7] = [
 /// A site's `app:` block in its `index.md` (decision 2026-11-07): where the app shows, which
 /// projects it attaches to (`when`, any one), its rail entry, whether it has a Home tile, the file
 /// types it opens, and the recipes of its own justfile run when a project opens.
+///
+/// `app:` with a string (`app: blender`) is another thing: a workflow's application, an
+/// `[applications.<name>]` entry ([`crate::agent::Site`]). It is no manifest, broken or not.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppManifest {
     pub scope: AppScope,
@@ -42,12 +45,17 @@ impl AppManifest {
 
     /// The site's manifest from its index's frontmatter: `None` when it isn't an app (no `app:`
     /// block and no `ui/`). A block that doesn't parse says what is wrong and what to write.
+    ///
+    /// A string (`app: blender`) is a workflow's application, not a manifest: such a site is an
+    /// app only by its `ui/`, with the plain manifest, like a site with no `app:` at all.
     pub fn of_site(app: Option<&Value>, has_ui: bool) -> Result<Option<Self>, String> {
         match app {
-            None | Some(Value::Null) => Ok(has_ui.then(Self::plain)),
+            None | Some(Value::Null | Value::String(_)) => Ok(has_ui.then(Self::plain)),
             Some(Value::Object(block)) => Self::parse(block).map(Some),
             Some(_) => Err(
-                "`app:` is a block of keys (scope, when, rail, tile, opens, on_open)".to_string(),
+                "`app:` is a block of keys (scope, when, rail, tile, opens, on_open), or the \
+                 name of a workflow's application"
+                    .to_string(),
             ),
         }
     }
@@ -190,9 +198,22 @@ mod tests {
     }
 
     #[test]
+    fn a_workflows_application_is_no_manifest() {
+        assert_eq!(parse("app: blender\n").unwrap(), None, "no ui: not an app");
+        let frontmatter = composer_core::Frontmatter::parse("app: blender\n").unwrap();
+        assert_eq!(
+            AppManifest::of_site(frontmatter.get("app"), true).unwrap(),
+            Some(AppManifest::plain()),
+            "with a ui: an app like any site without an `app:` block"
+        );
+    }
+
+    #[test]
     fn errors_say_what_to_write() {
         for (yaml, says) in [
-            ("app: yes\n", "block of keys"),
+            ("app: true\n", "block of keys"),
+            ("app: [blender]\n", "block of keys"),
+            ("app: 3\n", "block of keys"),
             ("app:\n  colour: red\n", "has no `colour`"),
             (
                 "app:\n  scope: everywhere\n",

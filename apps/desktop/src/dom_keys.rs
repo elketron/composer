@@ -2,6 +2,37 @@
 //! (XKB) key code it derives `KeyboardEvent.code` from, for the key's place on a US layout (gpui
 //! gives the key, not the scancode).
 
+/// Which modifier keys are down.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Held {
+    pub shift: bool,
+    pub control: bool,
+    pub alt: bool,
+    pub platform: bool,
+}
+
+/// A modifier key going down or up: (down, windows key code, native key code), the left-hand key
+/// (gpui says which modifiers are held, not which side).
+pub type ModifierKey = (bool, i32, i32);
+
+/// The modifier keys that changed between two states, in the order shift, control, alt, super.
+/// gpui reports a modifier on its own only as a change of state, never as a key press, so a pane
+/// that must pass them on (the live view's Drive mode: shift-drag, ctrl-click) builds the key
+/// events from these.
+pub fn modifier_changes(before: Held, now: Held) -> Vec<ModifierKey> {
+    // VK_SHIFT, VK_CONTROL, VK_MENU, VK_LWIN; X keycodes (evdev + 8) of the left-hand keys.
+    [
+        (before.shift, now.shift, 0x10, 50),
+        (before.control, now.control, 0x11, 37),
+        (before.alt, now.alt, 0x12, 64),
+        (before.platform, now.platform, 0x5B, 133),
+    ]
+    .into_iter()
+    .filter(|(was, is, ..)| was != is)
+    .map(|(_, is, windows, native)| (is, windows, native))
+    .collect()
+}
+
 /// (windows key code, native key code) for a gpui key name.
 pub fn codes(key: &str) -> Option<(i32, i32)> {
     let windows = windows_code(key)?;
@@ -104,6 +135,36 @@ fn native_code(key: &str) -> Option<i32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn modifier_keys_are_the_changes_between_states() {
+        let none = Held::default();
+        let shift = Held {
+            shift: true,
+            ..none
+        };
+        let both = Held {
+            shift: true,
+            control: true,
+            ..none
+        };
+        assert_eq!(modifier_changes(none, shift), [(true, 0x10, 50)]);
+        assert_eq!(modifier_changes(shift, both), [(true, 0x11, 37)]);
+        assert_eq!(
+            modifier_changes(both, none),
+            [(false, 0x10, 50), (false, 0x11, 37)]
+        );
+        assert!(modifier_changes(both, both).is_empty());
+        let alt_super = Held {
+            alt: true,
+            platform: true,
+            ..none
+        };
+        assert_eq!(
+            modifier_changes(none, alt_super),
+            [(true, 0x12, 64), (true, 0x5B, 133)]
+        );
+    }
 
     #[test]
     fn letters_digits_and_named() {

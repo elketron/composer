@@ -11,7 +11,7 @@ use axum::response::{Html, IntoResponse, Response};
 use serde::Deserialize;
 use serde_json::json;
 
-use crate::api::auth::{is_https, same_origin, set_cookie};
+use crate::api::auth::{Audience, cookie_name, is_https, origin_refused, set_cookie};
 use crate::server::Server;
 
 /// A paired browser stays signed in for a year (revoke with `composer devices revoke`).
@@ -58,10 +58,8 @@ pub async fn pair_submit(
     headers: HeaderMap,
     Form(form): Form<PairForm>,
 ) -> Response {
-    if let Some(origin) = headers.get(header::ORIGIN).and_then(|v| v.to_str().ok())
-        && !same_origin(origin, &headers)
-    {
-        return (StatusCode::FORBIDDEN, "cross-origin request").into_response();
+    if let Some(refused) = origin_refused(&headers, Audience::Workspace) {
+        return refused;
     }
     match server.devices.redeem(&form.code, Some(&form.name)) {
         Ok(Some((name, token))) => {
@@ -71,6 +69,7 @@ pub async fn pair_submit(
                 (StatusCode::SEE_OTHER, [(header::LOCATION, chat.as_str())]).into_response();
             set_cookie(
                 &mut response,
+                &cookie_name(&server),
                 &token,
                 is_https(&headers),
                 Some(DEVICE_COOKIE_SECONDS),
@@ -80,7 +79,7 @@ pub async fn pair_submit(
         }
         Ok(None) => (
             StatusCode::UNAUTHORIZED,
-            page("<h1>That code didn't work</h1><p>It is wrong, already used, or older than 10 minutes. Run <code>composer pair</code> for a new one.</p>"),
+            page("<h1>That code didn't work</h1><p>It is wrong, already used, older than 10 minutes, or five wrong codes were tried while it was open. Run <code>composer pair</code> for a new one.</p>"),
         )
             .into_response(),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
@@ -88,7 +87,14 @@ pub async fn pair_submit(
 }
 
 /// `POST /api/pair` (JSON `{code, name}`): for `composer login` on another machine.
-pub async fn pair_api(State(server): State<Arc<Server>>, Json(form): Json<PairForm>) -> Response {
+pub async fn pair_api(
+    State(server): State<Arc<Server>>,
+    headers: HeaderMap,
+    Json(form): Json<PairForm>,
+) -> Response {
+    if let Some(refused) = origin_refused(&headers, Audience::Workspace) {
+        return refused;
+    }
     match server.devices.redeem(&form.code, Some(&form.name)) {
         Ok(Some((name, token))) => Json(json!({ "name": name, "token": token })).into_response(),
         Ok(None) => (

@@ -86,6 +86,12 @@ async fn review_merge_and_discard() {
     let say = |text: &str| vec![ModelEvent::Content(text.into()), finished(vec![])];
     // Each: the call (it returns at once), the turn's end, then a turn for the outcome.
     let (dir, server, _provider, addr) = start(vec![
+        vec![finished(vec![tool_call(
+            "enter",
+            "enter_site",
+            json!({ "site": "orchestration" }),
+        )])],
+        say("In orchestration."),
         merge("m1"),
         say("Asked."),
         say("Not merged."),
@@ -170,6 +176,20 @@ async fn review_merge_and_discard() {
         },
     )
     .await;
+    // `merge_ticket` is orchestration's verb: enter it first.
+    send(
+        &mut socket,
+        2,
+        ClientCommand::MessageSend {
+            session: session.clone(),
+            text: "enter orchestration".into(),
+            pages: vec![],
+            images: vec![],
+            attachments: vec![],
+        },
+    )
+    .await;
+    until(&mut socket, |e| matches!(e, ServerMessage::TurnDone { .. })).await;
     for (n, decision) in [(4, ApprovalDecision::Deny), (6, ApprovalDecision::Approve)] {
         send(
             &mut socket,
@@ -319,6 +339,12 @@ async fn merging_into_another_branch() {
     let say = |text: &str| vec![ModelEvent::Content(text.into()), finished(vec![])];
     // into → lands on dev; frontmatter → lands on staging; unknown → error; no into → main.
     let (dir, server, _provider, addr) = start(vec![
+        vec![finished(vec![tool_call(
+            "enter",
+            "enter_site",
+            json!({ "site": "orchestration" }),
+        )])],
+        say("In orchestration."),
         call("1", json!("dev")),
         say("Asked."),
         say("Merged."),
@@ -395,7 +421,22 @@ async fn merging_into_another_branch() {
     )
     .await;
 
-    let mut next = 3u64;
+    // `merge_ticket` is orchestration's verb: enter it first.
+    send(
+        &mut socket,
+        3,
+        ClientCommand::MessageSend {
+            session: session.clone(),
+            text: "enter orchestration".into(),
+            pages: vec![],
+            images: vec![],
+            attachments: vec![],
+        },
+    )
+    .await;
+    until(&mut socket, |e| matches!(e, ServerMessage::TurnDone { .. })).await;
+
+    let mut next = 4u64;
     let mut ask = |id: &str| {
         let n = next;
         next += 2;

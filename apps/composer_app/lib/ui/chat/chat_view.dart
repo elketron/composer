@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
 import '../../state/actions.dart';
+import '../../state/chat_order.dart';
 import '../../state/chat_state.dart';
 import '../../state/server_status.dart';
 import '../../theme/tokens.dart' as t;
@@ -21,21 +22,28 @@ import 'older_messages.dart';
 import 'selection_chip.dart';
 import 'orchestration_bar.dart';
 
-/// A session's chat: transcript (newest at the bottom, following the stream), its approvals,
-/// and the composer.
+/// A session's chat: transcript (newest first or last, see [chatNewestFirst]; it follows the
+/// stream), its approvals, and the composer.
 class ChatView extends StatefulWidget {
-  const ChatView({super.key, required this.url, required this.status, required this.chat});
+  const ChatView({super.key, required this.url, required this.status, required this.chat, this.newestFirst = chatNewestFirst, this.stopInHeader = false});
 
   final String url;
   final ServerStatus status;
   final ChatState chat;
+
+  /// The newest item at the top (and the list starts there) instead of the bottom.
+  final bool newestFirst;
+
+  /// The screen's header has the stop control: the composer has none.
+  final bool stopInHeader;
 
   @override
   State<ChatView> createState() => _ChatViewState();
 }
 
 class _ChatViewState extends State<ChatView> {
-  /// The list is reversed, so the newest line is where the scroll starts.
+  /// The newest line is where the scroll starts, in both orders: the list is built newest first
+  /// and reversed (newest at the bottom) or not (newest at the top).
   final _controller = ScrollController();
 
   @override
@@ -112,8 +120,8 @@ class _ChatViewState extends State<ChatView> {
       if (before.isNotEmpty) WidgetsBinding.instance.addPostFrameCallback((_) => _hold(before, pixels));
     }
 
-    // Built bottom-up: the list is reversed so it sticks to the newest line. Keys keep each
-    // row's state (an expanded tool row) on its row as new ones arrive below.
+    // Built newest first: the list sticks to the newest line in either direction. Keys keep each
+    // row's state (an expanded tool row) on its row as new ones arrive.
     // A turn's steps fold into one row; workers' reports become cards.
     final chatRowsList = chatRows(chat.items);
     final rows = <(Key, Widget)>[
@@ -148,8 +156,8 @@ class _ChatViewState extends State<ChatView> {
                     child: ListView.builder(
                       key: PageStorageKey('chat-${widget.url}-${chat.session}'),
                       controller: _controller,
-                      reverse: true,
-                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
+                      reverse: !widget.newestFirst,
+                      padding: const EdgeInsets.fromLTRB(14, 4, 14, 14),
                       itemCount: rows.length,
                       findChildIndexCallback: (key) => keys[key],
                       itemBuilder: (_, i) => Padding(
@@ -167,16 +175,16 @@ class _ChatViewState extends State<ChatView> {
                 ),
                 if (chat.newSince > 0)
                   Align(
-                    alignment: Alignment.bottomCenter,
+                    alignment: widget.newestFirst ? Alignment.topCenter : Alignment.bottomCenter,
                     child: Padding(
-                      padding: const EdgeInsets.only(bottom: 4),
-                      child: NewContentPill(key: const Key('new-content'), count: chat.newSince, onTap: _backToLatest),
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: NewContentPill(key: const Key('new-content'), count: chat.newSince, up: widget.newestFirst, onTap: _backToLatest),
                     ),
                   ),
               ]),
       ),
       if (chat.selection case final selection?) SelectionChip(url: widget.url, selection: selection),
-      MessageComposer(key: ValueKey('composer-${widget.url}-${chat.session}'), url: widget.url, busy: busy),
+      MessageComposer(key: ValueKey('composer-${widget.url}-${chat.session}'), url: widget.url, busy: busy, showStop: !widget.stopInHeader),
     ]);
   }
 }

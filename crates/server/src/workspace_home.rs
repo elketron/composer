@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 
 use crate::config::Config;
 use crate::error::Result;
+use crate::mcp_bundles::InstalledMcpBundles;
 use crate::workspace_name::WorkspaceName;
 
 /// One workspace's folder: its web, config and state.
@@ -153,7 +154,19 @@ impl WorkspaceHome {
 
     /// This workspace's settings: the global defaults with its own `config.toml` on top.
     pub fn load_config(&self) -> Result<Config> {
-        Config::load_layered(&self.global_config_file(), &self.config_file())
+        let mut config = Config::load_layered(&self.global_config_file(), &self.config_file())?;
+        InstalledMcpBundles::load(&self.mcps(), &self.mcps_state()).merge_into(&mut config.mcp);
+        Ok(config)
+    }
+
+    /// The MCP bundles (`mcps/*.mcpb`) of the home, shared by its workspaces.
+    pub fn mcps(&self) -> PathBuf {
+        self.home.join("mcps")
+    }
+
+    /// Where the bundles are unpacked (`state/mcps/<server>/`).
+    pub fn mcps_state(&self) -> PathBuf {
+        self.home.join("state").join("mcps")
     }
 
     pub fn sites(&self) -> PathBuf {

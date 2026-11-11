@@ -1,17 +1,20 @@
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use composer_core::{Page, SiteUrl, Web};
+use composer_core::{Frontmatter, Page, SiteUrl, Web};
 use composer_protocol::http::{StageState, WorkSummary};
+use serde_json::Value;
 
 use crate::content_hash;
 use crate::pipeline::pipeline::Pipeline;
 use crate::pipeline::stage_contract::StageContract;
 use crate::pipeline::types::FINISHED;
+use crate::project::{ProjectMode, ProjectRef};
+use crate::server::Server;
 
-/// A piece of work: a folder in a pipeline site (`site://coding/save-system/`) with its brief in
-/// `index.md` (`type: work`) and a folder per stage holding what the stage wrote and its
-/// `_stage.md`.
+/// A piece of work: a folder in a pipeline site (`site://coding/save-system/`) with its brief and
+/// state in `index.md` (`type: work`) and a folder per stage holding what the stage wrote. A work
+/// from before the state moved to its page still reads its stages' `_stage.md`.
 #[derive(Debug, Clone)]
 pub struct Work {
     pub pipeline: Pipeline,
@@ -50,14 +53,145 @@ impl Work {
         format!("site://{}/{}/index.md", self.pipeline.name, self.name)
     }
 
-    /// A stage's state: its `_stage.md`'s `status:`, `waiting` without one.
+    /// How this work may use its project: the stage's `project_mode`, its legacy `worktree:`,
+    /// then the work's own `project_mode`, then the pipeline's default.
+    pub fn project_mode(&self, contract: Option<&StageContract>) -> ProjectMode {
+        if let Some(contract) = contract {
+            if let Some(raw) = contract.project_mode.as_deref() {
+                return ProjectMode::parse(raw);
+            }
+            if contract.worktree {
+                return ProjectMode::Worktree;
+            }
+        }
+        if let Some(raw) = self.field("project_mode") {
+            return ProjectMode::parse(&raw);
+        }
+        self.pipeline.project_mode
+    }
+
+    /// The project page this work names, resolved.
+    pub fn project_root(&self, server: &Server) -> Option<ProjectRef> {
+        self.project
+            .as_deref()
+            .and_then(|project| ProjectRef::resolve(server, project).ok())
+    }
+
+    /// Points this work's `project/` at `target` (the project root or its worktree) and records
+    /// the mode.
+    pub fn project_mount(&self, server: &Server, target: &Path, mode: ProjectMode) {
+        let link = self.dir.join("project");
+        let _ = std::fs::remove_file(&link);
+        if let Err(error) = std::os::unix::fs::symlink(target, &link) {
+            tracing::warn!("project link {}: {error}", link.display());
+            return;
+        }
+        server.web.set_project_mount(&link, target, mode.as_mount());
+    }
+
+    /// A field of the work's own `index.md`.
+    fn field(&self, key: &str) -> Option<String> {
+        self.frontmatter()?
+            .get_str(key)
+            .filter(|value| !value.is_empty())
+    }
+
+    fn frontmatter(&self) -> Option<Frontmatter> {
+        let raw = std::fs::read_to_string(self.dir.join("index.md")).ok()?;
+        let url = SiteUrl::new(&self.pipeline.name, &format!("{}/index.md", self.name)).ok()?;
+        Some(Page::parse(url, raw).frontmatter)
+    }
+
+    /// The stages that finished (`done:` on the work's page).
+    pub fn done(&self) -> Vec<String> {
+        self.frontmatter()
+            .and_then(|fm| {
+                fm.get("done").and_then(Value::as_array).map(|items| {
+                    items
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .map(str::to_string)
+                        .collect()
+                })
+            })
+            .unwrap_or_default()
+    }
+
+    /// The stage the work is on (`stage:` on its page), if any.
+    pub fn current(&self) -> Option<String> {
+        self.field("stage")
+    }
+
+    /// The work's own `status:` (`waiting`, `running`, `review`, `approved`, ...).
+    pub fn current_status(&self) -> Option<String> {
+        self.field("status")
+    }
+
+    /// How many times a stage ran (`attempts:` on the work's page).
+    pub fn attempts(&self, stage: &str) -> u32 {
+        self.frontmatter()
+            .and_then(|fm| fm.get("attempts").cloned())
+            .and_then(|value| value.as_object().cloned())
+            .and_then(|map| map.get(stage).cloned())
+            .and_then(|value| value.as_u64())
+            .unwrap_or(0) as u32
+    }
+
+    /// A stage's state: done when it is in `done:`, the work's `status:` while it is the
+    /// current stage, else `waiting`. A work from before the state moved to its page still reads
+    /// its stage's `_stage.md`.
     pub fn stage_status(&self, stage: &str) -> String {
-        self.stage_field(stage, "status")
+        if let Some(fm) = self.frontmatter() {
+            // The current stage's own status wins: a rerun in progress (or failed) is not `done`
+            // just because an earlier run of it was.
+            if fm.get_str("stage").as_deref() == Some(stage)
+                && let Some(status) = fm.get_str("status").filter(|s| !s.is_empty())
+            {
+                return status;
+            }
+            if self.done().iter().any(|done| done == stage) {
+                return "done".into();
+            }
+        }
+        self.legacy_stage_field(stage, "status")
             .unwrap_or_else(|| "waiting".into())
     }
 
-    /// A field of a stage's `_stage.md`.
+    /// A stage's run record: `ticket:`, `summary:`, `session:` and the rest, keyed by stage on
+    /// the work's page; `_stage.md` for a work from before.
     pub fn stage_field(&self, stage: &str, key: &str) -> Option<String> {
+        if let Some(value) = self
+            .frontmatter()
+            .and_then(|fm| fm.get(key).cloned())
+            .and_then(|value| value.as_object().cloned())
+            .and_then(|map| map.get(stage).cloned())
+            .and_then(|value| value.as_str().map(str::to_string))
+            .filter(|value| !value.is_empty())
+        {
+            return Some(value);
+        }
+        self.legacy_stage_field(stage, key)
+    }
+
+    /// The inputs a stage read last time, from the work's page; `_stage.md` for an older work.
+    fn stage_inputs(&self, stage: &str) -> Option<BTreeMap<String, String>> {
+        let map = self
+            .frontmatter()
+            .and_then(|fm| fm.get("inputs").cloned())
+            .and_then(|value| value.as_object().cloned())
+            .and_then(|map| map.get(stage).cloned())
+            .and_then(|value| value.as_object().cloned());
+        if let Some(map) = map {
+            return Some(
+                map.iter()
+                    .map(|(k, v)| (k.clone(), v.as_str().unwrap_or_default().to_string()))
+                    .collect(),
+            );
+        }
+        self.legacy_stage_inputs(stage)
+    }
+
+    fn legacy_stage_field(&self, stage: &str, key: &str) -> Option<String> {
         let raw = std::fs::read_to_string(self.dir.join(stage).join("_stage.md")).ok()?;
         let url = SiteUrl::new(
             &self.pipeline.name,
@@ -70,8 +204,26 @@ impl Work {
             .filter(|v| !v.is_empty())
     }
 
+    fn legacy_stage_inputs(&self, stage: &str) -> Option<BTreeMap<String, String>> {
+        let raw = std::fs::read_to_string(self.dir.join(stage).join("_stage.md")).ok()?;
+        let url = SiteUrl::new(
+            &self.pipeline.name,
+            &format!("{}/{stage}/_stage.md", self.name),
+        )
+        .ok()?;
+        let page = Page::parse(url, raw);
+        let inputs = page.frontmatter.get("inputs")?.as_object()?;
+        Some(
+            inputs
+                .iter()
+                .map(|(k, v)| (k.clone(), v.as_str().unwrap_or_default().to_string()))
+                .collect(),
+        )
+    }
+
     /// Its stages with their state. A stage that ran is stale when an input it read changed
-    /// since (its `_stage.md` keeps their hashes), and so is every stage after it that ran.
+    /// since (its `inputs:` on the work's page keep their hashes), and so is every stage after
+    /// it that ran.
     pub fn stages(&self) -> Vec<StageState> {
         let mut behind = false;
         self.pipeline
@@ -102,20 +254,28 @@ impl Work {
         contract
             .inputs
             .iter()
-            .filter_map(|i| self.resolve(&i.path))
-            .map(|url| {
-                let hash = root
-                    .as_ref()
-                    .and_then(|ws| ws.locate(&url).ok())
-                    .and_then(|path| std::fs::read(path).ok())
-                    .map(|bytes| content_hash(&bytes))
-                    .unwrap_or_default();
+            .filter_map(|input| self.resolve(&input.path).map(|url| (input, url)))
+            .map(|(input, url)| {
+                // The brief is the work page's body; its state is frontmatter and must not make
+                // every stage that read the brief stale.
+                let hash = if input.path.trim() == "brief" {
+                    root.as_ref()
+                        .and_then(|ws| ws.read_page(&url).ok())
+                        .map(|page| content_hash(page.body().as_bytes()))
+                        .unwrap_or_default()
+                } else {
+                    root.as_ref()
+                        .and_then(|ws| ws.locate(&url).ok())
+                        .and_then(|path| std::fs::read(path).ok())
+                        .map(|bytes| content_hash(&bytes))
+                        .unwrap_or_default()
+                };
                 (url.to_string(), hash)
             })
             .collect()
     }
 
-    /// The inputs that differ from what the stage read last time (`inputs:` in `_stage.md`).
+    /// The inputs that differ from what the stage read last time (`inputs:` on the work's page).
     fn changed_inputs(&self, contract: &StageContract) -> Vec<String> {
         let Some(recorded) = self.recorded_inputs(&contract.name) else {
             // Run before inputs were recorded: nothing to compare with.
@@ -137,20 +297,7 @@ impl Work {
     }
 
     fn recorded_inputs(&self, stage: &str) -> Option<BTreeMap<String, String>> {
-        let raw = std::fs::read_to_string(self.dir.join(stage).join("_stage.md")).ok()?;
-        let url = SiteUrl::new(
-            &self.pipeline.name,
-            &format!("{}/{stage}/_stage.md", self.name),
-        )
-        .ok()?;
-        let page = Page::parse(url, raw);
-        let inputs = page.frontmatter.get("inputs")?.as_object()?;
-        Some(
-            inputs
-                .iter()
-                .map(|(k, v)| (k.clone(), v.as_str().unwrap_or_default().to_string()))
-                .collect(),
-        )
+        self.stage_inputs(stage)
     }
 
     /// The pages a stage wrote: markdown in its folder (and one level down), not `_stage.md`.

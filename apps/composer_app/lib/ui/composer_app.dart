@@ -9,6 +9,7 @@ import '../state/types.dart';
 import '../theme/composer_theme.dart';
 import 'chat/chat_page_route.dart';
 import 'chat/navigation.dart';
+import 'chat/page_cover.dart';
 import 'pages/page_navigation.dart';
 import 'shell.dart';
 import 'store_scope.dart';
@@ -27,6 +28,7 @@ class ComposerApp extends StatefulWidget {
 class _ComposerAppState extends State<ComposerApp> {
   final _messenger = GlobalKey<ScaffoldMessengerState>();
   final _navigator = GlobalKey<NavigatorState>();
+  final _cover = PageCover();
   StreamSubscription<NotificationTap>? _taps;
   Notice? _shown;
   /// Taps that arrived before the store knew their server (a cold start); re-driven by `_replayHeld`.
@@ -109,13 +111,17 @@ class _ComposerAppState extends State<ComposerApp> {
   @override
   Widget build(BuildContext context) => StoreScope(
         store: widget.store,
-        child: MaterialApp(
-          title: 'composer',
-          debugShowCheckedModeBanner: false,
-          theme: composerTheme(),
-          scaffoldMessengerKey: _messenger,
-          navigatorKey: _navigator,
-          home: const Shell(),
+        child: PageCoverScope(
+          cover: _cover,
+          child: MaterialApp(
+            title: 'composer',
+            debugShowCheckedModeBanner: false,
+            theme: composerTheme(),
+            scaffoldMessengerKey: _messenger,
+            navigatorKey: _navigator,
+            navigatorObservers: [_cover],
+            home: const Shell(),
+          ),
         ),
       );
 }

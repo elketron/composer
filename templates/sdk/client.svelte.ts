@@ -1,7 +1,10 @@
 // The composer server, as seen from a micro app.
 //
-// The app is served by the server at /<site>/, so every request is same-origin and
-// authenticated by the cookie set when the app was opened (?token=...).
+// An app is served by the server at <workspace>/a/<app token>/, sandboxed: its page has an opaque
+// origin (no cookies, no storage, `Origin: null`), and its token is in the path, so the API under
+// it (`api/...`, `ws`) is authenticated by the URL itself. The server tells the page its site,
+// project and session in `<meta name="composer-app">`. A client app (the chat) is served at
+// <workspace>/<site>/ instead, with the workspace's cookie.
 // Types mirror crates/protocol (generate them with `cargo test -p composer-protocol --features ts`).
 
 export interface Page {
@@ -29,51 +32,47 @@ export interface PageChange {
 const params = new URLSearchParams(location.search);
 
 /** This sdk's version, stamped into every app built with it (the server tells an older build
- * apart: one before 2 doesn't know the `/h/` and `/p/` routes). */
-export const SDK_VERSION = 2;
+ * apart: one before 3 doesn't know the sandboxed `/a/<app token>/` routes). */
+export const SDK_VERSION = 3;
 document.documentElement.dataset.composerSdk = `composer-sdk:${SDK_VERSION}`;
 
 const segments = location.pathname.split('/').filter(Boolean);
 const inWorkspace = segments[0] === 'w' && segments.length >= 2;
 /** Where the workspace's own segments end: after `/w/<workspace>`, or at the start. */
 const at = inWorkspace ? 2 : 0;
-/** Opened on a project: `<workspace>/p/<project>/<app>/` (its own token and API). */
-const onProject = segments[at] === 'p' && segments.length >= at + 3;
-/** Opened on Home with a token of its own: `<workspace>/h/<app>/`. */
-const onHome = segments[at] === 'h' && segments.length >= at + 2;
+/** Opened with a token of its own (on a project or on Home): `<workspace>/a/<app token>/`. */
+const onToken = segments[at] === 'a' && segments.length >= at + 2;
 const workspaceBase = inWorkspace ? `/w/${segments[1]}` : '';
+
+/** What the server says about this app page (only under `/a/`). */
+const facts: { site?: string; project?: string | null; session?: string | null } = (() => {
+  if (!onToken) return {};
+  try {
+    return JSON.parse(document.querySelector('meta[name="composer-app"]')?.getAttribute('content') ?? '{}') ?? {};
+  } catch {
+    return {};
+  }
+})();
 
 /** This app's workspace (`default`, ...), or `null` when served without one. */
 export const workspace: string | null = inWorkspace ? segments[1] : null;
 
 /** The name of the project the app was opened on, or `null` on Home. */
-export const projectName: string | null = onProject ? decodeURIComponent(segments[at + 1]) : null;
+export const projectName: string | null = facts.project ?? null;
 
-/** This app's site: `/w/default/design/` → `design`; `/w/default/p/game/cad/` → `cad`;
- * `/w/default/h/calendar/` → `calendar`. */
-export const site: string = (onProject ? segments[at + 2] : onHome ? segments[at + 1] : segments[at]) ?? '';
+/** This app's site: from the server under `/a/`; a client app's is its path
+ * (`/w/default/chat/` → `chat`). */
+export const site: string = (onToken ? facts.site : segments[at]) ?? '';
 
-/** Where this app's API lives: the workspace's (`/w/<workspace>`), or on a project the app's own
- * (`/w/<workspace>/p/<project>/<app>`), which its token allows. */
-export const base: string = onProject
-  ? `${workspaceBase}/p/${segments[at + 1]}/${segments[at + 2]}`
-  : onHome
-    ? `${workspaceBase}/h/${segments[at + 1]}`
-    : workspaceBase;
+/** Where this app's API lives: under its token (`/w/<workspace>/a/<app token>`), or for a client
+ * app the workspace's (`/w/<workspace>`). */
+export const base: string = onToken ? `${workspaceBase}/a/${segments[at + 1]}` : workspaceBase;
 
-/** The session that opened the app; messages from `send` go there. Survives reloads. */
-export const session: string | null = (() => {
-  const key = `composer:${workspace ?? ''}:${site}:session`;
-  const fromUrl = params.get('session');
-  try {
-    if (fromUrl) sessionStorage.setItem(key, fromUrl);
-    return fromUrl ?? sessionStorage.getItem(key);
-  } catch {
-    return fromUrl;
-  }
-})();
+/** The session that opened the app; messages from `send` go there. (No storage: a sandboxed page
+ * has none; the server says it on every load.) */
+export const session: string | null = facts.session ?? params.get('session');
 
-// Drop the token from the address bar once the cookie is set.
+// Drop a client app's token or one-time code from the address bar once the cookie is set.
 if (params.has('token') || params.has('app_token') || params.has('once')) {
   params.delete('token');
   params.delete('app_token');
@@ -98,13 +97,18 @@ async function json<T>(response: Response): Promise<T> {
 export interface Project {
   /** Its name in the workspace (and in this app's URL). */
   name: string;
+  /** Its project page (`site://projects/<name>`), when it has one. */
+  page?: string;
   /** The absolute folder. */
   root: string;
   /** The branch checked out (git projects). */
   branch?: string;
-  /** The first pipeline with a work linking it; `pipelines` has them all. */
+  /** The first site with a work linking it; `sites` has them all. */
   pipeline?: string;
+  /** The old name for `sites`. */
   pipelines: string[];
+  /** The sites operating on it. */
+  sites: string[];
   tags: string[];
 }
 
@@ -114,10 +118,30 @@ export async function project(): Promise<Project | null> {
   return json(await fetch(`${base}/api/project`));
 }
 
+/** Reads a file of the project. With `work`, the work's `project/` view: the worktree while a
+ * code stage runs, the project root otherwise. */
+export async function projectFile(path: string, work?: string): Promise<Response> {
+  const query = work ? `?work=${encodeURIComponent(work)}` : '';
+  const response = await fetch(`${base}/api/project/files/${path}${query}`);
+  if (!response.ok) throw new Error(`${response.status} ${await response.text()}`);
+  return response;
+}
+
+/** Writes a file of the project (or the work's `project/` view). A `read` work refuses. */
+export async function putProjectFile(
+  path: string,
+  body: Blob | string,
+  work?: string,
+): Promise<void> {
+  const query = work ? `?work=${encodeURIComponent(work)}` : '';
+  const response = await fetch(`${base}/api/project/files/${path}${query}`, { method: 'PUT', body });
+  if (!response.ok) throw new Error(`${response.status} ${await response.text()}`);
+}
+
 /** This app's work data on its project (renders, view models, JSON): kept in the workspace, keyed
  * by project, not in the project. Its recipes see the same folder as `APP_DATA`. */
 export async function data(path: string): Promise<Response> {
-  if (!projectName && !onHome) throw new Error('data() needs the app opened on a project or on Home');
+  if (!onToken) throw new Error('data() needs the app opened on a project or on Home');
   const response = await fetch(`${base}/api/data/${path}`);
   if (!response.ok) throw new Error(`${response.status} ${await response.text()}`);
   return response;
@@ -125,7 +149,7 @@ export async function data(path: string): Promise<Response> {
 
 /** Writes this app's work data on its project (see `data`). */
 export async function putData(path: string, body: Blob | string): Promise<void> {
-  if (!projectName && !onHome) throw new Error('putData() needs the app opened on a project or on Home');
+  if (!onToken) throw new Error('putData() needs the app opened on a project or on Home');
   const response = await fetch(`${base}/api/data/${path}`, { method: 'PUT', body });
   if (!response.ok) throw new Error(`${response.status} ${await response.text()}`);
 }

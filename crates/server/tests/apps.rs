@@ -21,6 +21,13 @@ fn no_redirects() -> reqwest::Client {
 #[tokio::test]
 async fn new_app_scaffolds_the_ui_and_a_build_action() {
     let (dir, server, _p, addr) = start(vec![
+        // Home is the site-management capability: enter it, then `new_app` is available next turn.
+        vec![finished(vec![tool_call(
+            "e",
+            "enter_site",
+            json!({ "site": "home" }),
+        )])],
+        vec![ModelEvent::Content("in home".into()), finished(vec![])],
         vec![finished(vec![tool_call(
             "n",
             "new_app",
@@ -63,18 +70,16 @@ async fn new_app_scaffolds_the_ui_and_a_build_action() {
         },
     )
     .await;
-    send(
-        &mut socket,
-        3,
-        ClientCommand::MessageSend {
-            session: session.id.clone(),
-            text: "app please".into(),
-            pages: vec![],
-            images: vec![],
-            attachments: vec![],
-        },
-    )
-    .await;
+    let message = |text: &str| ClientCommand::MessageSend {
+        session: session.id.clone(),
+        text: text.into(),
+        pages: vec![],
+        images: vec![],
+        attachments: vec![],
+    };
+    send(&mut socket, 3, message("enter home")).await;
+    until(&mut socket, |e| matches!(e, ServerMessage::TurnDone { .. })).await;
+    send(&mut socket, 4, message("app please")).await;
     let events = until(&mut socket, |e| matches!(e, ServerMessage::TurnDone { .. })).await;
     assert!(events.iter().any(|e| matches!(e, ServerMessage::ToolResult { is_error: false, result, .. } if result.contains("created site://plans/ui"))));
 
@@ -128,6 +133,18 @@ async fn apps_are_served_with_cookie_auth() {
         redirect.headers()["location"],
         format!("plans/?token={}&session=ab12", server.token)
     );
+
+    // Not approved yet: a client app runs with the workspace's access, so it is served only as
+    // the user approved it; the page says how.
+    let refused = client
+        .get(format!("{base}/plans/?token={}", server.token))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(refused.status(), 403);
+    let said = refused.text().await.unwrap();
+    assert!(said.contains("composer app approve plans"), "{said}");
+    server.client_apps.approve("plans", &dist).unwrap();
 
     // Opening with the token sets the cookie.
     let index = client
@@ -196,6 +213,27 @@ async fn apps_are_served_with_cookie_auth() {
         .unwrap();
     assert!(escape.status().is_client_error(), "{}", escape.status());
 
+    // Its build changed (an agent can write it): refused, page and changed file alike, until
+    // approved again.
+    std::fs::write(dist.join("assets/app.js"), "steal()").unwrap();
+    for path in ["plans/", "plans/assets/app.js"] {
+        let response = client
+            .get(format!("{base}/{path}"))
+            .header("cookie", &cookie)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), 403, "{path}");
+        assert!(
+            response
+                .text()
+                .await
+                .unwrap()
+                .contains("composer app approve plans")
+        );
+    }
+    std::fs::write(dist.join("assets/app.js"), "console.log(1)").unwrap();
+
     // A site without an app, or with one that isn't built, says what it looked for.
     let page = |site: &'static str| {
         let request = client
@@ -226,7 +264,7 @@ async fn apps_are_served_with_cookie_auth() {
         .await
         .unwrap();
     let url = opened["url"].as_str().unwrap();
-    assert!(url.starts_with("/h/orchestration/?app_token=app_"), "{url}");
+    assert!(url.starts_with("/a/app_") && url.ends_with('/'), "{url}");
     let response = client.get(format!("{base}{url}")).send().await.unwrap();
     assert_eq!(response.status(), 404);
     let unbuilt = response.text().await.unwrap();
@@ -297,6 +335,11 @@ async fn files_api_round_trips_bytes_and_notifies() {
         .await
         .unwrap();
     assert_eq!(get.headers()["content-type"], "image/png");
+    // A site's file is agent-writable: opened as a page, it would run sandboxed.
+    assert_eq!(
+        get.headers()["content-security-policy"],
+        composer_server::api::SANDBOX
+    );
     assert_eq!(get.bytes().await.unwrap().to_vec(), png);
 
     let events = until(&mut socket, |e| {

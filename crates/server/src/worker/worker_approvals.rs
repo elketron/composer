@@ -133,6 +133,10 @@ impl WorkerApprovals {
         id: Option<&str>,
         verdict: Verdict,
     ) -> Result<String, String> {
+        // Models often use this placeholder when the request id is not in front of them; it
+        // means "the one waiting", which is the default anyway.
+        let asked_with_id = id.is_some();
+        let id = id.filter(|id| !id.trim().is_empty() && !id.eq_ignore_ascii_case("last-pending"));
         let mut waiting = self.waiting.lock().expect("approvals lock");
         let ids: Vec<String> = waiting
             .iter()
@@ -146,6 +150,14 @@ impl WorkerApprovals {
         let id = match ids.as_slice() {
             [id] => id.clone(),
             [] => {
+                // An id names a request that was answered or whose worker ended: that is not a
+                // failure. No id at all is the ambiguous "last pending" case, where saying the
+                // request is gone is useful (the caller may have gone away).
+                if asked_with_id {
+                    return Ok(format!(
+                        "no approval of ticket {ticket} waits for you (already answered, or its worker ended)"
+                    ));
+                }
                 return Err(format!(
                     "no approval of ticket {ticket} waits for you (answered, or its worker ended)"
                 ));
@@ -163,10 +175,11 @@ impl WorkerApprovals {
             Verdict::Deny(_) => "denied; the worker is told why",
             Verdict::AskUser(_) => "passed to the user",
         };
-        waiting
-            .reply
-            .send(verdict)
-            .map_err(|_| "the worker stopped waiting".to_string())?;
+        if waiting.reply.send(verdict).is_err() {
+            return Ok(format!(
+                "request {id} of ticket {ticket} is over (its worker stopped waiting)"
+            ));
+        }
         Ok(format!("request {id} of ticket {ticket}: {said}"))
     }
 
@@ -218,5 +231,61 @@ impl WorkerApprovals {
             let message = user_message(content, MessageSource::Worker { session: worker });
             submit(server, orchestrator, message);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn waiting(orchestrator: &str, ticket: &str) -> (Waiting, oneshot::Receiver<Verdict>) {
+        let (reply, verdict) = oneshot::channel();
+        (
+            Waiting {
+                orchestrator: orchestrator.into(),
+                ticket: ticket.into(),
+                worker: "beef".into(),
+                message: "request".into(),
+                read: false,
+                reminded: false,
+                reply,
+            },
+            verdict,
+        )
+    }
+
+    #[test]
+    fn last_pending_answers_the_one_waiting() {
+        let approvals = WorkerApprovals::default();
+        let (waiting, mut verdict) = waiting("orch", "0001");
+        approvals
+            .waiting
+            .lock()
+            .unwrap()
+            .insert("request-1".into(), waiting);
+        let said = approvals
+            .answer(
+                "orch",
+                "0001",
+                Some("last-pending"),
+                Verdict::Approve("fine".into()),
+            )
+            .unwrap();
+        assert!(said.contains("request-1"), "{said}");
+        assert!(verdict.try_recv().is_ok());
+    }
+
+    #[test]
+    fn an_already_answered_request_is_not_an_error() {
+        let approvals = WorkerApprovals::default();
+        let said = approvals
+            .answer(
+                "orch",
+                "0001",
+                Some("last-pending"),
+                Verdict::Deny("no".into()),
+            )
+            .unwrap();
+        assert!(said.contains("already answered"), "{said}");
     }
 }

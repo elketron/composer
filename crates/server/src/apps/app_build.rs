@@ -1,9 +1,9 @@
 use std::path::Path;
 
 /// The app sdk's version now (`SDK_VERSION` in `templates/sdk/client.svelte.ts`). A build with an
-/// older one (or none: before builds were stamped) doesn't know the `/h/` and `/p/` routes and
-/// shows nothing there.
-pub const SDK_VERSION: u32 = 2;
+/// older one (or none: before builds were stamped) doesn't know the sandboxed `/a/<app token>/`
+/// routes (3) and shows nothing there: it is refused with a page saying to rebuild it.
+pub const SDK_VERSION: u32 = 3;
 
 /// The sdk version `dir`'s app was built with (`dir/ui/dist`): `None` when it isn't built, `0`
 /// when the build has no stamp.
@@ -57,6 +57,8 @@ mod tests {
         assert!(outdated(app.path()));
         std::fs::write(assets.join("a.js"), "d.composerSdk=\"composer-sdk:2\"").unwrap();
         assert_eq!(built_with(app.path()), Some(2));
+        assert!(outdated(app.path()), "2 doesn't know the sandboxed routes");
+        std::fs::write(assets.join("a.js"), "d.composerSdk=\"composer-sdk:3\"").unwrap();
         assert!(!outdated(app.path()));
     }
 }

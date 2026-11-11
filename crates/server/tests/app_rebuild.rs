@@ -1,5 +1,5 @@
-//! Old app builds (ticket 0169): an app built with an sdk from before the `/h/` and `/p/` routes
-//! says so there instead of showing nothing, and the listings flag it; `apps.rebuild` shows the
+//! Old app builds (ticket 0169): an app built with an sdk from before its current routes (the
+//! sandboxed `/a/<token>/`, sdk 3) says so there instead of showing nothing, and the listings flag it; `apps.rebuild` shows the
 //! `ui-build` recipes it would run, and with `yes` runs them in the sandbox.
 #![allow(
     clippy::disallowed_methods,
@@ -73,7 +73,7 @@ async fn an_old_build_says_so_and_rebuilds() {
     write(&sites.join("old/ui/dist/assets/a.js"), "let x = 1;");
     write(
         &sites.join("old/justfile"),
-        "ui-build:\n    echo '<p>new build</p>' > ui/dist/index.html\n    echo 'd=\"composer-sdk:2\"' > ui/dist/assets/a.js\n",
+        "ui-build:\n    echo '<p>new build</p>' > ui/dist/index.html\n    echo 'd=\"composer-sdk:3\"' > ui/dist/assets/a.js\n",
     );
     write(
         &sites.join("fresh/index.md"),
@@ -82,7 +82,7 @@ async fn an_old_build_says_so_and_rebuilds() {
     write(&sites.join("fresh/ui/dist/index.html"), "<p>fresh</p>");
     write(
         &sites.join("fresh/ui/dist/assets/a.js"),
-        "d=\"composer-sdk:2\"",
+        "d=\"composer-sdk:3\"",
     );
     write(&sites.join("fresh/justfile"), "ui-build:\n    echo fresh\n");
     let token = server.token.clone();
@@ -95,7 +95,10 @@ async fn an_old_build_says_so_and_rebuilds() {
         .to_string();
     let (status, page) = call(addr, Method::GET, &url, "").await;
     assert_eq!(status, 409, "{page}");
-    assert!(page.contains("older composer sdk"), "{page}");
+    assert!(
+        page.contains("older composer sdk") && page.contains("just ui-build"),
+        "{page}"
+    );
     let (_, body) = call(addr, Method::GET, "/api/apps", &token).await;
     let home: Value = serde_json::from_str(&body).unwrap();
     let outdated = |site: &str| {

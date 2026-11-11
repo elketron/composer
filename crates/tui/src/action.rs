@@ -107,6 +107,8 @@ pub enum Action {
     EditPage,
     /// Open a site's app in the browser: the given site, or the current page's.
     OpenApp(Option<String>),
+    /// Enter a site (a workflow) for the shown session, or (`None`) leave its site.
+    SetSite(Option<String>),
     ReloadPage,
 
     // ---- changes view (active project) ----

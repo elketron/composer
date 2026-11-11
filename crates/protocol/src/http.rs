@@ -28,6 +28,11 @@ pub struct ServerInfo {
     /// servers leave it out.
     #[serde(default)]
     pub workspace_color: String,
+    /// Where this workspace serves wayai's live view, as a path after the workspace's address
+    /// (`/view`); absent when no viewer is configured. Needs the workspace's token, like the rest.
+    /// Older servers leave it out.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub viewer: Option<String>,
 }
 
 /// `GET /api/sites`
@@ -49,6 +54,13 @@ pub struct SiteSummary {
     /// Pages in the site.
     #[serde(default)]
     pub pages: u32,
+    /// `app:` of its `index.md`: the application (`[applications.<name>]`) it starts. A site with
+    /// `app` or `mcp` set is a workflow.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub app: Option<String>,
+    /// `mcp:` of its `index.md`: the MCP servers whose tools the agent has while in the site.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mcp: Vec<String>,
 }
 
 /// `GET /api/agents`: the agent definitions (`site://agents`).
@@ -90,6 +102,9 @@ pub struct ProjectSummary {
     /// When one of its sessions last did something (RFC 3339).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_used: Option<String>,
+    /// Its project page (`site://projects/<name>`), when it has one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub page: Option<String>,
 }
 
 /// `project.overview`: what is going on in one project.
@@ -98,6 +113,9 @@ pub struct ProjectSummary {
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct ProjectOverview {
     pub name: String,
+    /// Its project page (`site://projects/<name>`), when it has one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub page: Option<String>,
     /// `~/Projects/<name>`.
     pub path: String,
     /// The absolute folder, as sessions' `project` holds it.
@@ -108,6 +126,9 @@ pub struct ProjectOverview {
     pub uncommitted: u32,
     /// Works of any pipeline that link it.
     pub works: Vec<WorkSummary>,
+    /// The sites operating on it, each with its works and its app tile.
+    #[serde(default)]
+    pub sites: Vec<ProjectSiteSummary>,
     /// Tickets whose worktree of it is still there: their branch waits to be merged or discarded.
     pub branches: Vec<TicketBranchSummary>,
     /// Its memory page (`site://memory/projects/<name>`), when there is one.
@@ -117,6 +138,26 @@ pub struct ProjectOverview {
     pub harnesses: Vec<HarnessSwitch>,
     /// Tool rules remembered for it (Claude Code's `always`).
     pub tool_rules: u32,
+}
+
+/// One site operating on a project, as the project hub shows it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct ProjectSiteSummary {
+    pub site: String,
+    pub title: String,
+    #[serde(default)]
+    pub works: Vec<WorkSummary>,
+    /// Its works' stages running now.
+    #[serde(default)]
+    pub running: u32,
+    /// Its works' stages waiting for review.
+    #[serde(default)]
+    pub waiting: u32,
+    /// Its tile, when it has one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub app: Option<AppInfo>,
 }
 
 /// A piece of work in a pipeline (`site://<pipeline>/<work>/index.md`, `type: work`).
@@ -139,7 +180,7 @@ pub struct WorkSummary {
 }
 
 /// A work's stage and where it is: `waiting`, `running`, `review`, `approved`, `rerun`,
-/// `stopped`, `done` (its `_stage.md`'s `status:`).
+/// `stopped`, `done` (the work page's `stage`, `status` and `done`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
@@ -211,6 +252,9 @@ pub struct AppInfo {
 pub struct ProjectInfo {
     /// Its name in the workspace (and in the app's URL).
     pub name: String,
+    /// Its project page (`site://projects/<name>`), when it has one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub page: Option<String>,
     /// The absolute folder.
     pub root: String,
     /// The branch checked out, for a git repository.
@@ -221,14 +265,17 @@ pub struct ProjectInfo {
     pub pipeline: Option<String>,
     #[serde(default)]
     pub pipelines: Vec<String>,
+    /// The sites operating on it (the same list as `pipelines`; the project hub's name).
+    #[serde(default)]
+    pub sites: Vec<String>,
     /// `[projects."<path>"] tags`.
     #[serde(default)]
     pub tags: Vec<String>,
 }
 
-/// `POST /api/projects/<name>/apps/<site>/open`: where to load the app (its token in the URL
-/// once; the page then keeps it in a cookie scoped to the app), and the token itself for a
-/// client that calls the app's API directly.
+/// `POST /api/projects/<name>/apps/<site>/open`: where to load the app (`<base>/a/<token>/`: its
+/// token is in the path, and its API is under it), and the token itself for a client that calls
+/// the app's API directly.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
@@ -237,6 +284,24 @@ pub struct AppOpened {
     /// The app's own token; `None` for a client app (its URL has a one-time code instead).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub token: Option<String>,
+    /// The project it was opened on, by its name; `None` on Home.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project: Option<String>,
+}
+
+/// `POST /api/web-session`: a new browser session of the caller's kind, for a client that sets
+/// the workspace's cookie itself (the desktop's panes, the phone's webviews) instead of putting a
+/// token in a cookie or a URL.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct WebSession {
+    /// The cookie's name.
+    pub cookie_name: String,
+    /// The session secret (`ses_...`): the cookie's value.
+    pub value: String,
+    /// The cookie's `Path` (the workspace's routes).
+    pub path: String,
 }
 
 /// A project open in the workspace (`projects.open`).

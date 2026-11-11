@@ -1,3 +1,6 @@
+use composer_core::SiteUrl;
+
+use crate::project::ProjectMode;
 use crate::sandbox::SandboxSpec;
 use crate::server::Server;
 use crate::session::Session;
@@ -21,7 +24,16 @@ impl RecipeEnv {
             .and_then(|s| s.info().project)
             .and_then(|p| server.see_project(&p).ok())
             .unwrap_or_default();
-        Self::with_project(server, site, session, project)
+        // `PROJECT_ROOT` is an explicit grant: only a site that may write gets it. A `read`
+        // site still gets `COMPOSER_PROJECT` (the path), but not `PROJECT_ROOT`.
+        let mode = SiteUrl::new(site, "")
+            .ok()
+            .and_then(|url| server.web.read_page(&url).ok())
+            .and_then(|page| page.frontmatter.get_str("project_mode"))
+            .map(|raw| ProjectMode::parse(&raw))
+            .unwrap_or_default();
+        let project_root = (!project.is_empty() && !mode.readonly()).then(|| project.clone());
+        Self::with_project(server, site, session, project, project_root)
     }
 
     /// For a recipe an app runs: its own site's, on the project it was opened on.
@@ -37,9 +49,14 @@ impl RecipeEnv {
         if let Err(e) = std::fs::create_dir_all(&data) {
             tracing::warn!("{}: {e}", data.display());
         }
-        let mut env = Self::with_project(server, &grant.site, None, project.clone());
+        let mut env = Self::with_project(
+            server,
+            &grant.site,
+            None,
+            project.clone(),
+            Some(project.clone()),
+        );
         env.vars.extend([
-            ("PROJECT_ROOT", project),
             (
                 "PROJECT_NAME",
                 grant
@@ -60,6 +77,7 @@ impl RecipeEnv {
         site: &str,
         session: Option<&Session>,
         project: String,
+        project_root: Option<String>,
     ) -> Self {
         let mut vars = vec![
             ("COMPOSER_SITE", site.to_string()),
@@ -73,6 +91,9 @@ impl RecipeEnv {
                 server.home.templates().join("sdk").display().to_string(),
             ),
         ];
+        if let Some(root) = project_root {
+            vars.push(("PROJECT_ROOT", root));
+        }
         vars.extend(server.home.env());
         let mut sandbox = server.sandbox();
         if !project.is_empty() {

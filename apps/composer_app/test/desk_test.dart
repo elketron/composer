@@ -102,4 +102,21 @@ void main() {
     expect(DeskView.label(app), 'board · composer');
     expect(DeskView.label(DeskEntry(id: 'changes:c', tab: const DeskTabChanges(project: 'c'))), 'changes · c');
   });
+
+  test('the live view tab is listed and labelled, from its wire form', () {
+    final live = Desk.fromJson({
+      'tabs': [
+        {'id': 'live', 'tab': {'kind': 'live_view'}, 'unseen': true},
+      ],
+      'active': 'live',
+    });
+    final desk = DeskView(live);
+    expect(desk.tabs.single.tab, isA<DeskTabLiveView>());
+    expect(DeskView.label(desk.tabs.single), 'live view');
+    expect(desk.shown?.id, 'live');
+    expect(desk.unseen, 1);
+    expect(live.toJson()['tabs'], [
+      {'id': 'live', 'tab': {'kind': 'live_view'}, 'unseen': true},
+    ]);
+  });
 }

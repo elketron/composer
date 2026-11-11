@@ -4,9 +4,9 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::config_sections::{
-    AgentConfig, AppsConfig, AttachmentsConfig, ClaudeCodeConfig, DesktopConfig, LauncherEntry,
-    McpServerConfig, PipelinesConfig, ProjectsConfig, ProviderConfig, RemindersConfig,
-    SandboxConfig, ServerConfig, System1Config, TerminalsConfig,
+    AgentConfig, ApplicationConfig, AppsConfig, AttachmentsConfig, ClaudeCodeConfig, DesktopConfig,
+    LauncherEntry, McpServerConfig, PipelinesConfig, ProjectsConfig, ProviderConfig,
+    RemindersConfig, SandboxConfig, ServerConfig, System1Config, TerminalsConfig, ViewerConfig,
 };
 use crate::error::{Result, ServerError};
 
@@ -39,12 +39,17 @@ pub struct Config {
     pub terminals: TerminalsConfig,
     #[serde(default = "section")]
     pub desktop: DesktopConfig,
+    #[serde(default = "section")]
+    pub viewer: ViewerConfig,
     /// MCP servers by name, `[mcp.github]`.
     #[serde(default)]
     pub mcp: BTreeMap<String, McpServerConfig>,
     /// Launcher entries, `[[launcher]]`: apps the web's apps can open on the desktop.
     #[serde(default)]
     pub launcher: Vec<LauncherEntry>,
+    /// Applications a site's `app:` starts on entering, `[applications.blender]`.
+    #[serde(default)]
+    pub applications: BTreeMap<String, ApplicationConfig>,
 }
 
 impl Config {

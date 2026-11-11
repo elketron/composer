@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 
 use composer_protocol::{
     Attachment, ChangedBy, ChatMessage, ClientCommand, ClientRequest, CommandResult, DeskBy,
-    MessageSource, Role, Seq, ServerMessage, SessionId,
+    DeskTab, MessageSource, Role, Seq, ServerMessage, SessionId,
 };
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
@@ -15,6 +15,7 @@ use crate::agent::AgentDefinition;
 use crate::api::app_commands::app_may;
 use crate::api::event_scope::{EventScope, scope};
 use crate::api::glob::url_matches;
+use crate::api::{Credential, viewer_proxy};
 use crate::apps::{AppGrant, ProjectName};
 use crate::attachments::resolve;
 use crate::harness::{PERMISSION_TOOL, WorkerSink, answer_permission, permission_tool_info};
@@ -36,6 +37,9 @@ pub struct Connection {
     next_grant: AtomicU64,
     /// An app's socket: only the commands its token allows.
     app: Option<AppGrant>,
+    /// What the socket was authenticated with (`None`: an app's token, which is no workspace
+    /// credential): who a one-time code it asks for stands for.
+    credential: Option<Credential>,
     /// The projects this client opened (`project.open`); closed when it goes.
     opened: Mutex<HashSet<ProjectName>>,
     /// A desktop window's connection (ticket 0177): its id and its TUI's terminal; the TUI ends
@@ -46,7 +50,15 @@ pub struct Connection {
 }
 
 impl Connection {
-    pub fn new(out: mpsc::UnboundedSender<Arc<ServerMessage>>) -> Self {
+    /// A workspace client's socket, authenticated with `credential`.
+    pub fn new(out: mpsc::UnboundedSender<Arc<ServerMessage>>, credential: Credential) -> Self {
+        Self {
+            credential: Some(credential),
+            ..Self::unauthenticated(out)
+        }
+    }
+
+    fn unauthenticated(out: mpsc::UnboundedSender<Arc<ServerMessage>>) -> Self {
         Self {
             out,
             attached: Mutex::new(HashMap::new()),
@@ -55,6 +67,7 @@ impl Connection {
             grants: Mutex::new(HashMap::new()),
             next_grant: AtomicU64::new(0),
             app: None,
+            credential: None,
             opened: Mutex::new(HashSet::new()),
             window: Mutex::new(None),
             joined: Mutex::new(None),
@@ -66,7 +79,7 @@ impl Connection {
     pub fn for_app(out: mpsc::UnboundedSender<Arc<ServerMessage>>, grant: AppGrant) -> Self {
         Self {
             app: Some(grant),
-            ..Self::new(out)
+            ..Self::unauthenticated(out)
         }
     }
 
@@ -402,8 +415,10 @@ impl Connection {
                 tokio::spawn(async move {
                     let result = match server.workers.tool_context(&server, &session) {
                         Ok(context) => {
-                            let mut tools =
-                                server.tools.infos_for(&server.mcp(), &context.agent).await;
+                            let mut tools = server
+                                .tools
+                                .infos_for(&server.mcp(), &context.agent, context.site.as_deref())
+                                .await;
                             // External harnesses ask the user through it.
                             if server.workers.get(&session).is_some_and(|h| h.external) {
                                 tools.push(permission_tool_info());
@@ -493,6 +508,14 @@ impl Connection {
                 project,
                 session,
             } => {
+                // An app's socket never gets here (`app_may`); without a workspace credential
+                // nothing is opened.
+                let Some(minter) = self.credential.clone() else {
+                    return Some(ServerMessage::Error {
+                        id: Some(id),
+                        message: "only a client of the workspace opens apps".into(),
+                    });
+                };
                 let (connection, server) = (self.clone(), server.clone());
                 tokio::spawn(async move {
                     let opened = tokio::task::spawn_blocking(move || {
@@ -501,12 +524,21 @@ impl Connection {
                             &site,
                             project.as_deref(),
                             session.as_deref(),
+                            &minter,
                         )
                     })
                     .await
                     .map_err(|e| e.to_string())
                     .and_then(|r| r);
                     connection.reply(id, opened.map(|opened| CommandResult::AppOpened { opened }));
+                });
+                None
+            }
+            ClientCommand::SiteSet { session, site } => {
+                let (connection, server) = (self.clone(), server.clone());
+                tokio::spawn(async move {
+                    let result = set_site(&server, &session, site).await;
+                    connection.reply(id, result.map(|text| CommandResult::Note { text }));
                 });
                 None
             }
@@ -945,6 +977,7 @@ impl Connection {
             | ClientCommand::ProjectClose { .. }
             | ClientCommand::ProjectsOpen
             | ClientCommand::AppOpen { .. }
+            | ClientCommand::SiteSet { .. }
             | ClientCommand::AppsRebuild { .. }
             | ClientCommand::AppAllow { .. }
             | ClientCommand::AppPromote { .. }
@@ -1057,9 +1090,14 @@ impl Connection {
                 session,
                 tab,
                 focus,
-            } => change_desk(server, &session, |desk| {
-                desk.open(tab, focus, DeskBy::User).map(|_| ())
-            }),
+            } => {
+                if tab == DeskTab::LiveView && viewer_proxy::viewer_path(server).is_none() {
+                    return Err(viewer_proxy::NO_LIVE_VIEW.into());
+                }
+                change_desk(server, &session, |desk| {
+                    desk.open(tab, focus, DeskBy::User).map(|_| ())
+                })
+            }
             ClientCommand::DeskClose { session, tab } => {
                 change_desk(server, &session, |desk| desk.close(&tab))
             }
@@ -1104,6 +1142,35 @@ async fn run_work(
     Ok(CommandResult::Work {
         work: started.work.summary(),
     })
+}
+
+/// `site.set`: the user enters site `site` for a session, or (`None`, or blank) leaves its site.
+/// The text is what happened, the site's application included; the session's new state goes out
+/// as `session.updated`.
+async fn set_site(
+    server: &Arc<Server>,
+    session: &str,
+    site: Option<String>,
+) -> Result<String, String> {
+    let session = server.sessions.get(session).map_err(|e| e.to_string())?;
+    let name = site.as_deref().map(str::trim).filter(|n| !n.is_empty());
+    let Some(name) = name else {
+        return Ok(match crate::agent::leave_site(server, &session) {
+            Some(previous) => format!("Left site {previous}."),
+            None => "The session was not in a site.".into(),
+        });
+    };
+    let entered = crate::agent::enter_site_as_client(server, &session, name).await?;
+    let mut text = format!("Entered {} ({}).", entered.site, entered.title);
+    let notes = entered.notes();
+    if !notes.is_empty() {
+        text.push(' ');
+        text.push_str(&notes);
+    }
+    if entered.live_view {
+        text.push_str(" The live view is on the stage.");
+    }
+    Ok(text)
 }
 
 /// `apps.rebuild`: what would run, or (with `yes`) what ran.

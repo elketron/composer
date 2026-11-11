@@ -7,6 +7,7 @@ use std::sync::atomic::AtomicU64;
 
 use base64::Engine;
 use composer_client::{Connection, Endpoint, Event, Store};
+use composer_protocol::http::SiteSummary;
 use composer_protocol::{ClientCommand, CommandResult, DeskEntry, DeskTab, ServerMessage};
 use gpui::{
     Context, Entity, ExternalPaths, FocusHandle, Focusable, MouseButton, MouseDownEvent,
@@ -24,7 +25,7 @@ use crate::picker::{Item, Pick, Picker, PickerEvent};
 use crate::stage_tabs;
 use crate::term_pane::{FONT, PaneEvent, TermPane};
 use crate::terminal_link::TerminalLink;
-use crate::view_urls::{origin, paths_text, view_url};
+use crate::view_urls::{AuthCookie, auth_cookie, origin, paths_text, view_url};
 use crate::web_pane::{WebEvent, WebPane};
 
 actions!(
@@ -70,6 +71,8 @@ pub struct Shell {
     /// Browser panes of the other tabs; made when a tab is first shown.
     webs: BrowserTabs<Entity<WebPane>>,
     subscriptions: Vec<Subscription>,
+    /// The workspace's sites, as last fetched (the palette's workflows, the live view's name).
+    sites: Vec<SiteSummary>,
     chat_width: ChatWidth,
     dragging: bool,
     /// Show what the agent opens (else it is only marked unseen). The client's choice.
@@ -78,6 +81,8 @@ pub struct Shell {
     active: bool,
     /// Drawn once (start-up timing).
     drawn: bool,
+    visibility_observed: bool,
+    window_visible: bool,
     focus: FocusHandle,
 }
 
@@ -114,11 +119,14 @@ impl Shell {
             panes: HashMap::new(),
             webs: BrowserTabs::default(),
             subscriptions: Vec::new(),
+            sites: Vec::new(),
             chat_width: ChatWidth::DEFAULT,
             dragging: false,
             follow: true,
             active: true,
             drawn: false,
+            visibility_observed: false,
+            window_visible: true,
             focus: cx.focus_handle(),
         }
     }
@@ -131,6 +139,7 @@ impl Shell {
                 self.hello(cx);
                 // All the sessions, for the switcher (updates follow as events).
                 self.ask(ClientCommand::SessionList, cx);
+                self.refresh_sites(cx);
                 // Stage panes start over from the server's scrollback; apps get fresh tokens.
                 self.panes.clear();
                 self.webs.clear();
@@ -387,6 +396,13 @@ impl Shell {
         self.webs.get(&self.shown_entry()?.id)
     }
 
+    fn sync_web_visibility(&self, cx: &mut Context<Self>) {
+        let shown = stage_tabs::shown(&self.store.desk);
+        for (pane, visible) in self.webs.visibility(shown, self.window_visible) {
+            pane.update(cx, |pane, cx| pane.set_visible(visible, cx));
+        }
+    }
+
     /// The shown tab's browser pane, if it is a browser tab and has none yet: a view's URL right
     /// away, an app's from `app.open`.
     fn load_shown(&mut self, cx: &mut Context<Self>) {
@@ -397,7 +413,21 @@ impl Shell {
             return;
         }
         if let Some(url) = view_url(&self.endpoint, &entry.tab) {
-            self.show_web(entry.id, url, cx);
+            let live = entry.tab == DeskTab::LiveView;
+            // A fresh browser session for the pane's cookie, never the token.
+            let session = self.web_session(cx);
+            cx.spawn(async move |this, cx| {
+                let session = session.await;
+                let _ = this.update(cx, |shell, cx| match session {
+                    Ok(cookie) => shell.show_web(entry.id, url, live, Some(cookie), cx),
+                    Err(e) => {
+                        shell.webs.failed(&entry.id);
+                        shell.link = shell.link.refused(format!("no browser session: {e}"));
+                        cx.notify();
+                    }
+                });
+            })
+            .detach();
             return;
         }
         let DeskTab::App { site, project } = entry.tab else {
@@ -407,18 +437,16 @@ impl Shell {
         let command = ClientCommand::AppOpen {
             site,
             project,
-            session: session.clone(),
+            session,
         };
         let connection = self.connection.clone();
         cx.spawn(async move |this, cx| {
             let answer = connection.request(command).await;
             let _ = this.update(cx, |shell, cx| match answer {
+                // The server knows the session it was opened from (the app is told on load).
                 Ok(CommandResult::AppOpened { opened }) => {
-                    let mut url = format!("{}{}", origin(shell.endpoint.base()), opened.url);
-                    if let Some(session) = session {
-                        url.push_str(&format!("&session={session}"));
-                    }
-                    shell.show_web(entry.id, url, cx);
+                    let url = format!("{}{}", origin(shell.endpoint.base()), opened.url);
+                    shell.show_web(entry.id, url, false, None, cx);
                 }
                 Ok(_) => {}
                 Err(e) => {
@@ -431,13 +459,50 @@ impl Shell {
         .detach();
     }
 
-    fn show_web(&mut self, tab: String, url: String, cx: &mut Context<Self>) {
+    /// A new browser session of this desktop's credential (`POST <base>/api/web-session`), as the
+    /// panes' cookie.
+    fn web_session(
+        &self,
+        cx: &mut Context<Self>,
+    ) -> impl std::future::Future<Output = Result<AuthCookie, String>> + use<> {
+        let endpoint = self.endpoint.clone();
+        let fetched = cx.global::<Desktop>().spawn(async move {
+            let session: composer_protocol::http::WebSession =
+                endpoint.post("/api/web-session").await?;
+            auth_cookie(&endpoint, &session)
+                .ok_or_else(|| format!("{} is no http(s) address", endpoint.base()))
+        });
+        async move { fetched.await.unwrap_or_else(|e| Err(e.to_string())) }
+    }
+
+    /// A browser pane for `tab`. `drive`: the page is the live view, whose Drive mode needs the
+    /// pane to pass on modifier keys, repeats and drags that leave it (see `WebPane::set_drive`).
+    fn show_web(
+        &mut self,
+        tab: String,
+        url: String,
+        drive: bool,
+        cookie: Option<AuthCookie>,
+        cx: &mut Context<Self>,
+    ) {
         let base = self.endpoint.base().to_string();
-        let pane = cx.new(|cx| WebPane::new(&url, &base, cx));
+        let pane = cx.new(|cx| WebPane::new(&url, &base, cookie, cx));
+        pane.update(cx, |pane, _| pane.set_drive(drive));
         self.subscriptions.push(cx.subscribe(
             &pane,
-            |shell, _, event: &WebEvent, cx| match event {
+            |shell, pane, event: &WebEvent, cx| match event {
                 WebEvent::OpenPage(url) => shell.open_page(url.clone(), cx),
+                // Expired, or the server restarted: a new session, and the page again (once).
+                WebEvent::SessionLost => {
+                    let session = shell.web_session(cx);
+                    let pane = pane.downgrade();
+                    cx.spawn(async move |_, cx| {
+                        if let Ok(cookie) = session.await {
+                            let _ = pane.update(cx, |pane, _| pane.renew(cookie));
+                        }
+                    })
+                    .detach();
+                }
                 // Only http(s) and mail links get here (view_urls::external).
                 WebEvent::OpenOutside(url) => {
                     if let Err(e) = open::that_detached(url) {
@@ -448,6 +513,7 @@ impl Shell {
             },
         ));
         self.webs.arrived(tab, pane);
+        self.sync_web_visibility(cx);
         cx.notify();
     }
 
@@ -501,6 +567,7 @@ impl Shell {
     /// Commands, then sessions; the workspace's sites and Home apps join when fetched.
     fn open_palette(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let mut items = pick_lists::commands(self.follow);
+        items.extend(pick_lists::leave_workflow(self.session_site()));
         items.extend(pick_lists::sessions(
             &self.store.sessions,
             self.store.attached.as_deref(),
@@ -517,10 +584,17 @@ impl Shell {
             (sites, apps, launchers)
         });
         let weak = picker.downgrade();
-        cx.spawn(async move |_, cx| {
+        cx.spawn(async move |this, cx| {
             let Ok((sites, apps, launchers)) = fetched.await else {
                 return;
             };
+            // The workflows as the session stands now (it may have changed while this fetched).
+            let workflows = this
+                .update(cx, |shell, _| {
+                    shell.sites = sites.clone();
+                    pick_lists::workflows(&sites, shell.session_site())
+                })
+                .unwrap_or_default();
             let mut more: Vec<Item> = apps
                 .map(|list| list.apps)
                 .unwrap_or_default()
@@ -539,6 +613,7 @@ impl Shell {
                     pick: Pick::Launch(name),
                 })
             }));
+            more.extend(workflows);
             more.extend(sites.into_iter().map(|site| Item {
                 label: format!("page: {}", site.title),
                 detail: format!("site://{}", site.name),
@@ -581,6 +656,8 @@ impl Shell {
                     );
                 }
             }
+            Pick::Workflow(site) => self.switch_workflow(Some(site), cx),
+            Pick::LeaveWorkflow => self.switch_workflow(None, cx),
             Pick::NewTerminal => self.new_terminal(cx),
             Pick::Launch(name) => self.launch(name, cx),
             Pick::AttachFile => self.attach_file(cx),
@@ -588,6 +665,68 @@ impl Shell {
             Pick::Workspaces => self.open_workspaces(window, cx),
             Pick::Sessions => self.open_sessions(window, cx),
         }
+    }
+
+    /// The site (workflow) the shown session is in.
+    fn session_site(&self) -> Option<&str> {
+        let attached = self.store.attached.as_deref()?;
+        self.store
+            .sessions
+            .iter()
+            .find(|s| s.id == attached)?
+            .site
+            .as_deref()
+    }
+
+    /// The sites listing, for the live view's name and the palette's workflows.
+    fn refresh_sites(&mut self, cx: &mut Context<Self>) {
+        let endpoint = self.endpoint.clone();
+        let fetched = cx.global::<Desktop>().spawn(async move {
+            endpoint
+                .get::<Vec<SiteSummary>>("/api/sites")
+                .await
+                .unwrap_or_default()
+        });
+        cx.spawn(async move |this, cx| {
+            if let Ok(sites) = fetched.await {
+                let _ = this.update(cx, |shell, cx| {
+                    shell.sites = sites;
+                    cx.notify();
+                });
+            }
+        })
+        .detach();
+    }
+
+    /// `site.set` for the shown session: enters the workflow `site` (its application starts and
+    /// its live view opens on the stage), or leaves the current one. What the server answered,
+    /// or why not, goes to a notice.
+    fn switch_workflow(&mut self, site: Option<String>, cx: &mut Context<Self>) {
+        let Some(session) = self.store.attached.clone() else {
+            self.link = self
+                .link
+                .refused("no session yet: the chat hasn't started one".into());
+            return;
+        };
+        let connection = self.connection.clone();
+        cx.spawn(async move |this, cx| {
+            let answer = connection
+                .request(ClientCommand::SiteSet { session, site })
+                .await;
+            let reply = match answer {
+                Ok(CommandResult::Note { text }) => Ok(text),
+                Ok(_) => Ok("done".to_string()),
+                Err(e) => Err(e),
+            };
+            let _ = this.update(cx, |shell, cx| {
+                if let Err(why) = &reply {
+                    shell.link = shell.link.refused(why.clone());
+                }
+                Notice::workflow(reply).show();
+                cx.notify();
+            });
+        })
+        .detach();
     }
 
     /// Runs a `[[launcher]]` entry.
@@ -672,6 +811,18 @@ const ACCENT: u32 = 0xe0a040;
 
 impl Render for Shell {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.window_visible = window.is_visible();
+        if !self.visibility_observed {
+            self.visibility_observed = true;
+            self.subscriptions.push(cx.observe_window_visibility(
+                window,
+                |shell, visibility, _, cx| {
+                    shell.window_visible = visibility.is_visible();
+                    shell.sync_web_visibility(cx);
+                    cx.notify();
+                },
+            ));
+        }
         if !self.drawn {
             self.drawn = true;
             crate::trace("first draw");
@@ -680,7 +831,9 @@ impl Render for Shell {
         self.chat_width = self.chat_width.within(total);
         self.active = window.is_window_active();
         self.load_shown(cx);
+        self.sync_web_visibility(cx);
         let shown = stage_tabs::shown(&self.store.desk).map(str::to_string);
+        let live_app = stage_tabs::live_app(self.session_site(), &self.sites).map(str::to_string);
         let tabs = self.store.desk.tabs.iter().map(|entry| {
             let id = entry.id.clone();
             let close = entry.id.clone();
@@ -700,7 +853,7 @@ impl Render for Shell {
                 .when(entry.unseen, |d| {
                     d.child(div().text_color(rgb(ACCENT)).child("●"))
                 })
-                .child(stage_tabs::label(&entry.tab))
+                .child(stage_tabs::label(&entry.tab, live_app.as_deref()))
                 .child(
                     div()
                         .id(gpui::SharedString::from(format!("close-{}", entry.id)))

@@ -34,10 +34,19 @@ merge in `~/.composer/state/updates/` for you to look at.
 Other devices: expose the server to your tailnet (`tailscale serve --bg http://127.0.0.1:7420`)
 and pair them with `composer pair --name <device>`.
 
+Micro apps run sandboxed at `<server>/a/<app token>/` (opened from the TUI's `a`, the desktop or the app); their
+code can be written by an agent, so they never get the workspace's credentials. The chat client (`site://chat`)
+does: build it (`just ui-build` in its site), then approve that build with `composer app approve chat`. A changed
+build is refused until you approve it again.
+
 ## Docs
 
 - [docs/plan.md](docs/plan.md) — design of the server, TUI and micro apps
 - [docs/plan-app.md](docs/plan-app.md) — the app
+- [docs/lean-orchestration.md](docs/lean-orchestration.md) — proposal: a small harness, capabilities injected by sites, workflows as files
+- [docs/workflows.md](docs/workflows.md) — design: one agent, a workflow folder per kind of work, and a shared view (an application in wayai, or a view type)
+- [docs/project-hub.md](docs/project-hub.md) — design: the project as the hub, with sites operating on it
+- [docs/tui-mode.md](docs/tui-mode.md) — TUI capabilities: a terminal program with a control adapter (Hunk)
 - [docs/wsl.md](docs/wsl.md) — running the server in WSL on Windows
 - [docs/releasing.md](docs/releasing.md) — releases and Android signing
 - [CLAUDE.md](CLAUDE.md) — conventions, and how to test the TUI and the app headlessly

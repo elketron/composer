@@ -8,7 +8,7 @@ use std::time::SystemTime;
 use composer_protocol::http::ProjectSummary;
 use composer_protocol::{ServerMessage, SessionInfo, TurnState, WorkerState};
 
-use crate::project::ProjectPath;
+use crate::project::{ProjectPath, ProjectRef};
 use crate::server::Server;
 use crate::tools::{expand_home, tilde};
 
@@ -128,6 +128,9 @@ pub fn project_list(server: &Server, query: &str) -> Vec<ProjectSummary> {
                 .chain([modified.clone()])
                 .max()
                 .unwrap_or_default();
+            let page = ProjectRef::resolve(server, &folder)
+                .ok()
+                .and_then(|project| project.page_url());
             Some((
                 running > 0 || waiting > 0,
                 recent,
@@ -140,6 +143,7 @@ pub fn project_list(server: &Server, query: &str) -> Vec<ProjectSummary> {
                     waiting,
                     last_used,
                     folder,
+                    page,
                 },
             ))
         })

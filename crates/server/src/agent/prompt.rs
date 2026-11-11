@@ -15,16 +15,55 @@ pub fn system_prompt(
     index: &Index,
     session: &SessionInfo,
 ) -> String {
-    // A pipeline stage's worker gets its stage's scoped context instead of the usual one.
-    if let Some(stage) = session.ticket.as_deref().and_then(|ticket| {
-        crate::pipeline::stage_context(workspace, ticket, session.project.as_deref())
-    }) {
-        return format!("{}\n\n---\n\n{stage}", agent.prompt);
-    }
     let mut sections = vec![agent.prompt.clone()];
+    let site = session
+        .site
+        .as_deref()
+        .and_then(|name| crate::agent::Site::load(workspace, name).ok());
+    let stage = session.ticket.as_deref().and_then(|ticket| {
+        crate::pipeline::stage_context(workspace, ticket, session.project.as_deref())
+    });
 
-    if let Some(home) = page_body(workspace, "site://home") {
+    if let Some(site) = &site {
+        sections.push(format!(
+            "<page url=\"site://{}/\">\n{}\n</page>",
+            site.name, site.prompt
+        ));
+        let tools = if site.tools.is_empty() {
+            "it adds no tools".to_string()
+        } else {
+            format!("its tools are: {}", site.tools.join(", "))
+        };
+        let tools = if site.mcp.is_empty() {
+            tools
+        } else {
+            format!(
+                "{tools}; it also names the MCP servers: {} (their tools are yours here where \
+                 config.toml lets this site grant them)",
+                site.mcp.join(", ")
+            )
+        };
+        let mode = site
+            .project_mode
+            .as_deref()
+            .map_or_else(String::new, |mode| {
+                format!(" Its works' project mode is `{mode}`.")
+            });
+        sections.push(format!(
+            "# Site\n\nYou are in `site://{}` ({}); {tools}.{mode} `leave_site` returns to the \
+             base tools.",
+            site.name, site.title
+        ));
+    } else if stage.is_none()
+        && let Some(home) = page_body(workspace, "site://home")
+    {
         sections.push(format!("<page url=\"site://home\">\n{home}\n</page>"));
+    }
+
+    // A pipeline stage's worker gets its stage's scoped context instead of the usual environment.
+    if let Some(stage) = stage {
+        sections.push(stage);
+        return sections.join("\n\n---\n\n");
     }
 
     let mut env = format!(
@@ -69,10 +108,13 @@ pub fn system_prompt(
         .and_then(|p| Path::new(p).file_name())
         .and_then(|n| n.to_str())
     {
-        let url = format!("site://memory/projects/{name}");
-        match page_body(workspace, &url) {
+        let url = format!("site://projects/{name}");
+        let fallback = format!("site://memory/projects/{name}");
+        match page_body(workspace, &url).or_else(|| page_body(workspace, &fallback)) {
             Some(project) => memory.push(format!("<page url=\"{url}.md\">\n{project}\n</page>")),
-            None => memory.push(format!("No memory page for this project yet: create `{url}.md` when you learn something worth keeping.")),
+            None => memory.push(format!(
+                "No project page for this project yet: create `{url}.md` when you learn something worth keeping."
+            )),
         }
     }
     let pages = memory_pages(index);

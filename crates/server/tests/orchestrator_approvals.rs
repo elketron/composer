@@ -21,6 +21,7 @@ fn worker_of(parent: &str, ticket: &str) -> SessionInfo {
         id: format!("w{ticket}"),
         agent: "worker".into(),
         project: None,
+        site: None,
         ticket: Some(ticket.into()),
         parent: Some(parent.into()),
         worker: None,

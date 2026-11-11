@@ -13,10 +13,13 @@ import 'upload_chips.dart';
 /// Writing a message. Enter is a newline; ctrl-enter (or the button) sends. While the agent
 /// works, the message waits for the turn to end, and stop cancels the turn.
 class MessageComposer extends StatefulWidget {
-  const MessageComposer({super.key, required this.url, required this.busy});
+  const MessageComposer({super.key, required this.url, required this.busy, this.showStop = true});
 
   final String url;
   final bool busy;
+
+  /// Stop beside (or in place of) Send while the agent works; false where the screen's header has it.
+  final bool showStop;
 
   @override
   State<MessageComposer> createState() => _MessageComposerState();
@@ -66,9 +69,9 @@ class _MessageComposerState extends State<MessageComposer> {
     final uploads = store.state.statusOf(widget.url).chat?.uploads ?? const <Upload>[];
     final idle = _text.text.trim().isEmpty && uploads.isEmpty;
     return Container(
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
       decoration: const BoxDecoration(
-        color: t.surface,
+        color: t.bg,
         border: Border(top: BorderSide(color: t.border)),
       ),
       child: SafeArea(
@@ -105,14 +108,14 @@ class _MessageComposerState extends State<MessageComposer> {
                       textCapitalization: TextCapitalization.sentences,
                       style: const TextStyle(fontSize: 15, height: 1.4),
                       decoration: InputDecoration(
-                        hintText: widget.busy ? 'Message (sent after this turn)' : 'Message',
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        hintText: widget.busy ? 'message (sent after this turn)' : 'message the agent',
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                       ),
                     ),
                   ),
                 ),
                 // Writing while the agent works: Stop stays beside Send (the message waits for the turn).
-                if (widget.busy && !idle) ...[
+                if (widget.showStop && widget.busy && !idle) ...[
                   const SizedBox(width: 8),
                   SquareButton(
                     key: const Key('cancel'),
@@ -124,7 +127,7 @@ class _MessageComposerState extends State<MessageComposer> {
                 ],
                 const SizedBox(width: 8),
                 // Nothing written while it works: Stop in Send's place.
-                if (widget.busy && idle)
+                if (widget.showStop && widget.busy && idle)
                   SquareButton(
                     key: const Key('cancel'),
                     tooltip: 'Stop the turn',

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../theme/tokens.dart' as t;
 
-/// A 42px icon button with a filled background.
+/// A 44px icon button with a filled background.
 class SquareButton extends StatelessWidget {
   const SquareButton({super.key, required this.tooltip, required this.color, required this.child, this.onPressed});
 
@@ -16,11 +16,11 @@ class SquareButton extends StatelessWidget {
         message: tooltip,
         child: Material(
           color: onPressed == null ? color.withValues(alpha: 0.4) : color,
-          borderRadius: BorderRadius.circular(t.radius),
+          borderRadius: BorderRadius.circular(t.radiusControl),
           child: InkWell(
-            borderRadius: BorderRadius.circular(t.radius),
+            borderRadius: BorderRadius.circular(t.radiusControl),
             onTap: onPressed,
-            child: SizedBox(width: 42, height: 42, child: Center(child: child)),
+            child: SizedBox(width: 44, height: 44, child: Center(child: child)),
           ),
         ),
       );

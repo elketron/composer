@@ -224,10 +224,16 @@ async fn an_agent_can_only_ask_and_the_user_decides_each_time() {
         .unwrap()
         .clone();
     let session = server.sessions.create("default", None).unwrap();
+    let site = Arc::new(
+        composer_server::agent::Site::load(&server.web, "home")
+            .map_err(|e| panic!("{e}"))
+            .unwrap(),
+    );
     let context = ToolContext {
         server: server.clone(),
         session,
         agent: Arc::new(AgentDefinition::load(&server.web, "default").unwrap()),
+        site: Some(site),
         cancel: CancellationToken::new(),
     };
     for decision in [ApprovalDecision::Deny, ApprovalDecision::Always] {

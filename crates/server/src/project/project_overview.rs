@@ -4,8 +4,11 @@
 use std::path::Path;
 
 use composer_core::SiteUrl;
-use composer_protocol::http::{PageExcerpt, ProjectOverview, TicketBranchSummary, WorkSummary};
+use composer_protocol::http::{
+    AppInfo, PageExcerpt, ProjectOverview, ProjectSiteSummary, TicketBranchSummary, WorkSummary,
+};
 
+use crate::project::ProjectRef;
 use crate::project::TicketBranch;
 use crate::project::git::git;
 use crate::server::Server;
@@ -18,12 +21,10 @@ const EXCERPT_CHARS: usize = 280;
 
 /// `project` is a name in the projects directory or a path.
 pub fn project_overview(server: &Server, project: &str) -> Result<ProjectOverview, String> {
-    let folder = server.see_project(project)?;
+    let project = ProjectRef::resolve(server, project)?;
+    let folder = project.root.display().to_string();
     let path = Path::new(&folder);
-    let name = path
-        .file_name()
-        .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_else(|| folder.clone());
+    let name = project.name.clone();
     let top = git(path, &["rev-parse", "--show-toplevel"])
         .ok()
         .and_then(|t| Path::new(&t).canonicalize().ok());
@@ -35,10 +36,14 @@ pub fn project_overview(server: &Server, project: &str) -> Result<ProjectOvervie
         .and_then(|_| git(path, &["status", "--porcelain"]).ok())
         .map_or(0, |s| s.lines().filter(|l| !l.is_empty()).count() as u32);
 
+    let works = works(server, &folder);
+    let sites = site_summaries(server, &works, &project);
     Ok(ProjectOverview {
-        works: works(server, &folder),
+        page: project.page_url(),
+        works,
+        sites,
         branches: top.map(|top| branches(server, &top)).unwrap_or_default(),
-        memory: memory(server, &name),
+        memory: memory(server, &name, &project),
         harnesses: server.workers.switches(server, &folder),
         tool_rules: server.tool_rules.rules(&folder).len() as u32,
         path: tilde(path),
@@ -47,6 +52,59 @@ pub fn project_overview(server: &Server, project: &str) -> Result<ProjectOvervie
         branch,
         uncommitted,
     })
+}
+
+/// The sites operating on a project: the page's `sites:`, plus every site with a work on it.
+fn site_summaries(
+    server: &Server,
+    works: &[WorkSummary],
+    project: &ProjectRef,
+) -> Vec<ProjectSiteSummary> {
+    let apps = crate::apps::project_home(server, &project.name).ok();
+    let mut names: Vec<String> = project.sites.clone();
+    for work in works {
+        if !names.contains(&work.pipeline) {
+            names.push(work.pipeline.clone());
+        }
+    }
+    names.sort();
+    names.dedup();
+    names
+        .into_iter()
+        .map(|site| {
+            let site_works: Vec<WorkSummary> = works
+                .iter()
+                .filter(|w| w.pipeline == site)
+                .cloned()
+                .collect();
+            let running = site_works
+                .iter()
+                .flat_map(|w| &w.stages)
+                .filter(|s| s.status == "running")
+                .count() as u32;
+            let waiting = site_works
+                .iter()
+                .flat_map(|w| &w.stages)
+                .filter(|s| s.status == "review")
+                .count() as u32;
+            let title = SiteUrl::new(&site, "")
+                .ok()
+                .and_then(|url| server.web.read_page(&url).ok())
+                .map(|page| page.title())
+                .unwrap_or_else(|| site.clone());
+            let app: Option<AppInfo> = apps
+                .as_ref()
+                .and_then(|list| list.apps.iter().find(|a| a.site == site).cloned());
+            ProjectSiteSummary {
+                site,
+                title,
+                works: site_works,
+                running,
+                waiting,
+                app,
+            }
+        })
+        .collect()
 }
 
 /// `type: work` pages whose `project:` is this folder.
@@ -111,10 +169,17 @@ fn branches(server: &Server, top: &Path) -> Vec<TicketBranchSummary> {
     branches
 }
 
-/// `site://memory/projects/<name>`: its first paragraphs, without headings and frontmatter.
-fn memory(server: &Server, name: &str) -> Option<PageExcerpt> {
-    let url = SiteUrl::new("memory", &format!("projects/{name}.md")).ok()?;
-    let page = server.web.read_page(&url).ok()?;
+/// The project page's body, or the old `site://memory/projects/<name>` as a fallback: its first
+/// paragraphs, without headings and frontmatter.
+fn memory(server: &Server, name: &str, project: &ProjectRef) -> Option<PageExcerpt> {
+    let page = project
+        .page
+        .as_ref()
+        .and_then(|url| server.web.read_page(url).ok())
+        .or_else(|| {
+            let url = SiteUrl::new("memory", &format!("projects/{name}.md")).ok()?;
+            server.web.read_page(&url).ok()
+        })?;
     let body = page.body();
     let text: Vec<&str> = body
         .lines()
@@ -127,7 +192,7 @@ fn memory(server: &Server, name: &str) -> Option<PageExcerpt> {
         None => joined,
     };
     Some(PageExcerpt {
-        url: url.to_string(),
+        url: page.url.to_string(),
         excerpt,
     })
 }

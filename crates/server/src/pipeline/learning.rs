@@ -93,7 +93,7 @@ pub fn gate_approved(server: &Arc<Server>, work: &Work, stage: &str) {
     if edited.len() >= threshold {
         // Counted once: they wait for this proposal, whatever comes of it.
         for other in &edited {
-            set_stage_fields(server, other, stage, &[("learned", "\"proposed\"")]);
+            set_stage_fields(server, other, stage, &[("learned", "proposed")]);
         }
         let server = server.clone();
         let pipeline = work.pipeline.clone();

@@ -167,6 +167,20 @@ pub struct DesktopConfig {
     pub color: String,
 }
 
+/// `[viewer]`: wayai's live view, which composer serves to other devices at `<workspace>/view`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct ViewerConfig {
+    /// The viewer page, e.g. `http://127.0.0.1:7878/view`; loopback hosts only. Empty: taken from
+    /// `[mcp.wayai]`'s `url` (same address, path `/view`), and no viewer when that isn't set either.
+    #[serde(default)]
+    pub url: String,
+    /// A file holding the viewer's bearer token (`~/` expanded): read, trimmed, for every request
+    /// the proxy makes and sent as `Authorization: Bearer <token>`. Empty: `[mcp.wayai]`'s
+    /// `bearer_file` when the viewer is at that server's address, else no header.
+    #[serde(default)]
+    pub bearer_file: String,
+}
+
 /// `[sandbox]`: the world each spawn an agent or a site controls runs in (`bwrap`). The home's
 /// global config sets the machine's paths; a workspace's config may add `binds_ro`, `binds_rw` and
 /// `devices` of its own. Paths are `~/` or absolute; missing ones are skipped.
@@ -276,6 +290,9 @@ pub struct AgentConfig {
 
 /// An MCP server whose tools composer's agents may use, `[mcp.<name>]`: a `command` (stdio) or
 /// a `url` (streamable HTTP). `${VAR}` in `env` and `headers` is taken from composer's environment.
+///
+/// An agent gets its tools from its own page's `tools:`, or from the site its session is in when
+/// that site's `mcp:` names the server and `sites` here lists the site.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct McpServerConfig {
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -288,6 +305,16 @@ pub struct McpServerConfig {
     pub url: String,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub headers: BTreeMap<String, String>,
+    /// A file holding a bearer token for an HTTP server (`~/` expanded): read, trimmed, at every
+    /// connect and sent as `Authorization: Bearer <token>`, unless `headers` sets `Authorization`
+    /// itself. A file that cannot be read fails the connect.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub bearer_file: String,
+    /// The sites that may grant this server's tools with `mcp:` in their `index.md`: a site not
+    /// listed here grants nothing, whatever its page says (agents can write pages; this file they
+    /// cannot). Empty, the default: no site may.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sites: Vec<String>,
     /// What a stdio server needs from outside its workspace's sandbox, read-only and read-write
     /// (`~/` and `${VAR}` expanded; checked like `[sandbox]` binds).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -299,6 +326,19 @@ pub struct McpServerConfig {
     pub allow: Vec<String>,
     #[serde(default = "default_true")]
     pub enabled: bool,
+    /// Where a stdio server starts (`~/` expanded; bound read-write in its sandbox), instead of
+    /// the workspace's sites.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub cwd: String,
+    /// Settings of an `.mcpb` bundle (`[mcp.<name>.config]`), by the manifest's `user_config` keys.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub config: BTreeMap<String, String>,
+    /// Why the server cannot start (a bundle's missing settings): `connect` fails with it.
+    #[serde(skip)]
+    pub problem: Option<String>,
+    /// `cwd` is bound read-only (a bundle's unpacked code), never set from `config.toml`.
+    #[serde(skip)]
+    pub cwd_read_only: bool,
 }
 
 /// An app a site's app can launch on this machine's desktop: one `[[launcher]]` entry per
@@ -315,6 +355,27 @@ pub struct LauncherEntry {
     /// Extra arguments, put before the folder path.
     #[serde(default)]
     pub args: Vec<String>,
+}
+
+/// An application a workflow site's `app:` can start, `[applications.<name>]`. Site pages are
+/// writable by agents, so the command lives here and not in the page: declaring the entry is
+/// the user's approval, as with `[[launcher]]`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ApplicationConfig {
+    /// The program to run: a name on `PATH` or a path.
+    pub command: String,
+    #[serde(default)]
+    pub args: Vec<String>,
+    /// Extra environment for the application.
+    #[serde(default)]
+    pub env: BTreeMap<String, String>,
+    /// The MCP server whose `launch` tool starts it.
+    #[serde(default = "default_launch_server")]
+    pub mcp: String,
+}
+
+fn default_launch_server() -> String {
+    "wayai".into()
 }
 
 /// llama.cpp's `llama-server` on this machine; set your own in config.toml.

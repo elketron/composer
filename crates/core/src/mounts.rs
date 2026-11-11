@@ -7,7 +7,12 @@
 //! site's top folder*: the web's root itself, and a site folder itself, stay whatever the
 //! web chose to put there, except that the guard (another workspace's folders) refuses a site
 //! folder too. Without an allowed list the web is lenient, as before mounts.
+//!
+//! Project mounts are the same mechanism with a mode: a work's `project/` is registered as
+//! `link → (target, mode)`, so reads resolve through it and `check_write` can refuse a `read`
+//! work even when the symlink itself would be allowed.
 
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
@@ -20,6 +25,24 @@ use crate::error::{CoreError, Result};
 /// server uses it for folders another workspace owns.
 pub type MountGuard = Arc<dyn Fn(&Path) -> bool + Send + Sync>;
 
+/// What a registered project mount allows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum MountMode {
+    /// Reads only.
+    #[default]
+    Read,
+    /// The project in place.
+    Write,
+    /// The ticket's worktree.
+    Worktree,
+}
+
+impl MountMode {
+    pub fn readonly(self) -> bool {
+        matches!(self, Self::Read)
+    }
+}
+
 /// The web's root, plus the roots a mount under a site may point into. Without an
 /// allowed list the web is lenient, as it was before scoped mounts existed.
 #[derive(Default)]
@@ -27,6 +50,8 @@ pub struct Mounts {
     root: PathBuf,
     allowed: RwLock<Option<Vec<PathBuf>>>,
     refuse: RwLock<Option<MountGuard>>,
+    /// `link → (target, mode)` for work `project/` mounts.
+    projects: RwLock<BTreeMap<PathBuf, (PathBuf, MountMode)>>,
 }
 
 impl Clone for Mounts {
@@ -35,6 +60,7 @@ impl Clone for Mounts {
             root: self.root.clone(),
             allowed: RwLock::new(self.allowed.read().expect("mounts lock").clone()),
             refuse: RwLock::new(self.refuse.read().expect("mounts lock").clone()),
+            projects: RwLock::new(self.projects.read().expect("projects lock").clone()),
         }
     }
 }
@@ -48,6 +74,10 @@ impl std::fmt::Debug for Mounts {
                 "guarded",
                 &self.refuse.read().expect("mounts lock").is_some(),
             )
+            .field(
+                "projects",
+                &self.projects.read().expect("projects lock").len(),
+            )
             .finish()
     }
 }
@@ -59,6 +89,7 @@ impl Mounts {
             root: root.into(),
             allowed: RwLock::new(None),
             refuse: RwLock::new(None),
+            projects: RwLock::new(BTreeMap::new()),
         }
     }
 
@@ -69,6 +100,7 @@ impl Mounts {
             root: root.into(),
             allowed: RwLock::new(Some(allowed)),
             refuse: RwLock::new(None),
+            projects: RwLock::new(BTreeMap::new()),
         }
     }
 
@@ -82,9 +114,50 @@ impl Mounts {
         *self.refuse.write().expect("mounts lock") = Some(refuse);
     }
 
-    /// Whether the web may read, list, write or watch `path` (its own address for it):
-    /// every symlink below a site's top folder must land inside the web or an allowed root.
+    /// Register a work's `project/` link: the target is the project root or the ticket worktree.
+    pub fn set_project(&self, link: PathBuf, target: PathBuf, mode: MountMode) {
+        self.projects
+            .write()
+            .expect("projects lock")
+            .insert(link, (target, mode));
+    }
+
+    /// Whether the web may read `path` (its own address for it): every symlink below a site's
+    /// top folder must land inside the web or an allowed root. A registered project mount is
+    /// allowed by construction, but still checked against the guard.
     pub fn check(&self, path: &Path) -> Result<()> {
+        if let Some((link, target, _)) = self.project_for(path) {
+            let target = target.join(path.strip_prefix(&link).unwrap_or(Path::new("")));
+            let refused = self
+                .refuse
+                .read()
+                .expect("mounts lock")
+                .as_ref()
+                .is_some_and(|refuse| refuse(&target));
+            if refused {
+                return Err(CoreError::MountRefused {
+                    path: path.to_path_buf(),
+                });
+            }
+            return self.check_allowed(&target);
+        }
+        self.check_allowed(path)
+    }
+
+    /// The same, for a write. A `read` project mount is refused; a `write`/`worktree` one is
+    /// checked like any other path.
+    pub fn check_write(&self, path: &Path) -> Result<()> {
+        if let Some((_, _, mode)) = self.project_for(path)
+            && mode.readonly()
+        {
+            return Err(CoreError::MountRefused {
+                path: path.to_path_buf(),
+            });
+        }
+        self.check(path)
+    }
+
+    fn check_allowed(&self, path: &Path) -> Result<()> {
         let guard = self.allowed.read().expect("mounts lock");
         let Some(allowed) = guard.as_ref() else {
             return Ok(());
@@ -125,6 +198,26 @@ impl Mounts {
         Ok(())
     }
 
+    /// Whether `path` is under a registered project mount.
+    pub fn is_project(&self, path: &Path) -> bool {
+        self.project_for(path).is_some()
+    }
+
+    /// The live mode of the project mount `path` is under.
+    pub fn project_mode(&self, path: &Path) -> Option<MountMode> {
+        self.project_for(path).map(|(_, _, mode)| mode)
+    }
+
+    /// The project mount `path` is under, if any.
+    fn project_for(&self, path: &Path) -> Option<(PathBuf, PathBuf, MountMode)> {
+        self.projects
+            .read()
+            .expect("projects lock")
+            .iter()
+            .find(|(link, _)| path.starts_with(link))
+            .map(|(link, (target, mode))| (link.clone(), target.clone(), *mode))
+    }
+
     /// The same question as a bool, for walkers and watchers.
     pub fn allows(&self, path: &Path) -> bool {
         self.check(path).is_ok()
@@ -137,10 +230,10 @@ impl Mounts {
     }
 
     /// The mount points there are now, as web paths (a symlink at a site's top level, or
-    /// deeper, that lands in the web or an allowed root). Only symlinks count: a real
-    /// folder is already on the watched tree, and listing it as a mount would make the
-    /// watcher watch the web to itself twice. Only when an allowed list is set: without
-    /// one there are no mounts, as before the feature.
+    /// deeper, that lands in the web or an allowed root), plus every registered project
+    /// link. Only symlinks count: a real folder is already on the watched tree, and listing
+    /// it as a mount would make the watcher watch the web to itself twice. Only when an
+    /// allowed list is set: without one there are no mounts, as before the feature.
     pub fn current(&self) -> Vec<PathBuf> {
         if self.allowed.read().expect("mounts lock").is_none() {
             return Vec::new();
@@ -173,6 +266,7 @@ impl Mounts {
                 }
             }
         }
+        found.extend(self.projects.read().expect("projects lock").keys().cloned());
         found
     }
 }

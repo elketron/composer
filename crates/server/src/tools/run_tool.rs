@@ -124,6 +124,33 @@ async fn forgiving(context: &ToolContext, mut args: Value) -> Result<Value, Stri
             *item = Value::String(item.to_string());
         }
     }
+    // `sh` takes one command string; models often pass `-c` or a token list.
+    if call.get("recipe").and_then(Value::as_str) == Some("sh")
+        && let Some(Value::Array(items)) = call.get_mut("args")
+    {
+        let mut args: Vec<String> = items
+            .iter()
+            .filter_map(Value::as_str)
+            .map(str::to_string)
+            .collect();
+        if args.first().is_some_and(|arg| arg == "-c") {
+            args.remove(0);
+        }
+        if args.len() > 1 {
+            args = vec![args.join(" ")];
+        }
+        *items = args.into_iter().map(Value::String).collect();
+    }
+    // The site the agent is in is the first place to look; then the only site with the recipe.
+    if !call.contains_key("site")
+        && let Some(recipe) = call.get("recipe").and_then(Value::as_str)
+        && let Some(site) = &context.site
+        && Justfile::load(&context.server.web.root().join(&site.name))
+            .await
+            .is_ok_and(|justfile| justfile.recipe(recipe).is_some())
+    {
+        call.insert("site".into(), json!(site.name));
+    }
     if !call.contains_key("site")
         && let Some(recipe) = call.get("recipe").and_then(Value::as_str)
     {

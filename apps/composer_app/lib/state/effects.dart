@@ -2,6 +2,7 @@
 
 import 'package:composer_protocol/composer_protocol.dart';
 
+import 'live_view_size.dart';
 import 'server_entry.dart';
 import 'types.dart';
 
@@ -78,10 +79,24 @@ final class TicketCommand extends AppEffect {
 
 /// `session.create`, then open it.
 final class CreateSession extends AppEffect {
-  const CreateSession(this.url, this.agent, {this.project});
+  const CreateSession(this.url, this.agent, {this.project, this.site});
   final String url;
   final String agent;
   final String? project;
+
+  /// A workflow to enter (`site.set`) once the session exists.
+  final String? site;
+}
+
+/// Read the device's saved preferences (`PreferencesLoaded`).
+final class LoadPreferences extends AppEffect {
+  const LoadPreferences();
+}
+
+/// Keep the live view's size.
+final class SaveLiveViewSize extends AppEffect {
+  const SaveLiveViewSize(this.size);
+  final LiveViewSize size;
 }
 
 /// A system notification; `key` identifies it (to replace or withdraw it).

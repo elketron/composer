@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 
 import '../../state/actions.dart';
 import '../../state/types.dart';
-import '../../theme/composer_theme.dart';
 import '../../theme/tokens.dart' as t;
 import '../store_scope.dart';
 
-/// Chats · Projects · Pages · Server, with a count on Chats of what needs you.
+/// The bottom bar: inbox · workflows · pages · server. Icons over lowercase labels, the active tab
+/// in the accent colour under a 2px line; the inbox label carries the count of what needs you.
+/// Square, edge to edge.
 class PhoneTabs extends StatelessWidget {
   const PhoneTabs({super.key, required this.tab, required this.needsYou});
 
@@ -15,25 +16,26 @@ class PhoneTabs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Widget item(PhoneTab value, IconData icon, String label, {int count = 0}) {
+    Widget item(PhoneTab value, IconData icon, String label) {
       final on = value == tab;
+      final color = on ? t.accent : t.muted;
       return Expanded(
-        child: InkWell(
-          key: Key('tab-${value.name}'),
-          onTap: () => StoreScope.read(context).dispatch(TabSelected(value)),
-          child: Container(
-            decoration: BoxDecoration(border: Border(top: BorderSide(color: on ? t.accent : Colors.transparent, width: 2))),
-            child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-              Badge(
-                isLabelVisible: count > 0,
-                backgroundColor: t.warn,
-                textColor: t.bg,
-                label: Text('$count', style: mono(size: 9, color: t.bg, weight: FontWeight.w600)),
-                child: Icon(icon, size: 21, color: on ? t.text : t.faint),
-              ),
-              const SizedBox(height: 3),
-              Text(label, style: TextStyle(fontSize: 11, color: on ? t.text : t.faint)),
-            ]),
+        child: Semantics(
+          button: true,
+          selected: on,
+          label: label,
+          excludeSemantics: true,
+          child: InkWell(
+            key: Key('tab-${value.name}'),
+            onTap: () => StoreScope.read(context).dispatch(TabSelected(value)),
+            child: Container(
+              decoration: BoxDecoration(border: Border(top: BorderSide(color: on ? t.accent : t.surface, width: 2))),
+              child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                Icon(icon, size: 18, color: color),
+                const SizedBox(height: 3),
+                Text(label, maxLines: 1, style: TextStyle(fontSize: 11, color: color, fontWeight: on ? FontWeight.w600 : FontWeight.w400)),
+              ]),
+            ),
           ),
         ),
       );
@@ -44,12 +46,12 @@ class PhoneTabs extends StatelessWidget {
       child: SafeArea(
         top: false,
         child: SizedBox(
-          height: 58,
+          height: 56,
           child: Row(children: [
-            item(PhoneTab.chats, Icons.chat_bubble_outline, 'Chats', count: needsYou),
-            item(PhoneTab.projects, Icons.folder_outlined, 'Projects'),
-            item(PhoneTab.pages, Icons.description_outlined, 'Pages'),
-            item(PhoneTab.server, Icons.dns_outlined, 'Server'),
+            item(PhoneTab.inbox, Icons.inbox_outlined, needsYou > 0 ? 'inbox · $needsYou' : 'inbox'),
+            item(PhoneTab.workflows, Icons.grid_view_outlined, 'workflows'),
+            item(PhoneTab.pages, Icons.description_outlined, 'pages'),
+            item(PhoneTab.server, Icons.dns_outlined, 'server'),
           ]),
         ),
       ),

@@ -2,8 +2,10 @@ use std::path::{Path, PathBuf};
 
 use composer_core::{Page, SiteUrl};
 use composer_protocol::http::PipelineSummary;
+use serde_json::Value;
 
 use crate::pipeline::stage_contract::StageContract;
+use crate::project::ProjectMode;
 
 /// A pipeline: a folder with an `index.md` of `type: pipeline` and its stage contracts in
 /// `stages/`. A site (`sites/coding/`) or a template (`templates/pipelines/coding/`).
@@ -16,6 +18,8 @@ pub struct Pipeline {
     pub about: String,
     /// A work must link a project.
     pub needs_project: bool,
+    /// The default project access for its works and stages.
+    pub project_mode: ProjectMode,
     /// In order (by file name).
     pub stages: Vec<StageContract>,
 }
@@ -28,35 +32,71 @@ impl Pipeline {
         if page.frontmatter.get_str("type").as_deref() != Some("pipeline") {
             return None;
         }
-        let mut files: Vec<(String, PathBuf)> = std::fs::read_dir(dir.join("stages"))
-            .into_iter()
-            .flatten()
-            .flatten()
-            .filter_map(|e| {
-                let file = e.file_name().into_string().ok()?;
-                let stem = file.strip_suffix(".md")?.to_string();
-                // `NN_name.md`: a number first.
-                stem.split_once('_')
-                    .filter(|(n, rest)| {
-                        !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()) && !rest.is_empty()
+        let stages = match page.frontmatter.get("stages").and_then(Value::as_array) {
+            // The graph is declared on the pipeline's page: `id`, `file`, `needs`, `gate`.
+            Some(graph) => graph
+                .iter()
+                .filter_map(|entry| {
+                    let id = entry.get("id").and_then(Value::as_str)?;
+                    let file = entry.get("file").and_then(Value::as_str)?;
+                    let raw = std::fs::read_to_string(dir.join(file)).ok()?;
+                    let mut contract = StageContract::parse(id, &raw);
+                    contract.needs = strings(entry.get("needs"));
+                    if let Some(gate) = entry.get("gate").and_then(Value::as_bool) {
+                        contract.gate = gate;
+                    }
+                    contract.repeat = entry
+                        .get("repeat")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                    Some(contract)
+                })
+                .collect(),
+            // Before the graph: every `NN_name.md` in `stages/`, each needing the one before.
+            None => {
+                let mut files: Vec<(String, PathBuf)> = std::fs::read_dir(dir.join("stages"))
+                    .into_iter()
+                    .flatten()
+                    .flatten()
+                    .filter_map(|e| {
+                        let file = e.file_name().into_string().ok()?;
+                        let stem = file.strip_suffix(".md")?.to_string();
+                        // `NN_name.md`: a number first.
+                        stem.split_once('_')
+                            .filter(|(n, rest)| {
+                                !n.is_empty()
+                                    && n.chars().all(|c| c.is_ascii_digit())
+                                    && !rest.is_empty()
+                            })
+                            .map(|_| (stem.clone(), e.path()))
                     })
-                    .map(|_| (stem.clone(), e.path()))
-            })
-            .collect();
-        files.sort();
-        let stages = files
-            .into_iter()
-            .filter_map(|(stem, path)| {
-                let raw = std::fs::read_to_string(path).ok()?;
-                Some(StageContract::parse(&stem, &raw))
-            })
-            .collect();
+                    .collect();
+                files.sort();
+                let mut previous: Option<String> = None;
+                files
+                    .into_iter()
+                    .filter_map(|(stem, path)| {
+                        let raw = std::fs::read_to_string(path).ok()?;
+                        let mut contract = StageContract::parse(&stem, &raw);
+                        contract.needs = previous.take().into_iter().collect();
+                        previous = Some(stem);
+                        Some(contract)
+                    })
+                    .collect()
+            }
+        };
         Some(Self {
             name: name.to_string(),
             dir: dir.to_path_buf(),
             title: page.title(),
             about: page.description(),
             needs_project: page.frontmatter.get_str("needs_project").as_deref() == Some("true"),
+            project_mode: ProjectMode::parse(
+                page.frontmatter
+                    .get_str("project_mode")
+                    .as_deref()
+                    .unwrap_or(""),
+            ),
             stages,
         })
     }
@@ -98,4 +138,17 @@ impl Pipeline {
             works: self.works().len() as u32,
         }
     }
+}
+
+fn strings(value: Option<&Value>) -> Vec<String> {
+    value
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
 }

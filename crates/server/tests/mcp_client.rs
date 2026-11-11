@@ -483,6 +483,136 @@ async fn http_servers() {
     assert!(!stored.contains(PNG));
 }
 
+/// `bearer_file` (what wayai asks for): the file's token is the bearer header of every request,
+/// read at each connect; no `Origin` goes along; without the setting there is no header; a file
+/// that cannot be read fails the connect with its path; an `Authorization` in `headers` wins.
+#[tokio::test]
+async fn an_http_server_gets_the_token_of_its_bearer_file() {
+    type Seen = Arc<std::sync::Mutex<Vec<(String, Option<String>, Option<String>)>>>;
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let web = listener.local_addr().unwrap();
+    let seen = Seen::default();
+    let record = seen.clone();
+    let app = Router::new().route(
+        "/{name}",
+        post(
+            move |axum::extract::Path(name): axum::extract::Path<String>,
+                  headers: HeaderMap,
+                  body: String| {
+                let get = |header: &str| {
+                    headers
+                        .get(header)
+                        .and_then(|v| v.to_str().ok())
+                        .map(str::to_string)
+                };
+                record
+                    .lock()
+                    .unwrap()
+                    .push((name, get("authorization"), get("origin")));
+                fake_http(headers, body)
+            },
+        ),
+    );
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+
+    let files = tempfile::tempdir().unwrap();
+    let file = |name: &str, content: Option<&str>| {
+        let path = files.path().join(name);
+        if let Some(content) = content {
+            std::fs::write(&path, content).unwrap();
+        }
+        path.display().to_string()
+    };
+    let entry = |name: &str, bearer_file: String, authorization: Option<&str>| McpServerConfig {
+        url: format!("http://{web}/{name}"),
+        bearer_file,
+        headers: authorization
+            .map(|value| ("authorization".to_string(), value.to_string()))
+            .into_iter()
+            .collect(),
+        enabled: true,
+        ..Default::default()
+    };
+    let mut config = Config::defaults();
+    let late = file("late", Some("old-token\n"));
+    let missing = file("missing", None);
+    for (name, entry) in [
+        (
+            "with",
+            entry("with", file("with", Some("  tok-123\n")), None),
+        ),
+        ("without", entry("without", String::new(), None)),
+        ("missing", entry("missing", missing.clone(), None)),
+        (
+            "own",
+            entry("own", file("own", Some("not-this")), Some("Bearer tok-123")),
+        ),
+        ("late", entry("late", late.clone(), None)),
+    ] {
+        config.mcp.insert(name.into(), entry);
+    }
+    let (_dir, server, _provider, _addr) = start_with(config, vec![]).await;
+    let listed = server.mcp().list(&[]).await;
+    let state = |name: &str| {
+        let info = listed.iter().find(|s| s.name == name).unwrap();
+        (info.state.clone(), info.error.clone().unwrap_or_default())
+    };
+    let requests = |name: &str| -> Vec<(Option<String>, Option<String>)> {
+        seen.lock()
+            .unwrap()
+            .iter()
+            .filter(|(to, _, _)| to == name)
+            .map(|(_, authorization, origin)| (authorization.clone(), origin.clone()))
+            .collect()
+    };
+
+    assert_eq!(state("with").0, "ready", "{}", state("with").1);
+    let with = requests("with");
+    assert!(
+        with.len() >= 3,
+        "initialize, initialized, tools/list: {with:?}"
+    );
+    for (authorization, origin) in &with {
+        assert_eq!(authorization.as_deref(), Some("Bearer tok-123"));
+        assert_eq!(origin, &None, "no Origin goes to the server");
+    }
+
+    let (failed, error) = state("without");
+    assert_eq!(failed, "failed");
+    assert!(error.contains("401"), "{error}");
+    assert_eq!(
+        requests("without"),
+        [(None, None)],
+        "no header without the setting"
+    );
+
+    let (failed, error) = state("missing");
+    assert_eq!(failed, "failed");
+    assert!(
+        error.contains(&missing) && error.contains("bearer token file"),
+        "{error}"
+    );
+    assert!(requests("missing").is_empty(), "nothing was sent");
+
+    assert_eq!(state("own").0, "ready", "{}", state("own").1);
+    assert!(
+        requests("own")
+            .iter()
+            .all(|(authorization, _)| authorization.as_deref() == Some("Bearer tok-123"))
+    );
+
+    // The file is read at every connect: a token written later is the one sent.
+    assert_eq!(state("late").0, "failed");
+    assert_eq!(
+        requests("late"),
+        [(Some("Bearer old-token".to_string()), None)]
+    );
+    std::fs::write(&late, "tok-123").unwrap();
+    let listed = server.mcp().list(&[]).await;
+    let late = listed.iter().find(|s| s.name == "late").unwrap();
+    assert_eq!(late.state, "ready", "{:?}", late.error);
+}
+
 /// Writes what it sees to its rw bind, then answers like an MCP server with no tools.
 const LOOKING_SERVER: &str = r#"
 import json, os, sys

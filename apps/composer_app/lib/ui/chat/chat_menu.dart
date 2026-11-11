@@ -2,13 +2,16 @@ import 'package:composer_protocol/composer_protocol.dart';
 import 'package:flutter/material.dart';
 
 import '../../state/actions.dart';
+import '../../state/desk_view.dart';
 import '../../theme/tokens.dart' as t;
+import '../pages/page_navigation.dart';
 import '../store_scope.dart';
+import 'desk_sheet.dart';
 import 'model_sheet.dart';
 import 'project_sheet.dart';
 import 'review_page.dart';
 
-/// ⋮ for the open chat: its project, a worker's changes, Claude Code on or off for the project,
+/// ⋮ for the open chat: the desk and pages, its project, a worker's changes, Claude Code on or off for the project,
 /// compacting and stopping. The same on phones (app bar) and wide screens (chat header).
 class ChatMenu extends StatelessWidget {
   const ChatMenu({super.key, required this.url, required this.session});
@@ -26,10 +29,17 @@ class ChatMenu extends StatelessWidget {
       for (final h in status.harnesses[session?.project] ?? const <HarnessSwitch>[])
         if (h.allowed && !h.entry.contains(':')) h,
     ];
+    final unseen = DeskView(status.chat?.desk ?? const Desk()).unseen;
     return PopupMenuButton<String>(
       key: const Key('chat-menu'),
       tooltip: 'More',
-      icon: const Icon(Icons.more_vert, size: 20, color: t.muted),
+      iconSize: 24,
+      icon: Badge(
+        isLabelVisible: unseen > 0,
+        smallSize: 8,
+        backgroundColor: t.accent,
+        child: const Icon(Icons.more_vert, size: 22, color: t.muted),
+      ),
       enabled: session != null,
       onOpened: () {
         final folder = session?.project;
@@ -37,6 +47,8 @@ class ChatMenu extends StatelessWidget {
       },
       onSelected: (choice) => switch (choice) {
         _ when choice.startsWith('harness:') => _toggle(store, session?.project, choice),
+        'desk' => showDesk(context, url),
+        'pages' => openPage(context, url, status.page.page?.url ?? 'site://home'),
         'review' => openReview(context, url, session!.ticket!),
         'project' => showProjectSheet(context, url),
         'model' => showModelSheet(context, url),
@@ -46,6 +58,8 @@ class ChatMenu extends StatelessWidget {
         _ => null,
       },
       itemBuilder: (_) => [
+        PopupMenuItem(key: const Key('desk'), value: 'desk', child: Text(unseen > 0 ? 'Desk ($unseen new)' : 'Desk')),
+        const PopupMenuItem(key: Key('pages'), value: 'pages', child: Text('Pages')),
         if (session?.ticket != null) PopupMenuItem(value: 'review', child: Text('Review changes of ticket ${session!.ticket}')),
         PopupMenuItem(value: 'project', child: Text(project == null ? 'Set project…' : 'Change project…')),
         if (project != null) PopupMenuItem(value: 'unset', child: Text('Unset $project')),

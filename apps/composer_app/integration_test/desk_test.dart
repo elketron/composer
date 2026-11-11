@@ -31,6 +31,9 @@ void main() {
     // The turn, and the tab it puts on the desk.
     await pumpUntil(tester, find.byType(ActivityLine), seconds: 30);
     await pumpUntilGone(tester, find.byType(ActivityLine), seconds: 120);
+    // The desk is an entry of the chat's ⋮ menu.
+    await tester.tap(find.byKey(const Key('chat-menu')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('desk')));
     final tab = find.byKey(const Key('desk-tab-page:site://plans'));
     await pumpUntil(tester, tab, seconds: 30);

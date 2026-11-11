@@ -7,7 +7,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use composer_core::{Index, Query, SiteUrl, Web};
+use composer_core::{Index, MountMode, Mounts, Query, SiteUrl, Web};
 
 fn url(s: &str) -> SiteUrl {
     SiteUrl::parse(s).unwrap()
@@ -37,6 +37,24 @@ fn web_with_mounts(
 
 fn page(frontmatter_type: &str) -> String {
     format!("---\ntitle: Page\ntype: {frontmatter_type}\n---\n# Page\n")
+}
+
+#[test]
+fn a_project_mount_is_read_only_in_read_mode() {
+    let dir = tempfile::tempdir().unwrap();
+    let web = dir.path().join("sites");
+    let project = dir.path().join("project");
+    let work = web.join("coding/work");
+    fs::create_dir_all(&work).unwrap();
+    fs::create_dir_all(&project).unwrap();
+    let link = work.join("project");
+    std::os::unix::fs::symlink(&project, &link).unwrap();
+    let mounts = Mounts::with_allowed(web, vec![dir.path().to_path_buf()]);
+    mounts.set_project(link.clone(), project.clone(), MountMode::Read);
+    assert!(mounts.check(&link.join("main.rs")).is_ok());
+    assert!(mounts.check_write(&link.join("main.rs")).is_err());
+    mounts.set_project(link.clone(), project, MountMode::Write);
+    assert!(mounts.check_write(&link.join("main.rs")).is_ok());
 }
 
 #[test]

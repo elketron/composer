@@ -86,3 +86,13 @@ WorkerRow? workerReport(UserItem item) {
   final branch = RegExp(r'on branch `([^`]+)`').firstMatch(item.text)?[1];
   return WorkerRow(worker: m[1]!, ticket: m[2]!, status: m[3]!, summary: m[4]!.trim(), result: m[5], branch: branch);
 }
+
+/// Tool calls made since the last message you sent: "step 6" of the turn under way.
+int stepsSinceLastMessage(List<ChatItem> items) {
+  var steps = 0;
+  for (final item in items.reversed) {
+    if (item is UserItem && item.source == null) break;
+    if (item is ToolItem) steps++;
+  }
+  return steps;
+}

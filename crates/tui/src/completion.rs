@@ -50,6 +50,7 @@ pub fn complete(line: &str, state: &AppState) -> Completions {
         "new" => agents(arg, state),
         "open" | "o" => pages(arg, state),
         "app" => app_sites(arg, state),
+        "workflow" | "site" => all_sites(arg, state),
         "model" | "m" => models(arg, state),
         "work" => subcommands(
             arg,
@@ -275,6 +276,21 @@ fn page_path(url: &str) -> Option<String> {
     Some(path.strip_suffix("/index").unwrap_or(path).to_string())
 }
 
+/// Every site of the workspace (a workflow is any site; its `index.md` says what it brings).
+fn all_sites(arg: &str, state: &AppState) -> Vec<Candidate> {
+    let arg = arg.strip_prefix("site://").unwrap_or(arg);
+    state
+        .catalog
+        .sites
+        .iter()
+        .filter(|site| starts_with(&site.name, arg))
+        .map(|site| Candidate {
+            text: site.name.clone(),
+            detail: site.title.clone(),
+        })
+        .collect()
+}
+
 fn app_sites(arg: &str, state: &AppState) -> Vec<Candidate> {
     state
         .catalog
@@ -372,6 +388,7 @@ mod tests {
             id: id.into(),
             agent: agent.into(),
             project: None,
+            site: None,
             ticket: None,
             parent: None,
             worker: None,
@@ -399,6 +416,8 @@ mod tests {
             app_built: has_ui,
             description: String::new(),
             pages: 0,
+            app: None,
+            mcp: Vec::new(),
         };
         let page = |url: &str, title: &str| SearchHit {
             url: url.into(),
@@ -459,7 +478,7 @@ mod tests {
         unique.dedup();
         assert_eq!(all.len(), unique.len(), "{all:?}");
         assert_eq!(texts("pro"), ["project"]);
-        assert_eq!(texts("wor"), ["workers", "work"]);
+        assert_eq!(texts("wor"), ["workers", "work", "workflow"]);
         let work = &complete("work", &state()).items[1];
         assert_eq!(
             work.detail,
@@ -514,6 +533,8 @@ mod tests {
         assert_eq!(texts("open memory/u"), ["memory/user"]);
         assert_eq!(texts("o site://memory/t"), ["site://memory/topics/rust"]);
         assert_eq!(texts("app "), ["orchestration"]);
+        assert_eq!(texts("workflow "), ["memory", "orchestration", "agents"]);
+        assert_eq!(texts("site ag"), ["agents"]);
     }
 
     #[test]

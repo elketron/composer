@@ -20,10 +20,10 @@ fn write(path: &Path, text: &str) {
     std::fs::write(path, text).unwrap();
 }
 
+/// `POST /a/<token>/<path>`: the app's own route.
 async fn post(addr: SocketAddr, path: &str, token: &str, body: Value) -> u16 {
     Client::new()
-        .request(Method::POST, format!("http://{addr}{path}"))
-        .bearer_auth(token)
+        .request(Method::POST, format!("http://{addr}/a/{token}/{path}"))
         .json(&body)
         .send()
         .await
@@ -64,7 +64,7 @@ async fn an_app_points_the_agent_at_things() {
     write(&sites.join("board/ui/dist/index.html"), "<p>board</p>");
     write(
         &sites.join("board/ui/dist/assets/a.js"),
-        "d=\"composer-sdk:2\"",
+        "d=\"composer-sdk:3\"",
     );
     let session = server.sessions.create("default", None).unwrap();
     let id = session.id().to_string();
@@ -87,7 +87,7 @@ async fn an_app_points_the_agent_at_things() {
     // Selecting: the chip.
     let status = post(
         addr,
-        "/h/board/api/selection",
+        "api/selection",
         &app,
         json!({ "label": "ticket 0042: fix the hinge", "url": "site://orchestration/tickets/0042.md", "text": "the hinge" }),
     )
@@ -110,6 +110,7 @@ async fn an_app_points_the_agent_at_things() {
         agent: std::sync::Arc::new(
             composer_server::agent::AgentDefinition::load(&server.web, "default").unwrap(),
         ),
+        site: None,
         cancel: tokio_util::sync::CancellationToken::new(),
     };
     let read = server
@@ -121,7 +122,7 @@ async fn an_app_points_the_agent_at_things() {
     // An event: no turn now; the agent sees it at the next one.
     let status = post(
         addr,
-        "/h/board/api/events",
+        "api/events",
         &app,
         json!({ "kind": "gate.approved", "detail": { "stage": 2 } }),
     )
@@ -162,13 +163,7 @@ async fn an_app_points_the_agent_at_things() {
     assert!(session.selection().is_none(), "used once");
 
     // Cleared: the next message goes without it.
-    post(
-        addr,
-        "/h/board/api/selection",
-        &app,
-        json!({ "label": "part 7" }),
-    )
-    .await;
+    post(addr, "api/selection", &app, json!({ "label": "part 7" })).await;
     send(
         &mut client,
         3,
@@ -186,18 +181,12 @@ async fn an_app_points_the_agent_at_things() {
     // Opened outside a chat: it points at nothing. Too many events: refused.
     let nowhere = open(addr, &server.token, None).await;
     assert_eq!(
-        post(
-            addr,
-            "/h/board/api/selection",
-            &nowhere,
-            json!({ "label": "x" })
-        )
-        .await,
+        post(addr, "api/selection", &nowhere, json!({ "label": "x" })).await,
         403
     );
     let mut statuses = Vec::new();
     for _ in 0..20 {
-        statuses.push(post(addr, "/h/board/api/events", &app, json!({ "kind": "tick" })).await);
+        statuses.push(post(addr, "api/events", &app, json!({ "kind": "tick" })).await);
     }
     assert_eq!(
         statuses.iter().filter(|s| **s == 429).count(),

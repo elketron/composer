@@ -6,7 +6,8 @@
     "slots": 2,
     "projects_dir": "~/Projects",
     "workspace": "default",
-    "workspace_color": "#3f9c6b"
+    "workspace_color": "#3f9c6b",
+    "viewer": "/view"
   },
   {
     "name": "memory",
@@ -15,7 +16,11 @@
     "has_ui": true,
     "app_built": false,
     "description": "what agents know",
-    "pages": 12
+    "pages": 12,
+    "app": "blender",
+    "mcp": [
+      "blender"
+    ]
   },
   {
     "url": "site://memory/user.md",
@@ -72,10 +77,12 @@
     "sessions": 2,
     "running": 1,
     "waiting": 0,
-    "last_used": "2026-10-21T09:00:00+00:00"
+    "last_used": "2026-10-21T09:00:00+00:00",
+    "page": "site://projects/composer.md"
   },
   {
     "name": "game",
+    "page": "site://projects/game.md",
     "path": "~/Projects/game",
     "folder": "/home/me/Projects/game",
     "branch": "main",
@@ -103,6 +110,7 @@
         "project": "~/Projects/game"
       }
     ],
+    "sites": [],
     "branches": [
       {
         "ticket": "0028",

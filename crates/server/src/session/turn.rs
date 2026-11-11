@@ -199,14 +199,21 @@ async fn run_turn(
     let agent = Arc::new(
         AgentDefinition::load(&server.web, &session.info().agent).map_err(|e| e.to_string())?,
     );
+    let site = session
+        .info()
+        .site
+        .as_deref()
+        .and_then(|name| crate::agent::Site::load(&server.web, name).ok())
+        .map(Arc::new);
     let tools = server
         .tools
-        .specs_with_mcp(server, session.id(), &agent)
+        .specs_with_mcp(server, session.id(), &agent, site.as_deref())
         .await;
     let context = ToolContext {
         server: server.clone(),
         session: session.clone(),
         agent: agent.clone(),
+        site: site.clone(),
         cancel: cancel.clone(),
     };
 

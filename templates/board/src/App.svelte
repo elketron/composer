@@ -1,7 +1,7 @@
 <!--
   The board of a pipeline site: its works, the stages of the one you pick with their state, the
   output of a stage, and the gate (Continue / Rerun / Stop). Gates are page state: the buttons
-  write the stage's `_stage.md`, and the server goes on from there.
+  write the work's `index.md` (`stage`, `status`, `done`) and Run starts a stage explicitly.
 -->
 <script lang="ts">
   import { AppShell, Badge, Button, Kbd, file, onChange, page, putPage, request, session, site, type Page } from '$sdk';
@@ -99,16 +99,52 @@
     return `---\n${lines.join('\n')}\n---${raw.slice(match[0].length)}`;
   }
 
+  /** A flow list on the work's page (`done: ["spec"]`). */
+  function listField(raw: string, key: string): string[] {
+    const match = raw.match(new RegExp(`^${key}:\\s*\\[(.*)\\]`, 'm'));
+    if (!match) return [];
+    try {
+      return JSON.parse(`[${match[1]}]`);
+    } catch {
+      return [];
+    }
+  }
+
+  /** A flow map on the work's page (`note: {"spec": "..."}`). */
+  function mapField(raw: string, key: string): Record<string, unknown> {
+    const match = raw.match(new RegExp(`^${key}:\\s*(\\{.*\\})`, 'm'));
+    if (!match) return {};
+    try {
+      return JSON.parse(match[1]);
+    } catch {
+      return {};
+    }
+  }
+
+  /** A gate is page state: the work's `index.md` says where it is. */
   async function decide(status: 'approved' | 'rerun' | 'stopped', withNote = '') {
     if (!work || !stage) return;
     busy = true;
     try {
-      const url = work.url.replace(/index\.md$/, `${stage.name}/_stage.md`);
-      const current = await page(url);
-      let raw = setField(current.raw, 'status', status);
-      if (withNote) raw = setField(raw, 'note', JSON.stringify(withNote.replace(/\s+/g, ' ').trim()));
-      await putPage(url, raw, current.hash);
-      notice = { approved: 'approved: the next stage starts', rerun: 'running it again with your note', stopped: 'stopped here' }[status];
+      const current = await page(work.url);
+      let raw = setField(current.raw, 'stage', stage.name);
+      raw = setField(raw, 'status', status);
+      if (status === 'approved') {
+        const done = listField(current.raw, 'done');
+        if (!done.includes(stage.name)) done.push(stage.name);
+        raw = setField(raw, 'done', JSON.stringify(done));
+      }
+      if (status === 'rerun' && withNote) {
+        const notes = mapField(current.raw, 'note');
+        notes[stage.name] = withNote.replace(/\s+/g, ' ').trim();
+        raw = setField(raw, 'note', JSON.stringify(notes));
+      }
+      await putPage(work.url, raw, current.hash);
+      notice = {
+        approved: 'approved: Run starts the next stage',
+        rerun: 'set to run again with your note',
+        stopped: 'stopped here',
+      }[status];
       rerunning = false;
       note = '';
       stageIndex = null;

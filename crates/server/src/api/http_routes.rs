@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use axum::Json;
-use axum::extract::{Path, Query, State};
+use axum::extract::{Extension, Path, Query, State};
 use axum::http::StatusCode;
 use composer_core::SiteUrl;
 use composer_protocol::http::{
@@ -11,11 +11,26 @@ use composer_protocol::http::{
 };
 use composer_protocol::{ChangedBy, ChatMessage, MessageSource, Role};
 
-use crate::agent::AgentDefinition;
-use crate::api::ApiError;
+use crate::agent::{AgentDefinition, Site};
+use crate::api::{ApiError, Credential};
 use crate::server::Server;
 use crate::session::submit;
 use crate::worker::ticket::TicketId;
+
+/// `POST /api/web-session`: a new browser session of the caller's kind (a device gets a device's
+/// session, the local token the local user's), for a client that sets the workspace's cookie in
+/// its own webview (the desktop's panes, the phone's live view). An app's token is no workspace
+/// credential: it never gets here.
+pub async fn web_session(
+    State(server): State<Arc<Server>>,
+    Extension(credential): Extension<Credential>,
+) -> Json<composer_protocol::http::WebSession> {
+    Json(composer_protocol::http::WebSession {
+        cookie_name: crate::api::auth::cookie_name(&server),
+        value: server.web_sessions.mint(credential),
+        path: format!("{}/", server.route_base()),
+    })
+}
 
 /// `GET /api/info`: what this server is.
 pub async fn info(State(server): State<Arc<Server>>) -> Json<ServerInfo> {
@@ -30,6 +45,7 @@ pub async fn info(State(server): State<Arc<Server>>) -> Json<ServerInfo> {
         projects_dir: config.projects.dir.clone(),
         workspace,
         workspace_color: color.to_hex(),
+        viewer: crate::api::viewer_proxy::viewer_path(&server),
     })
 }
 
@@ -88,8 +104,10 @@ pub async fn open_app(
     State(server): State<Arc<Server>>,
     axum::extract::Path((name, site)): axum::extract::Path<(String, String)>,
     Query(params): Query<HashMap<String, String>>,
+    Extension(credential): Extension<Credential>,
 ) -> Result<Json<composer_protocol::http::AppOpened>, ApiError> {
-    opened(server, site, Some(name), params.get("session").cloned()).await
+    let session = params.get("session").cloned();
+    opened(server, site, Some(name), session, credential).await
 }
 
 /// `POST /api/apps/<site>/open`: a Home app's URL (its token, or a client app's one-time code).
@@ -97,19 +115,35 @@ pub async fn open_home_app(
     State(server): State<Arc<Server>>,
     axum::extract::Path(site): axum::extract::Path<String>,
     Query(params): Query<HashMap<String, String>>,
+    Extension(credential): Extension<Credential>,
 ) -> Result<Json<composer_protocol::http::AppOpened>, ApiError> {
-    opened(server, site, None, params.get("session").cloned()).await
+    opened(
+        server,
+        site,
+        None,
+        params.get("session").cloned(),
+        credential,
+    )
+    .await
 }
 
-/// Both open routes take `?session=<id>`: the session the app is opened from.
+/// Both open routes take `?session=<id>`: the session the app is opened from. `credential` is
+/// the caller's: what a client app's one-time code will stand for.
 async fn opened(
     server: Arc<Server>,
     site: String,
     project: Option<String>,
     session: Option<String>,
+    credential: Credential,
 ) -> Result<Json<composer_protocol::http::AppOpened>, ApiError> {
     tokio::task::spawn_blocking(move || {
-        crate::apps::open_app(&server, &site, project.as_deref(), session.as_deref())
+        crate::apps::open_app(
+            &server,
+            &site,
+            project.as_deref(),
+            session.as_deref(),
+            &credential,
+        )
     })
     .await
     .expect("opening an app doesn't panic")
@@ -150,14 +184,20 @@ pub async fn sites(State(server): State<Arc<Server>>) -> Result<Json<Vec<SiteSum
     Ok(Json(
         sites
             .into_iter()
-            .map(|s| SiteSummary {
-                pages: pages.get(s.name.as_str()).copied().unwrap_or(0),
-                name: s.name,
-                title: s.title,
-                has_justfile: s.has_justfile,
-                has_ui: s.has_ui,
-                app_built: s.app_built,
-                description: s.description,
+            .map(|s| {
+                // A workflow declares `app:` / `mcp:` in its index.
+                let site = Site::load(&server.web, &s.name).ok();
+                SiteSummary {
+                    app: site.as_ref().and_then(|site| site.app.clone()),
+                    mcp: site.map(|site| site.mcp).unwrap_or_default(),
+                    pages: pages.get(s.name.as_str()).copied().unwrap_or(0),
+                    name: s.name,
+                    title: s.title,
+                    has_justfile: s.has_justfile,
+                    has_ui: s.has_ui,
+                    app_built: s.app_built,
+                    description: s.description,
+                }
             })
             .collect(),
     ))

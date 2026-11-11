@@ -11,10 +11,16 @@ pub struct StageContract {
     pub name: String,
     pub title: String,
     pub gate: bool,
+    /// The stages that must be done before this one (`needs:` in the pipeline's graph).
+    pub needs: Vec<String>,
+    /// `repeat:`: `until-approved` (a gate that reruns) or `always`.
+    pub repeat: Option<String>,
     pub harness: Option<String>,
     pub model: Option<String>,
     /// The agent that runs it (default `stage`).
     pub agent: Option<String>,
+    /// `project_mode`: `read`, `write` or `worktree`; the old `worktree: true` is `worktree`.
+    pub project_mode: Option<String>,
     pub worktree: bool,
     pub inputs: Vec<StageInput>,
     /// The Outputs section's paths (in backticks).
@@ -45,9 +51,12 @@ impl StageContract {
             name: name.to_string(),
             title,
             gate: flag("gate"),
+            needs: Vec::new(),
+            repeat: None,
             harness: text("harness"),
             model: text("model"),
             agent: text("agent"),
+            project_mode: text("project_mode"),
             worktree: flag("worktree"),
             inputs: inputs(section(body, "inputs")),
             verify: checks(section(body, "verify")),

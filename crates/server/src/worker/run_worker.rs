@@ -53,6 +53,7 @@ pub async fn run_worker(home: WorkspaceHome, options: WorkerOptions) -> Result<(
         id: options.session.clone(),
         agent: options.agent.clone(),
         project: options.project.clone(),
+        site: None,
         ticket: Some(options.ticket.clone()),
         parent: None,
         worker: None,

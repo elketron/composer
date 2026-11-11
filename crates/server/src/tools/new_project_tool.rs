@@ -20,11 +20,11 @@ impl Tool for NewProjectTool {
     }
 
     fn description(&self) -> &'static str {
-        "Create a project: a new folder in the user's projects directory, its memory page \
-         (site://memory/projects/<name>) and its entry in the memory index's registry. With \
-         `template`, the folder starts as a copy of that site's templates/project/ folder; \
-         otherwise it gets a README. Never touches an existing folder. It becomes this session's \
-         active project."
+        "Create a project: a new folder in the user's projects directory, its project page \
+         (site://projects/<name>, type: project) and its entries in the projects index, Home and \
+         the memory registry. With `template`, the folder starts as a copy of that site's \
+         templates/project/ folder; otherwise it gets a README. Never touches an existing folder. \
+         It becomes this session's active project."
     }
 
     fn parameters(&self) -> Value {
@@ -46,9 +46,13 @@ impl Tool for NewProjectTool {
         let about = one_line(&args.about);
         let server = &context.server;
         let page_url =
+            SiteUrl::new("projects", &format!("{name}.md")).map_err(|e| e.to_string())?;
+        let index_url = SiteUrl::new("projects", "").map_err(|e| e.to_string())?;
+        let memory_url =
             SiteUrl::new("memory", &format!("projects/{name}.md")).map_err(|e| e.to_string())?;
         context.check_write(&page_url)?;
-        if server.web.locate(&page_url).is_ok() {
+        context.check_write(&index_url)?;
+        if server.web.locate(&page_url).is_ok() || server.web.locate(&memory_url).is_ok() {
             return Err(format!(
                 "{page_url} already exists; open it, the project may exist"
             ));
@@ -100,11 +104,11 @@ impl Tool for NewProjectTool {
         server
             .write_page(
                 &page_url,
-                &memory_page(name, &about, &path, workflow),
+                &project_page(name, &about, &path, workflow),
                 ChangedBy::Agent,
             )
             .map_err(|e| e.to_string())?;
-        let registered = register(context, name, &about, &path);
+        let registered = register(context, name, &about, &path, workflow);
         let from = workflow
             .map(|s| format!(" from site://{s}'s template"))
             .unwrap_or_default();
@@ -147,37 +151,77 @@ fn one_line(text: &str) -> String {
         .replace('|', "/")
 }
 
-fn memory_page(name: &str, about: &str, path: &str, workflow: Option<&str>) -> String {
+fn project_page(name: &str, about: &str, path: &str, workflow: Option<&str>) -> String {
     let today = chrono::Local::now().format("%Y-%m-%d");
-    let workflow = workflow
-        .map(|site| format!("workflow: {site}\n"))
-        .unwrap_or_default();
+    let sites = workflow
+        .map(|site| format!("sites: [{site}]\n"))
+        .unwrap_or_else(|| "sites: []\n".to_string());
     format!(
-        "---\ntitle: {name}\ntype: memory\nkind: project\ntags: [project]\npath: {path}\n{workflow}\
-         status: active\nupdated: {today}\n---\n# {name}\n\n{about}\n\nCreated {today}.\n"
+        "---\ntitle: {name}\ntype: project\nroot: {path}\n{sites}\
+         tags: [project]\nstatus: active\ncreated: {today}\n---\n# {name}\n\n{about}\n\nCreated {today}.\n"
     )
 }
 
-/// Adds the project to the memory index: a registry row and a pages entry. Returns a note.
-fn register(context: &ToolContext, name: &str, about: &str, path: &str) -> String {
-    let index_url = SiteUrl::new("memory", "").expect("valid");
+/// Lists the project in `site://projects`, Home and the memory registry. Returns a note.
+fn register(
+    context: &ToolContext,
+    name: &str,
+    about: &str,
+    path: &str,
+    workflow: Option<&str>,
+) -> String {
     let server = &context.server;
-    let Ok(page) = server.web.read_page(&index_url) else {
-        return "; there is no memory index to register it in".into();
-    };
-    let link = format!("[{name}](projects/{name}.md)");
-    let row = format!("| {link} | `{path}` | active | {about} |");
-    let mut text = append_table_row(&page.raw, "Projects registry", &row).unwrap_or_else(|| {
-        let table = format!(
-            "| project | path | status | what it is |\n|---------|------|--------|------------|\n{row}"
-        );
-        add_section(&page.raw, "Projects registry", &table, "Pages")
-    });
-    if let Some(listed) = append_list_item(&text, "Pages", &link) {
-        text = listed;
+    let mut notes: Vec<String> = Vec::new();
+
+    let index_url = SiteUrl::new("projects", "").expect("valid");
+    if let Ok(page) = server.web.read_page(&index_url) {
+        let link = format!("[{name}]({name}.md)");
+        let row = format!("| {link} | `{path}` | {} |", workflow.unwrap_or(""));
+        let text = append_table_row(&page.raw, "Projects", &row).unwrap_or_else(|| {
+            let table = format!("| project | root | sites |\n|---------|------|-------|\n{row}");
+            add_section(&page.raw, "Projects", &table, "Projects")
+        });
+        match server.write_page(&index_url, &text, ChangedBy::Agent) {
+            Ok(_) => notes.push("listed it in the projects index".into()),
+            Err(e) => notes.push(format!("registering it in the projects index failed: {e}")),
+        }
     }
-    match server.write_page(&index_url, &text, ChangedBy::Agent) {
-        Ok(_) => " and registered it in the memory index".into(),
-        Err(e) => format!("; registering it in the memory index failed: {e}"),
+
+    let home = SiteUrl::new("home", "").expect("valid");
+    if let Ok(page) = server.web.read_page(&home)
+        && !page.raw.contains("(site://projects)")
+        && let Err(e) = crate::tools::add_to_home(
+            server,
+            "projects",
+            "the things you work on: a folder, a page, and the sites that operate on it.",
+            ChangedBy::Agent,
+        )
+    {
+        notes.push(format!("adding the projects site to Home failed: {e}"));
+    }
+
+    let memory_url = SiteUrl::new("memory", "").expect("valid");
+    if let Ok(page) = server.web.read_page(&memory_url) {
+        let link = format!("[{name}](site://projects/{name})");
+        let row = format!("| {link} | `{path}` | active | {about} |");
+        let mut text = append_table_row(&page.raw, "Projects registry", &row).unwrap_or_else(|| {
+            let table = format!(
+                "| project | path | status | what it is |\n|---------|------|--------|------------|\n{row}"
+            );
+            add_section(&page.raw, "Projects registry", &table, "Pages")
+        });
+        if let Some(listed) = append_list_item(&text, "Pages", &link) {
+            text = listed;
+        }
+        match server.write_page(&memory_url, &text, ChangedBy::Agent) {
+            Ok(_) => notes.push("linked it from memory".into()),
+            Err(e) => notes.push(format!("linking it from memory failed: {e}")),
+        }
+    }
+
+    if notes.is_empty() {
+        String::new()
+    } else {
+        format!(" and {}", notes.join(", "))
     }
 }

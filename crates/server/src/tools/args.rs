@@ -1,6 +1,24 @@
 //! Tool argument shapes, as sent by the model.
 
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
+use serde_json::Value;
+
+/// A bool as models send it: `true`, `"True"`, `"yes"`, `1`.
+pub fn boolish<'de, D>(deserializer: D) -> Result<bool, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = Value::deserialize(deserializer)?;
+    Ok(match value {
+        Value::Bool(value) => value,
+        Value::String(value) => matches!(
+            value.trim().to_ascii_lowercase().as_str(),
+            "true" | "yes" | "on" | "1"
+        ),
+        Value::Number(value) => value.as_i64().is_some_and(|value| value != 0),
+        _ => false,
+    })
+}
 
 #[derive(Debug, Deserialize)]
 pub struct OpenArgs {
@@ -24,8 +42,11 @@ pub struct EditArgs {
     pub url: String,
     pub old_text: String,
     pub new_text: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "boolish")]
     pub replace_all: bool,
+    /// The page hash `open` printed; refuses a stale edit when it differs.
+    #[serde(default)]
+    pub if_hash: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -36,7 +57,8 @@ pub struct SetProjectArgs {
 
 #[derive(Debug, Deserialize)]
 pub struct ActionsArgs {
-    pub site: String,
+    /// Default: the site the agent entered.
+    pub site: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -104,7 +126,7 @@ pub struct SteerWorkerArgs {
     pub ticket: String,
     pub message: String,
     /// `continue_worker` only: compact the worker's session first.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "boolish")]
     pub compact: bool,
 }
 
@@ -156,4 +178,26 @@ pub struct PublishSiteArgs {
     pub site: String,
     #[serde(default, rename = "as")]
     pub name: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bools_from_models_are_forgiving() {
+        let steer = |value: Value| {
+            serde_json::from_value::<SteerWorkerArgs>(serde_json::json!({
+                "ticket": "0001",
+                "message": "go on",
+                "compact": value,
+            }))
+            .unwrap()
+            .compact
+        };
+        assert!(steer(Value::Bool(true)));
+        assert!(steer(Value::String("True".into())));
+        assert!(steer(Value::String("yes".into())));
+        assert!(!steer(Value::String("False".into())));
+    }
 }

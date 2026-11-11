@@ -1,16 +1,19 @@
 //! Running a work's stages: each stage is a ticket in `site://orchestration` worked by a stage
 //! worker with scoped context; a stage without a gate starts the next one when it is done.
 
+use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 
 use composer_core::{Page, SiteUrl};
 use composer_protocol::{ChangedBy, ServerMessage, WorkerState};
+use serde_json::{Map, Value};
 
 use crate::pipeline::pipeline::Pipeline;
 use crate::pipeline::stage_contract::StageContract;
 use crate::pipeline::types::FINISHED;
 use crate::pipeline::work::Work;
+use crate::project::ProjectMode;
 use crate::server::Server;
 use crate::session::Session;
 use crate::worker::ticket::{TicketId, set_field, ticket_url};
@@ -67,22 +70,30 @@ fn pick_stage<'a>(work: &'a Work, stage: Option<&str>) -> Result<&'a StageContra
                 format!("no stage `{wanted}` (stages: {})", names.join(", "))
             }),
         None => {
-            // The first that is stale (rerun from there) or not finished.
+            // The first stage whose needs are done that is stale or not finished.
+            let done = work.done();
+            let finished = |name: &str| {
+                done.iter().any(|d| d == name)
+                    || matches!(work.stage_status(name).as_str(), "done" | "approved")
+            };
             let states = work.stages();
             let next = stages
                 .iter()
                 .zip(&states)
-                .find(|(_, s)| s.stale || !FINISHED.contains(&s.status.as_str()))
+                .find(|(contract, state)| {
+                    contract.needs.iter().all(|need| finished(need))
+                        && (state.stale || !FINISHED.contains(&state.status.as_str()))
+                })
                 .ok_or_else(|| {
                     format!(
-                        "every stage of {} is done; give a stage to run one again",
+                        "no stage of {} can start: finish or approve the stages before it, or give a stage",
                         work.name
                     )
                 })?;
             let (next, state) = next;
             if state.status == "review" && !state.stale {
                 return Err(format!(
-                    "{} waits for review: approve it (`status: approved` in its _stage.md) or run it again with stage {}",
+                    "{} waits for review: approve it (`status: approved` in the work's index.md) or run it again with stage {}",
                     next.name, next.name
                 ));
             }
@@ -100,6 +111,15 @@ pub async fn run_stage(
     note: Option<&str>,
 ) -> Result<StageStarted, String> {
     let work = find_work(server.web.root(), work)?;
+    // A gate that is approved and skipped (no page-change watcher): record the user's edits
+    // before the next stage reads its output.
+    for stage in &work.pipeline.stages {
+        let approved = work.current().as_deref() == Some(stage.name.as_str())
+            && work.current_status().as_deref() == Some("approved");
+        if approved && work.stage_field(&stage.name, "edited").as_deref() != Some("true") {
+            crate::pipeline::learning::gate_approved(server, &work, &stage.name);
+        }
+    }
     // Running is what has a worker now (a `running` left by a stopped server is not).
     let tickets: Vec<String> = server
         .workers
@@ -123,23 +143,30 @@ pub async fn run_stage(
             contract.name, work.name
         ));
     }
-    let note = note.map(str::trim).filter(|n| !n.is_empty());
+    // A rerun's note is on the work's page when the gate set it; an explicit one wins.
+    let note = note
+        .map(str::trim)
+        .filter(|n| !n.is_empty())
+        .map(str::to_string)
+        .or_else(|| work.stage_field(&contract.name, "note"));
+    let note = note.as_deref().map(str::trim).filter(|n| !n.is_empty());
     let ticket = new_ticket(server, &work, &contract, note)?;
     // Before the worker starts: one that finishes quickly must not be overwritten.
     let now = chrono::Local::now().to_rfc3339();
-    let quoted = format!("\"{ticket}\"");
-    let session = format!("\"{}\"", parent.id());
+    let attempts = (work.attempts(&contract.name) + 1).to_string();
     // What it reads, by hash: when one of them changes, the stage is stale.
     let inputs = serde_json::to_string(&work.input_hashes(&contract)).expect("a map serializes");
     let mut fields = vec![
+        ("stage", contract.name.as_str()),
         ("status", "running"),
-        ("ticket", quoted.as_str()),
+        ("ticket", ticket.as_str()),
         ("started", now.as_str()),
         // Who hears about it, and whose session the next stage joins after a gate.
-        ("session", session.as_str()),
+        ("session", parent.id()),
         // A rerun's note is in the ticket now.
-        ("note", "\"\""),
+        ("note", ""),
         ("inputs", inputs.as_str()),
+        ("attempts", attempts.as_str()),
     ];
     if let Some(harness) = &contract.harness {
         fields.push(("harness", harness));
@@ -150,13 +177,18 @@ pub async fn run_stage(
         .spawn(server, parent, &TicketId::parse(&ticket)?, None, None)
         .await
     {
-        Ok((worker, _)) => worker,
+        Ok((worker, worktree)) => {
+            if let Some(worktree) = &worktree {
+                work.project_mount(server, &worktree.path, ProjectMode::Worktree);
+            }
+            worker
+        }
         Err(e) => {
             set_stage_fields(
                 server,
                 &work,
                 &contract.name,
-                &[("status", "failed"), ("error", &one_line(&e))],
+                &[("status", "failed"), ("error", &one_line_raw(&e))],
             );
             return Err(e);
         }
@@ -265,36 +297,82 @@ fn new_ticket(
     Ok(id)
 }
 
-/// Sets fields of a stage's `_stage.md`.
+/// Sets the work's state: `stage`, `status` and `done` on its page; the run record (`ticket`,
+/// `inputs`, `summary`, ...) in a map keyed by stage. The page is the only state; there is no
+/// `_stage.md` to keep in step.
 pub(crate) fn set_stage_fields(server: &Server, work: &Work, stage: &str, fields: &[(&str, &str)]) {
-    let Ok(url) = SiteUrl::new(
-        &work.pipeline.name,
-        &format!("{}/{stage}/_stage.md", work.name),
-    ) else {
+    let Ok(url) = SiteUrl::parse(&work.url()) else {
         return;
     };
-    let raw = server
-        .web
-        .read_page(&url)
-        .map(|p| p.raw)
-        .unwrap_or_else(|_| {
-            format!("---\ntitle: {stage}\ntype: stage-run\nstage: {stage}\n---\n# {stage}\n")
+    let Ok(page) = server.web.read_page(&url) else {
+        return;
+    };
+    let mut raw = page.raw.clone();
+    let mut maps: HashMap<String, Map<String, Value>> = HashMap::new();
+    for (key, value) in fields {
+        if matches!(*key, "stage" | "status" | "done") {
+            raw = set_field(&raw, key, value);
+            continue;
+        }
+        let map = maps.entry((*key).to_string()).or_insert_with(|| {
+            page.frontmatter
+                .get(key)
+                .and_then(Value::as_object)
+                .cloned()
+                .unwrap_or_default()
         });
-    let raw = fields
-        .iter()
-        .fold(raw, |raw, (key, value)| set_field(&raw, key, value));
+        let value = match *key {
+            "inputs" => serde_json::from_str(value).unwrap_or(Value::Null),
+            "attempts" => serde_json::from_str(value).unwrap_or(Value::String(value.to_string())),
+            _ => Value::String(value.to_string()),
+        };
+        map.insert(stage.to_string(), value);
+        raw = set_plain_field(
+            &raw,
+            key,
+            &serde_json::to_string(map).expect("a map serializes"),
+        );
+    }
     if let Err(e) = server.write_page(&url, &raw, ChangedBy::Agent) {
         tracing::error!("updating {url}: {e}");
     }
 }
 
-/// A stage ticket's worker ended: record it in the stage's `_stage.md`; a finished stage
-/// without a gate starts the next one. Returns what the parent should be told, if anything:
+/// `set_field`, but for a value that is a YAML flow collection: no ` #` is a comment.
+fn set_plain_field(raw: &str, key: &str, value: &str) -> String {
+    let Some(rest) = raw.strip_prefix("---\n") else {
+        return format!("---\n{key}: {value}\n---\n{raw}");
+    };
+    let Some(end) = rest.find("\n---") else {
+        return raw.to_string();
+    };
+    let (front, body) = rest.split_at(end);
+    let mut found = false;
+    let lines: Vec<String> = front
+        .lines()
+        .map(|line| {
+            if line.starts_with(&format!("{key}:")) {
+                found = true;
+                format!("{key}: {value}")
+            } else {
+                line.to_string()
+            }
+        })
+        .collect();
+    let mut front = lines.join("\n");
+    if !found {
+        front.push_str(&format!("\n{key}: {value}"));
+    }
+    format!("---\n{front}{body}")
+}
+
+/// A stage ticket's worker ended: record it on the work's page. Nothing starts the next stage.
+/// Returns what the parent should be told, if anything:
 /// `None` for a ticket that isn't a stage's.
 pub fn stage_ended(
     server: &Arc<Server>,
     ticket: &Page,
-    parent: &str,
+    _parent: &str,
     state: WorkerState,
     summary: &str,
 ) -> Option<Option<String>> {
@@ -304,6 +382,11 @@ pub fn stage_ended(
         Ok(work) => work,
         Err(e) => return Some(Some(format!("[stage {stage}: {e}]"))),
     };
+    let project = work.project_root(server);
+    let project_mode = work.project_mode(work.pipeline.stage(&stage));
+    if let Some(project) = &project {
+        work.project_mount(server, &project.root, project_mode);
+    }
     let gate = work.pipeline.stage(&stage).is_some_and(|c| c.gate);
     let status = match state {
         WorkerState::Done if gate => "review",
@@ -312,14 +395,22 @@ pub fn stage_ended(
         _ => "failed",
     };
     let now = chrono::Local::now().to_rfc3339();
+    let summary = one_line_raw(summary);
+    let mut done = work.done();
+    if status == "done" && !done.iter().any(|d| d == &stage) {
+        done.push(stage.clone());
+    }
+    let done = serde_json::to_string(&done).expect("a list serializes");
     set_stage_fields(
         server,
         &work,
         &stage,
         &[
+            ("stage", &stage),
             ("status", status),
+            ("done", &done),
             ("finished", &now),
-            ("summary", &one_line(summary)),
+            ("summary", &summary),
             // A fresh run: its output is the agent's again.
             ("edited", "false"),
         ],
@@ -333,42 +424,26 @@ pub fn stage_ended(
         title: work.title.clone(),
         stage: stage.clone(),
         status: status.to_string(),
-        summary: summary.to_string(),
+        summary: summary.clone(),
     });
     let label = format!("{}/{}", work.pipeline.name, work.name);
     let folder = format!("site://{label}/{stage}/");
-    let next = work
-        .pipeline
-        .stages
-        .iter()
-        .skip_while(|s| s.name != stage)
-        .nth(1)
-        .map(|s| s.name.clone());
-    Some(match (status, next) {
-        ("done", Some(next)) => {
-            // Not from inside the worker's ending: the next one starts on its own task.
-            let server = server.clone();
-            let parent = parent.to_string();
-            let spec = label.clone();
-            tokio::spawn(async move {
-                let Ok(parent) = server.sessions.get(&parent) else {
-                    return;
-                };
-                if let Err(e) = run_stage(&server, &parent, &spec, Some(&next), None).await {
-                    tracing::warn!("starting {next} of {spec}: {e}");
-                }
-            });
-            None
-        }
-        ("done", None) => Some(format!(
-            "[work {label}: every stage is done]\n{summary}\n\nThe last stage wrote into {folder}."
+    Some(match status {
+        "done" => Some(format!(
+            "[work {label}: stage {stage} is done]\n{summary}\n\nIts output is in {folder}; \
+             start the next stage when you want it."
         )),
-        ("review", _) => Some(format!(
+        "review" => Some(format!(
             "[work {label}: stage {stage} waits for review]\n{summary}\n\nIts output is in {folder}. \
-             The user approves it (`status: approved` in its _stage.md) or has it run again."
+             The user approves it (`status: approved` and the stage in `done:` in the work's \
+             index.md) or has it run again."
         )),
-        (other, _) => Some(format!("[work {label}: stage {stage} {other}]\n{summary}")),
+        other => Some(format!("[work {label}: stage {stage} {other}]\n{summary}")),
     })
+}
+
+fn one_line_raw(text: &str) -> String {
+    text.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 fn one_line(text: &str) -> String {
@@ -377,7 +452,7 @@ fn one_line(text: &str) -> String {
 }
 
 /// The session a work's stages belong to when nobody asked for them in a chat: the one its
-/// last stage ran under (`session:` in `_stage.md`), else a new one in the work's project.
+/// last stage ran under (`session:` on the work's page), else a new one in the work's project.
 pub fn work_session(
     server: &Server,
     work: &Work,
@@ -402,81 +477,26 @@ pub fn work_session(
     Ok(session)
 }
 
-/// Watches stages' `_stage.md` pages for what the user decided at a gate: `approved` starts
-/// the next stage (if it hasn't run), `rerun` runs the stage again with its `note`. Whoever
-/// wrote it (the board app, the TUI, an editor, an agent).
-pub async fn run_gates(server: Arc<Server>) {
-    let mut events = server.hub.subscribe();
-    crate::pipeline::learning::ask_open_proposals(&server);
-    loop {
-        let event = match events.recv().await {
-            Ok(event) => event,
-            Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
-            Err(_) => return,
-        };
-        let ServerMessage::PageChanged { url, .. } = &*event else {
+/// Rebuilds every work's `project/` link: after a restart, a work made by hand, or a moved
+/// project. The worktree is not active outside a run, so the link points at the project root.
+pub fn ensure_project_mounts(server: &Server) {
+    let Ok(sites) = server.web.sites() else {
+        return;
+    };
+    for site in sites {
+        let dir = server.web.root().join(&site.name);
+        let Some(pipeline) = Pipeline::from_dir(&site.name, &dir) else {
             continue;
         };
-        if url.ends_with("/_stage.md")
-            && let Err(e) = gate_changed(&server, url).await
-        {
-            tracing::warn!("{url}: {e}");
-        }
-    }
-}
-
-async fn gate_changed(server: &Arc<Server>, url: &str) -> Result<(), String> {
-    let url = SiteUrl::parse(url).map_err(|e| e.to_string())?;
-    let mut parts = url.path().split('/');
-    let (Some(name), Some(stage), Some("_stage.md"), None) =
-        (parts.next(), parts.next(), parts.next(), parts.next())
-    else {
-        return Ok(());
-    };
-    let Ok(work) = find_work(server.web.root(), &format!("{}/{name}", url.site())) else {
-        return Ok(());
-    };
-    match work.stage_status(stage).as_str() {
-        "approved" => {
-            // What you changed before approving it (once: the edit is recorded then).
-            if work.stage_field(stage, "edited").as_deref() != Some("true") {
-                crate::pipeline::learning::gate_approved(server, &work, stage);
-            }
-            let Some(next) = work
-                .pipeline
-                .stages
-                .iter()
-                .skip_while(|s| s.name != stage)
-                .nth(1)
-                .map(|s| s.name.clone())
-            else {
-                return Ok(());
+        for name in pipeline.works() {
+            let Some(work) = Work::load(pipeline.clone(), &name) else {
+                continue;
             };
-            // Only a stage that hasn't run, or whose inputs changed (a rerun going on through
-            // the stages after it): approving again (or editing the page) does nothing.
-            let fresh = work
-                .stages()
-                .iter()
-                .find(|s| s.name == next)
-                .is_some_and(|s| s.status == "waiting" || s.stale);
-            if !fresh {
-                return Ok(());
+            if let Some(project) = work.project_root(server) {
+                let mode = work.project_mode(None);
+                work.project_mount(server, &project.root, mode);
             }
-            let parent = work_session(server, &work, Some(stage))?;
-            let spec = format!("{}/{name}", url.site());
-            run_stage(server, &parent, &spec, Some(&next), None)
-                .await
-                .map(|_| ())
         }
-        "rerun" => {
-            let note = work.stage_field(stage, "note");
-            let parent = work_session(server, &work, Some(stage))?;
-            let spec = format!("{}/{name}", url.site());
-            run_stage(server, &parent, &spec, Some(stage), note.as_deref())
-                .await
-                .map(|_| ())
-        }
-        _ => Ok(()),
     }
 }
 

@@ -66,23 +66,35 @@
   },
   {
     "id": 12,
+    "type": "site.set",
+    "session": "a3f1",
+    "site": "3d"
+  },
+  {
+    "id": 13,
+    "type": "site.set",
+    "session": "a3f1",
+    "site": null
+  },
+  {
+    "id": 14,
     "type": "approval.respond",
     "request": "r1",
     "decision": "approve"
   },
   {
-    "id": 13,
+    "id": 15,
     "type": "approval.respond",
     "request": "r2",
     "decision": "always"
   },
   {
-    "id": 14,
+    "id": 16,
     "type": "ticket.changes",
     "ticket": "0007"
   },
   {
-    "id": 15,
+    "id": 17,
     "type": "ticket.comment",
     "ticket": "0007",
     "comments": [
@@ -96,22 +108,22 @@
     ]
   },
   {
-    "id": 16,
+    "id": 18,
     "type": "project.overview",
     "project": "game"
   },
   {
-    "id": 17,
+    "id": 19,
     "type": "pipeline.list"
   },
   {
-    "id": 18,
+    "id": 20,
     "type": "pipeline.new",
     "kind": "video",
     "name": "shorts"
   },
   {
-    "id": 19,
+    "id": 21,
     "type": "work.new",
     "pipeline": "coding",
     "name": "save-system",
@@ -119,35 +131,35 @@
     "brief": "Three save slots."
   },
   {
-    "id": 20,
+    "id": 22,
     "type": "work.run",
     "work": "coding/save-system",
     "stage": "02_plan"
   },
   {
-    "id": 21,
+    "id": 23,
     "type": "ticket.merge",
     "ticket": "0007"
   },
   {
-    "id": 22,
+    "id": 24,
     "type": "ticket.discard",
     "ticket": "0007"
   },
   {
-    "id": 23,
+    "id": 25,
     "type": "subscribe",
     "urls": [
       "*"
     ]
   },
   {
-    "id": 24,
+    "id": 26,
     "type": "worker.hello",
     "session": "a3f1"
   },
   {
-    "id": 25,
+    "id": 27,
     "type": "worker.event",
     "event": {
       "type": "turn.started",
@@ -156,16 +168,16 @@
     }
   },
   {
-    "id": 26,
+    "id": 28,
     "type": "slot.acquire"
   },
   {
-    "id": 27,
+    "id": 29,
     "type": "slot.release",
     "grant": 7
   },
   {
-    "id": 28,
+    "id": 30,
     "type": "approval.ask",
     "site": "t",
     "recipe": "r",
@@ -174,30 +186,30 @@
     "hash": "h"
   },
   {
-    "id": 29,
+    "id": 31,
     "type": "worker.finish",
     "state": "failed",
     "summary": "why"
   },
   {
-    "id": 30,
+    "id": 32,
     "type": "tool.list",
     "session": "a3f1"
   },
   {
-    "id": 31,
+    "id": 33,
     "type": "harness.list",
     "project": "composer"
   },
   {
-    "id": 32,
+    "id": 34,
     "type": "harness.set",
     "project": "composer",
     "entry": "claude-code",
     "on": false
   },
   {
-    "id": 33,
+    "id": 35,
     "type": "tool.call",
     "session": "a3f1",
     "name": "open",

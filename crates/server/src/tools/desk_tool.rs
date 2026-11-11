@@ -26,6 +26,7 @@ impl Tool for DeskTool {
             "type": "object",
             "properties": {
                 "changes": { "type": "boolean", "description": "put the project's changes on the stage" },
+                "live": { "type": "boolean", "description": "put the live view of the application on the stage" },
                 "point": { "type": "string", "description": "a tab id to show, e.g. app:cad@game" }
             }
         })
@@ -37,6 +38,13 @@ impl Tool for DeskTool {
                 .ok_or("this session has no project: set one first (`set_project`)")?;
             let tab = put(context, DeskTab::Changes { project })?;
             return Ok(format!("{tab} is on the stage"));
+        }
+        if args["live"].as_bool().unwrap_or(false) {
+            if crate::api::viewer_proxy::viewer_path(&context.server).is_none() {
+                return Err(crate::api::viewer_proxy::NO_LIVE_VIEW.into());
+            }
+            let tab = put(context, DeskTab::LiveView)?;
+            return Ok(format!("{tab} (the live view) is on the stage"));
         }
         let desk = context.session.desk();
         if let Some(tab) = args["point"].as_str() {

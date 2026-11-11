@@ -1,3 +1,5 @@
+import 'frame_size.dart';
+import 'live_view_size.dart';
 import 'server_entry.dart';
 import 'server_status.dart';
 import 'types.dart';
@@ -14,7 +16,9 @@ class AppState {
     this.notice,
     this.foreground = true,
     this.notifiedApprovals = const {},
-    this.tab = PhoneTab.chats,
+    this.tab = PhoneTab.inbox,
+    this.liveViewSize = LiveViewSize.medium,
+    this.liveFrame,
   });
 
   static const initial = AppState();
@@ -45,6 +49,12 @@ class AppState {
   /// The phone layout's tab.
   final PhoneTab tab;
 
+  /// How tall the session screen's live view is (kept per device).
+  final LiveViewSize liveViewSize;
+
+  /// The size of the application's screen as the live view's page last reported it (not kept).
+  final FrameSize? liveFrame;
+
 
   ServerEntry? get activeServer => servers.where((s) => s.url == active).firstOrNull;
 
@@ -62,6 +72,8 @@ class AppState {
     bool? foreground,
     Set<String>? notifiedApprovals,
     PhoneTab? tab,
+    LiveViewSize? liveViewSize,
+    FrameSize? liveFrame,
   }) =>
       AppState(
         loaded: loaded ?? this.loaded,
@@ -73,5 +85,7 @@ class AppState {
         foreground: foreground ?? this.foreground,
         notifiedApprovals: notifiedApprovals ?? this.notifiedApprovals,
         tab: tab ?? this.tab,
+        liveViewSize: liveViewSize ?? this.liveViewSize,
+        liveFrame: liveFrame ?? this.liveFrame,
       );
 }

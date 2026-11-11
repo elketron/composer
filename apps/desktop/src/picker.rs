@@ -21,6 +21,10 @@ pub enum Pick {
     AttachFile,
     NewTerminal,
     ToggleFollow,
+    /// Enter this workflow site (`site.set`) for the shown session.
+    Workflow(String),
+    /// Leave the shown session's workflow.
+    LeaveWorkflow,
     Workspaces,
     Sessions,
 }

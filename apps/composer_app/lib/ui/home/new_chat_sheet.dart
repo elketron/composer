@@ -7,18 +7,23 @@ import '../chat/navigation.dart';
 import '../store_scope.dart';
 
 /// Opens New chat for a server, as a sheet.
-void showNewChat(BuildContext context, String url) => showModalBottomSheet<void>(
+///
+/// With [site], the new chat enters that workflow once it exists.
+void showNewChat(BuildContext context, String url, {String? site}) => showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (_) => NewChatSheet(url: url, parent: context),
+      builder: (_) => NewChatSheet(url: url, parent: context, site: site),
     );
 
 /// Agent and project for a new chat; both start on a sensible choice, so Start is one tap.
 class NewChatSheet extends StatefulWidget {
-  const NewChatSheet({super.key, required this.url, required this.parent});
+  const NewChatSheet({super.key, required this.url, required this.parent, this.site});
 
   final String url;
+
+  /// The workflow the chat starts in.
+  final String? site;
 
   /// Where the chat opens (the sheet's own context goes away with it).
   final BuildContext parent;
@@ -47,7 +52,7 @@ class _NewChatSheetState extends State<NewChatSheet> {
 
     void start(String? project) {
       Navigator.pop(context);
-      StoreScope.read(widget.parent).dispatch(NewSessionRequested(widget.url, agent: _agent, project: project));
+      StoreScope.read(widget.parent).dispatch(NewSessionRequested(widget.url, agent: _agent, project: project, site: widget.site));
       pushChat(widget.parent, widget.url);
     }
 
@@ -108,7 +113,7 @@ class _NewChatSheetState extends State<NewChatSheet> {
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          const Text('New chat', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+          Text(widget.site == null ? 'New chat' : 'New chat in ${widget.site}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
           const SizedBox(height: 12),
           Text('AGENT', style: mono(size: 10.5, color: t.faint)),
           const SizedBox(height: 8),

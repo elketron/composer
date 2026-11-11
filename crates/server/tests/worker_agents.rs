@@ -56,6 +56,7 @@ async fn orchestrators_see_the_worker_agents() {
         id: "ab12".into(),
         agent: "orchestrator".into(),
         project: None,
+        site: None,
         ticket: None,
         parent: None,
         worker: None,
@@ -76,5 +77,7 @@ async fn orchestrators_see_the_worker_agents() {
             .contains("- worker agents (`spawn_worker`'s `agent`):\n  - `coder`: writes code\n"),
         "{orchestrator}"
     );
-    assert!(!prompt("default").contains("`spawn_worker`'s `agent`"));
+    // The default agent can delegate too; a worker cannot list (or start) workers.
+    assert!(prompt("default").contains("`spawn_worker`'s `agent`"));
+    assert!(!prompt("worker").contains("`spawn_worker`'s `agent`"));
 }

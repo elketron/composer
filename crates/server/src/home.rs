@@ -10,6 +10,7 @@ use crate::workspace_name::WorkspaceName;
 /// global/           config.toml (defaults every workspace starts from), user.md
 /// sites/            the library: site definitions workspaces install from
 /// templates/        app scaffold and sdk
+/// mcps/             `.mcpb` bundles: MCP servers shared by every workspace
 /// state/            server-only: stock bases for the library and templates
 /// workspaces/<n>/   each workspace (see WorkspaceHome)
 /// ```
@@ -53,6 +54,11 @@ impl Home {
 
     pub fn templates(&self) -> PathBuf {
         self.root.join("templates")
+    }
+
+    /// The MCP bundles (`mcps/*.mcpb`): putting a file there installs it.
+    pub fn mcps(&self) -> PathBuf {
+        self.root.join("mcps")
     }
 
     pub fn state(&self) -> PathBuf {

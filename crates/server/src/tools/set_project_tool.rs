@@ -16,8 +16,9 @@ impl Tool for SetProjectTool {
 
     fn description(&self) -> &'static str {
         "Set the session's active project: a code directory on disk the user is working on. \
-         Its memory page (site://memory/projects/<folder name>) is then loaded into your context. \
-         A plain name is a folder in the user's projects directory. An empty path clears it."
+         Its project page (site://projects/<name>) is then loaded into your context. \
+         Accepts a page, a plain name (a folder in the user's projects directory), or a path. \
+         An empty path clears it."
     }
 
     fn parameters(&self) -> Value {
@@ -39,7 +40,38 @@ impl Tool for SetProjectTool {
             .filter(|p| !p.is_empty())
         {
             None => None,
-            Some(path) => Some(context.server.use_project(path)?),
+            Some(path) => {
+                let project = crate::project::ProjectRef::resolve(&context.server, path).map_err(
+                    |error| {
+                        let dir = expand_home(&context.server.config().projects.dir);
+                        let mut names: Vec<String> = std::fs::read_dir(&dir)
+                            .into_iter()
+                            .flatten()
+                            .flatten()
+                            .filter_map(|entry| {
+                                entry
+                                    .file_name()
+                                    .to_str()
+                                    .filter(|_| entry.path().is_dir())
+                                    .map(str::to_string)
+                            })
+                            .collect();
+                        names.sort();
+                        names.truncate(12);
+                        if names.is_empty() {
+                            error
+                        } else {
+                            format!(
+                                "{error}. Projects in {}: {}",
+                                dir.display(),
+                                names.join(", ")
+                            )
+                        }
+                    },
+                )?;
+                let root = project.root.display().to_string();
+                Some(context.server.use_project(&root)?)
+            }
         };
         let message = match &project {
             Some(path) => format!("active project: {path}"),

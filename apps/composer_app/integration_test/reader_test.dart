@@ -47,12 +47,15 @@ void main() {
     await tester.pumpAndSettle();
 
     // The agent opens a page; the reader follows it.
-    await tester.tap(find.byKey(const Key('tab-chats')));
+    await tester.tap(find.byKey(const Key('tab-inbox')));
     await pumpUntil(tester, find.byKey(const Key('new-chat')));
     await sendInNewChat(tester, 'Use your open tool to open site://plans, then say its title.');
     await pumpUntil(tester, find.byType(ActivityLine), seconds: 30);
     await pumpUntilGone(tester, find.byType(ActivityLine), seconds: 60);
-    await tester.tap(find.byTooltip('Pages'));
+    // Pages is an entry of the chat's ⋮ menu.
+    await tester.tap(find.byKey(const Key('chat-menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('pages')));
     await pumpUntil(tester, pageTitled('Plans'));
     await settle(tester, seconds: 2);
   });

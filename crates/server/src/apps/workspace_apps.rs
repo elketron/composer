@@ -6,7 +6,7 @@ use composer_protocol::http::{AppInfo, AppList, ProjectInfo};
 use crate::apps::{AppManifest, AttachReason, AttachedApp, LocalApp, ProjectFacts, ProjectName};
 use crate::harness::project_settings;
 use crate::pipeline::Pipeline;
-use crate::project::{ProjectPath, project_list};
+use crate::project::{ProjectPath, ProjectRef, project_list};
 use crate::server::Server;
 
 /// The workspace's apps by site (sites with a `ui/` or an `app:` block), and the sites whose
@@ -170,14 +170,19 @@ pub fn project_info(server: &Server, project: &crate::apps::GrantedProject) -> P
     let folder = &project.folder;
     let settings = project_settings(&config, &folder.display().to_string());
     let pipelines = linking_pipelines(server, folder);
+    let page = ProjectRef::resolve(server, &folder.display().to_string())
+        .ok()
+        .and_then(|project| project.page_url());
     let branch = crate::project::git::git(folder, &["rev-parse", "--abbrev-ref", "HEAD"])
         .ok()
         .filter(|b| !b.is_empty() && b != "HEAD");
     ProjectInfo {
         name: project.name.to_string(),
+        page,
         root: folder.display().to_string(),
         branch: folder.join(".git").exists().then_some(branch).flatten(),
         pipeline: pipelines.first().cloned(),
+        sites: pipelines.clone(),
         pipelines,
         tags: settings.tags,
     }

@@ -22,6 +22,7 @@ mod init;
 mod launcher;
 pub mod library;
 pub mod mcp;
+pub mod mcp_bundles;
 pub mod mcp_clients;
 mod migrate;
 pub mod pipeline;
@@ -29,6 +30,7 @@ pub mod project;
 pub mod provider;
 pub mod reminders;
 pub mod sandbox;
+mod secret;
 mod server;
 pub mod session;
 mod slot_guard;
@@ -37,7 +39,9 @@ mod stock_root;
 mod template_name;
 pub mod terminals;
 pub mod tools;
+pub mod tui;
 mod update;
+mod viewer_upstream;
 mod watcher;
 pub mod watches;
 pub mod worker;
@@ -49,9 +53,9 @@ mod workspace_template_file;
 
 pub use config::Config;
 pub use config_sections::{
-    AgentConfig, AppsConfig, AttachmentsConfig, ClaudeCodeConfig, LauncherEntry, McpServerConfig,
-    PipelinesConfig, ProjectSettings, ProjectsConfig, ProviderConfig, RemindersConfig,
-    SandboxConfig, ServerConfig,
+    AgentConfig, ApplicationConfig, AppsConfig, AttachmentsConfig, ClaudeCodeConfig, LauncherEntry,
+    McpServerConfig, PipelinesConfig, ProjectSettings, ProjectsConfig, ProviderConfig,
+    RemindersConfig, SandboxConfig, ServerConfig,
 };
 pub use error::{Result, ServerError};
 pub use hash::content_hash;

@@ -1,8 +1,15 @@
-//! An app's own routes: `<base>/p/<project>/<app>/` for an app opened on a project (ticket 0163),
-//! `<base>/h/<app>/` for one opened on Home (ticket 0168). They serve the app, and `.../api/...` is
-//! the API as its token allows (decision 2026-11-07): read any page of the workspace; write only
-//! its own site and its project (on Home: no project); run only its own site's actions. These
-//! routes sit outside the workspace token's: an app page never needs (and never gets) it.
+//! An app's own routes: `<base>/a/<app token>/`, for an app opened on a project (ticket 0163) or
+//! on Home (ticket 0168). They serve the app, and `.../api/...` and `.../ws` are the API as its
+//! token allows (decision 2026-11-07): read any page of the workspace; write only its own site and
+//! its project (on Home: no project); run only its own site's actions. These routes sit outside the
+//! workspace token's: an app page never needs (and never gets) it.
+//!
+//! An app's code is untrusted (an agent may have written it), so every response here carries
+//! [`SANDBOX`]: the page runs in an opaque origin. Its requests say `Origin: null` and, being
+//! cross-site, carry no SameSite=Strict cookie, so the workspace's cookie is out of its reach
+//! whatever the page does. That is why the token is in the path: the app's relative URLs (and its
+//! socket) carry it without a cookie or a header. The answers allow `Origin: null` to read them
+//! (CORS), nothing else; the Origin rule is [`crate::api::auth::origin_refused`].
 
 use std::collections::HashMap;
 use std::path::{Path as FsPath, PathBuf};
@@ -10,7 +17,7 @@ use std::sync::Arc;
 
 use axum::body::Bytes;
 use axum::extract::{Path, Query, RawPathParams, Request, State, WebSocketUpgrade};
-use axum::http::{StatusCode, header};
+use axum::http::{HeaderValue, Method, StatusCode, header};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::{get, post};
@@ -22,15 +29,23 @@ use composer_protocol::http::{
 };
 
 use crate::actions::{Justfile, RecipeEnv, check_args, run_recipe};
-use crate::api::auth::{is_https, same_origin};
+use crate::api::auth::{Audience, origin_refused};
 use crate::api::{ApiError, action_routes, app_routes, http_routes, ws_routes};
 use crate::apps::AppGrant;
+use crate::pipeline::{Pipeline, Work};
+use crate::project::ProjectMode;
 use crate::server::Server;
 
-/// The cookie an app page's token rides in, scoped to the app's own path.
-pub const APP_COOKIE: &str = "composer_app";
+/// Where apps are served: `<base>/a/<app token>/` (a site named `a` is not served as a client
+/// app, like `h` and `p`).
+pub const APP_PREFIX: &str = "/a";
 
-/// A route's named parameters (`project`, `app`, `site`, `path`, ...).
+/// The sandbox every app response is served in: scripts, forms, dialogs, popups (which inherit
+/// the sandbox) and downloads (an app's exports), and no `allow-same-origin`: an opaque origin.
+pub const SANDBOX: &str =
+    "sandbox allow-scripts allow-forms allow-popups allow-modals allow-downloads";
+
+/// A route's named parameters (`token`, `site`, `path`, ...).
 type Params = HashMap<String, String>;
 
 fn arg(params: &Params, name: &str) -> String {
@@ -39,9 +54,14 @@ fn arg(params: &Params, name: &str) -> String {
 
 /// The routes, to merge into a workspace's router (outside its token layer).
 pub fn router(server: Arc<Server>) -> Router<Arc<Server>> {
-    let router = routes(Router::new(), "/p/{project}/{app}");
-    routes(router, "/h/{app}")
-        .route_layer(middleware::from_fn_with_state(server, require_app_token))
+    // A layer, not a route layer: it also answers the CORS preflight (`OPTIONS`) of every route.
+    routes(Router::new(), &format!("{APP_PREFIX}/{{token}}"))
+        .layer(middleware::from_fn_with_state(server, require_app_token))
+        // The old forms, `/p/<project>/<app>/?app_token=` and `/h/<app>/?app_token=`: to the new.
+        .route("/p/{project}/{app}", get(old_url))
+        .route("/p/{project}/{app}/", get(old_url))
+        .route("/h/{app}", get(old_url))
+        .route("/h/{app}/", get(old_url))
 }
 
 /// The app routes under `base`.
@@ -87,87 +107,148 @@ fn routes(router: Router<Arc<Server>>, base: &str) -> Router<Arc<Server>> {
         .route(&format!("{base}/api/events"), post(app_event))
 }
 
-/// Requires the token the app was opened with (`?app_token=` once, then its cookie; or
-/// `Authorization: Bearer`), for this project and this app. Like the workspace's, a wrong token
-/// is a 404: it learns nothing. A `?app_token=` sets the cookie, scoped to the app's path.
+/// Requires the app token in the path (`<base>/a/<token>/...`); nothing else authenticates here
+/// (no cookie, no header). Like the workspace's, a wrong token is a 404: it learns nothing. Every
+/// answer is sandboxed ([`SANDBOX`]) and readable by the app's opaque origin; a CORS preflight is
+/// answered here.
 async fn require_app_token(
     State(server): State<Arc<Server>>,
     params: RawPathParams,
     mut request: Request,
     next: Next,
 ) -> Response {
-    let param = |name: &str| {
-        params
-            .iter()
-            .find(|(k, _)| *k == name)
-            .map(|(_, v)| v.to_string())
-            .unwrap_or_default()
+    let token = params
+        .iter()
+        .find(|(k, _)| *k == "token")
+        .map(|(_, v)| v.to_string())
+        .unwrap_or_default();
+    let null_origin = request
+        .headers()
+        .get(header::ORIGIN)
+        .is_some_and(|o| o.as_bytes() == b"null");
+    let refused = origin_refused(request.headers(), Audience::App);
+    let mut response = match (server.app_tokens.grant(&token), refused) {
+        (None, _) => (
+            StatusCode::NOT_FOUND,
+            "not found (or not with this app's token: open the app to get one)",
+        )
+            .into_response(),
+        (Some(_), Some(refused)) => refused,
+        (Some(_), None) if request.method() == Method::OPTIONS => preflight(),
+        (Some(grant), None) => {
+            request.extensions_mut().insert(grant.clone());
+            let response = next.run(request).await;
+            with_meta(response, &grant).await
+        }
     };
-    // No `project`: an app opened on Home.
-    let (project, app) = (param("project"), param("app"));
-    let project = (!project.is_empty()).then_some(project);
-    let headers = request.headers();
-    let bearer = headers
-        .get(header::AUTHORIZATION)
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.strip_prefix("Bearer "))
-        .map(str::to_string);
-    let query = request
-        .uri()
+    let headers = response.headers_mut();
+    headers.insert(
+        header::CONTENT_SECURITY_POLICY,
+        HeaderValue::from_static(SANDBOX),
+    );
+    if null_origin {
+        headers.insert(
+            header::ACCESS_CONTROL_ALLOW_ORIGIN,
+            HeaderValue::from_static("null"),
+        );
+    }
+    response
+}
+
+/// The answer to a CORS preflight from the app's page: what the sdk sends.
+fn preflight() -> Response {
+    (
+        StatusCode::NO_CONTENT,
+        [
+            (header::ACCESS_CONTROL_ALLOW_METHODS, "GET, PUT, POST"),
+            (header::ACCESS_CONTROL_ALLOW_HEADERS, "content-type"),
+            (header::ACCESS_CONTROL_MAX_AGE, "600"),
+        ],
+    )
+        .into_response()
+}
+
+/// An app's HTML page gets what the sdk can no longer read from its URL: its site, its project
+/// and the session it was opened from, in `<meta name="composer-app">`.
+async fn with_meta(response: Response, grant: &AppGrant) -> Response {
+    let html = response
+        .headers()
+        .get(header::CONTENT_TYPE)
+        .is_some_and(|t| t.as_bytes().starts_with(b"text/html"));
+    if !html || response.status() != StatusCode::OK {
+        return response;
+    }
+    let (mut parts, body) = response.into_parts();
+    let Ok(bytes) = axum::body::to_bytes(body, 64 * 1024 * 1024).await else {
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    };
+    let facts = serde_json::json!({
+        "site": grant.site,
+        "project": grant.project.as_ref().map(|p| p.name.to_string()),
+        "session": grant.session,
+    })
+    .to_string();
+    let meta = format!(
+        "<meta name=\"composer-app\" content=\"{}\">",
+        facts
+            .replace('&', "&amp;")
+            .replace('"', "&quot;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;")
+    );
+    let page = String::from_utf8_lossy(&bytes);
+    let at = page
+        .to_ascii_lowercase()
+        .find("<head>")
+        .map(|at| at + "<head>".len())
+        .unwrap_or(0);
+    let page = format!("{}{meta}{}", &page[..at], &page[at..]);
+    parts.headers.remove(header::CONTENT_LENGTH);
+    Response::from_parts(parts, axum::body::Body::from(page))
+}
+
+/// `<base>/p/<project>/<app>/?app_token=<t>` and `<base>/h/<app>/?app_token=<t>` (the URLs
+/// before the token moved into the path): to `<base>/a/<t>/`, with the rest of the query, only
+/// for a token of that app there. Nothing else is served at the old URLs.
+async fn old_url(
+    State(server): State<Arc<Server>>,
+    Path(p): Path<Params>,
+    uri: axum::http::Uri,
+) -> Response {
+    let project = p.get("project").map(String::as_str);
+    let app = arg(&p, "app");
+    let pairs: Vec<(&str, &str)> = uri
         .query()
         .unwrap_or("")
         .split('&')
         .filter_map(|pair| pair.split_once('='))
-        .find(|(k, _)| *k == "app_token")
-        .map(|(_, v)| v.to_string());
-    let cookie = headers
-        .get_all(header::COOKIE)
+        .collect();
+    let token = pairs
         .iter()
-        .filter_map(|v| v.to_str().ok())
-        .flat_map(|v| v.split(';'))
-        .filter_map(|pair| pair.trim().split_once('='))
-        .filter(|(k, _)| *k == APP_COOKIE)
-        .map(|(_, v)| v.to_string())
-        .find(|t| fits(&server, t, project.as_deref(), &app));
-    let token = [bearer, query.clone()]
-        .into_iter()
-        .flatten()
-        .find(|t| fits(&server, t, project.as_deref(), &app))
-        .or(cookie.clone());
-    let Some(grant) = token.as_deref().and_then(|t| server.app_tokens.grant(t)) else {
+        .find(|(k, _)| *k == "app_token")
+        .map(|(_, v)| *v)
+        .filter(|t| fits(&server, t, project, &app));
+    let Some(token) = token else {
         return (
             StatusCode::NOT_FOUND,
-            "not found (or not with this app's token: open the app to get one)",
+            "not found (apps are served at <base>/a/<app token>/ now: open the app again)",
         )
             .into_response();
     };
-    if let Some(origin) = headers.get(header::ORIGIN).and_then(|v| v.to_str().ok())
-        && !same_origin(origin, headers)
-    {
-        return (StatusCode::FORBIDDEN, "cross-origin request").into_response();
-    }
-    let secure = is_https(headers);
-    request.extensions_mut().insert(grant);
-    let mut response = next.run(request).await;
-    if let Some(token) = query.filter(|q| cookie.as_deref() != Some(q.as_str())) {
-        let path = match &project {
-            Some(project) => format!(
-                "{}/p/{}/{}/",
-                server.route_base(),
-                encode_segment(project),
-                encode_segment(&app)
-            ),
-            None => format!("{}/h/{}/", server.route_base(), encode_segment(&app)),
-        };
-        let mut value = format!("{APP_COOKIE}={token}; Path={path}; HttpOnly; SameSite=Strict");
-        if secure {
-            value.push_str("; Secure");
-        }
-        if let Ok(value) = header::HeaderValue::from_str(&value) {
-            response.headers_mut().append(header::SET_COOKIE, value);
-        }
-    }
-    response
+    let rest: Vec<String> = pairs
+        .iter()
+        .filter(|(k, _)| *k != "app_token")
+        .map(|(k, v)| format!("{k}={v}"))
+        .collect();
+    let query = match rest.is_empty() {
+        true => String::new(),
+        false => format!("?{}", rest.join("&")),
+    };
+    Redirect::to(&format!(
+        "{}{APP_PREFIX}/{token}/{query}",
+        server.route_base()
+    ))
+    .into_response()
 }
 
 /// `token` is an app token for `app` on `project` (`None`: on Home).
@@ -226,7 +307,7 @@ fn own_site(grant: &AppGrant, site: &str, what: &str) -> Result<(), ApiError> {
 
 async fn redirect(Path(p): Path<Params>, uri: axum::http::Uri) -> Redirect {
     let query = uri.query().map(|q| format!("?{q}")).unwrap_or_default();
-    Redirect::permanent(&format!("{}/{query}", encode_segment(&arg(&p, "app"))))
+    Redirect::permanent(&format!("{}/{query}", arg(&p, "token")))
 }
 
 /// An app built with an older sdk calls the workspace's API from these routes and shows nothing:
@@ -242,7 +323,8 @@ fn outdated_page(server: &Server, grant: &AppGrant) -> Option<Response> {
     let site = &grant.site;
     let message = format!(
         "the {site} app was built with an older composer sdk (before version {}), which doesn't \
-         know where it is served now: rebuild it (its <code>ui-build</code> action, or \
+         know how apps are served now (sandboxed, at <code>&lt;base&gt;/a/&lt;app token&gt;/</code>): \
+         rebuild it (<code>just ui-build</code> in the site, its <code>ui-build</code> action, or \
          <code>composer app rebuild</code> for every app), then reload.",
         crate::apps::SDK_VERSION
     );
@@ -292,7 +374,7 @@ async fn ws(
     Extension(grant): Extension<AppGrant>,
     upgrade: WebSocketUpgrade,
 ) -> Response {
-    upgrade.on_upgrade(move |socket| ws_routes::run(server, socket, Some(grant)))
+    upgrade.on_upgrade(move |socket| ws_routes::run(server, socket, ws_routes::Client::App(grant)))
 }
 
 async fn sites(state: State<Arc<Server>>) -> Result<Json<Vec<SiteSummary>>, ApiError> {
@@ -395,24 +477,75 @@ fn granted(grant: &AppGrant) -> Result<&crate::apps::GrantedProject, ApiError> {
 }
 
 async fn get_project_file(
+    State(server): State<Arc<Server>>,
     Extension(grant): Extension<AppGrant>,
     Path(p): Path<Params>,
+    Query(query): Query<HashMap<String, String>>,
 ) -> Result<Response, ApiError> {
     let path = arg(&p, "path");
-    let project = granted(&grant)?;
-    let what = format!("project `{}`", project.name);
-    read_in(&inside(&project.folder, &path, &what)?, &path, &what)
+    let (root, _) = project_root(&server, &grant, query.get("work").map(String::as_str))?;
+    let what = format!("the {} app's project", grant.site);
+    read_in(&inside(&root, &path, &what)?, &path, &what)
 }
 
 async fn put_project_file(
+    State(server): State<Arc<Server>>,
     Extension(grant): Extension<AppGrant>,
     Path(p): Path<Params>,
+    Query(query): Query<HashMap<String, String>>,
     body: Bytes,
 ) -> Result<StatusCode, ApiError> {
     let path = arg(&p, "path");
-    let project = granted(&grant)?;
-    let what = format!("project `{}`", project.name);
-    write_in(&inside(&project.folder, &path, &what)?, &path, &body)
+    let (root, mode) = project_root(&server, &grant, query.get("work").map(String::as_str))?;
+    if mode.readonly() {
+        return Err(ApiError(
+            StatusCode::FORBIDDEN,
+            format!("the {} work is read-only", grant.site),
+        ));
+    }
+    let what = format!("the {} app's project", grant.site);
+    write_in(&inside(&root, &path, &what)?, &path, &body)
+}
+
+/// The project folder an app reads/writes: the main folder, or the work's `project/` (which is
+/// the project root or its worktree). A work must belong to the project the app was opened on.
+fn project_root(
+    server: &Server,
+    grant: &AppGrant,
+    work: Option<&str>,
+) -> Result<(PathBuf, ProjectMode), ApiError> {
+    let project = granted(grant)?;
+    let Some(work) = work.map(str::trim).filter(|w| !w.is_empty()) else {
+        return Ok((project.folder.clone(), ProjectMode::Write));
+    };
+    let dir = server.web.root().join(&grant.site);
+    let pipeline = Pipeline::from_dir(&grant.site, &dir).ok_or_else(|| {
+        ApiError(
+            StatusCode::NOT_FOUND,
+            format!("site://{} is not a pipeline", grant.site),
+        )
+    })?;
+    let work = Work::load(pipeline, work).ok_or_else(|| {
+        ApiError(
+            StatusCode::NOT_FOUND,
+            format!("no work `{work}` in site://{}", grant.site),
+        )
+    })?;
+    if work.project.as_deref() != Some(project.folder.to_str().unwrap_or("")) {
+        return Err(ApiError(
+            StatusCode::FORBIDDEN,
+            format!("the work `{}` is not on this project", work.name),
+        ));
+    }
+    let link = work.dir.join("project");
+    let root = link.canonicalize().unwrap_or(link);
+    // The live mount mode: a `worktree` run is writable even though the work's default is `read`.
+    let mode = server
+        .web
+        .project_mode(&work.dir.join("project"))
+        .map(ProjectMode::from_mount)
+        .unwrap_or_else(|| work.project_mode(None));
+    Ok((root, mode))
 }
 
 /// The app's work data on its project (`APP_DATA` for its recipes): `GET <app>/api/data/<path>`.

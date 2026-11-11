@@ -17,7 +17,9 @@ impl Tool for AnswerApprovalTool {
     fn description(&self) -> &'static str {
         "Decide a worker's approval request (a shell command, tool or recipe it wants to run) \
          instead of the user. `approve` lets it run once; `deny` refuses it, and `reason` goes \
-         to the worker; `ask_user` hands it to the user, with `reason` as what they should weigh."
+         to the worker; `ask_user` hands it to the user, with `reason` as what they should weigh. \
+         `request` is optional: without it, the one request waiting on the ticket. Answering \
+         one that is already over is not an error."
     }
 
     fn parameters(&self) -> Value {

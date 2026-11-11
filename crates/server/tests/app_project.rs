@@ -127,7 +127,14 @@ async fn an_app_knows_its_project_and_keeps_its_data_in_the_workspace() {
     let (_projects, root, dir, server, addr) = setup().await;
     let token = open(&server, addr, "cad").await;
 
-    let (status, body) = call(addr, Method::GET, "/p/game/cad/api/project", &token, None).await;
+    let (status, body) = call(
+        addr,
+        Method::GET,
+        &format!("/a/{token}/api/project"),
+        &token,
+        None,
+    )
+    .await;
     assert_eq!(status, 200, "{body}");
     let info: Value = serde_json::from_str(&body).unwrap();
     assert_eq!(
@@ -138,6 +145,7 @@ async fn an_app_knows_its_project_and_keeps_its_data_in_the_workspace() {
             "branch": "main",
             "pipeline": "cad",
             "pipelines": ["cad"],
+            "sites": ["cad"],
             "tags": ["hardware"],
         })
     );
@@ -146,7 +154,7 @@ async fn an_app_knows_its_project_and_keeps_its_data_in_the_workspace() {
     let (status, body) = call(
         addr,
         Method::PUT,
-        "/p/game/cad/api/data/views/arm.json",
+        &format!("/a/{token}/api/data/views/arm.json"),
         &token,
         Some(json!({ "zoom": 2 })),
     )
@@ -158,7 +166,7 @@ async fn an_app_knows_its_project_and_keeps_its_data_in_the_workspace() {
     let (status, body) = call(
         addr,
         Method::GET,
-        "/p/game/cad/api/data/views/arm.json",
+        &format!("/a/{token}/api/data/views/arm.json"),
         &token,
         None,
     )
@@ -167,7 +175,7 @@ async fn an_app_knows_its_project_and_keeps_its_data_in_the_workspace() {
     let (status, _) = call(
         addr,
         Method::GET,
-        "/p/game/cad/api/data/nope.json",
+        &format!("/a/{token}/api/data/nope.json"),
         &token,
         None,
     )
@@ -200,7 +208,7 @@ async fn an_apps_recipe_gets_its_project_and_data() {
     let (status, body) = call(
         addr,
         Method::POST,
-        "/p/game/cad/api/actions/cad/probe",
+        &format!("/a/{token}/api/actions/cad/probe"),
         &token,
         Some(json!({ "args": [] })),
     )
@@ -235,7 +243,7 @@ async fn a_fresh_app_from_the_template_builds_and_runs_on_a_project() {
     let (status, body) = call(
         addr,
         Method::POST,
-        "/p/game/cad/api/actions/cad/ui-build",
+        &format!("/a/{token}/api/actions/cad/ui-build"),
         &token,
         Some(json!({ "args": [] })),
     )
@@ -246,7 +254,7 @@ async fn a_fresh_app_from_the_template_builds_and_runs_on_a_project() {
         (200, Some("ok")),
         "{body}"
     );
-    let (status, page) = call(addr, Method::GET, "/p/game/cad/", &token, None).await;
+    let (status, page) = call(addr, Method::GET, &format!("/a/{token}/"), &token, None).await;
     assert_eq!(status, 200);
     assert!(page.contains("<script"), "{page}");
 }

@@ -1,16 +1,17 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import '../../theme/composer_theme.dart';
 import '../../theme/tokens.dart' as t;
 
-/// A site's micro app in the embedded browser, opened on Home with a token of its own: the server
-/// answers `POST <url>/api/apps/<site>/open` with the URL to load (its token, or a client app's
-/// one-time code, in it once), and that sets the cookie for this webview, so the app's API calls,
-/// `send()` and live updates work as in a browser. The workspace token never goes in an app's URL.
+/// A site's micro app in the embedded browser, opened with a token of its own: the server answers
+/// `POST <url>/api/apps/<site>/open` with the URL to load, `<base>/a/<app token>/` (the app runs
+/// sandboxed there, its API under that path), or for a client app a URL with a one-time code that
+/// sets the cookie for this webview. The workspace token never goes in an app's URL.
 class AppView extends StatefulWidget {
   const AppView({super.key, required this.url, required this.token, required this.site, this.session, this.project});
 
@@ -44,7 +45,8 @@ class AppView extends StatefulWidget {
       if (response.statusCode != 200) throw HttpException(body);
       final opened = jsonDecode(body)['url'] as String;
       final address = base.replace(path: '', query: null).toString().replaceAll(RegExp(r'[?#]$'), '');
-      return '$address$opened${session == null ? '' : '&session=$session'}';
+      final join = opened.contains('?') ? '&' : '?';
+      return '$address$opened${session == null ? '' : '${join}session=$session'}';
     } finally {
       client.close();
     }
@@ -74,7 +76,20 @@ class _AppViewState extends State<AppView> {
         InAppWebView(
           key: ValueKey(address),
           initialUrlRequest: URLRequest(url: WebUri(address)),
-          initialSettings: InAppWebViewSettings(transparentBackground: false, isInspectable: true),
+          initialSettings: InAppWebViewSettings(
+            transparentBackground: false,
+            // Debuggable (chrome://inspect, Safari Web Inspector) in debug builds only.
+            isInspectable: kDebugMode,
+            // The page is the server's: no local files, no content:// providers, no cross-site
+            // cookies, and an https page never loads http subresources (the page itself may be
+            // http: a tailnet or emulator server).
+            allowFileAccess: false,
+            allowContentAccess: false,
+            allowFileAccessFromFileURLs: false,
+            allowUniversalAccessFromFileURLs: false,
+            thirdPartyCookiesEnabled: false,
+            mixedContentMode: MixedContentMode.MIXED_CONTENT_NEVER_ALLOW,
+          ),
           onLoadStop: (_, _) => setState(() => _loading = false),
           onReceivedError: (_, request, error) {
             if (request.isForMainFrame ?? true) setState(() => _error = error.description);

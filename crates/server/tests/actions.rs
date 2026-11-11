@@ -18,12 +18,15 @@ use composer_protocol::{
 };
 use composer_server::Server;
 use composer_server::actions::{Approvals, Caller, Justfile, ensure_approved};
+use composer_server::agent::AgentDefinition;
 use composer_server::provider::ModelEvent;
 use composer_server::session::Session;
+use composer_server::tools::ToolContext;
 use composer_server::worker::Verdict;
 use composer_server::{Config, update_home};
 use serde_json::{Value, json};
 use support::*;
+use tokio_util::sync::CancellationToken;
 
 fn has_just() -> bool {
     std::process::Command::new("just")
@@ -991,6 +994,7 @@ fn worker_info(parent: &str, state: TurnState) -> SessionInfo {
         id: "w1".into(),
         agent: "worker".into(),
         project: None,
+        site: None,
         ticket: Some("0001".into()),
         parent: Some(parent.into()),
         worker: None,
@@ -1571,4 +1575,48 @@ async fn a_title_with_a_newline_uses_no_ticket_id() {
     let (_, run) = http(&server, addr, path, Some(json!({ "args": ["one line"] }))).await;
     assert_eq!(run["status"], "ok", "{run}");
     assert!(tickets.join("0001.md").exists());
+}
+
+#[tokio::test]
+async fn the_sh_escape_hatch_takes_one_command_with_quotes_and_newlines() {
+    if !has_just() {
+        return;
+    }
+    let (dir, server, _p, _addr) = start(vec![]).await;
+    let site = tools_site(
+        &dir,
+        "sh cmd:\n    @cd \"$COMPOSER_PROJECT\" && sh -c {{quote(cmd)}}\n",
+    );
+    approve(&server, &site, "sh").await;
+    let project = tempfile::tempdir().unwrap();
+    std::fs::write(project.path().join("README"), "hi\n").unwrap();
+    let session = server
+        .sessions
+        .create("default", Some(project.path().display().to_string()))
+        .unwrap();
+    let context = ToolContext {
+        server: server.clone(),
+        session,
+        agent: Arc::new(AgentDefinition::load(&server.web, "default").unwrap()),
+        site: None,
+        cancel: CancellationToken::new(),
+    };
+    let result = server
+        .tools
+        .call_value(
+            &context,
+            "run",
+            json!({
+                "site": "tools",
+                "recipe": "sh",
+                "args": ["-c", "printf '%s\\n' \"a b\"; printf 'c\\nd\\n'"],
+            }),
+        )
+        .await;
+    assert!(!result.is_error, "{}", result.text);
+    assert!(
+        result.text.contains("a b") && result.text.contains("c\nd"),
+        "{}",
+        result.text
+    );
 }

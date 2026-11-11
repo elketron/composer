@@ -61,8 +61,12 @@ pub struct Server {
     pub open_projects: crate::apps::OpenProjects,
     /// The project-local apps the user allowed (ticket 0166).
     pub local_apps: crate::apps::LocalAllowances,
+    /// The client apps' builds the user approved (`composer app approve`).
+    pub client_apps: crate::apps::ClientApprovals,
     /// One-time codes that open client apps (ticket 0168).
     pub once_codes: crate::apps::OnceCodes,
+    /// Browser sessions: what the auth cookie holds, never a token.
+    pub web_sessions: crate::api::WebSessions,
     /// Events apps reported, per session and app per minute (ticket 0175).
     pub app_events: crate::apps::EventLimit,
     /// Its sessions' terminals (ticket 0176).
@@ -129,6 +133,9 @@ impl Server {
         // Scoped mounts (ticket 0122): a symlink inside a site may point into the projects
         // directory; one that lands elsewhere is refused, not followed. Same allowance as
         // the launcher scope keys off.
+        if parent.is_none() {
+            crate::viewer_upstream::ViewerUpstream::warn_if_refused(&config);
+        }
         let web = Web::with_allowed(home.sites(), vec![expand_home(&config.projects.dir)]);
         // Set before the first index, so no page behind a closed mount is ever in it.
         let ownership = Arc::new(RwLock::new(Arc::new(match &parent {
@@ -182,7 +189,9 @@ impl Server {
             app_tokens: crate::apps::AppTokens::default(),
             open_projects: crate::apps::OpenProjects::default(),
             local_apps: crate::apps::LocalAllowances::load(home.state().join("local_apps.json")),
+            client_apps: crate::apps::ClientApprovals::new(home.state().join("client_apps.json")),
             once_codes: crate::apps::OnceCodes::default(),
+            web_sessions: crate::api::WebSessions::default(),
             app_events: crate::apps::EventLimit::default(),
             terminals: crate::terminals::Terminals::default(),
             watches: match &parent {
@@ -263,6 +272,7 @@ impl Server {
             // the new scope drops stay indexed until something changes them.
             self.web.set_allowed(vec![expand_home(&next.projects.dir)]);
         }
+        crate::viewer_upstream::ViewerUpstream::warn_if_refused(&next);
         *current = Arc::new(next);
         tracing::info!("config.toml reloaded");
         Ok(Some(restart_needed))
@@ -287,9 +297,36 @@ impl Server {
         self.hub.send(message);
     }
 
-    /// The local token, or a paired device's token.
+    /// The local token, a paired device's token, or a browser session one of them opened.
     pub fn accepts_token(&self, token: &str) -> bool {
-        token == self.token || self.devices.verify(token).is_some()
+        self.credential(token).is_some()
+    }
+
+    /// What kind of credential `token` is, `None` when it is none: the local token, a paired
+    /// device's token, or a browser session, which is the kind of the credential that opened it
+    /// (and nothing once that device is revoked).
+    pub fn credential(&self, token: &str) -> Option<crate::api::Credential> {
+        use crate::api::{Credential, WebSessions};
+        if token.starts_with(WebSessions::PREFIX) {
+            return self
+                .web_sessions
+                .credential(token, |minter| self.credential_alive(minter));
+        }
+        if crate::secret::secret_eq(token, &self.token) {
+            return Some(Credential::Local);
+        }
+        self.devices.find(token).map(|device| Credential::Device {
+            name: device.name,
+            token_hash: device.token_hash,
+        })
+    }
+
+    /// Whether `credential` still counts: a device's only while that device is paired.
+    pub fn credential_alive(&self, credential: &crate::api::Credential) -> bool {
+        match credential {
+            crate::api::Credential::Local => true,
+            crate::api::Credential::Device { token_hash, .. } => self.devices.is_paired(token_hash),
+        }
     }
 
     /// `server.name` from config.toml, else the hostname.
@@ -420,15 +457,16 @@ impl Server {
         Some(format!("http://{addr}{}", self.route_base()))
     }
 
-    /// Starts what runs whether or not anyone is connected: the file watcher, reminders, pipeline
-    /// gates, watches, and picking up workers from before a restart. `listen` and `route_base` are
-    /// where its API is served (see [`Server::parent_url`]).
+    /// Starts what runs whether or not anyone is connected: the file watcher, reminders, watches,
+    /// the works' project links, and picking up workers from before a restart. `listen` and
+    /// `route_base` are where its API is served (see [`Server::parent_url`]).
     pub fn start_background(self: &Arc<Self>, listen: SocketAddr, route_base: &str) -> Result<()> {
         let _ = self.listen_addr.set(listen);
         let _ = self.route_base.set(route_base.to_string());
         *self.watcher.lock().expect("watcher lock") = Some(crate::watcher::watch(self)?);
         tokio::spawn(crate::reminders::run_reminders(self.clone()));
-        tokio::spawn(crate::pipeline::run_gates(self.clone()));
+        crate::pipeline::ensure_project_mounts(self);
+        crate::pipeline::learning::ask_open_proposals(self);
         tokio::spawn(crate::watches::run_watches(self.clone()));
         self.workers.recover_orphans(self);
         self.workers.schedule_paused(self);

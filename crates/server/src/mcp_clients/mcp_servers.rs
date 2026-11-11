@@ -7,7 +7,7 @@ use composer_protocol::{ApprovalDecision, ApprovalKind};
 use serde_json::Value;
 
 use crate::McpServerConfig;
-use crate::agent::AgentDefinition;
+use crate::agent::{AgentDefinition, Site};
 use crate::mcp_clients::McpClient;
 use crate::mcp_clients::types::{Slot, glob_matches, tool_name, transport_kind};
 use crate::provider::ToolSpec;
@@ -131,10 +131,69 @@ impl McpServers {
         }
     }
 
-    /// The MCP tools `agent` lists, from servers it can reach now.
-    pub async fn specs_for(&self, agent: &AgentDefinition) -> Vec<ToolSpec> {
+    /// Whether `[mcp.<server>]` lets the site called `site` grant its tools (`sites` lists it).
+    /// The page's `mcp:` alone grants nothing: agents can write pages, not `config.toml`.
+    pub fn site_may_grant(&self, site: &str, server: &str) -> bool {
+        self.configs
+            .get(server)
+            .is_some_and(|config| config.sites.iter().any(|allowed| allowed == site))
+    }
+
+    /// The servers `site` names in `mcp:` and may grant.
+    pub fn granted_by(&self, site: &Site) -> Vec<String> {
+        site.mcp
+            .iter()
+            .filter(|server| self.site_may_grant(&site.name, server))
+            .cloned()
+            .collect()
+    }
+
+    /// For each server `site` names in `mcp:` and does not get: why, in a sentence for the user.
+    pub fn refused_grants(&self, site: &Site) -> Vec<String> {
+        site.mcp
+            .iter()
+            .filter(|server| !self.site_may_grant(&site.name, server))
+            .map(|server| match self.configs.contains_key(server) {
+                true => format!(
+                    "site {0} names MCP server {server}, but [mcp.{server}] does not list it in \
+                     `sites`: its tools are not added (add `sites = [\"{0}\"]` there to allow it)",
+                    site.name
+                ),
+                false => format!(
+                    "site {} names MCP server {server}, but there is no [mcp.{server}] in \
+                     config.toml: its tools are not added",
+                    site.name
+                ),
+            })
+            .collect()
+    }
+
+    /// Whether `agent`, in `site` (the one its session is in), has the MCP tool `tool`
+    /// (`blender__get_objects`): its page's `tools:` lists it, or the site names the tool's
+    /// server in `mcp:` and the server's config lets that site grant it. Every place that decides
+    /// MCP tool availability asks this one.
+    pub fn allows(&self, agent: &AgentDefinition, site: Option<&Site>, tool: &str) -> bool {
+        agent.allows_mcp_tool(tool)
+            || site.is_some_and(|site| {
+                tool.split_once("__").is_some_and(|(server, _)| {
+                    site.mcp.iter().any(|named| named == server)
+                        && self.site_may_grant(&site.name, server)
+                })
+            })
+    }
+
+    /// The MCP tools `agent` lists, and every tool of the servers `site` (the one the session is
+    /// in) names in `mcp:` and may grant ([`Self::granted_by`]), from servers that are
+    /// configured, on and reachable now.
+    pub async fn specs_for(&self, agent: &AgentDefinition, site: Option<&Site>) -> Vec<ToolSpec> {
+        let mut servers = agent.mcp_servers();
+        if let Some(site) = site {
+            servers.extend(self.granted_by(site));
+        }
+        servers.sort();
+        servers.dedup();
         let mut specs = Vec::new();
-        for server in agent.mcp_servers() {
+        for server in servers {
             if !self.slots.contains_key(&server) {
                 continue;
             }
@@ -144,7 +203,7 @@ impl McpServers {
             };
             for tool in client.tools().await {
                 let name = tool_name(&server, &tool.name);
-                if agent.allows_mcp_tool(&name) {
+                if self.allows(agent, site, &name) {
                     specs.push(ToolSpec {
                         name,
                         description: format!("[{server}] {}", tool.description),
@@ -162,7 +221,7 @@ impl McpServers {
         if !self.configs.contains_key(server) {
             return None;
         }
-        if !context.agent.allows_mcp_tool(name) {
+        if !self.allows(&context.agent, context.site.as_deref(), name) {
             return Some(text_result(format!("unknown tool `{name}`"), true));
         }
         Some(
@@ -170,6 +229,26 @@ impl McpServers {
                 .await
                 .unwrap_or_else(|e| text_result(e, true)),
         )
+    }
+
+    /// A call the server makes itself (an `app:` launch): by the tool's own name (`launch`), no
+    /// agent `tools:` check and no approval. The caller's authority is a `config.toml` entry.
+    /// Never reachable from a model's tool call: [`Self::call`] is that path.
+    pub async fn call_internal(
+        &self,
+        server: &str,
+        tool: &str,
+        args: Value,
+    ) -> Result<CallResult, String> {
+        if !self.configs.contains_key(server) {
+            return Err(format!("no MCP server `{server}` in config.toml"));
+        }
+        let client = self.client(server, true).await?;
+        let found = client.tools().await.into_iter().any(|t| t.name == tool);
+        if !found {
+            return Err(format!("MCP server `{server}` has no tool `{tool}`"));
+        }
+        client.call(tool, args).await
     }
 
     async fn call_tool(

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'tokens.dart' as t;
 
-/// The app theme: dark, one accent, corners of 2–5px, Inter for UI and JetBrains Mono for ids and URLs.
+/// The app theme: dark, one accent, corners of 2–5px (tokens.dart), Inter for UI and JetBrains Mono for ids and URLs.
 ThemeData composerTheme() {
   const scheme = ColorScheme.dark(
     primary: t.accent,
@@ -17,7 +17,9 @@ ThemeData composerTheme() {
     outline: t.borderStrong,
     outlineVariant: t.border,
   );
-  final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(t.radius));
+  final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(t.radiusControl));
+  final cardShape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(t.radiusCard));
+  final inputRadius = BorderRadius.circular(t.radiusControl);
   final base = ThemeData(useMaterial3: true, colorScheme: scheme, fontFamily: t.fontUi);
   return base.copyWith(
     scaffoldBackgroundColor: t.bg,
@@ -27,7 +29,7 @@ ThemeData composerTheme() {
     textTheme: base.textTheme.apply(bodyColor: t.text, displayColor: t.text),
     dividerTheme: const DividerThemeData(color: t.border, thickness: 1, space: 1),
     appBarTheme: const AppBarTheme(backgroundColor: t.surface, foregroundColor: t.text, elevation: 0, scrolledUnderElevation: 0),
-    cardTheme: CardThemeData(color: t.surface, elevation: 0, margin: EdgeInsets.zero, shape: shape.copyWith(side: const BorderSide(color: t.border))),
+    cardTheme: CardThemeData(color: t.surface, elevation: 0, margin: EdgeInsets.zero, shape: cardShape.copyWith(side: const BorderSide(color: t.border))),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(backgroundColor: t.accent, foregroundColor: t.bg, shape: shape, textStyle: const TextStyle(fontWeight: FontWeight.w600)),
     ),
@@ -41,9 +43,9 @@ ThemeData composerTheme() {
       isDense: true,
       hintStyle: const TextStyle(color: t.faint),
       labelStyle: const TextStyle(color: t.muted),
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(t.radius), borderSide: const BorderSide(color: t.borderStrong)),
-      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(t.radius), borderSide: const BorderSide(color: t.borderStrong)),
-      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(t.radius), borderSide: const BorderSide(color: t.accent, width: 2)),
+      border: OutlineInputBorder(borderRadius: inputRadius, borderSide: const BorderSide(color: t.borderStrong)),
+      enabledBorder: OutlineInputBorder(borderRadius: inputRadius, borderSide: const BorderSide(color: t.borderStrong)),
+      focusedBorder: OutlineInputBorder(borderRadius: inputRadius, borderSide: const BorderSide(color: t.accent, width: 2)),
     ),
     listTileTheme: ListTileThemeData(shape: shape, selectedColor: t.text, selectedTileColor: t.raised, iconColor: t.muted),
     bottomSheetTheme: const BottomSheetThemeData(backgroundColor: t.surface, shape: RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(t.radius)))),

@@ -16,7 +16,7 @@ use composer_protocol::http::{
     OpenProject, PageExcerpt, PageResponse, PipelineSummary, ProjectDiff, ProjectInfo,
     ProjectOverview, ProjectSummary, PutPageRequest, PutPageResponse, RunActionRequest,
     RunActionResponse, SearchHit, ServerInfo, SiteSummary, StageState, StageSummary,
-    TicketBranchSummary, TicketReview, WorkSummary,
+    TicketBranchSummary, TicketReview, WebSession, WorkSummary,
 };
 use composer_protocol::*;
 use serde_json::{Map, Value, json};
@@ -86,6 +86,7 @@ fn definitions() -> Map<String, Value> {
     let _ = generator.subschema_for::<AppOpened>();
     let _ = generator.subschema_for::<ProjectInfo>();
     let _ = generator.subschema_for::<OpenProject>();
+    let _ = generator.subschema_for::<WebSession>();
     let defs = generator.take_definitions(true);
     defs.into_iter().collect()
 }
@@ -565,6 +566,7 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
         id: "a3f1".into(),
         agent: "default".into(),
         project: Some("/home/me/project".into()),
+        site: Some("orchestration".into()),
         ticket: None,
         parent: None,
         worker: Some(WorkerState::Done),
@@ -928,6 +930,14 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
             session: s(),
             path: Some("/p".into()),
         },
+        ClientCommand::SiteSet {
+            session: s(),
+            site: Some("3d".into()),
+        },
+        ClientCommand::SiteSet {
+            session: s(),
+            site: None,
+        },
         ClientCommand::ApprovalRespond {
             request: "r1".into(),
             decision: ApprovalDecision::Approve,
@@ -1032,6 +1042,7 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
             projects_dir: "~/Projects".into(),
             workspace: "default".into(),
             workspace_color: "#3f9c6b".into(),
+            viewer: Some("/view".into()),
         }),
         serde_json::to_value(SiteSummary {
             name: "memory".into(),
@@ -1041,6 +1052,8 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
             app_built: false,
             description: "what agents know".into(),
             pages: 12,
+            app: Some("blender".into()),
+            mcp: vec!["blender".into()],
         }),
         serde_json::to_value(PageResponse {
             url: "site://memory/user.md".into(),
@@ -1087,9 +1100,11 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
             running: 1,
             waiting: 0,
             last_used: Some("2026-10-21T09:00:00+00:00".into()),
+            page: Some("site://projects/composer.md".into()),
         }),
         serde_json::to_value(ProjectOverview {
             name: "game".into(),
+            page: Some("site://projects/game.md".into()),
             path: "~/Projects/game".into(),
             folder: "/home/me/Projects/game".into(),
             branch: Some("main".into()),
@@ -1110,6 +1125,7 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
                 }],
                 project: Some("~/Projects/game".into()),
             }],
+            sites: vec![],
             branches: vec![TicketBranchSummary {
                 ticket: "0028".into(),
                 title: "Controller remapping".into(),

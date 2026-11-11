@@ -16,6 +16,9 @@ pub struct SessionInfo {
     pub agent: String,
     /// Active project directory, if any.
     pub project: Option<String>,
+    /// The site the agent entered (`enter_site`), if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub site: Option<String>,
     /// Set for worker sessions.
     pub ticket: Option<String>,
     /// The session that spawned this one (orchestrator of a worker).

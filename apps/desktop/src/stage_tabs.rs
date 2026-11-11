@@ -1,9 +1,20 @@
 //! The stage's tab strip, from the session's desk.
 
+use composer_protocol::http::SiteSummary;
 use composer_protocol::{Desk, DeskTab};
 
-/// A tab's label in the strip.
-pub fn label(tab: &DeskTab) -> String {
+/// The application the live view shows, as far as the client can know: the `app:` of the site the
+/// session is in, from the sites listing. `None` outside a workflow, or when the site names none.
+pub fn live_app<'a>(site: Option<&str>, sites: &'a [SiteSummary]) -> Option<&'a str> {
+    let site = site?;
+    sites
+        .iter()
+        .find(|s| s.name == site)
+        .and_then(|s| s.app.as_deref())
+}
+
+/// A tab's label in the strip. `live_app` names the application of the live view tab.
+pub fn label(tab: &DeskTab, live_app: Option<&str>) -> String {
     match tab {
         DeskTab::App { site, project } => match project {
             Some(project) => format!("{site} · {project}"),
@@ -15,6 +26,10 @@ pub fn label(tab: &DeskTab) -> String {
             .to_string(),
         DeskTab::Terminal { .. } => "terminal".into(),
         DeskTab::Changes { project } => format!("changes · {project}"),
+        DeskTab::LiveView => match live_app {
+            Some(app) => format!("live · {app}"),
+            None => "live view".into(),
+        },
     }
 }
 
@@ -80,10 +95,28 @@ mod tests {
             site: "orchestration".into(),
             project: Some("composer".into()),
         };
-        assert_eq!(label(&app), "orchestration · composer");
+        assert_eq!(label(&app, None), "orchestration · composer");
         let page = DeskTab::Page {
             url: "site://plans/x.md".into(),
         };
-        assert_eq!(label(&page), "plans/x");
+        assert_eq!(label(&page, None), "plans/x");
+        assert_eq!(label(&DeskTab::LiveView, None), "live view");
+        assert_eq!(label(&DeskTab::LiveView, Some("blender")), "live · blender");
+    }
+
+    fn site(name: &str, app: Option<&str>) -> SiteSummary {
+        serde_json::from_value(serde_json::json!({
+            "name": name, "title": name, "has_justfile": false, "has_ui": false, "app": app
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn the_live_view_is_named_after_the_sessions_application() {
+        let sites = [site("3d", Some("blender")), site("notes", None)];
+        assert_eq!(live_app(Some("3d"), &sites), Some("blender"));
+        assert_eq!(live_app(Some("notes"), &sites), None, "no application");
+        assert_eq!(live_app(Some("gone"), &sites), None, "not in the listing");
+        assert_eq!(live_app(None, &sites), None, "not in a workflow");
     }
 }

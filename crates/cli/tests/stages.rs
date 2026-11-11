@@ -1,8 +1,7 @@
-//! A work's stages run as tickets worked by real `composer worker` processes: the first (no
-//! gate) goes on to the second by itself, the second (a gate) waits for review. The stage
-//! worker's prompt is the stage's scoped context, not the usual one. At the gate, `rerun` (with
-//! a note) runs it again and `approved` starts the third, written into `_stage.md` as the
-//! board app does.
+//! A work's stages run as tickets worked by real `composer worker` processes. The work's state
+//! is on its `index.md`: a stage is started explicitly (`work.run`), a gate waits for review,
+//! and `rerun`/`approved` are page state the board and editor write. The stage worker's prompt
+//! is the stage's scoped context, not the usual one.
 #![allow(
     clippy::disallowed_methods,
     reason = "tests set up repos and fakes outside the sandbox"
@@ -12,7 +11,9 @@ mod support;
 
 use std::collections::VecDeque;
 
-use composer_protocol::{ClientCommand, CommandResult, ServerMessage, WorkerState};
+use composer_protocol::{ClientCommand, CommandResult, ServerMessage};
+use composer_server::pipeline::{Pipeline, Work};
+use composer_server::worker::ticket::set_field;
 use composer_server::{Server, WorkspaceHome, init_workspace};
 use serde_json::json;
 use support::{Reply, Scripts, fake_model_logged, send, until};
@@ -181,63 +182,55 @@ async fn stages_run_in_order_and_stop_at_a_gate() {
     };
     assert_eq!(work.status.as_deref(), Some("01 draft · running"));
 
-    // Both stages run; the second ends at its gate.
-    let done = std::cell::Cell::new(0);
-    let events = until(&mut socket, 90, |e| {
-        if matches!(
-            e,
-            ServerMessage::WorkerStatus {
-                state: WorkerState::Done | WorkerState::Failed,
-                ..
-            }
-        ) {
-            done.set(done.get() + 1);
-        }
-        done.get() == 2
-    })
-    .await;
-    let finished: Vec<(String, WorkerState)> = events
-        .iter()
-        .filter_map(|e| match e {
-            ServerMessage::WorkerStatus { ticket, state, .. }
-                if *state != WorkerState::Starting =>
-            {
-                Some((ticket.clone(), *state))
-            }
-            _ => None,
-        })
-        .collect();
-    assert_eq!(
-        finished,
-        [
-            ("0001".into(), WorkerState::Done),
-            ("0002".into(), WorkerState::Done)
-        ]
-    );
-    // Clients hear about the gate (right after the worker's own status).
-    until(&mut socket, 10, |e| {
+    // The first stage runs; nothing starts the next one behind your back.
+    until(&mut socket, 60, |e| {
         matches!(e, ServerMessage::StageEnded { stage, status, summary, .. }
-            if stage == "02_polish" && status == "review" && summary == "polished")
+            if stage == "01_draft" && status == "done" && summary == "drafted")
     })
     .await;
     // Let the ending's page writes land.
     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    let work = || Work::load(Pipeline::from_dir("flow", &flow).unwrap(), "note").unwrap();
+    assert_eq!(work().stage_status("01_draft"), "done");
+    assert_eq!(
+        work().stage_field("01_draft", "ticket").as_deref(),
+        Some("0001")
+    );
+    assert_eq!(
+        work().stage_field("01_draft", "summary").as_deref(),
+        Some("drafted")
+    );
+    let ticket =
+        std::fs::read_to_string(dir.path().join("sites/orchestration/tickets/0001.md")).unwrap();
+    assert!(
+        ticket.contains("agent: stage")
+            && ticket.contains("stage: 01_draft")
+            && ticket.contains("status: done"),
+        "{ticket}"
+    );
 
-    let stage = |name: &str| {
-        std::fs::read_to_string(flow.join("note").join(name).join("_stage.md")).unwrap()
-    };
-    let first = stage("01_draft");
-    assert!(
-        first.contains("status: done")
-            && first.contains("ticket: \"0001\"")
-            && first.contains("summary: \"drafted\""),
-        "{first}"
-    );
-    assert!(
-        stage("02_polish").contains("status: review"),
-        "{}",
-        stage("02_polish")
-    );
+    // Run the second explicitly; it ends at its gate.
+    send(
+        &mut socket,
+        3,
+        ClientCommand::WorkRun {
+            work: "flow/note".into(),
+            stage: None,
+            session: None,
+        },
+    )
+    .await;
+    until(&mut socket, 10, |e| {
+        matches!(e, ServerMessage::Ok { id: 3, .. })
+    })
+    .await;
+    until(&mut socket, 60, |e| {
+        matches!(e, ServerMessage::StageEnded { stage, status, summary, .. }
+            if stage == "02_polish" && status == "review" && summary == "polished")
+    })
+    .await;
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    assert_eq!(work().stage_status("02_polish"), "review");
     assert!(flow.join("note/02_polish/final.md").is_file());
     // What the agent wrote is kept beside it, to tell your edits at the gate from it.
     assert_eq!(
@@ -307,7 +300,7 @@ async fn stages_run_in_order_and_stop_at_a_gate() {
     // The next stage waits for review.
     send(
         &mut socket,
-        3,
+        4,
         ClientCommand::WorkRun {
             work: "flow/note".into(),
             stage: None,
@@ -316,7 +309,7 @@ async fn stages_run_in_order_and_stop_at_a_gate() {
     )
     .await;
     let reply = until(&mut socket, 10, |e| {
-        matches!(e, ServerMessage::Error { id: Some(3), .. })
+        matches!(e, ServerMessage::Error { id: Some(4), .. })
     })
     .await;
     let Some(ServerMessage::Error { message, .. }) = reply.last() else {
@@ -324,23 +317,41 @@ async fn stages_run_in_order_and_stop_at_a_gate() {
     };
     assert!(message.contains("02_polish waits for review"), "{message}");
 
-    // At the gate, as an editor writes it (the board does the same through the API).
+    // At the gate, as an editor writes it (the board does the same): the work's index.
     let gate = |status: &str, note: &str| {
-        let path = flow.join("note/02_polish/_stage.md");
+        let path = flow.join("note/index.md");
         let raw = std::fs::read_to_string(&path).unwrap();
-        let raw = raw
-            .lines()
-            .map(|l| match l {
-                l if l.starts_with("status:") => format!("status: {status}"),
-                l if l.starts_with("note:") && !note.is_empty() => format!("note: \"{note}\""),
-                l => l.to_string(),
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
-        std::fs::write(&path, raw + "\n").unwrap();
+        let raw = set_field(&raw, "stage", "02_polish");
+        let raw = set_field(&raw, "status", status);
+        let raw = if status == "approved" {
+            set_field(&raw, "done", "[\"01_draft\",\"02_polish\"]")
+        } else {
+            raw
+        };
+        let raw = if note.is_empty() {
+            raw
+        } else {
+            set_field(&raw, "note", &format!("{{\"02_polish\":\"{note}\"}}"))
+        };
+        std::fs::write(&path, raw).unwrap();
     };
-    gate("rerun", "Make it shorter.");
     let ended = |stage: &'static str, status: &'static str| move |e: &ServerMessage| matches!(e, ServerMessage::StageEnded { stage: s, status: t, .. } if s == stage && t == status);
+    // A gate is data; the stage runs again when asked.
+    gate("rerun", "Make it shorter.");
+    send(
+        &mut socket,
+        5,
+        ClientCommand::WorkRun {
+            work: "flow/note".into(),
+            stage: None,
+            session: None,
+        },
+    )
+    .await;
+    until(&mut socket, 10, |e| {
+        matches!(e, ServerMessage::Ok { id: 5, .. })
+    })
+    .await;
     until(&mut socket, 60, ended("02_polish", "review")).await;
     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
     let rerun =
@@ -361,21 +372,33 @@ async fn stages_run_in_order_and_stop_at_a_gate() {
         again.contains("Their note:\n\n> Make it shorter."),
         "{again}"
     );
-    assert!(stage("02_polish").contains("summary: \"polished again\""));
+    assert_eq!(
+        work().stage_field("02_polish", "summary").as_deref(),
+        Some("polished again")
+    );
 
-    // Continue: the third stage starts and, without a gate, finishes the work.
+    // Continue: approving is data; the third stage runs when asked, and finishes the work.
     gate("approved", "");
+    send(
+        &mut socket,
+        6,
+        ClientCommand::WorkRun {
+            work: "flow/note".into(),
+            stage: None,
+            session: None,
+        },
+    )
+    .await;
+    until(&mut socket, 10, |e| {
+        matches!(e, ServerMessage::Ok { id: 6, .. })
+    })
+    .await;
     until(&mut socket, 60, ended("03_publish", "done")).await;
     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
-    assert!(stage("02_polish").contains("status: approved"));
-    assert!(
-        stage("03_publish").contains("status: done"),
-        "{}",
-        stage("03_publish")
-    );
+    assert!(work().done().iter().any(|s| s == "02_polish"));
+    assert_eq!(work().stage_status("03_publish"), "done");
     assert!(flow.join("note/03_publish/out.md").is_file());
-    // Approving again (or any edit of the page) starts nothing.
-    gate("approved", "");
+    // Nothing watches the page: no edit starts a stage on its own.
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     assert!(
         !dir.path()
@@ -383,21 +406,20 @@ async fn stages_run_in_order_and_stop_at_a_gate() {
             .exists()
     );
 
-    // Stale: a rule the draft read changes. Run reruns from there and goes on through the
-    // stages after it, up to the gate.
+    // Stale: a rule the draft read changes. Run reruns from there.
+    let index = std::fs::read_to_string(flow.join("note/index.md")).unwrap();
     assert!(
-        stage("01_draft").contains("inputs: {\"site://flow/_config/rules.md\":"),
-        "{}",
-        stage("01_draft")
+        index.contains("inputs: {\"01_draft\":{\"site://flow/_config/rules.md\":"),
+        "{index}"
     );
     std::fs::write(
         flow.join("_config/rules.md"),
         "---\ntitle: Rules\n---\n# Rules\n\nBe briefer.\n",
     )
     .unwrap();
-    send(&mut socket, 4, ClientCommand::PipelineList).await;
+    send(&mut socket, 7, ClientCommand::PipelineList).await;
     let reply = until(&mut socket, 10, |e| {
-        matches!(e, ServerMessage::Ok { id: 4, .. })
+        matches!(e, ServerMessage::Ok { id: 7, .. })
     })
     .await;
     let Some(ServerMessage::Ok {
@@ -412,7 +434,7 @@ async fn stages_run_in_order_and_stop_at_a_gate() {
     assert_eq!(works[0].status.as_deref(), Some("01 draft · stale"));
     send(
         &mut socket,
-        5,
+        8,
         ClientCommand::WorkRun {
             work: "flow/note".into(),
             stage: None,
@@ -420,17 +442,40 @@ async fn stages_run_in_order_and_stop_at_a_gate() {
         },
     )
     .await;
+    until(&mut socket, 10, |e| {
+        matches!(e, ServerMessage::Ok { id: 8, .. })
+    })
+    .await;
+    until(&mut socket, 60, ended("01_draft", "done")).await;
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    assert_eq!(
+        work().stage_field("01_draft", "summary").as_deref(),
+        Some("drafted to the new rules")
+    );
+    send(
+        &mut socket,
+        9,
+        ClientCommand::WorkRun {
+            work: "flow/note".into(),
+            stage: None,
+            session: None,
+        },
+    )
+    .await;
+    until(&mut socket, 10, |e| {
+        matches!(e, ServerMessage::Ok { id: 9, .. })
+    })
+    .await;
     until(&mut socket, 60, ended("02_polish", "review")).await;
     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
-    assert!(stage("01_draft").contains("summary: \"drafted to the new rules\""));
     assert!(
         std::fs::read_to_string(flow.join("note/02_polish/final.md"))
             .unwrap()
             .contains("brief, polished")
     );
-    send(&mut socket, 6, ClientCommand::PipelineList).await;
+    send(&mut socket, 10, ClientCommand::PipelineList).await;
     let reply = until(&mut socket, 10, |e| {
-        matches!(e, ServerMessage::Ok { id: 6, .. })
+        matches!(e, ServerMessage::Ok { id: 10, .. })
     })
     .await;
     let Some(ServerMessage::Ok {
@@ -441,6 +486,6 @@ async fn stages_run_in_order_and_stop_at_a_gate() {
         panic!()
     };
     let stale: Vec<bool> = works[0].stages.iter().map(|s| s.stale).collect();
-    // 03 read the old polish: stale until approving 02 runs it again.
+    // 03 read the old polish: stale until 02 is approved and run again.
     assert_eq!(stale, [false, false, true]);
 }

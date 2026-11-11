@@ -55,6 +55,7 @@ async fn system1_decides_workers_approvals() {
             id: "w1".into(),
             agent: "worker".into(),
             project: Some("/home/me/game".into()),
+            site: None,
             ticket: Some("0001".into()),
             parent: Some(orchestrator.id().into()),
             worker: None,

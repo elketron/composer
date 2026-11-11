@@ -1,6 +1,6 @@
 # composer
 
-Design and decisions: [docs/plan.md](docs/plan.md) (phase 1; phase 3: harnesses and attachments; phase 4: merging, approvals, following Claude Code; phase 5: pipelines; phase 6: MCP servers; phase 7: entering sites, apps in the chat), [docs/plan-app.md](docs/plan-app.md) (phase 2: the Flutter app). UI mockups: [docs/mockups/](docs/mockups/).
+Design and decisions: [docs/plan.md](docs/plan.md) (phase 1; phase 3: harnesses and attachments; phase 4: merging, approvals, following Claude Code; phase 5: pipelines; phase 6: MCP servers; phase 7: entering sites, apps in the chat), [docs/plan-app.md](docs/plan-app.md) (phase 2: the Flutter app), [docs/lean-orchestration.md](docs/lean-orchestration.md) (proposal: a small harness, capabilities injected by sites, workflows as files), [docs/workflows.md](docs/workflows.md) (design: one agent, workflow folders, the shared view), [docs/project-hub.md](docs/project-hub.md) (design: the project as the hub with sites operating on it), [docs/tui-mode.md](docs/tui-mode.md) (TUI capabilities: a terminal program with a control adapter, first Hunk). UI mockups: [docs/mockups/](docs/mockups/).
 
 ## Code conventions (Rust)
 
@@ -61,7 +61,10 @@ workspace; the Flutter app has no Linux, Windows or macOS target.
   of one host and switches between them, `desk_test.dart` opens the agent's page from the desk and
   sends from the bar, `chat_test.dart` runs a whole turn with a recipe approval, `reader_test.dart`
   covers pages, an app and follow-agent, `review_test.dart` merges a ticket from the chat menu,
-  `measure_open_test.dart` measures opening a chat. A headless emulator:
+  `measure_open_test.dart` measures opening a chat, `workflow_test.dart` switches a session into the
+  `demo` workflow from the chip, resizes the live view with the handle, leaves it, and starts a chat from
+  the Workflows tab (it needs a `demo` site with `app: demoapp`, `[applications.demoapp]`, and a `[viewer]`
+  pointing at a running wayai; `SHOT_PAUSE=4` makes tests stop at their `shot`s for screenshots). A headless emulator:
   `emulator -avd <name> -read-only -no-window -no-audio`.
 - `COMPOSER_APP_DATA=<dir>` keeps the server list in that directory (tests, a second instance).
 - Icons: edit `assets/icon/*.svg`, then `scripts/app-icons.sh` renders the Android ones.
@@ -69,6 +72,12 @@ workspace; the Flutter app has no Linux, Windows or macOS target.
 
 ## Seeing an app
 
-Apps are served at `http://<bind>/<site>/?token=<state/token>&session=<id>` (`:app <site>` in a headless
-script shows the URL in the status bar). Open that URL with Playwright to screenshot or drive the app.
+An app is opened with `POST <base>/api/apps/<site>/open` (Home) or `POST <base>/api/projects/<p>/apps/<site>/open`
+(workspace token as bearer), which answers `{url, token, project}`: the app is served at
+`http://<bind><base>/a/<app token>/`, sandboxed (`Content-Security-Policy: sandbox ...`, an opaque origin), with
+its API under that same path (`api/...`, `ws`). (`:app <site>` in a headless script shows the URL in the status
+bar.) Open that URL with Playwright to screenshot or drive the app; its requests say `Origin: null`. Client apps
+(`[apps] clients`, the chat) are the exception: `<base>/<site>/?token=...`, served only while their `ui/dist` is
+the build approved with `composer app approve <site>`.
 The app template and sdk live in `templates/` and are embedded in the binary; `composer init` installs them.
+An app built with an older sdk (before 3) is refused with a page saying to rebuild it (`just ui-build` in the site).

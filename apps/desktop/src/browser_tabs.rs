@@ -36,6 +36,18 @@ impl<P> BrowserTabs<P> {
         self.panes.get(tab)
     }
 
+    /// Only the shown browser may paint, and not while its window is hidden. Focus is
+    /// deliberately not an input: an unfocused window can still be visible.
+    pub fn visibility<'a>(
+        &'a self,
+        shown: Option<&'a str>,
+        window_visible: bool,
+    ) -> impl Iterator<Item = (&'a P, bool)> {
+        self.panes
+            .iter()
+            .map(move |(id, pane)| (pane, window_visible && shown == Some(id.as_str())))
+    }
+
     /// Only the tabs still on the desk keep their panes.
     pub fn keep(&mut self, tabs: &HashSet<&str>) {
         self.panes.retain(|id, _| tabs.contains(id.as_str()));
@@ -72,5 +84,25 @@ mod tests {
         assert!(tabs.begin("c"));
         tabs.keep(&HashSet::new());
         assert!(tabs.begin("c"), "still marked as on its way");
+    }
+
+    #[test]
+    fn only_the_shown_tab_in_a_visible_window_paints() {
+        let mut tabs = BrowserTabs::default();
+        tabs.arrived("animation".into(), 1);
+        tabs.arrived("other".into(), 2);
+        let states = |shown, visible| {
+            let mut states: Vec<_> = tabs
+                .visibility(shown, visible)
+                .map(|(&pane, on)| (pane, on))
+                .collect();
+            states.sort();
+            states
+        };
+        assert_eq!(states(Some("animation"), true), [(1, true), (2, false)]);
+        assert_eq!(states(Some("other"), true), [(1, false), (2, true)]);
+        assert_eq!(states(Some("animation"), false), [(1, false), (2, false)]);
+        assert_eq!(states(Some("terminal"), true), [(1, false), (2, false)]);
+        assert_eq!(states(None, true), [(1, false), (2, false)]);
     }
 }

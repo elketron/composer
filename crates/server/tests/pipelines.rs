@@ -13,6 +13,7 @@ use composer_server::Config;
 use composer_server::actions::Caller;
 use composer_server::pipeline::{Work, pipeline};
 use composer_server::provider::ModelEvent;
+use composer_server::worker::ticket::set_field;
 use serde_json::json;
 use support::*;
 
@@ -92,6 +93,10 @@ async fn pipelines_and_works() {
     assert!(home.contains("| [coding](site://coding) |"), "{home}");
     let index = std::fs::read_to_string(dir.path().join("sites/coding/index.md")).unwrap();
     assert!(index.contains("site://coding/<work>/") && !index.contains("__PIPELINE__"));
+    assert!(index.contains("tools: [hunk]"), "{index}");
+    assert!(dir.path().join("sites/coding/review.md").is_file());
+    let site = composer_server::agent::Site::load(&server.web, "coding").unwrap();
+    assert!(site.allows_tool("hunk"));
     // Indexed as it was written.
     assert!(
         server
@@ -108,6 +113,7 @@ async fn pipelines_and_works() {
     assert!(dir.path().join("sites/coding/ui/src/App.svelte").is_file());
     let justfile = std::fs::read_to_string(dir.path().join("sites/coding/justfile")).unwrap();
     assert!(justfile.contains("ui-build:"), "{justfile}");
+    assert!(justfile.contains("sh -c {{quote(cmd)}}"), "{justfile}");
     let hash = composer_server::actions::Justfile::load(&dir.path().join("sites/coding"))
         .await
         .unwrap()
@@ -196,10 +202,13 @@ async fn pipelines_and_works() {
             && index.contains("Save slots, three of them."),
         "{index}"
     );
-    let stage = std::fs::read_to_string(work_dir.join("03_implement/_stage.md")).unwrap();
     assert!(
-        stage.contains("status: waiting\nharness: claude-code\n"),
-        "{stage}"
+        index.contains("stage: 01_spec\nstatus: waiting\ndone: []\nattempts: {}\n"),
+        "{index}"
+    );
+    assert!(
+        index.contains("| [02 Plan](../stages/02_plan.md)"),
+        "{index}"
     );
     let listed = std::fs::read_to_string(dir.path().join("sites/coding/index.md")).unwrap();
     assert!(
@@ -217,11 +226,14 @@ async fn pipelines_and_works() {
     };
     assert_eq!(o.works.len(), 1);
     assert_eq!(o.works[0].status.as_deref(), Some("01 spec · waiting"));
-    let spec = SiteUrl::new("coding", "save-system/01_spec/_stage.md").unwrap();
-    let text = std::fs::read_to_string(work_dir.join("01_spec/_stage.md"))
-        .unwrap()
-        .replace("status: waiting", "status: done");
-    server.write_page(&spec, &text, ChangedBy::App).unwrap();
+    let work_page = SiteUrl::new("coding", "save-system/index.md").unwrap();
+    let text = std::fs::read_to_string(work_dir.join("index.md")).unwrap();
+    let text = set_field(&text, "stage", "02_plan");
+    let text = set_field(&text, "status", "waiting");
+    let text = set_field(&text, "done", "[\"01_spec\"]");
+    server
+        .write_page(&work_page, &text, ChangedBy::App)
+        .unwrap();
     let Ok(CommandResult::Project { overview: o }) = command(&mut socket, 13, overview(())).await
     else {
         panic!()
@@ -252,6 +264,7 @@ async fn pipelines_and_works() {
             "site://shorts/trailer/index.md"
         ]
     );
+    std::fs::create_dir_all(work_dir.join("01_spec")).unwrap();
     std::fs::write(work_dir.join("01_spec/spec.md"), "# Spec\n").unwrap();
     let Ok(CommandResult::Project { overview: o }) = command(&mut socket, 15, overview(())).await
     else {
@@ -291,22 +304,40 @@ async fn the_agent_tools() {
     std::fs::create_dir_all(projects.path().join("site")).unwrap();
     let mut config = Config::defaults();
     config.projects.dir = projects.path().display().to_string();
-    let calls = vec![
-        tool_call("a", "new_pipeline", json!({ "kind": "research" })),
-        tool_call(
+    // The verbs live in sites: enter home to make a pipeline, orchestration to start work.
+    let enter = |site: &str| {
+        vec![
+            vec![finished(vec![tool_call(
+                "enter",
+                "enter_site",
+                json!({ "site": site }),
+            )])],
+            vec![ModelEvent::Content("in site".into()), finished(vec![])],
+        ]
+    };
+    let mut scripts = enter("home");
+    scripts.extend([
+        vec![finished(vec![tool_call(
+            "a",
+            "new_pipeline",
+            json!({ "kind": "research" }),
+        )])],
+        vec![ModelEvent::Content("made".into()), finished(vec![])],
+    ]);
+    scripts.extend(enter("orchestration"));
+    scripts.extend([
+        vec![finished(vec![tool_call(
             "b",
             "new_work",
             json!({ "pipeline": "research", "name": "ssr", "title": "Is SSR worth it?", "brief": "For the website." }),
-        ),
-        tool_call(
+        )])],
+        vec![finished(vec![tool_call(
             "c",
             "new_work",
             json!({ "pipeline": "site://research/", "name": "../x" }),
-        ),
-    ];
-    let mut scripts: Vec<Vec<ModelEvent>> =
-        calls.into_iter().map(|c| vec![finished(vec![c])]).collect();
-    scripts.push(vec![ModelEvent::Content("done".into()), finished(vec![])]);
+        )])],
+        vec![ModelEvent::Content("done".into()), finished(vec![])],
+    ]);
     let (dir, server, _provider, addr) = start_with(config, scripts).await;
     let mut socket = connect(addr, &server.token).await;
     let Ok(CommandResult::Session { session }) = command(
@@ -330,21 +361,15 @@ async fn the_agent_tools() {
         },
     )
     .await;
-    send(
-        &mut socket,
-        3,
-        ClientCommand::MessageSend {
-            session: session.id.clone(),
-            text: "make it".into(),
-            pages: vec![],
-            images: vec![],
-            attachments: vec![],
-        },
-    )
-    .await;
-    let results: Vec<(String, bool)> =
-        until(&mut socket, |e| matches!(e, ServerMessage::TurnDone { .. }))
-            .await
+    let message = |text: &str| ClientCommand::MessageSend {
+        session: session.id.clone(),
+        text: text.into(),
+        pages: vec![],
+        images: vec![],
+        attachments: vec![],
+    };
+    let results_of = |events: Vec<ServerMessage>| -> Vec<(String, bool)> {
+        events
             .into_iter()
             .filter_map(|e| match e {
                 ServerMessage::ToolResult {
@@ -352,7 +377,21 @@ async fn the_agent_tools() {
                 } => Some((result, is_error)),
                 _ => None,
             })
-            .collect();
+            .collect()
+    };
+    let mut results = Vec::new();
+    for (id, text) in [
+        (3, "enter home"),
+        (4, "make a pipeline"),
+        (5, "enter orchestration"),
+        (6, "make work"),
+    ] {
+        send(&mut socket, id, message(text)).await;
+        let events = until(&mut socket, |e| matches!(e, ServerMessage::TurnDone { .. })).await;
+        if id == 4 || id == 6 {
+            results.extend(results_of(events));
+        }
+    }
     assert_eq!(
         results.iter().map(|r| r.1).collect::<Vec<_>>(),
         [false, false, true],
@@ -411,22 +450,35 @@ async fn stale_stages() {
         .unwrap();
     }
     let coding = dir.path().join("sites/coding");
-    // As a run leaves them: 01 and 02 done, each with the hashes of what it read.
-    let ran = |name: &str, stage: &str| {
+    // As a run leaves them: 01 and 02 done, each with the hashes of what it read, on the work's
+    // page.
+    let ran = |name: &str| {
         let work = Work::load(pipeline(&server, "coding").unwrap(), name).unwrap();
-        let contract = work.pipeline.stage(stage).unwrap().clone();
-        let inputs = serde_json::to_string(&work.input_hashes(&contract)).unwrap();
-        let path = coding.join(name).join(stage).join("_stage.md");
-        let raw = std::fs::read_to_string(&path).unwrap().replace(
-            "status: waiting",
-            &format!("status: done\ninputs: {inputs}"),
+        let inputs = |stage: &str| {
+            let contract = work.pipeline.stage(stage).unwrap();
+            serde_json::to_string(&work.input_hashes(contract)).unwrap()
+        };
+        let path = coding.join(name).join("index.md");
+        let raw = std::fs::read_to_string(&path).unwrap();
+        let raw = set_field(&raw, "stage", "02_plan");
+        let raw = set_field(&raw, "status", "done");
+        let raw = set_field(&raw, "done", "[\"01_spec\",\"02_plan\"]");
+        let raw = set_field(
+            &raw,
+            "inputs",
+            &format!(
+                "{{\"01_spec\":{},\"02_plan\":{}}}",
+                inputs("01_spec"),
+                inputs("02_plan")
+            ),
         );
         std::fs::write(path, raw).unwrap();
     };
     for name in ["a", "b"] {
-        std::fs::write(coding.join(name).join("01_spec/spec.md"), "# Spec\n").unwrap();
-        ran(name, "01_spec");
-        ran(name, "02_plan");
+        let spec = coding.join(name).join("01_spec");
+        std::fs::create_dir_all(&spec).unwrap();
+        std::fs::write(spec.join("spec.md"), "# Spec\n").unwrap();
+        ran(name);
     }
     let states = |name: &str| {
         Work::load(pipeline(&server, "coding").unwrap(), name)

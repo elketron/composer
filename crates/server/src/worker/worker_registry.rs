@@ -49,6 +49,9 @@ pub struct WorkerRegistry {
     /// Own workers at their turn limit, waiting in their process: how to tell them to go on
     /// (the orchestrator's message) or stop (why).
     waiting: Mutex<HashMap<String, GoOnReply>>,
+    /// Notes for workers that were running when their orchestrator sent them: delivered as a
+    /// resume when the run finishes, rather than lost.
+    queued: Mutex<HashMap<String, String>>,
 }
 
 /// Where and how a ticket is worked.
@@ -114,12 +117,18 @@ impl WorkerRegistry {
             return Err(format!("#{worker} is not a running worker"));
         }
         let session = server.sessions.get(worker).map_err(|e| e.to_string())?;
-        let agent =
-            AgentDefinition::load(&server.web, &session.info().agent).map_err(|e| e.to_string())?;
+        let info = session.info();
+        let agent = AgentDefinition::load(&server.web, &info.agent).map_err(|e| e.to_string())?;
+        let site = info
+            .site
+            .as_deref()
+            .and_then(|name| crate::agent::Site::load(&server.web, name).ok())
+            .map(Arc::new);
         Ok(ToolContext {
             server: server.clone(),
             session,
             agent: Arc::new(agent),
+            site,
             cancel: CancellationToken::new(),
         })
     }
@@ -823,6 +832,25 @@ impl WorkerRegistry {
                 "worker #{worker} {first}goes on with ticket {ticket}"
             ));
         }
+        if let Some(running) = server.sessions.list().into_iter().find(|session| {
+            session.ticket.as_deref() == Some(ticket)
+                && matches!(session.worker, Some(WorkerState::Running))
+        }) {
+            let queued = message.replacen(
+                "From your orchestrator, after your turn limit: ",
+                "From your orchestrator, about your ticket: ",
+                1,
+            );
+            self.queued
+                .lock()
+                .expect("queued lock")
+                .insert(ticket.to_string(), queued);
+            return Ok(format!(
+                "worker #{} is running on ticket {ticket}; the note is queued and it goes on with \
+                 it when it finishes",
+                running.id
+            ));
+        }
         let session = match stuck_session(server, ticket) {
             Ok(session) => session,
             // Not stuck: a worker that finished (or stopped) goes back to its ticket with what
@@ -946,7 +974,31 @@ impl WorkerRegistry {
             parent: handle.parent.clone(),
             state,
         });
+        let queued = self
+            .queued
+            .lock()
+            .expect("queued lock")
+            .remove(&handle.ticket);
         if !notify {
+            return;
+        }
+        if let Some(message) = queued {
+            // The orchestrator sent a note while it ran: go back to the ticket with it now,
+            // instead of telling the orchestrator to send it again.
+            let server = server.clone();
+            let session = worker.to_string();
+            tokio::spawn(async move {
+                let Ok(session) = server.sessions.get(&session) else {
+                    return;
+                };
+                if let Err(e) = server
+                    .workers
+                    .resume(&server, &session, message, vec![])
+                    .await
+                {
+                    tracing::warn!("resuming {} with a queued note: {e}", session.id());
+                }
+            });
             return;
         }
         if state == WorkerState::Stuck {

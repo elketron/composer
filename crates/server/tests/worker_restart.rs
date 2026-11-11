@@ -38,6 +38,7 @@ async fn a_restart_pauses_or_fails_cut_off_workers() {
         id: id.into(),
         agent: "worker".into(),
         project: None,
+        site: None,
         ticket: Some(ticket.into()),
         parent: Some(orchestrator.id().into()),
         worker: Some(state),

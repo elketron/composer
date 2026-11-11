@@ -123,7 +123,8 @@ impl AgentDefinition {
     }
 
     /// Whether `tools:` lists this MCP tool (`github__get_issue`), by name or as `github__*`.
-    /// Never without a `tools:` list: MCP tools are opt-in.
+    /// Never without a `tools:` list: MCP tools are opt-in. A site may add more: whether a tool
+    /// is available is [`crate::mcp_clients::McpServers::allows`]'s to say.
     pub fn allows_mcp_tool(&self, tool: &str) -> bool {
         self.tools.as_ref().is_some_and(|tools| {
             tools

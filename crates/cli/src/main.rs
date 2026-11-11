@@ -129,7 +129,8 @@ enum Command {
     /// A project's own apps (`<project>/.composer/apps/<app>`): allow one as it is now, or promote
     /// it into this workspace's sites (needs a running server).
     ///
-    /// `composer app allow mygame viewer`; `composer app promote mygame viewer`.
+    /// `composer app allow mygame viewer`; `composer app promote mygame viewer`; `composer app
+    /// approve chat` (a client app's build).
     App {
         #[command(subcommand)]
         action: AppCommand,
@@ -202,6 +203,10 @@ enum AppCommand {
     Allow { project: String, app: String },
     /// Copy a project-local app into this workspace's sites; the workspace's copy wins after.
     Promote { project: String, app: String },
+    /// Approve a client app's build (`[apps] clients`, e.g. `chat`) as it is now: it runs with the
+    /// workspace's full access, so it is served only while its `ui/dist` is the one approved.
+    /// Works on this machine's files (no server needed).
+    Approve { site: String },
     /// Rebuild the apps built with an older sdk (or not built) with their `ui-build`, in the
     /// sandbox. Shows what would run; `--yes` runs it.
     Rebuild {
@@ -364,11 +369,28 @@ async fn main() -> anyhow::Result<()> {
             WorkspaceCommand::List => workspaces::list(&home)?,
             WorkspaceCommand::Templates => workspaces::templates(&home)?,
         },
+        Some(Command::App {
+            action: AppCommand::Approve { site },
+        }) => {
+            let dist = workspace.sites().join(&site).join("ui/dist");
+            let approvals = composer_server::apps::ClientApprovals::new(
+                workspace.state().join("client_apps.json"),
+            );
+            let (hash, files) = approvals
+                .approve(&site, &dist)
+                .map_err(|e| anyhow::anyhow!(e))?;
+            println!(
+                "approved site://{site}'s build ({files} files in {}, {})",
+                dist.display(),
+                &hash[..12]
+            );
+        }
         Some(Command::App { action }) => {
             let (server_url, token) = remote::client(&workspace)?;
             let (project, app, promote) = match action {
                 AppCommand::Allow { project, app } => (project, app, false),
                 AppCommand::Promote { project, app } => (project, app, true),
+                AppCommand::Approve { .. } => unreachable!("handled above"),
                 AppCommand::Rebuild { all, yes } => {
                     composer_client::cli::rebuild_apps(&server_url, &token, all, yes).await?;
                     return Ok(());

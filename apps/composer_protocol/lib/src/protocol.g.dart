@@ -216,13 +216,14 @@ class AppMessage {
       };
 }
 
-/// `POST /api/projects/<name>/apps/<site>/open`: where to load the app (its token in the URL
-/// once; the page then keeps it in a cookie scoped to the app), and the token itself for a
-/// client that calls the app's API directly.
+/// `POST /api/projects/<name>/apps/<site>/open`: where to load the app (`<base>/a/<token>/`: its
+/// token is in the path, and its API is under it), and the token itself for a client that calls
+/// the app's API directly.
 class AppOpened {
   const AppOpened({
     required this.url,
     this.token,
+    this.project,
   });
 
   final String url;
@@ -230,14 +231,19 @@ class AppOpened {
   /// The app's own token; `None` for a client app (its URL has a one-time code instead).
   final String? token;
 
+  /// The project it was opened on, by its name; `None` on Home.
+  final String? project;
+
   factory AppOpened.fromJson(Map<String, Object?> json) => AppOpened(
         url: json['url'] as String,
         token: json['token'] == null ? null : json['token'] as String,
+        project: json['project'] == null ? null : json['project'] as String,
       );
 
   Map<String, Object?> toJson() => {
         'url': url,
         if (token != null) 'token': token,
+        if (project != null) 'project': project,
       };
 }
 
@@ -436,6 +442,7 @@ sealed class ClientCommand {
         'session.compact' => ClientCommandSessionCompact.fromJson(json),
         'turn.cancel' => ClientCommandTurnCancel.fromJson(json),
         'project.set' => ClientCommandProjectSet.fromJson(json),
+        'site.set' => ClientCommandSiteSet.fromJson(json),
         'model.list' => ClientCommandModelList.fromJson(json),
         'model.set' => ClientCommandModelSet.fromJson(json),
         'harness.list' => ClientCommandHarnessList.fromJson(json),
@@ -708,6 +715,34 @@ final class ClientCommandProjectSet extends ClientCommand {
         'type': 'project.set',
         'session': session,
         if (path != null) 'path': path,
+      };
+}
+
+/// Enters the site `site` (a workflow: its page, tools and application) for a session, or
+/// leaves the current one with `None`. A running turn goes on as it was; the change applies
+/// from the session's next turn. The session's new state arrives as `session.updated`; the
+/// reply is `note`: what happened, the site's application included (started, already
+/// running, or skipped and why). An error when the site does not exist or needs a project
+/// the session has none for.
+final class ClientCommandSiteSet extends ClientCommand {
+  const ClientCommandSiteSet({
+    required this.session,
+    this.site,
+  });
+
+  final String session;
+
+  final String? site;
+
+  factory ClientCommandSiteSet.fromJson(Map<String, Object?> json) => ClientCommandSiteSet(
+        session: json['session'] as String,
+        site: json['site'] == null ? null : json['site'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'site.set',
+        'session': session,
+        if (site != null) 'site': site,
       };
 }
 
@@ -2626,7 +2661,7 @@ class DeskEntry {
     this.unseen = false,
   });
 
-  /// `app:cad@game`, `app:calendar`, `page:site://x`, `terminal:<id>`, `changes:<project>`.
+  /// `app:cad@game`, `app:calendar`, `page:site://x`, `terminal:<id>`, `changes:<project>`, `live`.
   final String id;
 
   final DeskTab tab;
@@ -2656,6 +2691,7 @@ sealed class DeskTab {
         'page' => DeskTabPage.fromJson(json),
         'terminal' => DeskTabTerminal.fromJson(json),
         'changes' => DeskTabChanges.fromJson(json),
+        'live_view' => DeskTabLiveView.fromJson(json),
         _ => DeskTabUnknown(json),
       };
 
@@ -2736,6 +2772,19 @@ final class DeskTabChanges extends DeskTab {
   Map<String, Object?> toJson() => {
         'kind': 'changes',
         'project': project,
+      };
+}
+
+/// The workspace's live view of its application (wayai's viewer, proxied at `<workspace>/view`).
+/// It names no site or project; one per desk (id `live`). Wire form: `{"kind":"live_view"}`.
+final class DeskTabLiveView extends DeskTab {
+  const DeskTabLiveView();
+
+  factory DeskTabLiveView.fromJson(Map<String, Object?> json) => DeskTabLiveView(
+      );
+
+  Map<String, Object?> toJson() => {
+        'kind': 'live_view',
       };
 }
 
@@ -3348,15 +3397,20 @@ class ProjectDiff {
 class ProjectInfo {
   const ProjectInfo({
     required this.name,
+    this.page,
     required this.root,
     this.branch,
     this.pipeline,
     this.pipelines = const [],
+    this.sites = const [],
     this.tags = const [],
   });
 
   /// Its name in the workspace (and in the app's URL).
   final String name;
+
+  /// Its project page (`site://projects/<name>`), when it has one.
+  final String? page;
 
   /// The absolute folder.
   final String root;
@@ -3369,24 +3423,31 @@ class ProjectInfo {
 
   final List<String> pipelines;
 
+  /// The sites operating on it (the same list as `pipelines`; the project hub's name).
+  final List<String> sites;
+
   /// `[projects."<path>"] tags`.
   final List<String> tags;
 
   factory ProjectInfo.fromJson(Map<String, Object?> json) => ProjectInfo(
         name: json['name'] as String,
+        page: json['page'] == null ? null : json['page'] as String,
         root: json['root'] as String,
         branch: json['branch'] == null ? null : json['branch'] as String,
         pipeline: json['pipeline'] == null ? null : json['pipeline'] as String,
         pipelines: json['pipelines'] == null ? const [] : (json['pipelines'] as List).map((e) => e as String).toList(),
+        sites: json['sites'] == null ? const [] : (json['sites'] as List).map((e) => e as String).toList(),
         tags: json['tags'] == null ? const [] : (json['tags'] as List).map((e) => e as String).toList(),
       );
 
   Map<String, Object?> toJson() => {
         'name': name,
+        if (page != null) 'page': page,
         'root': root,
         if (branch != null) 'branch': branch,
         if (pipeline != null) 'pipeline': pipeline,
         if (pipelines.isNotEmpty) 'pipelines': pipelines,
+        if (sites.isNotEmpty) 'sites': sites,
         if (tags.isNotEmpty) 'tags': tags,
       };
 }
@@ -3395,11 +3456,13 @@ class ProjectInfo {
 class ProjectOverview {
   const ProjectOverview({
     required this.name,
+    this.page,
     required this.path,
     required this.folder,
     this.branch,
     required this.uncommitted,
     required this.works,
+    this.sites = const [],
     required this.branches,
     this.memory,
     required this.harnesses,
@@ -3407,6 +3470,9 @@ class ProjectOverview {
   });
 
   final String name;
+
+  /// Its project page (`site://projects/<name>`), when it has one.
+  final String? page;
 
   /// `~/Projects/<name>`.
   final String path;
@@ -3423,6 +3489,9 @@ class ProjectOverview {
   /// Works of any pipeline that link it.
   final List<WorkSummary> works;
 
+  /// The sites operating on it, each with its works and its app tile.
+  final List<ProjectSiteSummary> sites;
+
   /// Tickets whose worktree of it is still there: their branch waits to be merged or discarded.
   final List<TicketBranchSummary> branches;
 
@@ -3437,11 +3506,13 @@ class ProjectOverview {
 
   factory ProjectOverview.fromJson(Map<String, Object?> json) => ProjectOverview(
         name: json['name'] as String,
+        page: json['page'] == null ? null : json['page'] as String,
         path: json['path'] as String,
         folder: json['folder'] as String,
         branch: json['branch'] == null ? null : json['branch'] as String,
         uncommitted: (json['uncommitted'] as num).toInt(),
         works: (json['works'] as List).map((e) => WorkSummary.fromJson(e as Map<String, Object?>)).toList(),
+        sites: json['sites'] == null ? const [] : (json['sites'] as List).map((e) => ProjectSiteSummary.fromJson(e as Map<String, Object?>)).toList(),
         branches: (json['branches'] as List).map((e) => TicketBranchSummary.fromJson(e as Map<String, Object?>)).toList(),
         memory: json['memory'] == null ? null : PageExcerpt.fromJson(json['memory'] as Map<String, Object?>),
         harnesses: (json['harnesses'] as List).map((e) => HarnessSwitch.fromJson(e as Map<String, Object?>)).toList(),
@@ -3450,15 +3521,62 @@ class ProjectOverview {
 
   Map<String, Object?> toJson() => {
         'name': name,
+        if (page != null) 'page': page,
         'path': path,
         'folder': folder,
         if (branch != null) 'branch': branch,
         'uncommitted': uncommitted,
         'works': works.map((e) => e.toJson()).toList(),
+        if (sites.isNotEmpty) 'sites': sites.map((e) => e.toJson()).toList(),
         'branches': branches.map((e) => e.toJson()).toList(),
         if (memory != null) 'memory': memory?.toJson(),
         'harnesses': harnesses.map((e) => e.toJson()).toList(),
         'tool_rules': toolRules,
+      };
+}
+
+/// One site operating on a project, as the project hub shows it.
+class ProjectSiteSummary {
+  const ProjectSiteSummary({
+    required this.site,
+    required this.title,
+    this.works = const [],
+    this.running = 0,
+    this.waiting = 0,
+    this.app,
+  });
+
+  final String site;
+
+  final String title;
+
+  final List<WorkSummary> works;
+
+  /// Its works' stages running now.
+  final int running;
+
+  /// Its works' stages waiting for review.
+  final int waiting;
+
+  /// Its tile, when it has one.
+  final AppInfo? app;
+
+  factory ProjectSiteSummary.fromJson(Map<String, Object?> json) => ProjectSiteSummary(
+        site: json['site'] as String,
+        title: json['title'] as String,
+        works: json['works'] == null ? const [] : (json['works'] as List).map((e) => WorkSummary.fromJson(e as Map<String, Object?>)).toList(),
+        running: json['running'] == null ? 0 : (json['running'] as num).toInt(),
+        waiting: json['waiting'] == null ? 0 : (json['waiting'] as num).toInt(),
+        app: json['app'] == null ? null : AppInfo.fromJson(json['app'] as Map<String, Object?>),
+      );
+
+  Map<String, Object?> toJson() => {
+        'site': site,
+        'title': title,
+        if (works.isNotEmpty) 'works': works.map((e) => e.toJson()).toList(),
+        'running': running,
+        'waiting': waiting,
+        if (app != null) 'app': app?.toJson(),
       };
 }
 
@@ -3473,6 +3591,7 @@ class ProjectSummary {
     this.running = 0,
     this.waiting = 0,
     this.lastUsed,
+    this.page,
   });
 
   /// Folder name; what `project.set` and `session.create` accept.
@@ -3499,6 +3618,9 @@ class ProjectSummary {
   /// When one of its sessions last did something (RFC 3339).
   final String? lastUsed;
 
+  /// Its project page (`site://projects/<name>`), when it has one.
+  final String? page;
+
   factory ProjectSummary.fromJson(Map<String, Object?> json) => ProjectSummary(
         name: json['name'] as String,
         path: json['path'] as String,
@@ -3508,6 +3630,7 @@ class ProjectSummary {
         running: json['running'] == null ? 0 : (json['running'] as num).toInt(),
         waiting: json['waiting'] == null ? 0 : (json['waiting'] as num).toInt(),
         lastUsed: json['last_used'] == null ? null : json['last_used'] as String,
+        page: json['page'] == null ? null : json['page'] as String,
       );
 
   Map<String, Object?> toJson() => {
@@ -3519,6 +3642,7 @@ class ProjectSummary {
         'running': running,
         'waiting': waiting,
         if (lastUsed != null) 'last_used': lastUsed,
+        if (page != null) 'page': page,
       };
 }
 
@@ -3714,6 +3838,7 @@ class ServerInfo {
     this.projectsDir,
     this.workspace,
     this.workspaceColor,
+    this.viewer,
   });
 
   /// `server.name` from config.toml, else the hostname.
@@ -3739,6 +3864,11 @@ class ServerInfo {
   /// servers leave it out.
   final String? workspaceColor;
 
+  /// Where this workspace serves wayai's live view, as a path after the workspace's address
+  /// (`/view`); absent when no viewer is configured. Needs the workspace's token, like the rest.
+  /// Older servers leave it out.
+  final String? viewer;
+
   factory ServerInfo.fromJson(Map<String, Object?> json) => ServerInfo(
         name: json['name'] as String,
         version: json['version'] as String,
@@ -3747,6 +3877,7 @@ class ServerInfo {
         projectsDir: json['projects_dir'] == null ? null : json['projects_dir'] as String,
         workspace: json['workspace'] == null ? null : json['workspace'] as String,
         workspaceColor: json['workspace_color'] == null ? null : json['workspace_color'] as String,
+        viewer: json['viewer'] == null ? null : json['viewer'] as String,
       );
 
   Map<String, Object?> toJson() => {
@@ -3757,6 +3888,7 @@ class ServerInfo {
         if (projectsDir != null) 'projects_dir': projectsDir,
         if (workspace != null) 'workspace': workspace,
         if (workspaceColor != null) 'workspace_color': workspaceColor,
+        if (viewer != null) 'viewer': viewer,
       };
 }
 
@@ -4706,6 +4838,7 @@ class SessionInfo {
     required this.id,
     required this.agent,
     this.project,
+    this.site,
     this.ticket,
     this.parent,
     this.worker,
@@ -4724,6 +4857,9 @@ class SessionInfo {
 
   /// Active project directory, if any.
   final String? project;
+
+  /// The site the agent entered (`enter_site`), if any.
+  final String? site;
 
   /// Set for worker sessions.
   final String? ticket;
@@ -4756,6 +4892,7 @@ class SessionInfo {
         id: json['id'] as String,
         agent: json['agent'] as String,
         project: json['project'] == null ? null : json['project'] as String,
+        site: json['site'] == null ? null : json['site'] as String,
         ticket: json['ticket'] == null ? null : json['ticket'] as String,
         parent: json['parent'] == null ? null : json['parent'] as String,
         worker: json['worker'] == null ? null : WorkerState.fromJson(json['worker']),
@@ -4771,6 +4908,7 @@ class SessionInfo {
         'id': id,
         'agent': agent,
         if (project != null) 'project': project,
+        if (site != null) 'site': site,
         if (ticket != null) 'ticket': ticket,
         if (parent != null) 'parent': parent,
         if (worker != null) 'worker': worker?.toJson(),
@@ -4793,6 +4931,8 @@ class SiteSummary {
     this.appBuilt = false,
     this.description,
     this.pages = 0,
+    this.app,
+    this.mcp = const [],
   });
 
   final String name;
@@ -4813,6 +4953,13 @@ class SiteSummary {
   /// Pages in the site.
   final int pages;
 
+  /// `app:` of its `index.md`: the application (`[applications.<name>]`) it starts. A site with
+  /// `app` or `mcp` set is a workflow.
+  final String? app;
+
+  /// `mcp:` of its `index.md`: the MCP servers whose tools the agent has while in the site.
+  final List<String> mcp;
+
   factory SiteSummary.fromJson(Map<String, Object?> json) => SiteSummary(
         name: json['name'] as String,
         title: json['title'] as String,
@@ -4821,6 +4968,8 @@ class SiteSummary {
         appBuilt: json['app_built'] == null ? false : json['app_built'] as bool,
         description: json['description'] == null ? null : json['description'] as String,
         pages: json['pages'] == null ? 0 : (json['pages'] as num).toInt(),
+        app: json['app'] == null ? null : json['app'] as String,
+        mcp: json['mcp'] == null ? const [] : (json['mcp'] as List).map((e) => e as String).toList(),
       );
 
   Map<String, Object?> toJson() => {
@@ -4831,11 +4980,13 @@ class SiteSummary {
         'app_built': appBuilt,
         if (description != null) 'description': description,
         'pages': pages,
+        if (app != null) 'app': app,
+        if (mcp.isNotEmpty) 'mcp': mcp,
       };
 }
 
 /// A work's stage and where it is: `waiting`, `running`, `review`, `approved`, `rerun`,
-/// `stopped`, `done` (its `_stage.md`'s `status:`).
+/// `stopped`, `done` (the work page's `stage`, `status` and `done`).
 class StageState {
   const StageState({
     required this.name,
@@ -5097,6 +5248,38 @@ enum TurnState {
       values.firstWhere((v) => v.wire == json, orElse: () => throw FormatException('unknown TurnState: $json'));
 
   String toJson() => wire;
+}
+
+/// `POST /api/web-session`: a new browser session of the caller's kind, for a client that sets
+/// the workspace's cookie itself (the desktop's panes, the phone's webviews) instead of putting a
+/// token in a cookie or a URL.
+class WebSession {
+  const WebSession({
+    required this.cookieName,
+    required this.value,
+    required this.path,
+  });
+
+  /// The cookie's name.
+  final String cookieName;
+
+  /// The session secret (`ses_...`): the cookie's value.
+  final String value;
+
+  /// The cookie's `Path` (the workspace's routes).
+  final String path;
+
+  factory WebSession.fromJson(Map<String, Object?> json) => WebSession(
+        cookieName: json['cookie_name'] as String,
+        value: json['value'] as String,
+        path: json['path'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'cookie_name': cookieName,
+        'value': value,
+        'path': path,
+      };
 }
 
 /// A piece of work in a pipeline (`site://<pipeline>/<work>/index.md`, `type: work`).

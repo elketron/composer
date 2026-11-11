@@ -163,6 +163,7 @@ async fn a_sessions_terminal_runs_in_its_sandbox() {
         server: server.clone(),
         session: session.clone(),
         agent: Arc::new(AgentDefinition::load(&server.web, "default").unwrap()),
+        site: None,
         cancel: CancellationToken::new(),
     };
     let read = server

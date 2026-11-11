@@ -30,6 +30,7 @@ class DeskView {
           url.replaceFirst('site://', '').replaceFirst(RegExp(r'\.md$'), ''),
         DeskTabChanges(:final project) => 'changes · $project',
         DeskTabTerminal() => 'terminal',
+        DeskTabLiveView() => 'live view',
         _ => 'tab',
       };
 
@@ -38,6 +39,7 @@ class DeskView {
         DeskTabPage() => Icons.description_outlined,
         DeskTabChanges() => Icons.difference_outlined,
         DeskTabTerminal() => Icons.terminal,
+        DeskTabLiveView() => Icons.desktop_windows_outlined,
         _ => Icons.tab,
       };
 }

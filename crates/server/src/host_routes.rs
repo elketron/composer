@@ -15,6 +15,7 @@ use serde_json::json;
 use tower::ServiceExt;
 
 use crate::host_state::HostState;
+use crate::secret::secret_eq;
 use crate::template_name::TemplateName;
 use crate::workspace_name::WorkspaceName;
 
@@ -31,10 +32,11 @@ pub fn workspaces(state: Arc<HostState>, master: String) -> MethodRouter {
         let Some(token) = presented_token(&headers, &uri) else {
             return not_found();
         };
+        let is_master = secret_eq(&token, &master);
         let open: Vec<_> = state
             .list()
             .into_iter()
-            .filter(|(_, server)| token == master || server.accepts_token(&token))
+            .filter(|(_, server)| is_master || server.accepts_token(&token))
             .map(
                 |(name, server)| json!({ "name": name.as_str(), "base": server.home.route_base() }),
             )
@@ -46,7 +48,7 @@ pub fn workspaces(state: Arc<HostState>, master: String) -> MethodRouter {
     })
     .post(
         move |headers: HeaderMap, uri: Uri, body: Json<NewWorkspace>| async move {
-            if presented_token(&headers, &uri).as_deref() != Some(master.as_str()) {
+            if !presented_token(&headers, &uri).is_some_and(|token| secret_eq(&token, &master)) {
                 return not_found();
             }
             create(&state, body.0).await

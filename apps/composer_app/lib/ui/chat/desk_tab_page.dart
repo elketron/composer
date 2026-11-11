@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 
 import '../../state/actions.dart';
 import '../../state/desk_view.dart';
+import '../../state/frame_size.dart';
+import '../../state/live_view_size.dart';
+import '../../state/workflows.dart';
 import '../../state/workspace.dart';
 import '../../theme/composer_theme.dart';
 import '../../theme/tokens.dart' as t;
@@ -11,6 +14,7 @@ import '../pages/reader.dart';
 import '../projects/project_overview_view.dart';
 import '../store_scope.dart';
 import '../workspace_mark.dart';
+import 'live_view.dart';
 import 'message_composer.dart';
 import 'selection_chip.dart';
 
@@ -60,6 +64,19 @@ class _DeskTabScreenState extends State<DeskTabScreen> {
         ),
       DeskTabPage() => Reader(url: widget.url, status: status, onClose: null),
       DeskTabChanges(:final project) => ProjectOverviewView(url: widget.url, status: status, folder: project),
+      // The bare page, view only: the phone does not drive. (The desktop opens the full page.)
+      DeskTabLiveView() => switch (viewerPath(status.info)) {
+          final viewer? => LiveView(
+              key: ValueKey('desk-live-${entry.id}'),
+              address: liveViewUrl(widget.url, viewer),
+              workspace: widget.url,
+              token: store.state.serverFor(widget.url)?.token ?? '',
+              size: LiveViewSize.large,
+              onFrameSize: (FrameSize _) {},
+              onLive: (_) {},
+            ),
+          null => Center(child: Text('This server has no live view.', style: mono(size: 12, color: t.faint))),
+        },
       _ => const SizedBox.shrink(),
     };
     return Scaffold(

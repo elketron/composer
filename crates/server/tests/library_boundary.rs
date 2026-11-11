@@ -273,6 +273,7 @@ async fn a_worker_can_not_publish() {
             id: "wk1".into(),
             agent: "default".into(),
             project: None,
+            site: None,
             ticket: Some("0001".into()),
             parent: None,
             worker: None,
@@ -284,10 +285,17 @@ async fn a_worker_can_not_publish() {
             updated: chrono::Utc::now().to_rfc3339(),
         })
         .unwrap();
+    // Publishing is home's verb: the worker is inside it and still refused.
+    let site = Arc::new(
+        composer_server::agent::Site::load(&server.web, "home")
+            .map_err(|e| panic!("{e}"))
+            .unwrap(),
+    );
     let context = ToolContext {
         server: server.clone(),
         session: worker,
         agent: Arc::new(AgentDefinition::load(&server.web, "default").unwrap()),
+        site: Some(site),
         cancel: CancellationToken::new(),
     };
     // A worker that got through would wait for an approval forever: fail instead of hanging.

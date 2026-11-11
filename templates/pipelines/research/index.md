@@ -2,6 +2,11 @@
 title: Research
 type: pipeline
 needs_project: false
+stages:
+  - { id: 01_question, file: stages/01_question.md, needs: [] }
+  - { id: 02_sources, file: stages/02_sources.md, needs: [01_question] }
+  - { id: 03_synthesis, file: stages/03_synthesis.md, needs: [02_sources] }
+  - { id: 04_write-up, file: stages/04_write-up.md, needs: [03_synthesis] }
 ---
 # Research
 
@@ -26,7 +31,7 @@ Each question is a folder here (`site://__PIPELINE__/<work>/`). Sources are page
 |------|-------|
 | `_config/` | `sources.md` (what counts as a source), `style.md` (how write-ups read) |
 | `stages/` | the stage contracts |
-| `<work>/index.md` | the question: its brief and stages |
-| `<work>/NN_stage/` | what the stage wrote, and `_stage.md` (its state) |
+| `<work>/index.md` | the question: its brief, state and the stages it is running |
+| `<work>/NN_stage/` | what the stage wrote |
 
 ## Works

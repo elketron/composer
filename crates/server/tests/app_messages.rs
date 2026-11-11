@@ -48,7 +48,7 @@ async fn an_app_messages_only_the_session_it_was_opened_from() {
     write(&sites.join("cal/ui/dist/index.html"), "<p>cal</p>");
     write(
         &sites.join("cal/ui/dist/assets/a.js"),
-        "d=\"composer-sdk:2\"",
+        "d=\"composer-sdk:3\"",
     );
     let a = server.sessions.create("default", None).unwrap();
     let b = server.sessions.create("default", None).unwrap();
@@ -72,12 +72,12 @@ async fn an_app_messages_only_the_session_it_was_opened_from() {
     let (status, body) = open(Some(a.id())).await;
     assert_eq!(status, 200, "{body}");
     let from_a = token(&body);
-    let to = |session: &str| format!("/h/cal/api/sessions/{session}/messages");
+    let to = |token: &str, session: &str| format!("/a/{token}/api/sessions/{session}/messages");
     let (status, body) = call(
         addr,
         Method::POST,
-        &to(a.id()),
-        &from_a,
+        &to(&from_a, a.id()),
+        "",
         Some(message.clone()),
     )
     .await;
@@ -85,8 +85,8 @@ async fn an_app_messages_only_the_session_it_was_opened_from() {
     let (status, body) = call(
         addr,
         Method::POST,
-        &to(b.id()),
-        &from_a,
+        &to(&from_a, b.id()),
+        "",
         Some(message.clone()),
     )
     .await;
@@ -99,7 +99,7 @@ async fn an_app_messages_only_the_session_it_was_opened_from() {
     // Opened outside a chat: it messages none.
     let (_, body) = open(None).await;
     let nowhere = token(&body);
-    let (status, body) = call(addr, Method::POST, &to(a.id()), &nowhere, Some(message)).await;
+    let (status, body) = call(addr, Method::POST, &to(&nowhere, a.id()), "", Some(message)).await;
     assert_eq!(status, 403, "{body}");
     assert!(body.contains("outside a chat"), "{body}");
 

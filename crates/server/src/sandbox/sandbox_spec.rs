@@ -29,6 +29,8 @@ pub struct SandboxSpec {
     protected: Vec<PathBuf>,
     sites: PathBuf,
     worktrees: PathBuf,
+    /// Where `.mcpb` bundles are unpacked (`state/mcps`): a server may work there.
+    mcps: PathBuf,
     workspace_root: PathBuf,
     /// Other workspaces' projects: hidden wherever a bind would show them.
     foreign: Vec<PathBuf>,
@@ -55,6 +57,7 @@ impl SandboxSpec {
             composer_home: canonical(workspace.home_root()),
             sites: canonical(&workspace.sites()),
             worktrees: canonical(&workspace.worktrees()),
+            mcps: canonical(workspace.home_root()).join("state").join("mcps"),
             workspace_root: workspace.root().to_path_buf(),
             foreign: foreign.iter().map(|p| canonical(p)).collect(),
             ro: Vec::new(),
@@ -204,11 +207,13 @@ impl SandboxSpec {
     }
 
     /// `path` when it may be bound: not into or around composer's state, the library, another
-    /// workspace or this one's config (its sites and worktrees are fine), not into another
+    /// workspace or this one's config (its sites and worktrees, and the unpacked MCP bundles, are fine), not into another
     /// workspace's project.
     fn allowed(&self, path: &Path) -> Result<PathBuf, String> {
         let real = canonical(path);
-        let own = real.starts_with(&self.sites) || real.starts_with(&self.worktrees);
+        let own = real.starts_with(&self.sites)
+            || real.starts_with(&self.worktrees)
+            || real.starts_with(&self.mcps);
         let refuse = |why: &str| Err(format!("the sandbox can't show {}: {why}", path.display()));
         if !own && self.protected.iter().any(|p| real.starts_with(p)) {
             return refuse(
@@ -288,14 +293,19 @@ pub(crate) fn canonical(path: &Path) -> PathBuf {
     std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
-/// The parts of `workspace`'s home no bind may reach.
+/// The parts of `workspace`'s home no bind may reach: state and config, the installed MCP bundles
+/// (`mcps/`: what is there runs as an MCP server), the library and the other workspaces.
 fn protected(workspace: &WorkspaceHome) -> Vec<PathBuf> {
     let root = canonical(workspace.root());
-    let mut parts = vec![root.join("state"), root.join("config.toml")];
+    let home = canonical(workspace.home_root());
+    let mut parts = vec![
+        root.join("state"),
+        root.join("config.toml"),
+        home.join("mcps"),
+    ];
     if workspace.is_standalone() {
         return parts;
     }
-    let home = canonical(workspace.home_root());
     parts.extend([home.join("state"), home.join("sites")]);
     let others = std::fs::read_dir(home.join("workspaces"))
         .into_iter()

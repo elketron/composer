@@ -2,8 +2,8 @@
 
 import 'package:composer_protocol/composer_protocol.dart';
 
-/// The phone layout's tabs.
-enum PhoneTab { chats, projects, pages, server }
+/// The phone layout's tabs (the bottom bar, in this order).
+enum PhoneTab { inbox, workflows, pages, server }
 
 /// What the reader screen shows: the page, or the micro app opened over it.
 enum ReaderTab { page, app }

@@ -8,6 +8,7 @@ import 'chat_items.dart';
 import 'chat_rows.dart';
 import 'chat_state.dart';
 import 'effects.dart';
+import 'live_view_size.dart';
 import 'page_state.dart';
 import 'site_url.dart';
 import 'server_entry.dart';
@@ -16,7 +17,7 @@ import 'types.dart';
 
 /// The app's reducer: pure, so it is tested without IO.
 (AppState, List<AppEffect>) reduce(AppState s, AppAction action) => switch (action) {
-      AppStarted() => (s, const [LoadServers()]),
+      AppStarted() => (s, const [LoadServers(), LoadPreferences()]),
       ForegroundChanged(foreground: true) => (
           s.copyWith(foreground: true),
           [for (final server in s.servers) if (s.statusOf(server.url).link == LinkState.offline) Reconnect(server.url)],
@@ -66,7 +67,13 @@ import 'types.dart';
       DeskTabFocused(:final url, :final tab) =>
         _deskCommand(s, url, (session) => ClientCommandDeskFocus(session: session, tab: tab)),
       SelectionCleared(:final url) => _selectionCleared(s, url),
-      NewSessionRequested(:final url, :final agent, :final project) => (s, [CreateSession(url, agent, project: project)]),
+      NewSessionRequested(:final url, :final agent, :final project, :final site) =>
+        (s, [CreateSession(url, agent, project: project, site: site)]),
+      SiteChosen(:final url, :final site, :final session) => _siteChosen(s, url, site, session),
+      PreferencesLoaded(:final liveViewSize) => (s.copyWith(liveViewSize: liveViewSize), const []),
+      LiveViewResized(:final size) => _liveViewSized(s, size),
+      LiveViewFrameSized(:final frame) => (frame == s.liveFrame ? s : s.copyWith(liveFrame: frame), const []),
+      LiveViewStepped() => _liveViewSized(s, s.liveViewSize.next),
       MessageSubmitted(:final url, :final text) => _submit(s, url, text),
       FilesPicked(:final url, :final files) => _picked(s, url, files),
       UploadProgressed(:final url, :final id, :final progress) => (
@@ -231,6 +238,16 @@ import 'types.dart';
       SitesLoaded(:final url, :final sites) => (_updateStatus(s, url, (x) => x.copyWith(sites: sites)), const []),
       NoticeShown(:final text) => (s.copyWith(notice: Notice((s.notice?.id ?? 0) + 1, text)), const []),
     };
+
+/// `site.set` for the session (default: the open chat's); the reply's sentence comes back as a notice.
+(AppState, List<AppEffect>) _siteChosen(AppState s, String url, String? site, String? session) {
+  final target = session ?? s.status[url]?.chat?.session;
+  if (target == null) return (s, const []);
+  return (s, [SendCommand(url, ClientCommandSiteSet(session: target, site: site))]);
+}
+
+(AppState, List<AppEffect>) _liveViewSized(AppState s, LiveViewSize size) =>
+    size == s.liveViewSize ? (s, const []) : (s.copyWith(liveViewSize: size), [SaveLiveViewSize(size)]);
 
 /// Pairing again with a known server replaces its token.
 (AppState, List<AppEffect>) _paired(AppState s, ServerEntry server, ServerInfo info) {

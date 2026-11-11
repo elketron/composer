@@ -6,7 +6,7 @@ import { defineConfig } from 'vite';
 const sdk = fileURLToPath(new URL('../../../templates/sdk', import.meta.url));
 
 export default defineConfig({
-  // Served by the composer server at /__PIPELINE__/.
+  // Served by the composer server at <workspace>/a/<app token>/: keep URLs relative.
   base: './',
   plugins: [svelte()],
   resolve: {

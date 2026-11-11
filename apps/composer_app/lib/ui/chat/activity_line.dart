@@ -31,7 +31,7 @@ class ActivityLine extends StatelessWidget {
         height: 7,
         decoration: BoxDecoration(
           color: t.warn,
-          shape: BoxShape.circle,
+          borderRadius: BorderRadius.circular(t.radiusDot),
           boxShadow: [BoxShadow(color: t.warn.withValues(alpha: 0.18), spreadRadius: 3)],
         ),
       ),

@@ -1,4 +1,6 @@
-//! Serving built micro apps (`<site>/ui/dist` at `/<site>/`) and raw site files.
+//! Serving built micro apps (`<site>/ui/dist`) and raw site files. At `<base>/<site>/` only
+//! client apps are served (approved builds only); every other app is served sandboxed under its
+//! own token (`app_api.rs`).
 
 use std::sync::Arc;
 
@@ -24,7 +26,7 @@ pub async fn app_redirect(Path(site): Path<String>, uri: Uri) -> Redirect {
 pub async fn app_index(State(server): State<Arc<Server>>, Path(site): Path<String>) -> Response {
     match client_only(&server, &site) {
         Some(refused) => refused,
-        None => serve_app(&server, &site, ""),
+        None => serve_client(&server, &site, ""),
     }
 }
 
@@ -34,22 +36,84 @@ pub async fn app_file(
 ) -> Response {
     match client_only(&server, &site) {
         Some(refused) => refused,
-        None => serve_app(&server, &site, &path),
+        None => serve_client(&server, &site, &path),
     }
 }
 
-/// `<base>/<site>/` (the workspace's token) serves client apps only (ticket 0168); any other app
-/// is opened with a token of its own: the refusal says how.
-fn client_only(server: &Server, site: &str) -> Option<Response> {
-    crate::apps::site_manifest(server, site).ok().flatten()?;
-    if crate::apps::is_client(server, site) {
-        return None;
+/// A client app's file (`<base>/<site>/`, unsandboxed, with the workspace's credentials): only
+/// the build the user approved ([`crate::apps::ClientApprovals`]). The bytes checked are the
+/// bytes sent; its page also checks the whole build, so a changed one says so there.
+fn serve_client(server: &Server, site: &str, path: &str) -> Response {
+    let Ok(url) = SiteUrl::new(site, path) else {
+        return StatusCode::BAD_REQUEST.into_response();
+    };
+    let dist = server.web.root().join(url.site()).join("ui").join("dist");
+    if !dist.join("index.html").is_file() {
+        // Not built (or no app): what `serve_app` says about it.
+        return serve_app(server, site, path);
     }
+    let file = pick(&dist, url.path());
+    if let Err(e) = server.web.check(&file) {
+        return ApiError::from(e).into_response();
+    }
+    let Ok(bytes) = std::fs::read(&file) else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    let relative = file
+        .strip_prefix(&dist)
+        .map(crate::apps::relative_path)
+        .unwrap_or_default();
+    let page = file.extension().is_some_and(|x| x == "html");
+    let approved = server.client_apps.allows_file(site, &relative, &bytes)
+        && (!page || server.client_apps.allows(site, &dist));
+    if !approved {
+        return unapproved(server, site);
+    }
+    send_bytes(&file, bytes)
+}
+
+/// The page a client app shows when its build isn't the one the user approved.
+fn unapproved(server: &Server, site: &str) -> Response {
+    let workspace = server.home.name().as_str();
+    let flag = match workspace {
+        "default" => String::new(),
+        name => format!(" --workspace {name}"),
+    };
     let message = format!(
-        "site://{site}'s app opens with a token of its own: <code>POST /api/apps/{site}/open</code> \
-         (Home) or <code>POST /api/projects/&lt;project&gt;/apps/{site}/open</code>, then load the \
-         URL it gives (the TUI's <code>a</code> does this)."
+        "site://{site} is a client app: it runs with this workspace's full access, so it is served \
+         only as you approved it, and its build (<code>{site}/ui/dist</code>) is new or changed \
+         since. Look at what changed (an agent can write it), then approve it as it is now: \
+         <code>composer app approve {site}{flag}</code>, and reload."
     );
+    (
+        StatusCode::FORBIDDEN,
+        Html(format!(
+            "<!doctype html><meta charset=utf-8><body style=\"background:#0c0d0f;color:#868c96;font:14px monospace;padding:40px\">{message}</body>"
+        )),
+    )
+        .into_response()
+}
+
+/// `<base>/<site>/` (the workspace's token) serves client apps only (ticket 0168); any other app
+/// is opened with a token of its own: the refusal says how. It fails closed: a site whose
+/// manifest cannot be read (a broken `app:` block, no such site) is refused too, never served
+/// under the workspace's credentials. `None` (go on to [`serve_app`]) only for a client app with
+/// a manifest that parses, and for a site that is no app at all, where there is nothing to serve
+/// and `serve_app` says so.
+fn client_only(server: &Server, site: &str) -> Option<Response> {
+    let message = match crate::apps::site_manifest(server, site) {
+        Ok(None) if !has_ui(server, site) => return None,
+        Ok(Some(_)) if crate::apps::is_client(server, site) => return None,
+        Ok(_) => format!(
+            "site://{site}'s app opens with a token of its own: <code>POST /api/apps/{site}/open</code> \
+             (Home) or <code>POST /api/projects/&lt;project&gt;/apps/{site}/open</code>, then load the \
+             URL it gives (the TUI's <code>a</code> does this)."
+        ),
+        Err(why) => format!(
+            "site://{site}'s app is not served: {}",
+            why.replace('&', "&amp;").replace('<', "&lt;")
+        ),
+    };
     Some(
         (
             StatusCode::NOT_FOUND,
@@ -59,6 +123,20 @@ fn client_only(server: &Server, site: &str) -> Option<Response> {
         )
             .into_response(),
     )
+}
+
+/// Whether anything exists at `site`'s `ui` (a folder, or whatever else is there): asked of the
+/// file system itself, so "no app" never rests on the manifest alone.
+fn has_ui(server: &Server, site: &str) -> bool {
+    SiteUrl::new(site, "").is_ok_and(|url| {
+        server
+            .web
+            .root()
+            .join(url.site())
+            .join("ui")
+            .symlink_metadata()
+            .is_ok()
+    })
 }
 
 /// `GET /api/files/<site>/<path>`: any file of a site, with its content type.
@@ -72,7 +150,16 @@ pub async fn get_file(
     server.web.check(&file)?;
     let bytes = std::fs::read(&file)
         .map_err(|_| ApiError(StatusCode::NOT_FOUND, format!("{url} not found")))?;
-    Ok(([(header::CONTENT_TYPE, content_type(url.path()))], bytes).into_response())
+    // A site's files are agent-writable: an HTML one opened as a page runs sandboxed, never with
+    // the workspace's cookie.
+    Ok((
+        [
+            (header::CONTENT_TYPE, content_type(url.path())),
+            (header::CONTENT_SECURITY_POLICY, crate::api::SANDBOX),
+        ],
+        bytes,
+    )
+        .into_response())
 }
 
 /// `PUT /api/files/<site>/<path>`: writes the request body as the file.
@@ -166,24 +253,26 @@ fn pick(dist: &std::path::Path, requested: &str) -> std::path::PathBuf {
 
 fn send_file(file: &std::path::Path) -> Response {
     match std::fs::read(file) {
-        Ok(bytes) => {
-            let name = file.to_string_lossy();
-            let cache = if name.ends_with("index.html") {
-                "no-cache"
-            } else {
-                "max-age=31536000, immutable"
-            };
-            (
-                [
-                    (header::CONTENT_TYPE, content_type(&name)),
-                    (header::CACHE_CONTROL, cache),
-                ],
-                bytes,
-            )
-                .into_response()
-        }
+        Ok(bytes) => send_bytes(file, bytes),
         Err(_) => StatusCode::NOT_FOUND.into_response(),
     }
+}
+
+fn send_bytes(file: &std::path::Path, bytes: Vec<u8>) -> Response {
+    let name = file.to_string_lossy();
+    let cache = if name.ends_with("index.html") {
+        "no-cache"
+    } else {
+        "max-age=31536000, immutable"
+    };
+    (
+        [
+            (header::CONTENT_TYPE, content_type(&name)),
+            (header::CACHE_CONTROL, cache),
+        ],
+        bytes,
+    )
+        .into_response()
 }
 
 fn content_type(path: &str) -> &'static str {

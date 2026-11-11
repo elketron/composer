@@ -1,24 +1,36 @@
 import 'package:composer_protocol/composer_protocol.dart';
 import 'package:flutter/material.dart';
 
-import '../../state/desk_view.dart';
+import '../../state/actions.dart';
+import '../../state/chat_rows.dart';
+import '../../state/workflows.dart';
 import '../../state/workspace.dart';
-import '../../theme/composer_theme.dart';
 import '../../theme/tokens.dart' as t;
 import '../home/activity_dot.dart';
-import '../pages/page_navigation.dart';
 import '../store_scope.dart';
 import '../workspace_mark.dart';
 import 'chat_menu.dart';
 import 'chat_view.dart';
-import 'desk_sheet.dart';
+import 'live_view_section.dart';
+import 'stop_button.dart';
+import 'workflow_row.dart';
 
-/// A chat as its own page (phones): agent, state and project on top; ⋮ for the project,
-/// compacting and stopping.
+/// A chat as its own page (phones): the session's title and state with stop on top, the workflow
+/// row, the live view of its application (when it has one), then the chat and the message bar.
+/// The overflow menu holds the desk, pages, project, model and the rest.
 class ChatPage extends StatelessWidget {
-  const ChatPage({super.key, required this.url});
+  static const _workflowRow = 52.0;
+  static const _handle = 44.0;
+
+  /// What the chat and the message bar keep below the live view.
+  static const _chatMinimum = 220.0;
+
+  const ChatPage({super.key, required this.url, this.liveViewBuilder});
 
   final String url;
+
+  /// What shows in the live view's box; the webview unless a test puts something else.
+  final LiveViewBuilder? liveViewBuilder;
 
   @override
   Widget build(BuildContext context) {
@@ -27,69 +39,64 @@ class ChatPage extends StatelessWidget {
     final chat = status.chat;
     final session = chat == null ? null : status.session(chat.session);
     final activity = session == null ? 'idle' : status.activity(session);
-    final project = session?.project?.split('/').last;
+    final running = session != null && (session.state != TurnState.idle);
     final workspace = Workspace.of(url, info: status.info, entry: store.state.serverFor(url));
-    final unseen = DeskView(chat?.desk ?? const Desk()).unseen;
+    final token = store.state.serverFor(url)?.token;
+    final viewer = viewerPath(status.info);
+    final app = status.liveViewOf(session);
     return Scaffold(
       appBar: AppBar(
+        toolbarHeight: 56,
         titleSpacing: 0,
+        leadingWidth: 48,
         title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            WorkspaceMark(
-              key: const Key('active-workspace'),
-              workspace: workspace,
-              dotSize: 8,
-              style: mono(size: 13, color: t.text, weight: FontWeight.w600),
-            ),
-            const SizedBox(width: 6),
-            Text('·', style: const TextStyle(fontSize: 13, color: t.faint)),
-            const SizedBox(width: 6),
-            Flexible(
-              child: Text(
-                session?.agent ?? 'new chat',
-                overflow: TextOverflow.ellipsis,
-                style: mono(size: 13, color: t.text, weight: FontWeight.w600),
-              ),
-            ),
-          ]),
+          Text(
+            session?.agent ?? 'new chat',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+          ),
           if (chat != null)
             Row(children: [
-              ActivityDot(activity, size: 6),
+              ActivityDot(activity),
               const SizedBox(width: 6),
               Flexible(
                 child: Text(
-                  [activity == 'approval' ? 'needs approval' : activity, project ?? 'no project', '#${chat.session}'].join(' · '),
+                  '${stateLine(activity, stepsSinceLastMessage(chat.items))} · #${chat.session}',
+                  key: const Key('session-state'),
+                  maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 11.5, color: t.muted),
+                  style: const TextStyle(fontSize: 11, color: t.muted),
                 ),
               ),
             ]),
         ]),
         actions: [
-          IconButton(
-            key: const Key('desk'),
-            tooltip: 'Desk',
-            onPressed: () => showDesk(context, url),
-            icon: Badge(
-              isLabelVisible: unseen > 0,
-              backgroundColor: t.accent,
-              textColor: t.bg,
-              label: Text('$unseen', style: mono(size: 9, color: t.bg)),
-              child: const Icon(Icons.dashboard_outlined, size: 20, color: t.muted),
-            ),
-          ),
-          IconButton(
-            tooltip: 'Pages',
-            onPressed: () => openPage(context, url, status.page.page?.url ?? 'site://home'),
-            icon: const Icon(Icons.description_outlined, size: 20, color: t.muted),
-          ),
+          if (running) StopButton(key: const Key('stop'), onPressed: () => store.dispatch(CancelRequested(url))),
           ChatMenu(url: url, session: session),
+          const SizedBox(width: 2),
         ],
         bottom: PreferredSize(preferredSize: const Size.fromHeight(2), child: WorkspaceStrip(workspace: workspace)),
       ),
       body: chat == null
           ? const Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)))
-          : ChatView(url: url, status: status, chat: chat),
+          : LayoutBuilder(
+              builder: (context, box) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                WorkflowRow(url: url, status: status, session: session),
+                if (app != null && viewer != null && token != null)
+                  // The chat keeps room for the message bar and a few lines, keyboard or not.
+                  LiveViewSection(
+                    key: ValueKey('live-view-section-${chat.session}'),
+                    url: url,
+                    app: app,
+                    viewer: viewer,
+                    token: token,
+                    maxHeight: box.maxHeight - _workflowRow - _handle - _chatMinimum,
+                    viewBuilder: liveViewBuilder ?? LiveViewSection.webview,
+                  ),
+                Expanded(child: ChatView(url: url, status: status, chat: chat, stopInHeader: true)),
+              ]),
+            ),
     );
   }
 }

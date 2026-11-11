@@ -109,7 +109,9 @@ pub fn new_pipeline(
             .map_err(|e| format!("copying the board app: {e}"))?;
         std::fs::write(
             dir.join("justfile"),
-            format!("# Build the board app (ui/dist), served at /{name}/.\nui-build:\n    cd ui && bun install && bun run build\n"),
+            format!(
+                "# Build the board app (ui/dist), served at /{name}/.\nui-build:\n    cd ui && bun install && bun run build\n\n# Run one shell command in the active project (the agent's escape hatch).\nsh cmd:\n    @cd \"$COMPOSER_PROJECT\" && sh -c {{{{quote(cmd)}}}}\n"
+            ),
         )
         .map_err(|e| format!("writing the justfile: {e}"))?;
     }
@@ -157,8 +159,8 @@ pub struct NewWork<'a> {
     pub brief: Option<&'a str>,
 }
 
-/// Makes the work's folder: its `index.md` (project, brief, stages) and a folder per stage with
-/// its `_stage.md` (`status: waiting`). Lists it under the pipeline's Works.
+/// Makes the work's folder: its `index.md` (project, brief, state and stages). Lists it under the
+/// pipeline's Works. Stage folders are made when a stage writes.
 pub fn new_work(server: &Server, new: NewWork, by: ChangedBy) -> Result<Work, String> {
     let pipeline = pipeline(server, new.pipeline)?;
     let name = new.name.trim();
@@ -201,15 +203,25 @@ pub fn new_work(server: &Server, new: NewWork, by: ChangedBy) -> Result<Work, St
     if let Some(project) = &project {
         fm.push_str(&format!("project: {project}\n"));
     }
+    let first = pipeline.stages.first().map(|s| s.name.clone());
+    if let Some(first) = &first {
+        fm.push_str(&format!(
+            "stage: {first}\nstatus: waiting\ndone: []\nattempts: {{}}\n"
+        ));
+    }
     fm.push_str(&format!("created: {today}\n---\n"));
-    // Each stage's state is in its `_stage.md`, not here.
-    let mut stages = String::from("| stage | gate |\n|-------|------|\n");
+    let mut stages = String::from("| stage | needs | gate |\n|-------|-------|------|\n");
     for s in &pipeline.stages {
         stages.push_str(&format!(
-            "| [{} {}]({}/_stage.md) | {} |\n",
+            "| [{} {}](../stages/{}.md) | {} | {} |\n",
             s.number(),
             s.title,
             s.name,
+            if s.needs.is_empty() {
+                "—".to_string()
+            } else {
+                s.needs.join(", ")
+            },
             if s.gate { "yes" } else { "no" }
         ));
     }
@@ -219,29 +231,6 @@ pub fn new_work(server: &Server, new: NewWork, by: ChangedBy) -> Result<Work, St
     server
         .write_page(&url("index.md")?, &index, by)
         .map_err(|e| e.to_string())?;
-    for s in &pipeline.stages {
-        let mut text = format!(
-            "---\ntitle: {}\ntype: stage-run\nstage: {}\nstatus: waiting\n",
-            serde_json::to_string(&format!("{} {}", s.number(), s.title))
-                .expect("a string serializes"),
-            s.name
-        );
-        if let Some(harness) = &s.harness {
-            text.push_str(&format!("harness: {harness}\n"));
-        }
-        if let Some(model) = &s.model {
-            text.push_str(&format!("model: {model}\n"));
-        }
-        text.push_str(&format!(
-            "---\n# {} · {}\n\nWhat [the stage](../../stages/{}.md) wrote goes in this folder.\n",
-            s.number(),
-            s.title,
-            s.name
-        ));
-        server
-            .write_page(&url(&format!("{}/_stage.md", s.name))?, &text, by)
-            .map_err(|e| e.to_string())?;
-    }
 
     // The pipeline's list of works, when it keeps one.
     let index_url = SiteUrl::new(&site, "").expect("valid");
@@ -254,7 +243,13 @@ pub fn new_work(server: &Server, new: NewWork, by: ChangedBy) -> Result<Work, St
             let _ = server.write_page(&index_url, &text, by);
         }
     }
-    Work::load(pipeline, name).ok_or_else(|| format!("site://{site}/{name}/ was not written"))
+    let work = Work::load(pipeline, name)
+        .ok_or_else(|| format!("site://{site}/{name}/ was not written"))?;
+    if let Some(project) = work.project_root(server) {
+        let mode = work.project_mode(None);
+        work.project_mount(server, &project.root, mode);
+    }
+    Ok(work)
 }
 
 /// The work a `type: work` page is the index of, if it is in a pipeline; its summary.

@@ -20,6 +20,9 @@ pub enum DeskTab {
     Terminal { id: String },
     /// A project's changes (its ticket branches, its diff).
     Changes { project: String },
+    /// The workspace's live view of its application (wayai's viewer, proxied at `<workspace>/view`).
+    /// It names no site or project; one per desk (id `live`). Wire form: `{"kind":"live_view"}`.
+    LiveView,
 }
 
 /// A tab on a desk.
@@ -27,7 +30,7 @@ pub enum DeskTab {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct DeskEntry {
-    /// `app:cad@game`, `app:calendar`, `page:site://x`, `terminal:<id>`, `changes:<project>`.
+    /// `app:cad@game`, `app:calendar`, `page:site://x`, `terminal:<id>`, `changes:<project>`, `live`.
     pub id: String,
     pub tab: DeskTab,
     /// Opened by the agent and not looked at yet (a badge, for a client not following it).

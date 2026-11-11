@@ -25,6 +25,7 @@ use composer_protocol::{
 };
 use composer_server::actions::{Caller, Justfile};
 use composer_server::agent::AgentDefinition;
+use composer_server::api::Credential;
 use composer_server::reminders::check_reminders;
 use composer_server::tools::ToolContext;
 use composer_server::{Home, Host, Server, WorkspaceName, init_home, init_workspace};
@@ -175,6 +176,11 @@ async fn side(
         format!("<!doctype html><title>app of {name}</title>"),
     )
     .unwrap();
+    // The user approved the client app's build.
+    server
+        .client_apps
+        .approve(&site, &web.join(&site).join("ui/dist"))
+        .unwrap();
     std::fs::write(
         web.join(&site).join("data.json"),
         format!("{{\"of\":\"{name}\"}}"),
@@ -246,6 +252,7 @@ async fn side(
             id: worker.clone(),
             agent: "worker".into(),
             project: Some(project.clone()),
+            site: None,
             ticket: Some(ticket.into()),
             parent: Some(session.id().to_string()),
             worker: Some(WorkerState::Paused),
@@ -694,6 +701,7 @@ async fn tool(a: &Side, name: &str, args: Value) -> (String, bool) {
         server: a.server.clone(),
         session: a.server.sessions.get(&a.session).unwrap(),
         agent: Arc::new(AgentDefinition::load(&a.server.web, "all").unwrap()),
+        site: None,
         cancel: CancellationToken::new(),
     };
     let result = a.server.tools.call_value(&context, name, args).await;
@@ -908,6 +916,7 @@ async fn a_session_left_in_the_other_workspaces_project_opens_none_of_it() {
         server: f.a.server.clone(),
         session: stale,
         agent: Arc::new(AgentDefinition::load(&f.a.server.web, "all").unwrap()),
+        site: None,
         cancel: CancellationToken::new(),
     };
     let result =
@@ -934,6 +943,7 @@ async fn a_worker_session_id_cannot_climb_into_the_other_workspace() {
         id: climbing,
         agent: "worker".into(),
         project: None,
+        site: None,
         ticket: None,
         parent: None,
         worker: None,
@@ -990,7 +1000,7 @@ async fn an_app_token_opens_none_of_the_workspace_routes() {
     std::fs::create_dir_all(web.join("board-a/ui/dist/assets")).unwrap();
     std::fs::write(
         web.join("board-a/ui/dist/assets/a.js"),
-        "d=\"composer-sdk:2\"",
+        "d=\"composer-sdk:3\"",
     )
     .unwrap();
     let (status, body) = http(
@@ -1015,9 +1025,21 @@ async fn an_app_token_opens_none_of_the_workspace_routes() {
     }
     let ws = format!("ws://{}/w/default/ws?token={app}", f.addr);
     assert!(tokio_tungstenite::connect_async(&ws).await.is_err());
-    // Its own path works.
-    let (status, _) = http(f.addr, "GET", "/w/default/h/board-a/", &app, None).await;
+    // Its own path works; the workspace's token, its cookie or a session don't open it.
+    let (status, _) = http(f.addr, "GET", &format!("/w/default/a/{app}/"), "", None).await;
     assert_eq!(status, 200);
+    let session = f.a.server.web_sessions.mint(Credential::Local);
+    for (path, token) in [
+        (format!("/w/default/a/{}/", f.a.server.token), ""),
+        (format!("/w/default/a/{session}/"), ""),
+        (
+            "/w/default/a/app_forged/".to_string(),
+            f.a.server.token.as_str(),
+        ),
+    ] {
+        let (status, _) = http(f.addr, "GET", &path, token, None).await;
+        assert_eq!(status, 404, "{path}");
+    }
 }
 
 /// Workspace A can't open an app on B's project, list its apps or open it, by name or folder.
