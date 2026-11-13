@@ -176,7 +176,7 @@ wrap_display_handler! {
         fn on_cursor_change(
             &self,
             _browser: Option<&mut Browser>,
-            _cursor: ::std::os::raw::c_ulong,
+            _cursor: CursorHandle,
             type_: CursorType,
             _custom: Option<&CursorInfo>,
         ) -> ::std::os::raw::c_int {
