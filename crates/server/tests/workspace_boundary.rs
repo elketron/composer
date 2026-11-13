@@ -119,7 +119,7 @@ fn project_and_ticket(server: &Server, project: &Path, ticket: &str) {
         .write_page(
             &url,
             &format!(
-                "---\ntitle: Ticket {ticket}\ntype: ticket\nid: \"{ticket}\"\nstatus: done\nagent: worker\nproject: {}\n---\n# Ticket {ticket}\n",
+                "---\ntitle: Ticket {ticket}\ntype: ticket\nid: \"{ticket}\"\nstatus: done\nagent: default\nproject: {}\n---\n# Ticket {ticket}\n",
                 project.display()
             ),
             ChangedBy::External,

@@ -27,7 +27,7 @@ struct Fixture {
     b: WorkspaceHome,
 }
 
-/// Workspaces `default` (a) and `b`; a has a pipeline site `cad` with a ui, a stage, a `library:`
+/// Workspaces `default` (a) and `b`; a has a site `cad` with a ui, a `library:`
 /// extra, and content: a work, tickets, a tmp folder, node_modules.
 async fn fixture() -> Fixture {
     let dir = tempfile::tempdir().unwrap();
@@ -44,12 +44,11 @@ async fn fixture() -> Fixture {
     };
     write(
         "index.md",
-        "---\ntitle: CAD\ntype: pipeline\nlibrary: [tools/]\n---\n# CAD\n",
+        "---\ntitle: CAD\ntype: index\nlibrary: [tools/]\n---\n# CAD\n",
     );
     write("justfile", "build:\n    @echo built\n");
     write("ui/src/main.ts", "console.log('cad')\n");
     write("ui/node_modules/dep/index.js", "x");
-    write("stages/01_plan.md", "# Plan\n");
     write("tools/slice.py", "print('slice')\n");
     write(
         "moonlander/index.md",
@@ -94,13 +93,7 @@ async fn only_the_definition_is_published_and_others_can_install_it() {
     let files: Vec<String> = plan.files.iter().map(|p| p.display().to_string()).collect();
     assert_eq!(
         files,
-        [
-            "index.md",
-            "justfile",
-            "stages/01_plan.md",
-            "tools/slice.py",
-            "ui/src/main.ts"
-        ]
+        ["index.md", "justfile", "tools/slice.py", "ui/src/main.ts"]
     );
     let left_out: Vec<String> = plan
         .left_out
@@ -127,25 +120,25 @@ async fn only_the_definition_is_published_and_others_can_install_it() {
     b.install(&site("cad"), None, &b.approvals().unwrap())
         .await
         .unwrap();
-    assert!(f.b.sites().join("cad/stages/01_plan.md").is_file());
+    assert!(f.b.sites().join("cad/tools/slice.py").is_file());
     assert!(!f.b.sites().join("cad/moonlander").exists());
 
     // A change published from a reaches b on update.
-    edit(&f.a, "cad/stages/01_plan.md", "# Plan v2\n");
+    edit(&f.a, "cad/tools/slice.py", "print('slice v2')\n");
     let plan = library_of(&f.a).plan_publish(&site("cad"), None).unwrap();
     assert_eq!(
         plan.changes,
         [(
-            std::path::PathBuf::from("stages/01_plan.md"),
+            std::path::PathBuf::from("tools/slice.py"),
             composer_server::library::PublishChange::Changed
         )]
     );
-    assert!(plan.diff.contains("+# Plan v2"), "{}", plan.diff);
+    assert!(plan.diff.contains("+print('slice v2')"), "{}", plan.diff);
     publish(&f.a, "cad", None).unwrap();
     b.update(false, &b.approvals().unwrap()).await.unwrap();
     assert_eq!(
-        std::fs::read_to_string(f.b.sites().join("cad/stages/01_plan.md")).unwrap(),
-        "# Plan v2\n"
+        std::fs::read_to_string(f.b.sites().join("cad/tools/slice.py")).unwrap(),
+        "print('slice v2')\n"
     );
     // Nothing left to publish.
     let error = publish(&f.a, "cad", None).unwrap_err();
@@ -163,7 +156,7 @@ async fn never_over_a_library_copy_this_workspace_has_not_seen() {
     // b publishes a change; a, behind, may not publish over it.
     edit(&f.b, "cad/justfile", "build:\n    @echo b's build\n");
     publish(&f.b, "cad", None).unwrap();
-    edit(&f.a, "cad/stages/01_plan.md", "# a's plan\n");
+    edit(&f.a, "cad/tools/slice.py", "print('a slice')\n");
     let error = publish(&f.a, "cad", None).unwrap_err();
     assert!(error.contains("composer library update"), "{error}");
     // After updating, a may.
@@ -272,7 +265,7 @@ async fn an_agent_can_only_ask_and_the_user_decides_each_time() {
         }
     }
     // `always` was one yes: the next publish asks again.
-    edit(&f.a, "cad/stages/01_plan.md", "# Plan v3\n");
+    edit(&f.a, "cad/tools/slice.py", "print('slice v3')\n");
     let call = {
         let context = context.clone();
         tokio::spawn(async move {

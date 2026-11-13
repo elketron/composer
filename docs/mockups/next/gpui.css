@@ -1,0 +1,196 @@
+/* composer next — the desktop shell as it actually is: gpui.
+   Values from apps/desktop/src/shell.rs (BG, LINE, TEXT, MUTED, ACTIVE_BG, ACCENT),
+   the picker (overlay, border, selected) and term_pane.rs (14px / 18px JetBrains Mono).
+   This is deliberately not the web SDK chrome: flat fills, one-pixel rules, amber focus. */
+
+:root {
+  --g-bg:      #0c0c0f;
+  --g-line:    #25252e;
+  --g-text:    #d7d7dd;
+  --g-muted:   #85858f;
+  --g-active:  #1c1c24;
+  --g-accent:  #e0a040;
+  --g-tui:     #8fb3e8;   /* the TUI painted inside the terminal pane */
+  --g-surface: #15151b;   /* an agent turn, a step up from the terminal bg */
+  --g-warn:    #d6b06a;
+  --g-you:     #1a1712;   /* a terminal band tinted toward the amber focus, not the web blue */
+  --g-overlay: #15151b;
+  --g-border-strong: #3a3a48;
+  --g-input:   #2a2a36;
+  --g-bright:  #e8e8ee;
+  --g-font:    'JetBrainsMono Nerd Font Mono', 'JetBrains Mono', ui-monospace, monospace;
+  --g-radius:  6px;       /* gpui's rounded_md */
+  --g-ws:      #7fb2d8;   /* the workspace stripe; configurable in the real shell */
+  --g-shadow:  #00000099;
+}
+
+/* ---------- the window ---------- */
+.gwin {
+  position: relative;
+  width: 1360px; height: 840px; display: flex; flex-direction: column;
+  background: var(--g-bg); color: var(--g-text);
+  font: 12.5px/1.45 var(--g-font); overflow: hidden;
+  border: 1px solid var(--g-border-strong);
+}
+.gstripe { height: 3px; flex: none; background: var(--g-ws); }
+.gtop {
+  height: 36px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 12px;
+  border-bottom: 1px solid var(--g-line); font: 12px var(--g-font);
+}
+.gtop .ws { color: var(--g-ws); font-weight: 700; display: flex; gap: 5px; align-items: center; }
+.gtop .crumb { color: var(--g-muted); }
+.gtop .sess { color: var(--g-text); }
+.gtop .grow { flex: 1; }
+.gtop .muted { color: var(--g-muted); }
+.gtop .follow { color: var(--g-muted); display: inline-flex; gap: 5px; align-items: center; }
+.gtop .follow.on { color: var(--g-accent); }
+.gtop .kbd { color: var(--g-muted); border: 1px solid var(--g-line); border-bottom-width: 2px; border-radius: 3px; padding: 0 4px; font-size: 10px; }
+.gbody { flex: 1; min-height: 0; display: flex; }
+.gchat { width: 480px; flex: none; min-height: 0; display: flex; flex-direction: column; background: var(--g-bg); }
+.gsplit {
+  width: 4px; flex: none; background: var(--g-line); position: relative;
+}
+.gsplit::after {
+  content: ""; position: absolute; left: 1px; top: 50%; width: 2px; height: 44px; margin-top: -22px;
+  background: var(--g-muted); opacity: .35;
+}
+.gstage { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--g-bg); }
+
+/* ---------- the stage ---------- */
+.gtabs {
+  height: 32px; flex: none; display: flex; align-items: stretch; overflow: hidden;
+  border-bottom: 1px solid var(--g-line);
+}
+.gtab {
+  display: flex; align-items: center; gap: 6px; padding: 0 12px;
+  color: var(--g-muted); font: 12px var(--g-font); white-space: nowrap;
+}
+.gtab.on { background: var(--g-active); color: var(--g-text); }
+.gtab .unseen { color: var(--g-accent); font-size: 9px; }
+.gtab .x { color: var(--g-muted); font-size: 12px; margin-left: 2px; }
+.gtab.add { padding: 0 10px; color: var(--g-muted); }
+.gview { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--g-bg); }
+.gviewbar {
+  height: 30px; flex: none; display: flex; align-items: center; gap: 9px; padding: 0 10px;
+  border-bottom: 1px solid var(--g-line); color: var(--g-muted); font: 11px var(--g-font);
+}
+.gviewbar .on { color: var(--g-text); }
+.gviewbar .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--g-accent); display: inline-block; }
+.gviewbar .grow { flex: 1; }
+.gviewport { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+.gcanvas { position: absolute; inset: 0; background: #09090b; overflow: hidden; }
+.gcanvas svg { width: 100%; height: 100%; display: block; }
+.gviewfoot {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 24px; display: flex; align-items: center; gap: 12px;
+  padding: 0 10px; background: var(--g-bg); border-top: 1px solid var(--g-line);
+  color: var(--g-muted); font: 10px var(--g-font);
+}
+.gviewfoot .grow { flex: 1; }
+
+/* ---------- the terminal pane (the real TUI) ---------- */
+.gterm {
+  flex: 1; min-height: 0; display: flex; flex-direction: column;
+  padding: 4px; font: 14px/18px var(--g-font); color: var(--g-text);
+}
+.gterm .tmsgs { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; gap: 6px; padding: 5px; }
+.gtl { white-space: pre-wrap; overflow-wrap: anywhere; min-height: 18px; }
+.gtl.you { background: var(--g-you); box-shadow: inset 2px 0 0 var(--g-tui); padding: 0 6px; }
+.gtl.agent { color: var(--g-text); }
+.gtl.muted { color: var(--g-muted); }
+.gtl.tool { color: var(--g-muted); }
+.gtl.tool b { color: var(--g-tui); font-weight: 400; }
+.gtl.sys { color: var(--g-muted); border: 1px solid var(--g-line); padding: 0 6px; }
+.gtl.sys b { color: var(--g-text); font-weight: 400; }
+.gtl code { color: var(--g-text); }
+.gtl .caret { display: inline-block; width: 7px; height: 15px; background: var(--g-tui); vertical-align: -2px; }
+/* full-width message bands: separation without a rule between turns */
+.gmsg {
+  width: 100%; padding: 6px 9px; border: 1px solid transparent;
+  border-left: 2px solid var(--g-line); background: var(--g-surface); border-radius: 4px;
+}
+.gmsg .meta {
+  display: flex; align-items: baseline; gap: 6px; margin-bottom: 2px;
+  font: 9px var(--g-font); letter-spacing: .06em; text-transform: uppercase; color: var(--g-muted);
+}
+.gmsg .meta b { color: var(--g-text); font-weight: 500; }
+.gmsg .meta time { margin-left: auto; text-transform: none; letter-spacing: 0; }
+.gmsg p { margin: 0; font: 12px/1.5 var(--g-font); color: var(--g-text); }
+.gmsg.you { background: var(--g-you); border-left-color: var(--g-tui); }
+.gmsg.agent { background: var(--g-surface); border-left-color: var(--g-line); }
+.gmsg.sys {
+  background: transparent; border: 1px solid var(--g-line); border-radius: 4px; padding: 5px 8px;
+  color: var(--g-muted); font: 10.5px/1.5 var(--g-font);
+}
+.gmsg.sys b { color: var(--g-text); font-weight: 400; }
+.gmsg.tool { background: var(--g-bg); border: 1px solid var(--g-line); }
+.gmsg.tool .meta b { color: var(--g-tui); }
+.gmsg.tool .meta span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gmsg.thread {
+  background: color-mix(in srgb, var(--g-warn) 7%, transparent); border-radius: 4px;
+  border: 1px solid color-mix(in srgb, var(--g-warn) 45%, transparent);
+  color: var(--g-muted); font: 10px/1.5 var(--g-font);
+}
+.gmsg.thread b { color: var(--g-warn); font-weight: 500; }
+.ginput {
+  flex: none; border-top: 1px solid var(--g-line); padding: 3px 6px 4px;
+  color: var(--g-muted); font: 14px/18px var(--g-font);
+}
+.ginput .q { color: var(--g-tui); }
+.gstatus {
+  height: 20px; flex: none; display: flex; align-items: center; gap: 10px; padding: 0 6px;
+  border-top: 1px solid var(--g-line); color: var(--g-muted); font: 10px var(--g-font);
+  white-space: nowrap; overflow: hidden;
+}
+.gstatus .normal { background: var(--g-tui); color: var(--g-bg); padding: 0 4px; font-weight: 700; }
+.gstatus .grow { flex: 1; }
+.gstatus .wait { color: var(--g-tui); }
+
+/* ---------- the gpui picker / palette ---------- */
+.gpalette {
+  position: absolute; left: 50%; top: 70px; transform: translateX(-50%);
+  width: 660px; background: var(--g-overlay); border: 1px solid var(--g-border-strong);
+  border-radius: var(--g-radius); box-shadow: 0 18px 60px #0000009e; overflow: hidden;
+  font: 12px var(--g-font); color: var(--g-bright);
+}
+.gpalette .search {
+  height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 12px;
+  border-bottom: 1px solid var(--g-input); color: var(--g-muted);
+}
+.gpalette .search .q { color: var(--g-accent); }
+.gpalette .search .in { color: var(--g-bright); }
+.gpalette .search .caret { width: 6px; height: 14px; background: var(--g-accent); display: inline-block; vertical-align: -2px; }
+.gpalette .search .esc { margin-left: auto; border: 1px solid var(--g-input); border-radius: 3px; padding: 0 4px; font-size: 10px; color: var(--g-muted); }
+.gpalette .glabel { padding: 7px 12px 4px; color: var(--g-muted); font: 9px var(--g-font); letter-spacing: .12em; text-transform: uppercase; }
+.gpalette .item {
+  display: flex; align-items: center; gap: 9px; height: 34px; padding: 0 12px;
+  color: var(--g-bright); border-left: 2px solid transparent;
+}
+.gpalette .item.on { background: var(--g-input); border-left-color: var(--g-accent); }
+.gpalette .item .kind { width: 58px; flex: none; color: var(--g-muted); font-size: 10px; }
+.gpalette .item .label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-transform: none; letter-spacing: 0; font-size: 12px; }
+.gpalette .item .label b { color: var(--g-accent); font-weight: 400; }
+.gpalette .item .detail { color: var(--g-muted); font-size: 10px; }
+.gpalette .foot {
+  height: 26px; display: flex; align-items: center; gap: 12px; padding: 0 12px;
+  border-top: 1px solid var(--g-input); color: var(--g-muted); font-size: 9.5px;
+}
+.gpalette .foot .grow { flex: 1; }
+.gpalette .foot kbd { border: 1px solid var(--g-input); border-radius: 3px; padding: 0 4px; font-size: 9px; }
+
+/* stage-side app chrome (the web pane inside gpui) */
+.gappbar {
+  height: 34px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 10px;
+  border-bottom: 1px solid var(--border); color: var(--muted); font: 11px var(--g-font);
+}
+.gappbar b { color: var(--text); font-weight: 500; }
+.gappbar .grow { flex: 1; }
+.gappbar .sep { color: var(--border-strong); }
+.gappbar .chip {
+  border: 1px solid var(--border); border-radius: 2px; padding: 1px 6px; color: var(--muted);
+}
+.gappbar .chip.hot { border-color: var(--warn-soft); color: var(--warn); }
+.gappbar .btn {
+  height: 22px; display: inline-flex; align-items: center; gap: 5px; padding: 0 8px;
+  border: 1px solid var(--border-strong); border-radius: 2px; color: var(--text); background: var(--raised);
+}
+.gappbar .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 600; }

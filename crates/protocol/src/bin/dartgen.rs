@@ -13,10 +13,9 @@ use std::path::{Path, PathBuf};
 
 use composer_protocol::http::{
     ActionSummary, AgentSummary, AppInfo, AppList, AppMessage, AppOpened, ChangedFile, DiffComment,
-    OpenProject, PageExcerpt, PageResponse, PipelineSummary, ProjectDiff, ProjectInfo,
-    ProjectOverview, ProjectSummary, PutPageRequest, PutPageResponse, RunActionRequest,
-    RunActionResponse, SearchHit, ServerInfo, SiteSummary, StageState, StageSummary,
-    TicketBranchSummary, TicketReview, WebSession, WorkSummary,
+    OpenProject, PageExcerpt, PageResponse, ProjectDiff, ProjectInfo, ProjectOverview,
+    ProjectSummary, PutPageRequest, PutPageResponse, RunActionRequest, RunActionResponse,
+    SearchHit, ServerInfo, SiteSummary, TicketBranchSummary, TicketReview, WebSession,
 };
 use composer_protocol::*;
 use serde_json::{Map, Value, json};
@@ -690,55 +689,6 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
             },
         },
         ServerMessage::Ok {
-            id: 54,
-            result: CommandResult::Pipelines {
-                pipelines: vec![PipelineSummary {
-                    site: "coding".into(),
-                    title: "Coding".into(),
-                    about: "Staged changes to a project.".into(),
-                    stages: vec![StageSummary {
-                        name: "03_implement".into(),
-                        title: "Implement".into(),
-                        gate: false,
-                        harness: Some("claude-code".into()),
-                        model: None,
-                        worktree: true,
-                    }],
-                    needs_project: true,
-                    works: 2,
-                }],
-                templates: vec![PipelineSummary {
-                    site: "video".into(),
-                    title: "Video".into(),
-                    about: "Short videos from an idea.".into(),
-                    stages: vec![],
-                    needs_project: false,
-                    works: 0,
-                }],
-                works: vec![],
-            },
-        },
-        ServerMessage::StageEnded {
-            work: "site://video/launch-video/index.md".into(),
-            title: "launch-video".into(),
-            stage: "02_script".into(),
-            status: "review".into(),
-            summary: "Wrote script.md: 6 scenes, 1:52.".into(),
-        },
-        ServerMessage::Ok {
-            id: 55,
-            result: CommandResult::Work {
-                work: WorkSummary {
-                    url: "site://coding/save-system/index.md".into(),
-                    pipeline: "coding".into(),
-                    title: "save-system".into(),
-                    status: Some("01 spec · waiting".into()),
-                    stages: vec![],
-                    project: None,
-                },
-            },
-        },
-        ServerMessage::Ok {
             id: 51,
             result: CommandResult::ToolOutput {
                 output: "# Home".into(),
@@ -962,22 +912,6 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
         ClientCommand::ProjectOverview {
             project: "game".into(),
         },
-        ClientCommand::PipelineList,
-        ClientCommand::PipelineNew {
-            kind: "video".into(),
-            name: Some("shorts".into()),
-        },
-        ClientCommand::WorkNew {
-            pipeline: "coding".into(),
-            name: "save-system".into(),
-            project: Some("game".into()),
-            brief: Some("Three save slots.".into()),
-        },
-        ClientCommand::WorkRun {
-            work: "coding/save-system".into(),
-            stage: Some("02_plan".into()),
-            session: None,
-        },
         ClientCommand::TicketMerge {
             ticket: "0007".into(),
         },
@@ -1109,22 +1043,6 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
             folder: "/home/me/Projects/game".into(),
             branch: Some("main".into()),
             uncommitted: 3,
-            works: vec![WorkSummary {
-                url: "site://coding/game-save-system/index.md".into(),
-                pipeline: "coding".into(),
-                title: "Save system".into(),
-                status: Some("03 implement · running".into()),
-                stages: vec![StageState {
-                    name: "03_implement".into(),
-                    status: "running".into(),
-                    ticket: Some("0031".into()),
-                    summary: None,
-                    outputs: vec!["site://coding/game-save-system/03_implement/notes.md".into()],
-                    stale: true,
-                    changed: vec!["site://coding/_config/conventions.md".into()],
-                }],
-                project: Some("~/Projects/game".into()),
-            }],
             sites: vec![],
             branches: vec![TicketBranchSummary {
                 ticket: "0028".into(),

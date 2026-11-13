@@ -41,6 +41,7 @@ fn lists_sites() {
             "agents",
             "chat",
             "home",
+            "icm",
             "memory",
             "orchestration",
             "plans",
@@ -105,12 +106,7 @@ fn index_search_and_backlinks() {
         .collect();
     assert_eq!(
         agents,
-        [
-            "site://agents/default.md",
-            "site://agents/orchestrator.md",
-            "site://agents/stage.md",
-            "site://agents/worker.md"
-        ]
+        ["site://agents/default.md", "site://agents/orchestrator.md"]
     );
 
     let hits = index.search(&Query::parse("site:memory feedback"));
@@ -139,8 +135,16 @@ fn seed_pages_have_no_broken_links() {
     let (_dir, ws) = seed();
     let index = Index::build(&ws).unwrap();
     for entry in index.entries() {
+        // ICM starters are copied into new workspaces: their links point to that future layout.
+        if entry
+            .url
+            .to_string()
+            .starts_with("site://icm/_shared/icm-architect/assets/templates/")
+        {
+            continue;
+        }
         let broken = index.broken_links(&entry.url);
-        // example links inside code blocks are not parsed as links, so anything here is real
+        // Example links inside code blocks are not parsed as links.
         assert!(
             broken.is_empty(),
             "{} links to missing pages: {broken:?}",

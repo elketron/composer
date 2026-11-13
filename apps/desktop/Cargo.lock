@@ -1081,7 +1081,7 @@ dependencies = [
 
 [[package]]
 name = "composer-client"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -1097,7 +1097,7 @@ dependencies = [
 
 [[package]]
 name = "composer-desktop"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -1121,7 +1121,7 @@ dependencies = [
 
 [[package]]
 name = "composer-protocol"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "serde",
  "serde_json",

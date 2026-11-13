@@ -5,7 +5,6 @@ import 'package:composer_app/state/effects.dart';
 import 'package:composer_app/state/reduce.dart';
 import 'package:composer_app/state/server_entry.dart';
 import 'package:composer_app/state/types.dart';
-import 'package:composer_app/state/works.dart';
 import 'package:composer_protocol/composer_protocol.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -464,7 +463,6 @@ void main() {
         path: '~/Projects/game',
         folder: '/home/me/Projects/game',
         uncommitted: 0,
-        works: [],
         branches: [],
         harnesses: [],
         toolRules: 0,
@@ -473,45 +471,6 @@ void main() {
       expect(state.statusOf(url).overviews['/home/me/Projects/game'], overview);
 
       expect(reduce(state, const CatalogRequested(url)).$2.single, isA<FetchCatalog>());
-    });
-
-    test('pipelines: the list, new work (from a template), its outcome', () {
-      const url = 'https://home.ts.net';
-      var (state, effects) = reduce(loaded([home]), const PipelinesRequested(url));
-      expect((effects.single as SendCommand).command, isA<ClientCommandPipelineList>());
-      const coding = PipelineSummary(site: 'coding', title: 'Coding', about: '', stages: [], needsProject: true, works: 0);
-      state = reduce(state, ServerEvent(url, const ServerMessageOk(id: 4, result: CommandResultPipelines(pipelines: [], templates: [coding])))).$1;
-      expect(state.statusOf(url).pipelines?.templates, [coding]);
-
-      (state, effects) = reduce(state, const WorkCreateRequested(url, pipeline: 'coding', name: 'save-system', project: 'game', template: 'coding'));
-      expect(state.statusOf(url).newWork.busy, isTrue);
-      final create = effects.single as CreateWork;
-      expect((create.template, create.work.pipeline, create.work.name, create.work.project), ('coding', 'coding', 'save-system', 'game'));
-
-      final failed = reduce(state, const WorkReplied(url, error: 'a coding work links a project')).$1.statusOf(url).newWork;
-      expect((failed.busy, failed.error), (false, 'a coding work links a project'));
-      const work = WorkSummary(url: 'site://coding/save-system/index.md', pipeline: 'coding', title: 'save-system', stages: []);
-      (state, effects) = reduce(state, const WorkReplied(url, work: work));
-      expect(state.statusOf(url).newWork.created, work.url);
-      expect((effects.single as SendCommand).command, isA<ClientCommandPipelineList>(), reason: 'the lists show it');
-      expect(reduce(state, const NewWorkReset(url)).$1.statusOf(url).newWork.created, isNull);
-
-      final run = reduce(state, const WorkRunRequested(url, 'coding/save-system', project: '/p/game')).$2.single as RunWork;
-      expect((run.command.work, run.command.stage, run.project), ('coding/save-system', null, '/p/game'));
-      const waiting = WorkSummary(url: 'site://coding/a/index.md', pipeline: 'coding', title: 'a', stages: [
-        StageState(name: '01_spec', status: 'approved'),
-        StageState(name: '02_plan', status: 'waiting'),
-      ]);
-      expect((workSpec(waiting.url), runnable(waiting)), ('coding/a', true));
-      const inReview = WorkSummary(url: 'site://coding/b/index.md', pipeline: 'coding', title: 'b', stages: [StageState(name: '01_spec', status: 'review')]);
-      expect(runnable(inReview), isFalse);
-      // Stale: what a stage read changed; Run reruns from there, even past a review.
-      const stale = WorkSummary(url: 'site://coding/c/index.md', pipeline: 'coding', title: 'c', stages: [
-        StageState(name: '01_spec', status: 'done', stale: true, outputs: []),
-        StageState(name: '02_plan', status: 'review', stale: true, outputs: []),
-      ]);
-      expect((runnable(stale), runLabel(stale), nextStage(stale)?.name), (true, 'Rerun from 01', '01_spec'));
-      expect(runLabel(waiting), 'Run');
     });
 
     test('apps show in the reader; closing keeps the follow choice', () {
@@ -526,33 +485,10 @@ void main() {
     test('coming online fetches the site list', () {
       final (_, effects) = reduce(loaded([home]), LinkChanged(home.url, LinkState.online));
       expect(effects.whereType<FetchCatalog>().single.url, home.url);
-      // And the works, for the ones waiting at a gate.
-      expect(effects.whereType<SendCommand>().map((e) => e.command), contains(isA<ClientCommandPipelineList>()));
     });
   });
 
   group('notifications', () {
-    test('a stage at its gate: notified (opening the board), the works fetched again, Needs you', () {
-      var state = loaded([home]);
-      const ended = ServerMessageStageEnded(
-          work: 'site://video/launch/index.md', title: 'launch', stage: '02_script', status: 'review', summary: 'six scenes');
-      final (_, effects) = reduce(state, ServerEvent(home.url, ended));
-      final note = effects.whereType<Notify>().single;
-      expect((note.title, note.body, note.page, note.app), ('launch · 02 script ready for review', 'six scenes', 'site://video/launch/index.md', null));
-      expect(effects.whereType<SendCommand>().single.command, isA<ClientCommandPipelineList>());
-      // With the board built, the notification opens it.
-      state = reduce(state, SitesLoaded(home.url, const [SiteSummary(name: 'video', title: 'Video', pages: 3, hasJustfile: true, hasUi: true, appBuilt: true)])).$1;
-      expect(reduce(state, ServerEvent(home.url, ended)).$2.whereType<Notify>().single.app, 'video');
-      // Done stages aren't notified.
-      const done = ServerMessageStageEnded(work: 'site://video/launch/index.md', title: 'launch', stage: '01_research', status: 'done', summary: '');
-      expect(reduce(state, ServerEvent(home.url, done)).$2.whereType<Notify>(), isEmpty);
-      const waiting = WorkSummary(url: 'site://video/launch/index.md', pipeline: 'video', title: 'launch', project: '~/Projects/game', stages: [
-        StageState(name: '01_research', status: 'done', outputs: []),
-        StageState(name: '02_script', status: 'review', outputs: []),
-      ]);
-      expect((waitingStage(waiting)?.name, workSite(waiting.url), linksProject(waiting, '/home/me/Projects/game')), ('02_script', 'video', true));
-    });
-
     ServerMessageApprovalRequest approval(String id) => ServerMessageApprovalRequest(
           request: id, session: 'a', site: 'tools', recipe: 'greet', args: const ['bob'], body: 'b', hash: 'h');
     SessionInfo info(String id, TurnState state, {String? ticket}) =>

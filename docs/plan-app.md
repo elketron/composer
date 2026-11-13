@@ -9,7 +9,7 @@ the chat, the pages, and the micro apps in an embedded browser. No terminal is a
 
 - **Platforms, in order:** Linux desktop (home, Hyprland/Wayland), Android, Windows (work PC; its server runs in WSL). macOS builds where it costs nothing extra.
 - **Several servers:** home computer and work PC, switchable, all kept connected.
-- **Same look:** the tokens from `templates/sdk/theme.css` (dark, one accent, radius 2–5px, Inter + JetBrains Mono).
+- **Same look:** the tokens from `templates/sdk/theme.css` (dark, one accent); the phone is Inter 15px with 2–5px rounding and 44px targets, not the mono/square web chrome. Screens: [mockups/next/](mockups/next/).
 - **First version is chat-first:** servers, sessions, chat, approvals, reading pages, micro apps. Editing pages, the changes view and a command palette come after.
 - **Input on desktop:** conventional (text fields, clicking) plus shortcuts mirroring the TUI where natural (ctrl-enter sends, ctrl-k palette later).
 - **Notifications** without a push service: the app keeps its connections open (desktop; Android via a foreground service) and shows local notifications.

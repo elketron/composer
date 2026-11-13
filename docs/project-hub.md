@@ -1,7 +1,9 @@
 # The project hub
 
-Status: phases A–D built. Phase E's file/state model and no-scheduler half are built; the
-read/write commands (`pipeline.list`, `work.run`) remain as explicit shims for one release.
+Status: phases A–D built. The pipeline engine (`pipeline.list`, `work.run`, stages, gates,
+board) was removed on 2026-11-12; a workflow is site + app + JSON
+([workflow-state.md](workflow-state.md)). The project page, sites and `project/` mounts remain.
+The pipeline/stage examples below are historical.
 
 Visual overview: [project-hub-flow.html](project-hub-flow.html) — the shape, a work's `project/`,
 the worktree/diff flow, local vs work, and the agent/app parity.

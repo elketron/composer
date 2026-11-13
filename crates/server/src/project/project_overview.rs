@@ -1,11 +1,11 @@
-//! One project's overview: git state, the works that link it, ticket branches still there, its
+//! One project's overview: git state, the sites its page lists, ticket branches still there, its
 //! memory page, its harness switches.
 
 use std::path::Path;
 
 use composer_core::SiteUrl;
 use composer_protocol::http::{
-    AppInfo, PageExcerpt, ProjectOverview, ProjectSiteSummary, TicketBranchSummary, WorkSummary,
+    AppInfo, PageExcerpt, ProjectOverview, ProjectSiteSummary, TicketBranchSummary,
 };
 
 use crate::project::ProjectRef;
@@ -36,11 +36,9 @@ pub fn project_overview(server: &Server, project: &str) -> Result<ProjectOvervie
         .and_then(|_| git(path, &["status", "--porcelain"]).ok())
         .map_or(0, |s| s.lines().filter(|l| !l.is_empty()).count() as u32);
 
-    let works = works(server, &folder);
-    let sites = site_summaries(server, &works, &project);
+    let sites = site_summaries(server, &project);
     Ok(ProjectOverview {
         page: project.page_url(),
-        works,
         sites,
         branches: top.map(|top| branches(server, &top)).unwrap_or_default(),
         memory: memory(server, &name, &project),
@@ -54,39 +52,15 @@ pub fn project_overview(server: &Server, project: &str) -> Result<ProjectOvervie
     })
 }
 
-/// The sites operating on a project: the page's `sites:`, plus every site with a work on it.
-fn site_summaries(
-    server: &Server,
-    works: &[WorkSummary],
-    project: &ProjectRef,
-) -> Vec<ProjectSiteSummary> {
+/// The sites operating on a project: the page's `sites:`.
+fn site_summaries(server: &Server, project: &ProjectRef) -> Vec<ProjectSiteSummary> {
     let apps = crate::apps::project_home(server, &project.name).ok();
-    let mut names: Vec<String> = project.sites.clone();
-    for work in works {
-        if !names.contains(&work.pipeline) {
-            names.push(work.pipeline.clone());
-        }
-    }
+    let mut names = project.sites.clone();
     names.sort();
     names.dedup();
     names
         .into_iter()
         .map(|site| {
-            let site_works: Vec<WorkSummary> = works
-                .iter()
-                .filter(|w| w.pipeline == site)
-                .cloned()
-                .collect();
-            let running = site_works
-                .iter()
-                .flat_map(|w| &w.stages)
-                .filter(|s| s.status == "running")
-                .count() as u32;
-            let waiting = site_works
-                .iter()
-                .flat_map(|w| &w.stages)
-                .filter(|s| s.status == "review")
-                .count() as u32;
             let title = SiteUrl::new(&site, "")
                 .ok()
                 .and_then(|url| server.web.read_page(&url).ok())
@@ -95,45 +69,9 @@ fn site_summaries(
             let app: Option<AppInfo> = apps
                 .as_ref()
                 .and_then(|list| list.apps.iter().find(|a| a.site == site).cloned());
-            ProjectSiteSummary {
-                site,
-                title,
-                works: site_works,
-                running,
-                waiting,
-                app,
-            }
+            ProjectSiteSummary { site, title, app }
         })
         .collect()
-}
-
-/// `type: work` pages whose `project:` is this folder.
-fn works(server: &Server, folder: &str) -> Vec<WorkSummary> {
-    let index = server.index.read().expect("index lock");
-    let mut works: Vec<WorkSummary> = index
-        .entries()
-        .filter(|e| e.frontmatter.get_str("type").as_deref() == Some("work"))
-        .filter(|e| {
-            e.frontmatter
-                .get_str("project")
-                .and_then(|p| server.see_project(&p).ok())
-                .as_deref()
-                == Some(folder)
-        })
-        .map(|e| {
-            // A work in a pipeline shows its stages; any other `type: work` page its `status:`.
-            crate::pipeline::work_summary(server, &e.url).unwrap_or_else(|| WorkSummary {
-                url: e.url.to_string(),
-                pipeline: e.url.site().to_string(),
-                title: e.title.clone(),
-                status: e.frontmatter.get_str("status"),
-                stages: vec![],
-                project: e.frontmatter.get_str("project"),
-            })
-        })
-        .collect();
-    works.sort_by(|a, b| a.url.cmp(&b.url));
-    works
 }
 
 /// Ticket worktrees of this repository that are still there.

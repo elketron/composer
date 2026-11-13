@@ -180,7 +180,7 @@ async fn claude_code_runs_sandboxed_with_its_own_login_and_home() {
     std::fs::write(
         tickets.join("0001.md"),
         format!(
-            "---\ntitle: Ticket 0001\ntype: ticket\nid: \"0001\"\nstatus: open\nagent: worker\n\
+            "---\ntitle: Ticket 0001\ntype: ticket\nid: \"0001\"\nstatus: open\nagent: default\n\
              project: {}\n---\n# Ticket 0001\n\n## Task\nSomething.\n\n## Result\n",
             project.display()
         ),
@@ -193,7 +193,6 @@ async fn claude_code_runs_sandboxed_with_its_own_login_and_home() {
                 &server,
                 &orchestrator,
                 &composer_server::worker::ticket::TicketId::parse("0001").unwrap(),
-                None,
                 Some("claude-code"),
             )
             .await

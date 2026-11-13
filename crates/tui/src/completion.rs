@@ -52,20 +52,6 @@ pub fn complete(line: &str, state: &AppState) -> Completions {
         "app" => app_sites(arg, state),
         "workflow" | "site" => all_sites(arg, state),
         "model" | "m" => models(arg, state),
-        "work" => subcommands(
-            arg,
-            &[
-                (
-                    "new",
-                    "a piece of work in a pipeline: new <pipeline> <name> [project]",
-                ),
-                ("run", "its next stage, or one again: run [work] [stage]"),
-            ],
-        ),
-        "pipeline" | "pipelines" => subcommands(
-            arg,
-            &[("new", "a pipeline from a template: new <kind> [name]")],
-        ),
         "project" | "p" => {
             let view = subcommands(arg, &[("view", "its works, sessions, branches and memory")]);
             let unset = state
@@ -478,15 +464,7 @@ mod tests {
         unique.dedup();
         assert_eq!(all.len(), unique.len(), "{all:?}");
         assert_eq!(texts("pro"), ["project"]);
-        assert_eq!(texts("wor"), ["workers", "work", "workflow"]);
-        let work = &complete("work", &state()).items[1];
-        assert_eq!(
-            work.detail,
-            "new <pipeline> <name> [project] · run [work] [stage]"
-        );
-        assert_eq!(texts("work "), ["new", "run"]);
-        assert_eq!(texts("work r"), ["run"]);
-        assert!(texts("work run ").is_empty());
+        assert_eq!(texts("wor"), ["workers", "workflow"]);
         let first = &complete("comp", &state()).items[0];
         assert_eq!(first.text, "compact");
         assert!(first.detail.contains("summarize"));

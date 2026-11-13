@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>composer next · 07 desktop — the GPUI picker</title>
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="../base.css">
+<link rel="stylesheet" href="../gpui.css">
+<style>
+  /* the stage is a web app (CEF), so it keeps the SDK's blue; the shell is amber gpui */
+  .s7 .gmv { height: 100%; display: flex; flex-direction: column; background: var(--bg); color: var(--text); }
+  .s7 .gmvbar {
+    height: 32px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 10px;
+    border-bottom: 1px solid var(--border); background: var(--surface);
+    color: var(--faint); font: 10px var(--font-ui);
+  }
+  .s7 .gmvbar b { color: var(--text); font-weight: 600; }
+  .s7 .gmvbar .grow { flex: 1; }
+  .s7 .gmvbar .chip { border: 1px solid var(--border-strong); border-radius: 2px; padding: 1px 5px; color: var(--muted); }
+  .s7 .gmvbody { flex: 1; min-height: 0; display: grid; grid-template-columns: 148px minmax(0, 1fr) 250px; }
+  .s7 .glist { border-right: 1px solid var(--border); background: var(--bg); }
+  .s7 .glist header { height: 28px; display: flex; align-items: center; padding: 0 8px; border-bottom: 1px solid var(--border); font: 9px var(--font-ui); letter-spacing: .12em; text-transform: uppercase; color: var(--faint); }
+  .s7 .glist .row { display: flex; align-items: center; gap: 7px; padding: 6px 8px; border-left: 2px solid transparent; font: 10px var(--font-ui); color: var(--muted); }
+  .s7 .glist .row.on { background: var(--raised); border-left-color: var(--accent); color: var(--text); }
+  .s7 .glist .row .n { margin-left: auto; color: var(--warn); font: 9px var(--font-mono); }
+  .s7 .gmcanvas {
+    position: relative; overflow: hidden; background:
+      radial-gradient(circle at 45% 42%, color-mix(in srgb, var(--accent) 6%, transparent), transparent 50%),
+      radial-gradient(var(--grid) 1px, transparent 1px);
+    background-size: auto, 18px 18px;
+  }
+  .s7 .gmcanvas .hint { position: absolute; left: 10px; top: 8px; font: 9px var(--font-ui); color: var(--faint); }
+  .s7 .mini {
+    position: absolute; top: 360px; width: 182px; height: 300px; background: var(--surface);
+    border: 1px solid var(--border-strong); box-shadow: 0 12px 30px var(--shadow-soft);
+  }
+  .s7 .mini.a { left: 34px; }
+  .s7 .mini.b { left: 236px; }
+  .s7 .mini .top { height: 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 3px; padding: 0 6px; font: 7px var(--font-ui); color: var(--faint); }
+  .s7 .mini .body { padding: 18px 14px; }
+  .s7 .mini h4 { margin: 0 0 3px; font: 600 12px var(--font-ui); color: var(--text); }
+  .s7 .mini .sub { font: 7px var(--font-ui); color: var(--muted); margin-bottom: 14px; }
+  .s7 .mini .f { height: 22px; border: 1px solid var(--border-strong); background: var(--bg); margin-bottom: 7px; display: flex; align-items: center; padding: 0 5px; font: 7px var(--font-mono); color: var(--muted); }
+  .s7 .mini .go { height: 24px; background: var(--accent); color: var(--bg); display: flex; align-items: center; justify-content: center; font: 600 8px var(--font-ui); }
+  .s7 .mini .alt { height: 22px; border: 1px solid var(--border-strong); display: flex; align-items: center; justify-content: center; font: 7px var(--font-ui); color: var(--muted); margin-top: 10px; }
+  .s7 .mini .fine { margin-top: 26px; text-align: center; font: 6.5px var(--font-ui); color: var(--faint); line-height: 1.9; }
+  .s7 .gpin {
+    position: absolute; width: 16px; height: 16px; background: var(--warn); color: var(--bg);
+    display: flex; align-items: center; justify-content: center; font: 700 9px var(--font-mono);
+    box-shadow: 0 0 0 2px var(--surface);
+  }
+  .s7 .gpin.one { left: 218px; top: 524px; }
+  .s7 .gpin.two { left: 420px; top: 472px; background: var(--accent); }
+  .s7 .gmthread { border-left: 1px solid var(--border-strong); background: var(--surface); display: flex; flex-direction: column; }
+  .s7 .gmthread header { height: 28px; display: flex; align-items: center; gap: 6px; padding: 0 8px; border-bottom: 1px solid var(--border); color: var(--muted); font: 9px var(--font-ui); }
+  .s7 .gmthread header b { color: var(--text); font-weight: 500; }
+  .s7 .gmthread .on { padding: 7px 8px; border-bottom: 1px solid var(--border); font: 9px var(--font-ui); color: var(--faint); }
+  .s7 .gmthread .on b { color: var(--text); font-weight: 500; }
+  .s7 .gmthread .m { padding: 6px 8px; border-left: 2px solid transparent; }
+  .s7 .gmthread .m.agent { border-left-color: var(--info); }
+  .s7 .gmthread .who { display: flex; gap: 6px; color: var(--faint); font: 8px var(--font-ui); margin-bottom: 2px; }
+  .s7 .gmthread .who time { margin-left: auto; }
+  .s7 .gmthread p { margin: 0; font: 9.5px/1.45 var(--font-ui); color: var(--muted); }
+  .s7 .gmthread .compose { margin-top: auto; padding: 6px 8px; border-top: 1px solid var(--border); color: var(--faint); font: 8.5px var(--font-ui); }
+</style>
+</head>
+<body class="s7">
+<div class="doc">
+  <header class="masthead">
+    <div>
+      <div class="kicker">composer / next · platform study · screen 07</div>
+      <h1>The picker is a gpui panel, not a web modal.</h1>
+      <p class="lede">Every command is one list: workflows, sessions, pages and actions. It floats over the workbench at 70px, 660px wide, with <b>rounded_md</b>, a selected row in <code>#2a2a36</code> and the amber focus edge. The stage behind it is a CEF web app, so it keeps the web SDK's blue/amber state colours.</p>
+    </div>
+    <div class="side">
+      <div class="row"><span>surface</span><b>apps/desktop/src/picker.rs</b></div>
+      <div class="row"><span>overlay</span><b>#15151b</b></div>
+      <div class="row"><span>border</span><b>#3a3a48</b></div>
+      <div class="row"><span>selected</span><b>#2a2a36</b></div>
+    </div>
+  </header>
+
+  <figure class="screen" id="gpui-palette">
+    <div class="screen-head">
+      <span class="snum">07</span>
+      <div>
+        <h2>Desktop — the GPUI picker over the shared view</h2>
+        <p>gpui's own search/commands overlay: the same component the shell uses for workspaces, sessions and the palette. The stage is the mockups view with a thread panel, so both layers of the window are visible.</p>
+      </div>
+      <div class="source">apps/desktop · picker.rs · shell.rs</div>
+    </div>
+
+    <div class="fit">
+    <div class="gwin">
+      <div class="gstripe"></div>
+      <div class="gtop">
+        <span class="ws">◉ demo</span><span class="crumb">/</span><span class="sess">default #a3f1</span>
+        <span class="grow"></span>
+        <span class="muted">no workers running</span><span class="crumb">·</span>
+        <span class="follow on">● following agent</span>
+        <span class="kbd">ctrl shift p</span>
+      </div>
+      <div class="gbody">
+        <section class="gchat">
+          <div class="gterm">
+            <div class="tmsgs">
+              <div class="gmsg sys"><b>comment mode</b> · click a card, or drag a region</div>
+              <div class="gmsg you">
+                <div class="meta"><b>you</b><time>14:02</time></div>
+                <p>the login button is too small on a phone.</p>
+              </div>
+              <div class="gmsg agent">
+                <div class="meta"><b>default</b><time>14:05</time></div>
+                <p>Made it full width below 600px. The thread stays open.</p>
+              </div>
+              <div class="gmsg tool">
+                <div class="meta"><b>✓ putPage</b><span>site://mockups/login.html</span></div>
+                <p>+8 −2 lines · v3 · live reload</p>
+              </div>
+              <div class="gmsg thread"><b>↳ thread</b> mockup/login · button · open</div>
+            </div>
+            <div class="ginput"><span class="q">›</span> keep it open until I see it<span class="caret"></span></div>
+            <div class="gstatus">
+              <span class="normal">NORMAL</span><span>esc enter send</span><span>ctrl-k palette</span>
+              <span class="grow"></span><span>site mockups</span><span>#a3f1</span>
+            </div>
+          </div>
+        </section>
+        <div class="gsplit"></div>
+        <section class="gstage">
+          <div class="gtabs">
+            <div class="gtab"><span class="unseen">●</span> live · blender</div>
+            <div class="gtab on">mockups <span class="unseen">●</span> <span class="x">×</span></div>
+            <div class="gtab">changes</div>
+            <div class="gtab add">+</div>
+          </div>
+          <div class="gview">
+            <div class="gmv">
+              <div class="gmvbar">
+                <b>composer</b><span>/</span><b>mockups</b><span>/</span><span>login</span>
+                <span class="grow"></span>
+                <span class="chip">#a3f1</span><span class="chip">comment</span>
+              </div>
+              <div class="gmvbody">
+                <aside class="glist">
+                  <header>mockups 4</header>
+                  <div class="row on"><span>▣</span>login<span class="n">2</span></div>
+                  <div class="row"><span>▣</span>settings<span class="n">1</span></div>
+                  <div class="row"><span>▣</span>ticket view</div>
+                  <div class="row"><span>▣</span>empty</div>
+                </aside>
+                <div class="gmcanvas">
+                  <span class="hint">login · 390 × 844 · comment</span>
+                  <div class="mini a">
+                    <div class="top"><span>▣</span> login</div>
+                    <div class="body">
+                      <h4>Sign in</h4><div class="sub">to continue to demo</div>
+                      <div class="f">you@demo.dev</div>
+                      <div class="f">••••••••</div>
+                      <div class="go">Sign in</div>
+                      <div class="alt">Continue with passkey</div>
+                      <div class="fine">Forgot password?<br>Create account</div>
+                    </div>
+                  </div>
+                  <div class="mini b">
+                    <div class="top"><span>▣</span> settings</div>
+                    <div class="body">
+                      <h4>Device</h4><div class="sub">pairing · this phone</div>
+                      <div class="f">my-pc</div>
+                      <div class="f">tail1234.ts.net</div>
+                      <div class="go" style="background:var(--raised); color:var(--text); border:1px solid var(--border-strong)">Unpair</div>
+                      <div class="alt">Scan a new code</div>
+                      <div class="fine">last seen 2m ago</div>
+                    </div>
+                  </div>
+                  <div class="gpin one">2</div>
+                  <div class="gpin two">1</div>
+                </div>
+                <aside class="gmthread">
+                  <header><span>‹ threads</span><span style="margin-left:auto">1 open</span></header>
+                  <div class="on">on <b>login / button</b> · open</div>
+                  <div class="m"><div class="who">you <time>14:02</time></div><p>The button is too small on a phone.</p></div>
+                  <div class="m agent"><div class="who">default <time>14:05</time></div><p>Made it full width below 600px. Height still matches the fields.</p></div>
+                  <div class="m"><div class="who">you <time>14:06</time></div><p>Keep it open until I see it on my phone.</p></div>
+                  <div class="compose">Reply… (⌘↵ sends to the agent)</div>
+                </aside>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div class="gpalette">
+        <div class="search"><span class="q">›</span><span class="in">w</span><span class="caret"></span><span class="esc">esc</span></div>
+        <div class="glabel">workflows</div>
+        <div class="item on"><span class="kind">workflow</span><span class="label"><b>3D</b> · blender · mcp granted</span><span class="detail">enter</span></div>
+        <div class="item"><span class="kind">workflow</span><span class="label">coding · worktree</span><span class="detail">enter</span></div>
+        <div class="item"><span class="kind">workflow</span><span class="label">video · storyboard</span><span class="detail">enter</span></div>
+        <div class="glabel">commands</div>
+        <div class="item"><span class="kind">session</span><span class="label">default #a3f1 · composer</span><span class="detail">open</span></div>
+        <div class="item"><span class="kind">page</span><span class="label">site://mockups/login.html</span><span class="detail">open</span></div>
+        <div class="item"><span class="kind">action</span><span class="label">switch workspace…</span><span class="detail">ctrl shift w</span></div>
+        <div class="foot"><span><kbd>↑↓</kbd> move</span><span><kbd>enter</kbd> run</span><span><kbd>esc</kbd> close</span><span class="grow"></span><span>6 results</span></div>
+      </div>
+    </div>
+    </div>
+
+    <div class="notes">
+      <div><b>one list</b>Workflows, sessions, pages and actions live in the same picker; the selected row is one flat fill.</div>
+      <div><b>two themes, on purpose</b>The shell's focus is amber; the CEF stage is the web SDK's blue. That line is the implementation boundary.</div>
+      <div><b>keyboard first</b><code>ctrl shift p</code> opens it, arrows move, enter runs, escape closes. No mouse needed.</div>
+    </div>
+  </figure>
+
+  <footer class="docfoot">
+    <a href="../index.html">← all screens</a>
+    <span class="grow"></span>
+    <span>static html · no build</span>
+    <span>desktop chrome: apps/desktop</span>
+  </footer>
+</div>
+<script>
+(function () {
+  if (location.search.includes('embed')) document.documentElement.classList.add('embed');
+  function fit() {
+    document.querySelectorAll('.fit').forEach(function (box) {
+      var frame = box.firstElementChild;
+      if (!frame) return;
+      var natural = 1360;
+      frame.style.width = natural + 'px';
+      var s = Math.min(1, box.clientWidth / natural);
+      frame.style.transformOrigin = 'top left';
+      frame.style.transform = 'scale(' + s + ')';
+      box.style.height = Math.round(frame.offsetHeight * s) + 'px';
+    });
+  }
+  window.addEventListener('resize', fit);
+  window.addEventListener('load', fit);
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fit);
+  else fit();
+  setTimeout(fit, 250);
+})();
+</script>
+</body>
+</html>

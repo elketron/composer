@@ -125,7 +125,7 @@ final class Notify extends AppEffect {
   /// A page to open when there is no session (a reminder).
   final String? page;
 
-  /// A site whose app to open instead (a pipeline's board, for a stage waiting for review).
+  /// A site whose app to open instead.
   final String? app;
 }
 
@@ -173,20 +173,4 @@ final class SearchProjects extends AppEffect {
   const SearchProjects(this.url, this.query);
   final String url;
   final String query;
-}
-
-/// `pipeline.new` (with `template`) then `work.new`; the outcome comes back as `WorkReplied`.
-final class CreateWork extends AppEffect {
-  const CreateWork(this.url, this.work, {this.template});
-  final String url;
-  final ClientCommandWorkNew work;
-  final String? template;
-}
-
-/// `work.run`; says what started (or why not), then refreshes `project`'s overview.
-final class RunWork extends AppEffect {
-  const RunWork(this.url, this.command, {this.project});
-  final String url;
-  final ClientCommandWorkRun command;
-  final String? project;
 }

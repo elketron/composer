@@ -96,8 +96,6 @@ pub struct NewProjectArgs {
 pub struct SpawnWorkerArgs {
     pub ticket: String,
     #[serde(default)]
-    pub agent: Option<String>,
-    #[serde(default)]
     pub harness: Option<String>,
 }
 
@@ -135,28 +133,6 @@ pub struct FinishArgs {
     /// `done` or `failed`.
     pub status: String,
     pub summary: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct NewPipelineArgs {
-    pub kind: String,
-    /// The site's name; defaults to the kind.
-    pub name: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct NewWorkArgs {
-    pub pipeline: String,
-    pub name: String,
-    pub title: Option<String>,
-    pub project: Option<String>,
-    pub brief: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct RunStageArgs {
-    pub work: String,
-    pub stage: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

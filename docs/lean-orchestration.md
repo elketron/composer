@@ -1,7 +1,13 @@
 # The harness, the capabilities, and the workflows
 
-Status: phases 1–2 built (site tools and the project hub); phase 4's file/state model is built
-except deleting the `pipeline.*` command shims. Phases 3, 5 and 6 are proposals.
+Status: phases 1–2 built (site tools and the project hub); phase 4's file/state model is built.
+The `pipeline.*` engine was removed 2026-11-12. Phases 3, 5 and 6 are proposals.
+
+> ICM correction (2026-11-13): ICM is a folder-design method with five forms
+> (Pipeline, Record library, Knowledge bundle, Context map, System map), not a
+> pipeline runtime. See [icm.md](icm.md). This document's rule — "if a workflow
+> can be a folder of markdown, it must not be a Rust module" — is the one the
+> engine violated.
 
 This replaces the earlier "task engine" draft. If the base is *a small harness with capabilities
 injected when needed*, then moving the scheduler into the server is the wrong direction. The server

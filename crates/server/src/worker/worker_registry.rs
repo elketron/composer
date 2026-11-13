@@ -153,7 +153,6 @@ impl WorkerRegistry {
         server: &Arc<Server>,
         parent: &Arc<Session>,
         id: &TicketId,
-        agent: Option<&str>,
         harness: Option<&str>,
     ) -> Result<(String, Option<Worktree>), String> {
         self.check_capacity(server, id.as_str())?;
@@ -167,12 +166,8 @@ impl WorkerRegistry {
             }
             _ => {}
         }
-        let agent = agent
-            .map(|a| a.trim().to_string())
-            .filter(|a| !a.is_empty())
-            .or_else(|| page.frontmatter.get_str("agent").filter(|a| !a.is_empty()))
-            .unwrap_or_else(|| "worker".into());
-        check_worker_agent(server, &agent, page.frontmatter.get_str("stage").is_some())?;
+        // Workers run the default agent; the ticket and its site are the "how to work".
+        let agent = "default".to_string();
         let harness = Self::harness(
             &harness
                 .map(|h| h.trim().to_string())
@@ -581,7 +576,7 @@ impl WorkerRegistry {
                 .unwrap_or_default()
         };
         let default = harness.default_model(server);
-        // A ticket can ask for a model (a pipeline stage's `model:`).
+        // A ticket can ask for a model.
         let wanted = page
             .frontmatter
             .get_str("model")
@@ -1005,27 +1000,6 @@ impl WorkerRegistry {
             tell_stuck(server, worker, &handle.ticket, &handle.parent, &summary);
             return;
         }
-        // A pipeline stage's ticket: its work goes on (or waits); the parent hears only when
-        // the run stops for the user, and only if it is an agent that runs stages.
-        if let Ok(page) = ticket_page(server, &handle.ticket)
-            && let Some(note) =
-                crate::pipeline::stage_ended(server, &page, &handle.parent, state, &summary)
-        {
-            if let Some(note) = note
-                && let Ok(parent) = server.sessions.get(&handle.parent)
-                && AgentDefinition::load(&server.web, &parent.info().agent)
-                    .is_ok_and(|a| a.allows_tool("run_stage"))
-            {
-                let message = user_message(
-                    note,
-                    MessageSource::Worker {
-                        session: worker.to_string(),
-                    },
-                );
-                submit(server, &parent, message);
-            }
-            return;
-        }
         if let Ok(orchestrator) = server.sessions.get(&handle.parent) {
             let on_branch = branch
                 .map(|b| {
@@ -1051,7 +1025,7 @@ impl WorkerRegistry {
 }
 
 /// Whether the worker's orchestrator decides what happens after its turn limit: its agent has
-/// `continue_worker`. Pipeline stages go by their pipeline instead.
+/// `continue_worker`.
 fn decided_by_parent(server: &Server, handle: &WorkerHandle) -> bool {
     let stage = ticket_page(server, &handle.ticket)
         .is_ok_and(|page| page.frontmatter.get_str("stage").is_some());
@@ -1264,31 +1238,6 @@ fn ticket_page(server: &Server, id: &str) -> Result<Page, String> {
     server.web.read_page(&url).map_err(|_| {
         format!("no ticket {id}; create it with `run orchestration new-ticket <title>`")
     })
-}
-
-fn check_worker_agent(server: &Server, agent: &str, stage: bool) -> Result<(), String> {
-    let definition = AgentDefinition::load(&server.web, agent).map_err(|e| e.to_string())?;
-    if definition.is_stage() && !stage {
-        return Err(format!(
-            "`{agent}` runs pipeline stages only (`run_stage`), not other tickets"
-        ));
-    }
-    if definition.is_worker() {
-        return Ok(());
-    }
-    let index = server.index.read().expect("index lock");
-    let workers: Vec<String> = AgentDefinition::workers(&server.web, &index)
-        .into_iter()
-        .map(|w| w.name)
-        .collect();
-    Err(format!(
-        "`{agent}` is not a worker agent (its page needs `role: worker`); worker agents: {}",
-        if workers.is_empty() {
-            "none".to_string()
-        } else {
-            workers.join(", ")
-        }
-    ))
 }
 
 fn log_path(server: &Server, session: &str) -> Result<std::path::PathBuf, String> {

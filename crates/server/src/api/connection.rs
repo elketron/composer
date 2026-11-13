@@ -4,8 +4,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use composer_protocol::{
-    Attachment, ChangedBy, ChatMessage, ClientCommand, ClientRequest, CommandResult, DeskBy,
-    DeskTab, MessageSource, Role, Seq, ServerMessage, SessionId,
+    Attachment, ChatMessage, ClientCommand, ClientRequest, CommandResult, DeskBy, DeskTab,
+    MessageSource, Role, Seq, ServerMessage, SessionId,
 };
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
@@ -75,7 +75,7 @@ impl Connection {
     }
 
     /// The socket of an app opened on a project (ticket 0163): it may subscribe to pages, list
-    /// pipelines and apps, and start and run its own site's works; nothing else.
+    /// apps; nothing else.
     pub fn for_app(out: mpsc::UnboundedSender<Arc<ServerMessage>>, grant: AppGrant) -> Self {
         Self {
             app: Some(grant),
@@ -344,18 +344,6 @@ impl Connection {
                             .map(|changes| CommandResult::Changes { changes }),
                         Err(e) => Err(e),
                     };
-                    connection.reply(id, result);
-                });
-                None
-            }
-            ClientCommand::WorkRun {
-                work,
-                stage,
-                session,
-            } => {
-                let (connection, server) = (self.clone(), server.clone());
-                tokio::spawn(async move {
-                    let result = run_work(&server, &work, stage.as_deref(), session).await;
                     connection.reply(id, result);
                 });
                 None
@@ -894,52 +882,6 @@ impl Connection {
                 crate::project::project_overview(server, &project)
                     .map(|overview| CommandResult::Project { overview })
             }
-            ClientCommand::PipelineList => Ok(CommandResult::Pipelines {
-                pipelines: crate::pipeline::pipelines(server)
-                    .iter()
-                    .map(|p| p.summary())
-                    .collect(),
-                templates: crate::pipeline::templates(server)
-                    .iter()
-                    .map(|t| t.summary())
-                    .collect(),
-                works: crate::pipeline::pipelines(server)
-                    .into_iter()
-                    .flat_map(|p| {
-                        p.works()
-                            .into_iter()
-                            .filter_map(move |w| crate::pipeline::Work::load(p.clone(), &w))
-                    })
-                    .map(|w| w.summary())
-                    .collect(),
-            }),
-            ClientCommand::PipelineNew { kind, name } => {
-                crate::pipeline::new_pipeline(server, &kind, name.as_deref(), ChangedBy::App).map(
-                    |p| {
-                        crate::pipeline::prepare_board(server, &p.name);
-                        CommandResult::Pipeline {
-                            pipeline: p.summary(),
-                        }
-                    },
-                )
-            }
-            ClientCommand::WorkNew {
-                pipeline,
-                name,
-                project,
-                brief,
-            } => crate::pipeline::new_work(
-                server,
-                crate::pipeline::NewWork {
-                    pipeline: &pipeline,
-                    name: &name,
-                    title: None,
-                    project: project.as_deref(),
-                    brief: brief.as_deref(),
-                },
-                ChangedBy::App,
-            )
-            .map(|w| CommandResult::Work { work: w.summary() }),
             ClientCommand::HarnessList { project } => {
                 let folder = server.see_project(&project)?;
                 Ok(CommandResult::Harnesses {
@@ -968,7 +910,6 @@ impl Connection {
             | ClientCommand::TicketComment { .. }
             | ClientCommand::TicketDiscard { .. }
             | ClientCommand::ModelList
-            | ClientCommand::WorkRun { .. }
             | ClientCommand::ToolCall { .. }
             | ClientCommand::ToolList { .. }
             | ClientCommand::McpList
@@ -1121,27 +1062,6 @@ fn resolve_attachments(
         .iter()
         .map(|a| resolve(&server.home, session, a).map(|(a, _)| a))
         .collect()
-}
-
-/// `work.run`: the stage's worker belongs to `session`, else to a new session in the work's
-/// project.
-async fn run_work(
-    server: &Arc<Server>,
-    work: &str,
-    stage: Option<&str>,
-    session: Option<String>,
-) -> Result<CommandResult, String> {
-    let parent = match session {
-        Some(id) => server.sessions.get(&id).map_err(|e| e.to_string())?,
-        None => {
-            let found = crate::pipeline::find_work(server.web.root(), work)?;
-            crate::pipeline::work_session(server, &found, None)?
-        }
-    };
-    let started = crate::pipeline::run_stage(server, &parent, work, stage, None).await?;
-    Ok(CommandResult::Work {
-        work: started.work.summary(),
-    })
 }
 
 /// `site.set`: the user enters site `site` for a session, or (`None`, or blank) leaves its site.

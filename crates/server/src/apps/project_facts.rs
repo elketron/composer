@@ -18,13 +18,12 @@ pub(crate) const SKIPPED: [&str; 8] = [
 const MAX_FILES: usize = 20_000;
 const MAX_DEPTH: usize = 6;
 
-/// What an app's `when` is matched against: whether the project is a git repository, the
-/// pipelines with a work linking it, its tags (`[projects."<path>"] tags`), and its files (a
-/// bounded walk).
+/// What an app's `when` is matched against: whether the project is a git repository, the sites
+/// its project page lists, its tags (`[projects."<path>"] tags`), and its files (a bounded walk).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ProjectFacts {
     git: bool,
-    pipelines: BTreeSet<String>,
+    sites: BTreeSet<String>,
     tags: BTreeSet<String>,
     /// Relative to the project.
     files: Vec<PathBuf>,
@@ -33,33 +32,33 @@ pub struct ProjectFacts {
 impl ProjectFacts {
     pub fn new(
         git: bool,
-        pipelines: impl IntoIterator<Item = String>,
+        sites: impl IntoIterator<Item = String>,
         tags: impl IntoIterator<Item = String>,
         files: Vec<PathBuf>,
     ) -> Self {
         Self {
             git,
-            pipelines: pipelines.into_iter().collect(),
+            sites: sites.into_iter().collect(),
             tags: tags.into_iter().collect(),
             files,
         }
     }
 
-    /// The facts of `folder`; `pipelines` and `tags` come from the workspace.
+    /// The facts of `folder`; `sites` and `tags` come from the workspace.
     pub fn gather(
         folder: &Path,
-        pipelines: impl IntoIterator<Item = String>,
+        sites: impl IntoIterator<Item = String>,
         tags: impl IntoIterator<Item = String>,
     ) -> Self {
-        Self::new(folder.join(".git").exists(), pipelines, tags, files(folder))
+        Self::new(folder.join(".git").exists(), sites, tags, files(folder))
     }
 
     pub fn is_git(&self) -> bool {
         self.git
     }
 
-    pub fn has_pipeline(&self, site: &str) -> bool {
-        self.pipelines.contains(site)
+    pub fn has_site(&self, site: &str) -> bool {
+        self.sites.contains(site)
     }
 
     pub fn has_tag(&self, tag: &str) -> bool {

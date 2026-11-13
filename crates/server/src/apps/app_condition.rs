@@ -2,12 +2,12 @@ use std::fmt;
 
 use crate::apps::{FileGlob, ProjectFacts};
 
-/// One entry of an app's `when`: the app attaches to a project that is a git repository, has a
-/// work in a pipeline, holds a matching file, or carries a tag.
+/// One entry of an app's `when`: the app attaches to a project that is a git repository, lists a
+/// site, holds a matching file, or carries a tag.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AppCondition {
     Git,
-    Pipeline(String),
+    Site(String),
     Files(FileGlob),
     Tag(String),
 }
@@ -17,7 +17,7 @@ impl AppCondition {
         let text = text.trim();
         let wrong = || {
             format!(
-                "`when` entries are `git`, `pipeline:<site>`, `files:<glob>` or `tag:<tag>`; \
+                "`when` entries are `git`, `site:<site>`, `files:<glob>` or `tag:<tag>`; \
                  got `{text}`"
             )
         };
@@ -30,7 +30,7 @@ impl AppCondition {
             return Err(wrong());
         }
         match kind.trim() {
-            "pipeline" => Ok(Self::Pipeline(value.to_string())),
+            "site" => Ok(Self::Site(value.to_string())),
             "files" => FileGlob::new(value).map(Self::Files),
             "tag" => Ok(Self::Tag(value.to_string())),
             _ => Err(wrong()),
@@ -40,7 +40,7 @@ impl AppCondition {
     pub fn matches(&self, facts: &ProjectFacts) -> bool {
         match self {
             Self::Git => facts.is_git(),
-            Self::Pipeline(site) => facts.has_pipeline(site),
+            Self::Site(site) => facts.has_site(site),
             Self::Files(glob) => facts.has_file(glob),
             Self::Tag(tag) => facts.has_tag(tag),
         }
@@ -51,7 +51,7 @@ impl fmt::Display for AppCondition {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Git => f.write_str("git"),
-            Self::Pipeline(site) => write!(f, "pipeline:{site}"),
+            Self::Site(site) => write!(f, "site:{site}"),
             Self::Files(glob) => write!(f, "files:{glob}"),
             Self::Tag(tag) => write!(f, "tag:{tag}"),
         }
@@ -74,8 +74,8 @@ mod tests {
         );
         for (text, hit) in [
             ("git", true),
-            ("pipeline:cad", true),
-            ("pipeline:video", false),
+            ("site:cad", true),
+            ("site:video", false),
             ("files:*.FCStd", true),
             ("files:*.blend", false),
             ("tag:game", true),
@@ -88,7 +88,7 @@ mod tests {
             AppCondition::parse(" files:*.FCStd ").unwrap().to_string(),
             "files:*.FCStd"
         );
-        for bad in ["svn", "pipeline:", "files:/abs", "colour:red"] {
+        for bad in ["svn", "site:", "pipeline:cad", "files:/abs", "colour:red"] {
             assert!(AppCondition::parse(bad).is_err(), "{bad}");
         }
     }

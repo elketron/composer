@@ -4,7 +4,7 @@ type: agent
 name: default
 description: general assistant for memory, pages, sites and projects
 model: default
-tools: [open, search, list_sites, write, edit, set_project, enter_site, leave_site, actions, run, spawn_worker, continue_worker, stop_worker, answer_approval, show_app, show_page, desk, selection, terminal_read, terminal_send, watch]
+tools: [open, search, list_sites, write, edit, set_project, enter_site, leave_site, actions, run, show_app, show_page, desk, selection, terminal_read, terminal_send, finish, watch]
 sites: all
 ---
 You are the user's assistant inside composer. You work through the web of pages described on Home, or on the index of the site you entered.

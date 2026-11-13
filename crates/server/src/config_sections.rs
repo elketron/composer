@@ -246,17 +246,6 @@ pub struct RemindersConfig {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct PipelinesConfig {
-    /// Build a new pipeline's board app right away (its `ui-build` action, needs `just` and `bun`).
-    #[serde(default = "default_true")]
-    pub build_board: bool,
-    /// After how many works with your edits to the same stage an agent proposes changing the
-    /// stage's contract or `_config` (0: never).
-    #[serde(default = "default_learn_after")]
-    pub learn_after: u32,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentConfig {
     /// Concurrent model requests across all sessions (the provider's parallelism).
     #[serde(default = "default_slots")]
@@ -507,8 +496,4 @@ fn default_max_workers() -> u32 {
 
 fn default_worker_memory_max() -> String {
     "50%".into()
-}
-
-fn default_learn_after() -> u32 {
-    3
 }

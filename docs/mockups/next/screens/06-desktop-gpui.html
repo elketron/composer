@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>composer next · 06 desktop — the GPUI workbench</title>
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="../base.css">
+<link rel="stylesheet" href="../gpui.css">
+<style>
+  /* stage app: wayai's live viewer, as a CEF pane inside gpui */
+  .s6 .gcanvas {
+    background:
+      radial-gradient(circle at 48% 42%, color-mix(in srgb, var(--g-accent) 7%, transparent), transparent 42%),
+      var(--g-bg);
+  }
+  .s6 .gcanvas svg { width: 100%; height: 100%; display: block; }
+  .s6 .g-hud {
+    position: absolute; left: 12px; top: 10px; color: var(--g-muted); font: 9px/1.6 var(--g-font);
+  }
+  .s6 .g-hud b { color: var(--g-text); font-weight: 400; }
+  .s6 .g-hud2 { position: absolute; right: 12px; top: 10px; text-align: right; color: var(--g-muted); font: 9px/1.6 var(--g-font); }
+  .s6 .g-hud2 b { color: var(--g-accent); font-weight: 400; }
+  .s6 .g-thread {
+    position: absolute; right: 14px; bottom: 38px; width: 250px;
+    background: var(--surface); border: 1px solid var(--border-strong); border-left: 2px solid var(--warn);
+    border-radius: 4px; box-shadow: 0 14px 34px var(--g-shadow);
+  }
+  .s6 .g-thread header {
+    display: flex; align-items: center; gap: 7px; padding: 6px 8px; border-bottom: 1px solid var(--g-line);
+    color: var(--muted); font: 10px var(--g-font);
+  }
+  .s6 .g-thread header b { color: var(--text); font-weight: 500; }
+  .s6 .g-thread header .x { margin-left: auto; }
+  .s6 .g-thread .m { padding: 7px 9px; border-bottom: 1px solid var(--g-line); }
+  .s6 .g-thread .m:last-of-type { border-bottom: 0; }
+  .s6 .g-thread .who { display: flex; gap: 6px; color: var(--g-muted); font: 9px var(--g-font); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 2px; }
+  .s6 .g-thread .who time { margin-left: auto; text-transform: none; letter-spacing: 0; }
+  .s6 .g-thread p { margin: 0; color: var(--muted); font: 10.5px/1.5 var(--g-font); }
+  .s6 .g-thread .foot { display: flex; gap: 6px; padding: 5px 9px; border-top: 1px solid var(--g-line); color: var(--g-muted); font: 9px var(--g-font); }
+  .s6 .g-thread .foot .kbd { border: 1px solid var(--g-line); border-radius: 3px; padding: 0 4px; }
+  .s6 .g-pin {
+    position: absolute; left: 61%; top: 28%; width: 18px; height: 18px; background: var(--warn);
+    color: var(--bg); display: flex; align-items: center; justify-content: center;
+    font: 700 10px var(--g-font); border-radius: 3px; box-shadow: 0 0 0 2px var(--bg);
+  }
+  .s6 .g-pin::after {
+    content: "top bevel"; position: absolute; left: 20px; top: 1px; white-space: nowrap;
+    background: var(--warn); color: var(--bg); font: 9px/16px var(--g-font); padding: 0 5px; border-radius: 2px;
+  }
+  .s6 .g-axis { position: absolute; left: 12px; bottom: 36px; width: 46px; height: 42px; }
+  .s6 .g-axis svg { width: 100%; height: 100%; }
+</style>
+</head>
+<body class="s6">
+<div class="doc">
+  <header class="masthead">
+    <div>
+      <div class="kicker">composer / next · platform study · screen 06</div>
+      <h1>GPUI is not a web page. It is two panes and a terminal.</h1>
+      <p class="lede">The desktop shell is the real thing: a workspace stripe, one top bar, the TUI in the left pane, a 4px splitter, and the stage as a CEF web pane. Its own focus accent is amber <b>#e0a040</b>; the terminal keeps the TUI's blue. The chat is full-width bands — yours tinted, the agent's raised — so turns separate without a rule between them.</p>
+    </div>
+    <div class="side">
+      <div class="row"><span>surface</span><b>apps/desktop/src/shell.rs</b></div>
+      <div class="row"><span>font</span><b>14 / 18 JetBrains Mono</b></div>
+      <div class="row"><span>accent</span><b>#e0a040 · focus</b></div>
+      <div class="row"><span>splitter</span><b>4px</b></div>
+    </div>
+  </header>
+
+  <figure class="screen" id="gpui">
+    <div class="screen-head">
+      <span class="snum">06</span>
+      <div>
+        <h2>Desktop — the GPUI workbench</h2>
+        <p>The left pane is the TUI the server starts for the window, not a chat UI reimplemented in gpui. The right pane is the stage; the splitter is draggable and the pointer's pane takes the keyboard.</p>
+      </div>
+      <div class="source">desktop.md · apps/desktop · shell.rs</div>
+    </div>
+
+    <div class="fit">
+    <div class="gwin">
+      <div class="gstripe"></div>
+      <div class="gtop">
+        <span class="ws">◉ demo</span><span class="crumb">/</span><span class="sess">default #a3f1</span>
+        <span class="grow"></span>
+        <span class="muted">no workers running</span><span class="crumb">·</span>
+        <span class="follow on">● following agent</span>
+        <span class="kbd">ctrl shift p</span>
+      </div>
+      <div class="gbody">
+        <section class="gchat">
+          <div class="gterm">
+            <div class="tmsgs">
+              <div class="gmsg sys"><b>entered 3d</b> · blender already running · drive: you</div>
+              <div class="gmsg you">
+                <div class="meta"><b>you</b><time>13:56</time></div>
+                <p>what's ready?</p>
+              </div>
+              <div class="gmsg agent">
+                <div class="meta"><b>default</b><time>13:57</time></div>
+                <p>0014 is ready to merge; the ship bevel is the only open thread.</p>
+              </div>
+              <div class="gmsg you">
+                <div class="meta"><b>you</b><time>13:58</time></div>
+                <p>leave 0014 — open the ship.</p>
+              </div>
+              <div class="gmsg agent">
+                <div class="meta"><b>default</b><time>13:59</time></div>
+                <p>Opened it. The top edges are selected; blender is on the stage.</p>
+              </div>
+              <div class="gmsg tool">
+                <div class="meta"><b>✓ open</b><span>site://3d/crashed-ship/project/models/ship.glb</span></div>
+                <p>scene/cube · 1 object · top edges selected</p>
+              </div>
+              <div class="gmsg you">
+                <div class="meta"><b>you</b><time>14:02</time></div>
+                <p>bevel the top edge; 0.03, three segments.</p>
+              </div>
+              <div class="gmsg agent">
+                <div class="meta"><b>default</b><time>14:02</time></div>
+                <p>On it — top edges only; the base stays sharp.</p>
+              </div>
+              <div class="gmsg tool">
+                <div class="meta"><b>✓ blender__execute_blender_code</b><span>bevel(0.03, 3)</span></div>
+                <p>12 edges · 3 segments · shade_smooth</p>
+              </div>
+              <div class="gmsg agent">
+                <div class="meta"><b>default</b><time>14:04</time></div>
+                <p>Bevel is in. I left a thread on the top edge.</p>
+              </div>
+              <div class="gmsg thread"><b>↳ thread</b> crashed-ship/top bevel · 1 open · you: three segments reads softer</div>
+            </div>
+            <div class="ginput"><span class="q">›</span> write the review reply<span class="caret"></span></div>
+            <div class="gstatus">
+              <span class="normal">NORMAL</span><span>esc enter send</span><span>ctrl-k palette</span>
+              <span class="grow"></span><span class="wait">1 waiting</span><span>site 3d</span><span>#a3f1</span>
+            </div>
+          </div>
+        </section>
+        <div class="gsplit"></div>
+        <section class="gstage">
+          <div class="gtabs">
+            <div class="gtab on"><span class="unseen">●</span> live · blender <span class="x">×</span></div>
+            <div class="gtab">mockups <span class="unseen">●</span></div>
+            <div class="gtab">changes</div>
+            <div class="gtab add">+</div>
+          </div>
+          <div class="gview">
+            <div class="gappbar">
+              <b>wayai</b><span class="sep">/</span><span>live</span><span class="sep">/</span><span>blender</span>
+              <span class="grow"></span>
+              <span class="chip hot">10 fps</span>
+              <span class="btn primary">Drive</span>
+              <span class="chip">follow</span>
+            </div>
+            <div class="gviewport">
+              <div class="gcanvas">
+                <svg viewBox="0 0 800 650" preserveAspectRatio="xMidYMid meet" aria-label="The cube in Blender">
+                  <defs>
+                    <linearGradient id="g6top" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0" stop-color="var(--g-accent)" stop-opacity=".24"/>
+                      <stop offset="1" stop-color="var(--g-accent)" stop-opacity=".04"/>
+                    </linearGradient>
+                  </defs>
+                  <g stroke="var(--g-line)" stroke-width="1">
+                    <path d="M0 650 400 260 800 650" fill="none"/>
+                    <path d="M110 650 400 310 690 620" fill="none"/>
+                    <path d="M0 540h800M0 600h800"/>
+                  </g>
+                  <ellipse cx="400" cy="460" rx="160" ry="17" fill="var(--g-accent)" opacity=".05"/>
+                  <g stroke-linejoin="miter">
+                    <path d="M400 142 536 208 400 274 264 208z" fill="var(--g-accent)" fill-opacity=".09" stroke="var(--g-accent)"/>
+                    <path d="M264 208 400 274 400 442 264 376z" fill="none" stroke="var(--g-accent)"/>
+                    <path d="M536 208 400 274 400 442 536 376z" fill="none" stroke="var(--g-accent)"/>
+                    <path d="M400 157 517 209 400 261 283 209z" fill="url(#g6top)" stroke="var(--g-accent)" stroke-width="1.4"/>
+                    <path d="M400 274 400 442" stroke="var(--g-muted)" stroke-dasharray="3 5" opacity=".65"/>
+                    <path d="M250 130h300v330h-300z" fill="none" stroke="var(--g-accent)" stroke-dasharray="4 5" opacity=".45"/>
+                  </g>
+                </svg>
+                <div class="g-hud"><b>perspective</b> · studio<br>solid · 1 object selected</div>
+                <div class="g-hud2"><b>wayai</b> · 10 fps<br>scene / cube</div>
+                <div class="g-pin">1</div>
+                <div class="g-axis">
+                  <svg viewBox="0 0 46 42">
+                    <g stroke="var(--g-muted)" stroke-width="1"><path d="M23 22V5"/><path d="M23 22 6 33"/><path d="M23 22 40 33"/></g>
+                    <g font-family="var(--g-font)" font-size="7" fill="var(--g-muted)"><text x="20" y="4">z</text><text x="1" y="37">x</text><text x="40" y="37">y</text></g>
+                    <circle cx="23" cy="22" r="2" fill="var(--g-accent)"/>
+                  </svg>
+                </div>
+                <aside class="g-thread">
+                  <header><span class="dot"></span><b>top bevel</b><span class="chip">open</span><span class="x">×</span></header>
+                  <div class="m"><div class="who">you <time>14:02</time></div><p>Three segments reads softer at this size.</p></div>
+                  <div class="m"><div class="who">default <time>14:05</time></div><p>Bumped to 3 and re-rendered the top face.</p></div>
+                  <div class="foot"><span class="kbd">⌘↵</span> send to agent<span style="margin-left:auto">1 of 1</span></div>
+                </aside>
+              </div>
+              <div class="gviewfoot"><span>127.0.0.1:7878</span><span>wayai</span><span class="grow"></span><span>drive: you</span><span>cef</span></div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+    </div>
+
+    <div class="notes">
+      <div><b>one window</b>No server rail or session list in the shell: the session list is inside the TUI pane, where it already lives.</div>
+      <div><b>focus follows</b>The pointer's pane takes the keyboard; the stage and the chat do not share one focus ring.</div>
+      <div><b>cheap and banded</b>Flat fills, 1px lines, a 4px splitter, one amber accent. Each turn is a full-width background band; no blur or CSS layout engine.</div>
+    </div>
+  </figure>
+
+  <footer class="docfoot">
+    <a href="../index.html">← all screens</a>
+    <span class="grow"></span>
+    <span>static html · no build</span>
+    <span>desktop chrome: apps/desktop</span>
+  </footer>
+</div>
+<script>
+(function () {
+  if (location.search.includes('embed')) document.documentElement.classList.add('embed');
+  function fit() {
+    document.querySelectorAll('.fit').forEach(function (box) {
+      var frame = box.firstElementChild;
+      if (!frame) return;
+      var natural = 1360;
+      frame.style.width = natural + 'px';
+      var s = Math.min(1, box.clientWidth / natural);
+      frame.style.transformOrigin = 'top left';
+      frame.style.transform = 'scale(' + s + ')';
+      box.style.height = Math.round(frame.offsetHeight * s) + 'px';
+    });
+  }
+  window.addEventListener('resize', fit);
+  window.addEventListener('load', fit);
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fit);
+  else fit();
+  setTimeout(fit, 250);
+})();
+</script>
+</body>
+</html>

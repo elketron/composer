@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>composer next · 04 phone — check in, approve, watch</title>
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="../base.css">
+<style>
+  .phone-stage {
+    width: 1360px;
+    position: relative; display: grid; grid-template-columns: 430px minmax(0, 1fr); gap: 58px;
+    align-items: center; padding: 38px 52px; border: 1px solid var(--border-strong);
+    background:
+      radial-gradient(circle at 28% 42%, color-mix(in srgb, var(--accent) 6%, transparent), transparent 40%),
+      radial-gradient(var(--grid) 1px, transparent 1px),
+      var(--stage);
+    background-size: auto, 18px 18px, auto;
+    min-height: 900px;
+  }
+  .phone-stage::before {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(180deg, transparent 55%, color-mix(in srgb, var(--stage) 72%, transparent));
+  }
+  .phone {
+    position: relative; z-index: 1; width: 390px; height: 820px; margin-left: 6px;
+    background: var(--bg); border: 1px solid var(--border-strong); border-radius: 4px;
+    box-shadow: 0 34px 90px var(--shadow-soft), 0 0 0 1px var(--shadow);
+    overflow: hidden; display: flex; flex-direction: column;
+  }
+  .pstatus {
+    height: 24px; flex: none; display: flex; align-items: center; padding: 0 18px;
+    font: 8.5px var(--font-mono); color: var(--faint);
+  }
+  .pstatus span:last-child { margin-left: auto; }
+  .phead {
+    height: 44px; flex: none; display: flex; align-items: center; gap: 7px; padding: 0 11px;
+    border-bottom: 1px solid var(--border); background: var(--surface);
+  }
+  .phead .back { color: var(--accent); font-size: 18px; line-height: 1; padding: 0 3px 2px 0; }
+  .phead .who { min-width: 0; }
+  .phead .who b { display: block; font: 600 11.5px var(--font-mono); }
+  .phead .who span { display: block; font: 8.5px var(--font-mono); color: var(--faint); }
+  .phead .grow { flex: 1; }
+  .phead .more { color: var(--muted); font-size: 15px; padding: 0 3px; }
+  .pbread {
+    height: 26px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 11px;
+    border-bottom: 1px solid var(--border); background: var(--stage);
+    font: 8.5px var(--font-mono); color: var(--faint);
+  }
+  .plive { flex: none; border-bottom: 1px solid var(--border); background: var(--stage); }
+  .plivehead {
+    height: 30px; display: flex; align-items: center; gap: 6px; padding: 0 10px;
+    font: 9.5px var(--font-mono); color: var(--muted);
+  }
+  .plivehead b { color: var(--text); font-weight: 500; }
+  .plivehead .grow { flex: 1; }
+  .plivehead .exp { color: var(--faint); font-size: 12px; }
+  .pcanvas {
+    position: relative; height: 222px; background:
+      radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 55%),
+      radial-gradient(var(--grid) 1px, transparent 1px);
+    background-size: auto, 15px 15px; overflow: hidden;
+  }
+  .pcanvas svg { width: 100%; height: 100%; display: block; }
+  .pcanvas .pin {
+    position: absolute; left: 67%; top: 27%; width: 17px; height: 17px; background: var(--warn);
+    color: var(--bg); display: flex; align-items: center; justify-content: center;
+    font: 700 9px var(--font-mono); box-shadow: 0 0 0 2px var(--stage);
+  }
+  .pcanvas .pin::after {
+    content: "top bevel"; position: absolute; left: 19px; top: 0; background: var(--warn);
+    color: var(--bg); font: 8px/16px var(--font-mono); padding: 0 4px; white-space: nowrap;
+  }
+  .pcanvas .hud {
+    position: absolute; left: 9px; top: 7px; font: 7.5px/1.5 var(--font-mono); color: var(--faint);
+  }
+  .plivefoot {
+    display: flex; align-items: center; gap: 8px; padding: 0 10px; height: 24px;
+    border-top: 1px solid var(--border); font: 8px var(--font-mono); color: var(--faint);
+  }
+  .plivefoot .grow { flex: 1; }
+  .ptools {
+    display: flex; align-items: center; gap: 6px; padding: 7px 10px;
+    border-bottom: 1px solid var(--border); background: var(--surface);
+    font: 8.5px var(--font-mono); color: var(--faint);
+  }
+  .ptools .grow { flex: 1; }
+  .pchat { flex: 1; min-height: 0; overflow: hidden; padding: 7px 10px 4px; display: flex; flex-direction: column; gap: 8px; }
+  .plabel { font: 8px var(--font-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--faint); display: flex; align-items: center; gap: 6px; }
+  .pmsg { padding-left: 8px; border-left: 1px solid var(--border-strong); }
+  .pmsg.agent { border-left-color: var(--info); }
+  .pmsg.you { border-left: 2px solid var(--accent); background: var(--you); padding: 6px 8px; }
+  .pchat .who { display: flex; gap: 6px; font: 8px var(--font-mono); color: var(--faint); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 2px; }
+  .pchat .agent .who { color: var(--info); }
+  .pchat .who time { margin-left: auto; text-transform: none; letter-spacing: 0; }
+  .pchat p { margin: 0; font-size: 10.5px; line-height: 1.5; color: var(--muted); }
+  .papproval {
+    border: 1px solid var(--warn-soft); background: color-mix(in srgb, var(--warn) 6%, transparent);
+    padding: 7px 8px;
+  }
+  .papproval .k { font: 8px var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--warn); }
+  .papproval .q { font-size: 10.5px; margin: 2px 0 5px; }
+  .papproval .meta { display: flex; align-items: center; gap: 6px; font: 8px var(--font-mono); color: var(--faint); margin-bottom: 6px; }
+  .papproval .btns { display: flex; gap: 5px; }
+  .papproval .btns .btn { flex: 1; }
+  .pevent {
+    display: flex; align-items: center; gap: 6px; border: 1px solid var(--border);
+    background: var(--surface); padding: 6px 7px; font: 8.5px var(--font-mono); color: var(--faint);
+  }
+  .pevent b { color: var(--muted); font-weight: 400; }
+  .pevent .grow { flex: 1; }
+  .pcompose {
+    flex: none; border-top: 1px solid var(--border); background: var(--surface); padding: 7px 9px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .pcompose .box {
+    flex: 1; height: 30px; border: 1px solid var(--border-strong); background: var(--bg);
+    display: flex; align-items: center; padding: 0 8px; font: 9.5px var(--font-mono); color: var(--faint);
+  }
+  .pcompose .wf { height: 28px; padding: 0 6px; display: flex; align-items: center; gap: 4px; border: 1px solid var(--border-strong); font: 8.5px var(--font-mono); color: var(--accent); }
+  .pcompose .send { width: 30px; height: 30px; background: var(--accent); color: var(--bg); display: flex; align-items: center; justify-content: center; font: 13px/1 var(--font-mono); }
+  .pnav {
+    flex: none; height: 52px; border-top: 1px solid var(--border); background: var(--surface);
+    display: grid; grid-template-columns: repeat(4, 1fr);
+  }
+  .pnav a { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font: 7.5px var(--font-mono); color: var(--faint); position: relative; }
+  .pnav a.on { color: var(--text); }
+  .pnav a.on::before { content: ""; position: absolute; left: 24px; right: 24px; top: 0; height: 2px; background: var(--accent); }
+  .pnav svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 1.5; stroke-linecap: square; }
+  .pnav .n { position: absolute; top: 7px; left: 50%; margin-left: 5px; min-width: 12px; height: 12px; background: var(--warn); color: var(--bg); font: 700 8px/12px var(--font-mono); text-align: center; }
+  .phome { flex: none; height: 15px; display: flex; align-items: center; justify-content: center; background: var(--surface); }
+  .phome i { width: 96px; height: 3px; background: var(--border-strong); }
+
+  /* annotations */
+  .annotations { position: relative; z-index: 1; max-width: 470px; }
+  .annotations .eyebrow { font: 9px var(--font-mono); letter-spacing: .18em; text-transform: uppercase; color: var(--accent); margin-bottom: 13px; }
+  .annotations h3 { font: 500 20px/1.3 var(--font-mono); letter-spacing: -.02em; margin: 0 0 18px; }
+  .ann { display: flex; gap: 12px; padding: 11px 0; border-top: 1px solid var(--border); }
+  .ann .n { flex: none; width: 22px; font: 600 9px/18px var(--font-mono); color: var(--accent); }
+  .ann b { display: block; font: 500 10.5px var(--font-mono); color: var(--text); margin-bottom: 2px; }
+  .ann p { margin: 0; font-size: 10.5px; line-height: 1.55; color: var(--muted); }
+  .switch {
+    margin-top: 18px; border: 1px solid var(--border-strong); background: var(--surface); padding: 9px 10px;
+  }
+  .annon .label { margin-bottom: 7px; }
+  .switch .row { display: flex; gap: 5px; flex-wrap: wrap; }
+  .switch .row .pill { height: 20px; padding: 0 7px; }
+  .switch .note { margin-top: 7px; font: 8.5px/1.5 var(--font-mono); color: var(--faint); }
+  .quote {
+    margin: 22px 0 0; padding: 2px 0 2px 12px; border-left: 2px solid var(--accent);
+    font: 11.5px/1.7 var(--font-mono); color: var(--muted);
+  }
+  .quote span { display: block; margin-top: 6px; font: 8.5px var(--font-mono); color: var(--faint); letter-spacing: .08em; }
+</style>
+</head>
+<body class="s4">
+<div class="doc">
+  <header class="masthead">
+    <div>
+      <div class="kicker">composer / next · single-chrome study · screen 04</div>
+      <h1>The phone is for checking in, not for doing the work.</h1>
+      <p class="lede">One screen per session: the workflow chip, the live view the user can grow or shrink, the chat newest-first, approvals answered in place, and a bottom bar. Dark and dense; the 2–5px rounding is the phone's, not the TUI's.</p>
+    </div>
+    <div class="side">
+      <div class="row"><span>surface</span><b>docs/mockups/next</b></div>
+      <div class="row"><span>tokens</span><b>templates/sdk/theme.css</b></div>
+      <div class="row"><span>frame</span><b>390 × 820</b></div>
+      <div class="row"><span>source</span><b><a href="../../../workflows.md">workflows.md</a> · board E</b></div>
+    </div>
+  </header>
+
+  <figure class="screen" id="phone">
+    <div class="screen-head">
+      <span class="snum">04</span>
+      <div>
+        <h2>Phone — one session, the same shared view</h2>
+        <p>The live view is view-only on a paired device; driving stays on the machine with the local token. The chat is newest-first, the approval is answered in place, and the workflow picker is one chip away.</p>
+      </div>
+      <div class="source">workflows.md · phase 3 · app.html</div>
+    </div>
+
+    <div class="fit">
+    <div class="phone-stage">
+      <div class="phone">
+        <div class="pstatus"><span>9:41</span><span>5G ▮ 84%</span></div>
+        <header class="phead">
+          <span class="back">‹</span>
+          <div class="who"><b>orchestrator</b><span>#a3f1 · composer</span></div>
+          <span class="grow"></span>
+          <span class="pill accent">3D</span>
+          <span class="more">⋮</span>
+        </header>
+        <div class="pbread">site 3d <span class="faint">·</span> mcp blender <span class="faint">·</span> <span class="dot ok"></span> running</div>
+
+        <section class="plive">
+          <div class="plivehead"><span class="dot ok"></span><b>live · blender</b><span class="pill">view only</span><span class="grow"></span><span class="exp">⤢</span></div>
+          <div class="pcanvas">
+            <svg viewBox="0 0 360 222" preserveAspectRatio="xMidYMid meet" aria-label="The cube in Blender">
+              <g stroke="var(--grid-strong)" stroke-width="1">
+                <path d="M0 222 180 96 360 222" fill="none"/>
+                <path d="M42 222 180 118 318 222" fill="none"/>
+                <path d="M0 190h360"/>
+              </g>
+              <ellipse cx="180" cy="177" rx="74" ry="8" fill="var(--accent)" opacity=".06"/>
+              <g stroke="var(--accent)" fill="none" stroke-linejoin="miter">
+                <path d="M180 46 244 80 180 114 116 80z" fill="var(--accent)" fill-opacity=".1"/>
+                <path d="M116 80 180 114 180 188 116 154z"/>
+                <path d="M244 80 180 114 180 188 244 154z"/>
+                <path d="M180 55 233 82 180 109 127 82z" fill="var(--accent)" fill-opacity=".08"/>
+                <path d="M180 114 180 188" stroke="var(--faint)" stroke-dasharray="3 4"/>
+                <path d="M114 72h132v120h-132z" stroke="var(--warn)" stroke-dasharray="4 4" opacity=".5"/>
+              </g>
+              <circle cx="180" cy="53" r="3" fill="var(--warn)"/>
+            </svg>
+            <div class="hud"><b>perspective</b><br>solid · 10 fps</div>
+            <div class="pin">1</div>
+          </div>
+          <div class="plivefoot"><span>wayai 127.0.0.1:7878</span><span class="grow"></span><span>drive is on the desktop</span></div>
+        </section>
+
+        <div class="ptools">
+          <span class="dot warn"></span><b>2 threads</b>
+          <span class="pill warn">1 on this view</span>
+          <span class="grow"></span>
+          <span class="btn sm ghost">comment</span>
+        </div>
+
+        <section class="pchat">
+          <div class="plabel">newest first</div>
+          <div class="pmsg agent">
+            <div class="who">default <time>14:06</time></div>
+            <p>Bevel is in: three segments, the top face softened. The thread is resolved.</p>
+          </div>
+          <div class="pmsg you">
+            <div class="who">you <time>14:02</time></div>
+            <p>Bevel the top edges — 0.03, three segments.</p>
+          </div>
+          <div class="papproval">
+            <div class="k">approval · ticket 0014</div>
+            <div class="k" style="color:var(--text); font-size:10.5px; letter-spacing:0; text-transform:none;">Merge ticket 0014?</div>
+            <div class="k" style="color:var(--muted); font-size:9px; letter-spacing:0; text-transform:none;">the work is in project/ · coding / game-save</div>
+            <div class="pills" style="display:flex; gap:6px; margin:6px 0"><span class="pill ok">1 commit</span><span class="pill">+12 −4</span></div>
+            <div class="btns"><span class="btn">Review</span><span class="btn primary">Merge</span></div>
+          </div>
+          <div class="approval-foot" style="font:8px var(--font-mono); color:var(--faint);">the branch is the same worktree the app shows</div>
+          <div class="pevent"><span class="dot ok"></span><b>worker #0014</b><span>done · 1 commit</span><span class="grow"></span><span>3 files</span></div>
+        </section>
+
+        <div class="pcompose">
+          <div class="box">Message</div>
+          <div class="wf"><span class="dot ok"></span> 3D</div>
+          <div class="send">↑</div>
+        </div>
+        <nav class="pnav">
+          <a class="on" href="#"><svg viewBox="0 0 16 16"><path d="M3 3h10v8H8l-3 2v-2H3z"/></svg>inbox<span class="n">2</span></a>
+          <a href="#"><svg viewBox="0 0 16 16"><path d="M2 4h12v3H2zM2 9h8v4H2z"/></svg>workflows</a>
+          <a href="#"><svg viewBox="0 0 16 16"><path d="M3 2h6l4 4v8H3z"/><path d="M9 2v4h4"/></svg>pages</a>
+          <a href="#"><svg viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="4"/><rect x="2" y="9" width="12" height="4"/></svg>server</a>
+        </nav>
+        <div class="phome"><i></i></div>
+      </div>
+
+      <aside class="annotations">
+        <div class="eyebrow">the phone's job</div>
+        <h3>Check in. Approve. Watch. Leave the hands on the machine.</h3>
+        <div class="ann"><span class="n">01</span><div><b>The workflow is the chip</b><p><code>3D</code> is the site the session is in; tapping it switches workflow and takes the tools with it.</p></div></div>
+        <div class="ann"><span class="n">02</span><div><b>The shared view, view-only</b><p>The live view is the same <code>/view</code> a browser opens. A paired token may look and comment, not drive.</p></div></div>
+        <div class="ann"><span class="n">03</span><div><b>Newest first</b><p>The phone is for what just happened. Approvals and the last turn are on top; the history is below.</p></div></div>
+        <div class="ann"><span class="n">04</span><div><b>One approval, in place</b><p>Merge answers where the request is. Review opens the same worktree the agent wrote; nothing is a separate screen.</p></div></div>
+        <div class="ann"><span class="n">05</span><div><b>The bar is the map</b><p>Inbox, workflows, pages, server. The session stays one screen; the bar changes what is beside it.</p></div></div>
+        <div class="switch">
+          <div class="label">switch workflow</div>
+          <div class="row"><span class="pill accent">3d</span><span class="pill">coding</span><span class="pill">video</span><span class="pill">cad</span></div>
+          <div class="note">entering 3d: blender already running · mcp blender granted</div>
+        </div>
+        <blockquote class="quote">“the agent follows me to whatever I am working in; I don’t go to where the agent is.”<span>owner · 2026-11-10</span></blockquote>
+      </aside>
+    </div>
+    </div>
+
+    <div class="notes">
+      <div><b>the same session</b>The phone does not get a copy. It is the same session, the same view URL, and the same worktree.</div>
+      <div><b>where drive lives</b>Only the machine's local token may drive; a paired device's messages are dropped by the proxy.</div>
+      <div><b>the 2–5px rule</b>The phone keeps a small radius; the TUI and the desktop chrome stay square.</div>
+    </div>
+  </figure>
+
+  <footer class="docfoot">
+    <a href="../index.html">← all screens</a>
+    <span class="grow"></span>
+    <span>static html · no build</span>
+    <span>tokens: templates/sdk/theme.css</span>
+  </footer>
+</div>
+<script>
+(function () {
+  if (location.search.includes('embed')) document.documentElement.classList.add('embed');
+  function fit() {
+    document.querySelectorAll('.fit').forEach(function (box) {
+      var frame = box.firstElementChild;
+      if (!frame) return;
+      var natural = 1360;
+      frame.style.width = natural + 'px';
+      var s = Math.min(1, box.clientWidth / natural);
+      frame.style.transformOrigin = 'top left';
+      frame.style.transform = 'scale(' + s + ')';
+      box.style.height = Math.round(frame.offsetHeight * s) + 'px';
+    });
+  }
+  window.addEventListener('resize', fit);
+  window.addEventListener('load', fit);
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fit);
+  else fit();
+  setTimeout(fit, 250);
+})();
+</script>
+</body>
+</html>

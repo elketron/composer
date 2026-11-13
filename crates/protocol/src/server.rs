@@ -213,19 +213,6 @@ pub enum ServerMessage {
         status: String,
         output: String,
     },
-    /// A pipeline stage's run ended: `review` (waits at its gate), `done`, `failed`, `paused`.
-    #[serde(rename = "stage.ended")]
-    StageEnded {
-        /// The work's page (`site://video/launch-video/index.md`).
-        work: Url,
-        /// The work's title.
-        title: String,
-        /// `02_script`.
-        stage: String,
-        status: String,
-        summary: String,
-    },
-
     /// A reminder page (`type: reminder`) came due. Sent once per reminder, to every client.
     #[serde(rename = "reminder.due")]
     ReminderDue {
@@ -390,18 +377,5 @@ pub enum CommandResult {
         changed: bool,
         /// Changed settings that only take effect after a restart (`provider`, `agent.slots`, …).
         restart_needed: Vec<String>,
-    },
-    Pipelines {
-        pipelines: Vec<crate::http::PipelineSummary>,
-        templates: Vec<crate::http::PipelineSummary>,
-        /// Every work in them.
-        #[serde(default)]
-        works: Vec<crate::http::WorkSummary>,
-    },
-    Pipeline {
-        pipeline: crate::http::PipelineSummary,
-    },
-    Work {
-        work: crate::http::WorkSummary,
     },
 }

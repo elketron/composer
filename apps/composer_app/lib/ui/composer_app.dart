@@ -84,7 +84,7 @@ class _ComposerAppState extends State<ComposerApp> {
     final session = tap.session;
     final page = tap.page;
     if (session == null) {
-      // A stage at its gate: the pipeline's board. A reminder: its page.
+      // A reminder: its page.
       final context = _navigator.currentContext;
       if (context == null) return;
       if (tap.app != null) {

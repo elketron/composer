@@ -150,12 +150,6 @@ pub enum Pending {
     McpServers,
     /// `config.reload`: say what changed.
     ReloadConfig,
-    /// `pipeline.list`, `pipeline.new`, `work.new`: say what there is, open what was made.
-    Pipelines,
-    Pipeline,
-    Work,
-    /// `work.run`: say which stage runs.
-    WorkRun,
     /// `ticket.merge` / `ticket.discard` of this ticket.
     Merged(String),
     Discarded(String),

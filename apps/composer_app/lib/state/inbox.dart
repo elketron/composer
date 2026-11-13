@@ -1,17 +1,13 @@
 import 'package:composer_protocol/composer_protocol.dart';
 
 import 'server_status.dart';
-import 'works.dart';
 
 /// A server's sessions by what they need: you, running, and the rest (the Inbox tab).
 class Inbox {
-  const Inbox({required this.approvals, required this.gates, required this.unread, required this.busy, required this.rest});
+  const Inbox({required this.approvals, required this.unread, required this.busy, required this.rest});
 
   /// Recipes waiting for an answer in sessions that are listed.
   final List<ServerMessageApprovalRequest> approvals;
-
-  /// Works waiting at a gate.
-  final List<WorkSummary> gates;
 
   /// Finished something you haven't seen, and not running again.
   final List<SessionInfo> unread;
@@ -19,7 +15,7 @@ class Inbox {
   final List<SessionInfo> rest;
 
   /// What needs you: the number on the Inbox tab.
-  int get needsYou => approvals.length + unread.length + gates.length;
+  int get needsYou => approvals.length + unread.length;
 
   factory Inbox.of(ServerStatus status) {
     final sessions = status.sessions;
@@ -30,7 +26,6 @@ class Inbox {
         isBusy(status.activity(s)) || sessions.any((w) => w.parent == s.id && isBusy(status.activity(w)));
     return Inbox(
       approvals: [for (final a in status.approvals) if (ids.contains(a.session)) a],
-      gates: [for (final w in status.pipelines?.works ?? const <WorkSummary>[]) if (waitingStage(w) != null) w],
       unread: sessions.where((s) => status.unread.contains(s.id) && !running(s)).toList(),
       busy: top.where(running).toList(),
       rest: top.where((s) => !running(s) && !status.unread.contains(s.id)).toList(),

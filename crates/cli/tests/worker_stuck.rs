@@ -45,7 +45,7 @@ async fn the_orchestrator_continues_a_worker_at_its_turn_limit() {
     std::fs::create_dir_all(dir.path().join("sites/orchestration/tickets")).unwrap();
     std::fs::write(
         dir.path().join("sites/orchestration/tickets/0001.md"),
-        "---\ntitle: Read\ntype: ticket\nid: \"0001\"\nstatus: open\nagent: worker\n---\n# Read\n\n## Task\nRead Home.\n\n## Result\n",
+        "---\ntitle: Read\ntype: ticket\nid: \"0001\"\nstatus: open\nagent: default\n---\n# Read\n\n## Task\nRead Home.\n\n## Result\n",
     )
     .unwrap();
     std::fs::write(

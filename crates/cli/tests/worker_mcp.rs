@@ -47,10 +47,7 @@ async fn a_worker_process_calls_an_mcp_tool_through_the_parent() {
     }
     let (base_url, requests) = fake_model_logged(Scripts {
         orchestrator: VecDeque::from([
-            Reply::Call(
-                "spawn_worker",
-                json!({ "ticket": "0001", "agent": "mcpworker" }),
-            ),
+            Reply::Call("spawn_worker", json!({ "ticket": "0001" })),
             Reply::Text("worker started"),
             Reply::Call(
                 "answer_approval",
@@ -85,16 +82,11 @@ async fn a_worker_process_calls_an_mcp_tool_through_the_parent() {
     std::fs::write(&script, FAKE_SERVER).unwrap();
     let home = WorkspaceHome::new(dir.path());
     init_workspace(&home).await.unwrap();
-    let worker = std::fs::read_to_string(dir.path().join("sites/agents/worker.md")).unwrap();
+    // The worker is the default agent; give it the fake server's tools and the worker finish.
+    let default = std::fs::read_to_string(dir.path().join("sites/agents/default.md")).unwrap();
     std::fs::write(
-        dir.path().join("sites/agents/mcpworker.md"),
-        worker
-            .replace("name: worker", "name: mcpworker")
-            .replace(
-                "description: general worker; carries out any ticket",
-                "description: adds numbers",
-            )
-            .replace("run, finish]", "run, finish, fake__*]"),
+        dir.path().join("sites/agents/default.md"),
+        default.replace("finish, watch]", "finish, watch, fake__*]"),
     )
     .unwrap();
     std::fs::create_dir_all(dir.path().join("sites/notes")).unwrap();
@@ -106,7 +98,7 @@ async fn a_worker_process_calls_an_mcp_tool_through_the_parent() {
     std::fs::create_dir_all(dir.path().join("sites/orchestration/tickets")).unwrap();
     std::fs::write(
         dir.path().join("sites/orchestration/tickets/0001.md"),
-        "---\ntitle: Add\ntype: ticket\nid: \"0001\"\nstatus: open\nagent: mcpworker\n---\n# Add\n\n## Task\nAdd 2 and 3.\n\n## Result\n",
+        "---\ntitle: Add\ntype: ticket\nid: \"0001\"\nstatus: open\n---\n# Add\n\n## Task\nAdd 2 and 3.\n\n## Result\n",
     )
     .unwrap();
     std::fs::write(

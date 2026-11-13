@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>composer next · 05 TUI — the chat and the artifact</title>
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="../base.css">
+<style>
+  .tui-frame {
+    width: 1360px;
+    border: 1px solid var(--border-strong); background: var(--bg);
+    box-shadow: 0 34px 90px var(--shadow-soft), 0 0 0 1px var(--shadow);
+    overflow: hidden;
+  }
+  .tw {
+    height: 26px; display: flex; align-items: center; gap: 8px; padding: 0 10px;
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    font: 8.5px var(--font-mono); color: var(--faint);
+  }
+  .term { height: 748px; display: flex; flex-direction: column; background: var(--stage); }
+  .thead {
+    height: 27px; flex: none; display: flex; align-items: center; gap: 10px; padding: 0 11px;
+    border-bottom: 1px solid var(--border); background: var(--surface);
+    font: 9.5px var(--font-mono); color: var(--faint);
+  }
+  .thead .brand { color: var(--text); font-weight: 700; letter-spacing: .04em; }
+  .thead .site { color: var(--accent); }
+  .thead .sep { color: var(--border-strong); }
+  .thead .grow { flex: 1; }
+  .thead .mode { color: var(--text); }
+  .tbody { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 426px; }
+  .tchat { min-width: 0; display: flex; flex-direction: column; border-right: 1px solid var(--border); background: var(--bg); }
+  .tmsgs { flex: 1; min-height: 0; overflow: hidden; padding: 9px 12px 6px; display: flex; flex-direction: column; justify-content: flex-end; gap: 7px; }
+  .tline { display: flex; gap: 8px; font: 10.5px/1.55 var(--font-mono); min-width: 0; }
+  .tline .g { color: var(--faint); width: 9px; flex: none; text-align: center; }
+  .tline .txt { min-width: 0; }
+  .tline .txt b { color: var(--text); font-weight: 500; }
+  .tline .txt code { color: var(--text); }
+  .tline .txt .dim { color: var(--faint); }
+  .tsys {
+    border: 1px solid var(--border); background: var(--surface); padding: 5px 8px;
+    font: 9.5px/1.6 var(--font-mono); color: var(--muted); display: flex; gap: 8px;
+  }
+  .tsys .g { color: var(--ok); }
+  .tsys b { color: var(--text); font-weight: 500; }
+  .tmsg { border-left: 2px solid var(--border-strong); padding: 6px 9px; }
+  .tmsg.you { border-left-color: var(--accent); background: var(--you); }
+  .tmsg.agent { border-left-color: var(--info); background: var(--surface); }
+  .tmsg .who { display: flex; gap: 7px; font: 8.5px var(--font-mono); color: var(--faint); text-transform: uppercase; letter-spacing: .1em; margin-bottom: 2px; }
+  .tmsg.agent .who { color: var(--info); }
+  .tmsg .who time { margin-left: auto; text-transform: none; letter-spacing: 0; }
+  .tmsg p { margin: 0; font: 10.5px/1.6 var(--font-mono); color: var(--text); }
+  .tmsg p.dim { color: var(--muted); }
+  .ttool { border: 1px solid var(--border); background: var(--bg); padding: 4px 7px; font: 9px var(--font-mono); }
+  .ttool .h { display: flex; gap: 7px; color: var(--muted); }
+  .ttool .ok { color: var(--ok); }
+  .ttool .tool { color: var(--info); }
+  .ttool .arg { color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ttool .sub { color: var(--faint); padding-left: 17px; margin-top: 1px; }
+  .tthread {
+    border: 1px solid var(--warn-soft); background: color-mix(in srgb, var(--warn) 5%, transparent);
+    padding: 4px 7px; font: 9px/1.55 var(--font-mono); color: var(--muted);
+    display: flex; gap: 7px;
+  }
+  .tthread .pin { color: var(--warn); }
+  .tthread b { color: var(--text); font-weight: 400; }
+  .tthread .grow { flex: 1; }
+  .tthread .k { color: var(--faint); }
+  .tstream { font: 10.5px/1.6 var(--font-mono); color: var(--text); padding-left: 9px; border-left: 2px solid var(--info); }
+  .tstream .who { color: var(--info); font: 8.5px var(--font-mono); letter-spacing: .1em; text-transform: uppercase; margin-bottom: 2px; }
+  .caret { display: inline-block; width: 6px; height: 12px; background: var(--accent); vertical-align: -1px; }
+  .tprompt {
+    flex: none; border-top: 1px solid var(--border); background: var(--surface);
+    padding: 6px 10px 8px;
+  }
+  .tprompt .row { display: flex; align-items: center; gap: 7px; font: 9.5px var(--font-mono); color: var(--faint); }
+  .tprompt .q { color: var(--accent); }
+  .tprompt .in { color: var(--text); }
+  .tprompt .hint { margin-left: auto; }
+  .tfoot {
+    height: 23px; flex: none; display: flex; align-items: center; gap: 12px; padding: 0 10px;
+    border-top: 1px solid var(--border); background: var(--surface);
+    font: 8.5px var(--font-mono); color: var(--faint);
+  }
+  .tfoot .normal { background: var(--accent); color: var(--bg); font-weight: 600; padding: 0 5px; line-height: 15px; }
+  .tfoot .grow { flex: 1; }
+  .tfoot .wait { color: var(--warn); }
+
+  /* review */
+  .trev { display: flex; flex-direction: column; min-width: 0; background: var(--bg); }
+  .trevhead {
+    height: 27px; flex: none; display: flex; align-items: center; gap: 7px; padding: 0 9px;
+    border-bottom: 1px solid var(--border); background: var(--surface);
+    font: 9px var(--font-mono); color: var(--faint);
+  }
+  .trevhead b { color: var(--text); font-weight: 500; }
+  .trevhead .grow { flex: 1; }
+  .tfile {
+    height: 25px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 9px;
+    border-bottom: 1px solid var(--border); font: 9px var(--font-mono); color: var(--muted);
+  }
+  .tfile .ok { color: var(--ok); }
+  .tfile .bad { color: var(--err); }
+  .tdiff {
+    flex: 1; min-height: 0; overflow: hidden; padding: 4px 0; background: var(--stage);
+    font: 9px/1.65 var(--font-mono); color: var(--muted);
+    display: flex; flex-direction: column;
+  }
+  .tdiff-end { margin-top: auto; border-top: 1px solid var(--border); background: var(--surface); padding: 4px 9px 5px; }
+  .tf { display: flex; gap: 7px; font: 8.5px/1.6 var(--font-mono); color: var(--muted); }
+  .tf .st { width: 8px; flex: none; color: var(--warn); }
+  .tf .path { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tf .stat { color: var(--faint); flex: none; }
+  .dl { display: flex; gap: 9px; padding: 0 9px; white-space: pre; }
+  .dl .n { width: 22px; flex: none; text-align: right; color: var(--faint); }
+  .dl .s { width: 9px; flex: none; color: var(--faint); }
+  .dl.add { background: color-mix(in srgb, var(--ok) 8%, transparent); color: var(--text); }
+  .dl.add .s { color: var(--ok); }
+  .dl.del { background: color-mix(in srgb, var(--err) 7%, transparent); color: var(--text); }
+  .dl.del .s { color: var(--err); }
+  .dl.hunk { color: var(--info); background: var(--surface); }
+  .dl.hunk .n { color: transparent; }
+  .dl.on { box-shadow: inset 2px 0 0 var(--accent); background: var(--raised); }
+  .tnotes { flex: none; border-top: 1px solid var(--border); background: var(--surface); padding: 6px 8px; display: flex; flex-direction: column; gap: 4px; }
+  .tnote { border-left: 2px solid var(--warn); padding: 3px 7px; font: 9px/1.55 var(--font-mono); color: var(--muted); }
+  .tnote.reply { border-left-color: var(--info); }
+  .tnote .meta { display: flex; gap: 6px; color: var(--faint); font-size: 8px; margin-bottom: 1px; }
+  .tnote .meta b { color: var(--warn); font-weight: 500; }
+  .tnote.reply .meta b { color: var(--info); }
+  .tnote p { margin: 0; }
+  .tnote code { color: var(--text); }
+  .trevfoot {
+    height: 23px; flex: none; display: flex; align-items: center; gap: 10px; padding: 0 9px;
+    border-top: 1px solid var(--border); font: 8px var(--font-mono); color: var(--faint);
+  }
+  .trevfoot .grow { flex: 1; }
+
+  /* scanlines, subtle */
+  .term { position: relative; }
+  .term::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 5;
+    background: repeating-linear-gradient(180deg, transparent 0 3px, color-mix(in srgb, var(--shadow) 12%, transparent) 3px 4px);
+    opacity: .22;
+  }
+</style>
+</head>
+<body class="s5">
+<div class="doc">
+  <header class="masthead">
+    <div>
+      <div class="kicker">composer / next · single-chrome study · screen 05</div>
+      <h1>The terminal is still the best seat for the work.</h1>
+      <p class="lede">The TUI stays square, mono, keyboard-first. A workflow switch is one command; the artifact opens beside the chat with its own notes. The same <b>Threads</b> model as the desktop and the phone, rendered for a hunk.</p>
+    </div>
+    <div class="side">
+      <div class="row"><span>surface</span><b>docs/mockups/next</b></div>
+      <div class="row"><span>tokens</span><b>templates/sdk/theme.css</b></div>
+      <div class="row"><span>frame</span><b>1360 × 774</b></div>
+      <div class="row"><span>source</span><b><a href="../../../tui-mode.md">tui-mode.md</a> · plan.md</b></div>
+    </div>
+  </header>
+
+  <figure class="screen" id="tui">
+    <div class="screen-head">
+      <span class="snum">05</span>
+      <div>
+        <h2>TUI — the chat, the workflow, and the hunk beside it</h2>
+        <p>A coding session after leaving <code>3D</code>: the conversation stays, only the prompt, tools and view change. The right side is a live review; the note the user left is answered in place.</p>
+      </div>
+      <div class="source">tui-mode.md · plan.md · phase 8</div>
+    </div>
+
+    <div class="fit">
+    <div class="tui-frame">
+      <div class="tw">
+        <span class="faint">kitty</span><span class="faint">·</span><span>~/Projects/composer</span>
+        <span style="margin-left:auto">composer — 1360×774</span>
+      </div>
+      <div class="term">
+        <div class="thead">
+          <span class="brand">composer</span><span class="sep">·</span><span class="site">demo</span>
+          <span class="sep">·</span><span>#a3f1</span><span class="sep">·</span><span class="mode">coding</span>
+          <span class="sep">·</span><span><span class="dot ok"></span> worktree</span>
+          <span class="grow"></span>
+          <span class="wait">! 1 waiting</span><span class="sep">·</span><span>slots 1/2</span>
+        </div>
+
+        <div class="tbody">
+          <section class="tchat">
+            <div class="tmsgs">
+              <div class="tsys"><span class="g">✦</span><span><b>entered 3d</b> · blender already running · drive: you · mcp blender</span></div>
+
+              <div class="tmsg you">
+                <div class="who">you <time>13:58</time></div>
+                <p>open the crashed-ship work; the top bevel reads sharp at this distance.</p>
+              </div>
+
+              <div class="tmsg agent">
+                <div class="who">default <time>13:59</time></div>
+                <p>Opened it. The top edges are selected; blender is on the stage.</p>
+              </div>
+
+              <div class="ttool">
+                <div class="h"><span class="ok">✓</span><span class="tool">open</span><span class="arg">site://3d/crashed-ship/project/models/ship.glb</span><span class="ok">0.2s</span></div>
+                <div class="sub">scene/cube · 1 object · top edges selected</div>
+              </div>
+
+              <div class="tmsg you">
+                <div class="who">you <time>14:02</time></div>
+                <p>bevel the top edge; 0.03, three segments. keep the bottom sharp.</p>
+              </div>
+
+              <div class="tmsg agent">
+                <div class="who">default <time>14:02</time></div>
+                <p>On it — top edges only, the base stays on the grid.</p>
+              </div>
+
+              <div class="ttool">
+                <div class="h"><span class="ok">✓</span><span class="tool">blender__execute_blender_code</span><span class="arg">bevel(0.03, 3)</span><span class="ok">2.1s</span></div>
+                <div class="sub">12 edges · 3 segments · shade_smooth</div>
+              </div>
+
+              <div class="tthread">
+                <span class="pin">1</span><span><b>thread</b> · crashed-ship / top bevel</span>
+                <span class="grow"></span><span class="k">you: three segments reads softer</span>
+              </div>
+
+              <div class="tstream">
+                <div class="who">default · streaming</div>
+                Bumped the bevel and left a note on the hunk. The review is ready when you are<span class="caret"></span>
+              </div>
+
+              <div class="tline"><span class="g">›</span><span class="txt"><code>:workflow coding</code> <span class="dim">— leave 3d, keep the conversation</span></span></div>
+              <div class="tsys"><span class="g">✓</span><span><b>left 3d</b> · blender stays open · tools dropped · site://coding in the prompt</span></div>
+            </div>
+
+            <div class="tprompt">
+              <div class="row"><span class="q">›</span><span class="in">write the review reply</span><span class="caret"></span><span class="hint">esc enter send</span></div>
+            </div>
+            <div class="tfoot">
+              <span class="normal">NORMAL</span>
+              <span>esc enter send</span><span>ctrl-k palette</span><span>:workflow 3d</span>
+              <span class="grow"></span><span class="wait">1 waiting</span><span>site coding</span><span class="sep">·</span><span>#a3f1</span>
+            </div>
+          </section>
+
+          <section class="trev">
+            <div class="trevhead"><span class="dot warn"></span><b>review · ticket/0014</b><span class="pill">4 files</span><span class="grow"></span><span>hunk</span></div>
+            <div class="tfile"><span>project/src/scene.rs</span><span class="ok">+8</span><span class="bad">−2</span><span style="margin-left:auto">2/4</span></div>
+            <div class="tdiff">
+              <div class="dl hunk"><span class="n"></span><span class="s"></span>@@ -18,9 +18,12 @@ fn bevel_top</div>
+              <div class="dl"><span class="n">18</span><span class="s"> </span>fn bevel_top(mesh: &amp;mut Mesh) {</div>
+              <div class="dl on"><span class="n">19</span><span class="s">-</span>    mesh.bevel(top_edges(), 0.02);</div>
+              <div class="dl add"><span class="n">19</span><span class="s">+</span>    mesh.bevel(top_edges(), BEVEL);</div>
+              <div class="dl add"><span class="n">20</span><span class="s">+</span>    mesh.shade_smooth(&amp;top_edges());</div>
+              <div class="dl"><span class="n">20</span><span class="s"> </span>}</div>
+              <div class="dl"><span class="n">21</span><span class="s"> </span></div>
+              <div class="dl"><span class="n">22</span><span class="s"> </span>const BEVEL: f32 = 0.03;</div>
+              <div class="dl add"><span class="n">23</span><span class="s">+</span>const SEGMENTS: u32 = 3;</div>
+              <div class="dl"><span class="n">24</span><span class="s"> </span></div>
+              <div class="dl"><span class="n">25</span><span class="s"> </span>fn top_edges() -&gt; Vec&lt;Edge&gt; {</div>
+              <div class="dl"><span class="n">26</span><span class="s"> </span>    // the bevel is on the top face only</div>
+              <div class="dl"><span class="n">27</span><span class="s"> </span>    mesh.edges().filter(|e| e.z &gt; 0.0).collect()</div>
+              <div class="dl"><span class="n">28</span><span class="s"> </span>}</div>
+              <div class="dl hunk"><span class="n"></span><span class="s"></span>@@ -41,7 +44,8 @@ fn render</div>
+              <div class="dl"><span class="n">41</span><span class="s"> </span>let bevel = BEVEL;</div>
+              <div class="dl"><span class="n">42</span><span class="s"> </span>let segments = SEGMENTS;</div>
+              <div class="dl"><span class="n">43</span><span class="s"> </span>scene.render(bevel, segments);</div>
+              <div class="dl hunk"><span class="n"></span><span class="s"></span>@@ -52,4 +55,5 @@ fn main</div>
+              <div class="dl"><span class="n">52</span><span class="s"> </span>let scene = Scene::load("ship.glb");</div>
+              <div class="dl del"><span class="n">53</span><span class="s">-</span>scene.render(0.02);</div>
+              <div class="dl add"><span class="n">53</span><span class="s">+</span>scene.render(BEVEL, SEGMENTS);</div>
+              <div class="dl add"><span class="n">54</span><span class="s">+</span>scene.save("scene/ship.glb");</div>
+              <div class="dl"><span class="n">55</span><span class="s"> </span>println!("rendered");</div>
+              <div class="tdiff-end">
+                <div class="tf"><span class="st">M</span><span class="path">project/src/scene.rs</span><span class="stat">+8 −2</span></div>
+                <div class="tf"><span class="st">M</span><span class="path">project/Cargo.toml</span><span class="stat">+1 −1</span></div>
+                <div class="tf"><span class="st" style="color:var(--ok)">A</span><span class="path">project/scene/ship.glb</span><span class="stat">new</span></div>
+                <div class="tf"><span class="st">M</span><span class="path">README.md</span><span class="stat">+3 −1</span></div>
+              </div>
+            </div>
+            <div class="tnotes">
+              <div class="tnote">
+                <div class="meta"><b>you</b><span>14:02</span><span>note</span></div>
+                <p>the bevel constant is repeated; hoist it and keep segments with it.</p>
+              </div>
+              <div class="tnote reply">
+                <div class="meta"><b>default</b><span>14:05</span><span>reply</span></div>
+                <p>moved to <code>BEVEL</code> and <code>SEGMENTS</code>, both used in <code>bevel_top</code> and <code>render</code>.</p>
+              </div>
+            </div>
+            <div class="trevfoot"><span>n next hunk</span><span>c comment</span><span>q close</span><span class="grow"></span><span>4 files · +12 −4</span></div>
+          </section>
+        </div>
+      </div>
+    </div>
+    </div>
+
+    <div class="notes">
+      <div><b>one agent</b>Switching workflow keeps the conversation and memory; only the prompt, the tools and the view change.</div>
+      <div><b>the artifact</b>The hunk is the shared view here; notes are the same threads as a mockup pin, rendered in a terminal.</div>
+      <div><b>follow the agent</b>The stage opens what the agent opened. <code>ctrl-1</code> / <code>ctrl-2</code> move the focus, not the work.</div>
+    </div>
+  </figure>
+
+  <footer class="docfoot">
+    <a href="../index.html">← all screens</a>
+    <span class="grow"></span>
+    <span>static html · no build</span>
+    <span>tokens: templates/sdk/theme.css</span>
+  </footer>
+</div>
+<script>
+(function () {
+  if (location.search.includes('embed')) document.documentElement.classList.add('embed');
+  function fit() {
+    document.querySelectorAll('.fit').forEach(function (box) {
+      var frame = box.firstElementChild;
+      if (!frame) return;
+      var natural = 1360;
+      frame.style.width = natural + 'px';
+      var s = Math.min(1, box.clientWidth / natural);
+      frame.style.transformOrigin = 'top left';
+      frame.style.transform = 'scale(' + s + ')';
+      box.style.height = Math.round(frame.offsetHeight * s) + 'px';
+    });
+  }
+  window.addEventListener('resize', fit);
+  window.addEventListener('load', fit);
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fit);
+  else fit();
+  setTimeout(fit, 250);
+})();
+</script>
+</body>
+</html>

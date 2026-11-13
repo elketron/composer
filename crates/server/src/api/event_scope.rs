@@ -59,8 +59,7 @@ pub fn scope(message: &ServerMessage) -> EventScope<'_> {
         | WorkerStatus { .. }
         | Slots { .. }
         | ConfigReloaded { .. }
-        | ReminderDue { .. }
-        | StageEnded { .. } => EventScope::Global,
+        | ReminderDue { .. } => EventScope::Global,
         Ok { .. } | Error { .. } => EventScope::Reply,
     }
 }

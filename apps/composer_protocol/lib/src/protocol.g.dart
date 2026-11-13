@@ -52,7 +52,7 @@ class AgentSummary {
   /// `description:`, else the title.
   final String description;
 
-  /// A worker agent (`role: worker`): runs tickets, not chats.
+  /// A legacy worker page (`role: worker`); current workers are the default agent.
   final bool worker;
 
   factory AgentSummary.fromJson(Map<String, Object?> json) => AgentSummary(
@@ -266,8 +266,6 @@ enum ApprovalKind {
   recipe('recipe'),
   merge('merge'),
   tool('tool'),
-  /// A change to a pipeline's stage contract or `_config` page, learned from your edits.
-  amendment('amendment'),
   /// A call to an MCP server's tool (`rule`: the tool, for `always`; it holds everywhere).
   mcp('mcp'),
   /// Publishing a workspace site to the library (the only write that leaves a workspace).
@@ -475,10 +473,6 @@ sealed class ClientCommand {
         'library.update' => ClientCommandLibraryUpdate.fromJson(json),
         'library.publish' => ClientCommandLibraryPublish.fromJson(json),
         'config.reload' => ClientCommandConfigReload.fromJson(json),
-        'pipeline.list' => ClientCommandPipelineList.fromJson(json),
-        'pipeline.new' => ClientCommandPipelineNew.fromJson(json),
-        'work.new' => ClientCommandWorkNew.fromJson(json),
-        'work.run' => ClientCommandWorkRun.fromJson(json),
         'ticket.changes' => ClientCommandTicketChanges.fromJson(json),
         'ticket.comment' => ClientCommandTicketComment.fromJson(json),
         'ticket.merge' => ClientCommandTicketMerge.fromJson(json),
@@ -1446,109 +1440,6 @@ final class ClientCommandConfigReload extends ClientCommand {
       };
 }
 
-/// The pipelines (sites of staged work) and the templates new ones are made from; the reply
-/// is `pipelines`.
-final class ClientCommandPipelineList extends ClientCommand {
-  const ClientCommandPipelineList();
-
-  factory ClientCommandPipelineList.fromJson(Map<String, Object?> json) => ClientCommandPipelineList(
-      );
-
-  Map<String, Object?> toJson() => {
-        'type': 'pipeline.list',
-      };
-}
-
-/// Makes a pipeline site from `templates/pipelines/<kind>/`, named `name` (default: the
-/// kind); the reply is `pipeline`.
-final class ClientCommandPipelineNew extends ClientCommand {
-  const ClientCommandPipelineNew({
-    required this.kind,
-    this.name,
-  });
-
-  final String kind;
-
-  final String? name;
-
-  factory ClientCommandPipelineNew.fromJson(Map<String, Object?> json) => ClientCommandPipelineNew(
-        kind: json['kind'] as String,
-        name: json['name'] == null ? null : json['name'] as String,
-      );
-
-  Map<String, Object?> toJson() => {
-        'type': 'pipeline.new',
-        'kind': kind,
-        if (name != null) 'name': name,
-      };
-}
-
-/// Starts a piece of work in a pipeline: the folder `site://<pipeline>/<name>/` with its
-/// brief and a folder per stage. `project` is a name in the projects directory or a path;
-/// the reply is `work`.
-final class ClientCommandWorkNew extends ClientCommand {
-  const ClientCommandWorkNew({
-    required this.pipeline,
-    required this.name,
-    this.project,
-    this.brief,
-  });
-
-  final String pipeline;
-
-  final String name;
-
-  final String? project;
-
-  final String? brief;
-
-  factory ClientCommandWorkNew.fromJson(Map<String, Object?> json) => ClientCommandWorkNew(
-        pipeline: json['pipeline'] as String,
-        name: json['name'] as String,
-        project: json['project'] == null ? null : json['project'] as String,
-        brief: json['brief'] == null ? null : json['brief'] as String,
-      );
-
-  Map<String, Object?> toJson() => {
-        'type': 'work.new',
-        'pipeline': pipeline,
-        'name': name,
-        if (project != null) 'project': project,
-        if (brief != null) 'brief': brief,
-      };
-}
-
-/// Runs a stage of a work (`site://coding/save-system`, or `coding/save-system`) as a
-/// ticket: `stage` (`02_plan`), else the first one not finished. Stages without a gate go
-/// on to the next by themselves. The stage workers belong to `session`, else to a new
-/// session in the work's project. The reply is `work`.
-final class ClientCommandWorkRun extends ClientCommand {
-  const ClientCommandWorkRun({
-    required this.work,
-    this.stage,
-    this.session,
-  });
-
-  final String work;
-
-  final String? stage;
-
-  final String? session;
-
-  factory ClientCommandWorkRun.fromJson(Map<String, Object?> json) => ClientCommandWorkRun(
-        work: json['work'] as String,
-        stage: json['stage'] == null ? null : json['stage'] as String,
-        session: json['session'] == null ? null : json['session'] as String,
-      );
-
-  Map<String, Object?> toJson() => {
-        'type': 'work.run',
-        'work': work,
-        if (stage != null) 'stage': stage,
-        if (session != null) 'session': session,
-      };
-}
-
 /// A ticket's changes against the branch it would be merged into; the reply is `changes`.
 final class ClientCommandTicketChanges extends ClientCommand {
   const ClientCommandTicketChanges({
@@ -1925,9 +1816,6 @@ sealed class CommandResult {
         'library_publish_plan' => CommandResultLibraryPublishPlan.fromJson(json),
         'library_published' => CommandResultLibraryPublished.fromJson(json),
         'config_reloaded' => CommandResultConfigReloaded.fromJson(json),
-        'pipelines' => CommandResultPipelines.fromJson(json),
-        'pipeline' => CommandResultPipeline.fromJson(json),
-        'work' => CommandResultWork.fromJson(json),
         _ => CommandResultUnknown(json),
       };
 
@@ -2544,68 +2432,6 @@ final class CommandResultConfigReloaded extends CommandResult {
         'kind': 'config_reloaded',
         'changed': changed,
         'restart_needed': restartNeeded,
-      };
-}
-
-final class CommandResultPipelines extends CommandResult {
-  const CommandResultPipelines({
-    required this.pipelines,
-    required this.templates,
-    this.works = const [],
-  });
-
-  final List<PipelineSummary> pipelines;
-
-  final List<PipelineSummary> templates;
-
-  /// Every work in them.
-  final List<WorkSummary> works;
-
-  factory CommandResultPipelines.fromJson(Map<String, Object?> json) => CommandResultPipelines(
-        pipelines: (json['pipelines'] as List).map((e) => PipelineSummary.fromJson(e as Map<String, Object?>)).toList(),
-        templates: (json['templates'] as List).map((e) => PipelineSummary.fromJson(e as Map<String, Object?>)).toList(),
-        works: json['works'] == null ? const [] : (json['works'] as List).map((e) => WorkSummary.fromJson(e as Map<String, Object?>)).toList(),
-      );
-
-  Map<String, Object?> toJson() => {
-        'kind': 'pipelines',
-        'pipelines': pipelines.map((e) => e.toJson()).toList(),
-        'templates': templates.map((e) => e.toJson()).toList(),
-        if (works.isNotEmpty) 'works': works.map((e) => e.toJson()).toList(),
-      };
-}
-
-final class CommandResultPipeline extends CommandResult {
-  const CommandResultPipeline({
-    required this.pipeline,
-  });
-
-  final PipelineSummary pipeline;
-
-  factory CommandResultPipeline.fromJson(Map<String, Object?> json) => CommandResultPipeline(
-        pipeline: PipelineSummary.fromJson(json['pipeline'] as Map<String, Object?>),
-      );
-
-  Map<String, Object?> toJson() => {
-        'kind': 'pipeline',
-        'pipeline': pipeline.toJson(),
-      };
-}
-
-final class CommandResultWork extends CommandResult {
-  const CommandResultWork({
-    required this.work,
-  });
-
-  final WorkSummary work;
-
-  factory CommandResultWork.fromJson(Map<String, Object?> json) => CommandResultWork(
-        work: WorkSummary.fromJson(json['work'] as Map<String, Object?>),
-      );
-
-  Map<String, Object?> toJson() => {
-        'kind': 'work',
-        'work': work.toJson(),
       };
 }
 
@@ -3306,53 +3132,6 @@ class PageResponse {
       };
 }
 
-/// A pipeline: a site of staged work (`type: pipeline`), or a template one is made from
-/// (`templates/pipelines/<kind>/`: `site` is the kind).
-class PipelineSummary {
-  const PipelineSummary({
-    required this.site,
-    required this.title,
-    required this.about,
-    required this.stages,
-    required this.needsProject,
-    required this.works,
-  });
-
-  final String site;
-
-  final String title;
-
-  /// One line: what kind of work it is for.
-  final String about;
-
-  /// Its stage contracts in order.
-  final List<StageSummary> stages;
-
-  /// Whether a work must link a project (coding: where the code lives).
-  final bool needsProject;
-
-  /// How many works it holds.
-  final int works;
-
-  factory PipelineSummary.fromJson(Map<String, Object?> json) => PipelineSummary(
-        site: json['site'] as String,
-        title: json['title'] as String,
-        about: json['about'] as String,
-        stages: (json['stages'] as List).map((e) => StageSummary.fromJson(e as Map<String, Object?>)).toList(),
-        needsProject: json['needs_project'] as bool,
-        works: (json['works'] as num).toInt(),
-      );
-
-  Map<String, Object?> toJson() => {
-        'site': site,
-        'title': title,
-        'about': about,
-        'stages': stages.map((e) => e.toJson()).toList(),
-        'needs_project': needsProject,
-        'works': works,
-      };
-}
-
 /// `GET /api/sessions/{id}/project/diff`
 class ProjectDiff {
   const ProjectDiff({
@@ -3400,8 +3179,6 @@ class ProjectInfo {
     this.page,
     required this.root,
     this.branch,
-    this.pipeline,
-    this.pipelines = const [],
     this.sites = const [],
     this.tags = const [],
   });
@@ -3418,12 +3195,7 @@ class ProjectInfo {
   /// The branch checked out, for a git repository.
   final String? branch;
 
-  /// The first pipeline with a work linking it (`cad`), if any; `pipelines` has them all.
-  final String? pipeline;
-
-  final List<String> pipelines;
-
-  /// The sites operating on it (the same list as `pipelines`; the project hub's name).
+  /// The sites operating on it (the project page's `sites:`).
   final List<String> sites;
 
   /// `[projects."<path>"] tags`.
@@ -3434,8 +3206,6 @@ class ProjectInfo {
         page: json['page'] == null ? null : json['page'] as String,
         root: json['root'] as String,
         branch: json['branch'] == null ? null : json['branch'] as String,
-        pipeline: json['pipeline'] == null ? null : json['pipeline'] as String,
-        pipelines: json['pipelines'] == null ? const [] : (json['pipelines'] as List).map((e) => e as String).toList(),
         sites: json['sites'] == null ? const [] : (json['sites'] as List).map((e) => e as String).toList(),
         tags: json['tags'] == null ? const [] : (json['tags'] as List).map((e) => e as String).toList(),
       );
@@ -3445,8 +3215,6 @@ class ProjectInfo {
         if (page != null) 'page': page,
         'root': root,
         if (branch != null) 'branch': branch,
-        if (pipeline != null) 'pipeline': pipeline,
-        if (pipelines.isNotEmpty) 'pipelines': pipelines,
         if (sites.isNotEmpty) 'sites': sites,
         if (tags.isNotEmpty) 'tags': tags,
       };
@@ -3461,7 +3229,6 @@ class ProjectOverview {
     required this.folder,
     this.branch,
     required this.uncommitted,
-    required this.works,
     this.sites = const [],
     required this.branches,
     this.memory,
@@ -3486,10 +3253,7 @@ class ProjectOverview {
   /// Files changed and not committed (git).
   final int uncommitted;
 
-  /// Works of any pipeline that link it.
-  final List<WorkSummary> works;
-
-  /// The sites operating on it, each with its works and its app tile.
+  /// The sites operating on it, each with its app tile.
   final List<ProjectSiteSummary> sites;
 
   /// Tickets whose worktree of it is still there: their branch waits to be merged or discarded.
@@ -3511,7 +3275,6 @@ class ProjectOverview {
         folder: json['folder'] as String,
         branch: json['branch'] == null ? null : json['branch'] as String,
         uncommitted: (json['uncommitted'] as num).toInt(),
-        works: (json['works'] as List).map((e) => WorkSummary.fromJson(e as Map<String, Object?>)).toList(),
         sites: json['sites'] == null ? const [] : (json['sites'] as List).map((e) => ProjectSiteSummary.fromJson(e as Map<String, Object?>)).toList(),
         branches: (json['branches'] as List).map((e) => TicketBranchSummary.fromJson(e as Map<String, Object?>)).toList(),
         memory: json['memory'] == null ? null : PageExcerpt.fromJson(json['memory'] as Map<String, Object?>),
@@ -3526,7 +3289,6 @@ class ProjectOverview {
         'folder': folder,
         if (branch != null) 'branch': branch,
         'uncommitted': uncommitted,
-        'works': works.map((e) => e.toJson()).toList(),
         if (sites.isNotEmpty) 'sites': sites.map((e) => e.toJson()).toList(),
         'branches': branches.map((e) => e.toJson()).toList(),
         if (memory != null) 'memory': memory?.toJson(),
@@ -3540,9 +3302,6 @@ class ProjectSiteSummary {
   const ProjectSiteSummary({
     required this.site,
     required this.title,
-    this.works = const [],
-    this.running = 0,
-    this.waiting = 0,
     this.app,
   });
 
@@ -3550,32 +3309,18 @@ class ProjectSiteSummary {
 
   final String title;
 
-  final List<WorkSummary> works;
-
-  /// Its works' stages running now.
-  final int running;
-
-  /// Its works' stages waiting for review.
-  final int waiting;
-
   /// Its tile, when it has one.
   final AppInfo? app;
 
   factory ProjectSiteSummary.fromJson(Map<String, Object?> json) => ProjectSiteSummary(
         site: json['site'] as String,
         title: json['title'] as String,
-        works: json['works'] == null ? const [] : (json['works'] as List).map((e) => WorkSummary.fromJson(e as Map<String, Object?>)).toList(),
-        running: json['running'] == null ? 0 : (json['running'] as num).toInt(),
-        waiting: json['waiting'] == null ? 0 : (json['waiting'] as num).toInt(),
         app: json['app'] == null ? null : AppInfo.fromJson(json['app'] as Map<String, Object?>),
       );
 
   Map<String, Object?> toJson() => {
         'site': site,
         'title': title,
-        if (works.isNotEmpty) 'works': works.map((e) => e.toJson()).toList(),
-        'running': running,
-        'waiting': waiting,
         if (app != null) 'app': app?.toJson(),
       };
 }
@@ -3925,7 +3670,6 @@ sealed class ServerMessage {
         'desk.changed' => ServerMessageDeskChanged.fromJson(json),
         'project.changed' => ServerMessageProjectChanged.fromJson(json),
         'on_open.ran' => ServerMessageOnOpenRan.fromJson(json),
-        'stage.ended' => ServerMessageStageEnded.fromJson(json),
         'reminder.due' => ServerMessageReminderDue.fromJson(json),
         'config.reloaded' => ServerMessageConfigReloaded.fromJson(json),
         'slots' => ServerMessageSlots.fromJson(json),
@@ -4691,47 +4435,6 @@ final class ServerMessageOnOpenRan extends ServerMessage {
       };
 }
 
-/// A pipeline stage's run ended: `review` (waits at its gate), `done`, `failed`, `paused`.
-final class ServerMessageStageEnded extends ServerMessage {
-  const ServerMessageStageEnded({
-    required this.work,
-    required this.title,
-    required this.stage,
-    required this.status,
-    required this.summary,
-  });
-
-  /// The work's page (`site://video/launch-video/index.md`).
-  final String work;
-
-  /// The work's title.
-  final String title;
-
-  /// `02_script`.
-  final String stage;
-
-  final String status;
-
-  final String summary;
-
-  factory ServerMessageStageEnded.fromJson(Map<String, Object?> json) => ServerMessageStageEnded(
-        work: json['work'] as String,
-        title: json['title'] as String,
-        stage: json['stage'] as String,
-        status: json['status'] as String,
-        summary: json['summary'] as String,
-      );
-
-  Map<String, Object?> toJson() => {
-        'type': 'stage.ended',
-        'work': work,
-        'title': title,
-        'stage': stage,
-        'status': status,
-        'summary': summary,
-      };
-}
-
 /// A reminder page (`type: reminder`) came due. Sent once per reminder, to every client.
 final class ServerMessageReminderDue extends ServerMessage {
   const ServerMessageReminderDue({
@@ -4985,106 +4688,6 @@ class SiteSummary {
       };
 }
 
-/// A work's stage and where it is: `waiting`, `running`, `review`, `approved`, `rerun`,
-/// `stopped`, `done` (the work page's `stage`, `status` and `done`).
-class StageState {
-  const StageState({
-    required this.name,
-    required this.status,
-    this.ticket,
-    this.summary,
-    this.outputs = const [],
-    this.stale = false,
-    this.changed = const [],
-  });
-
-  /// Its folder in the work (`02_script`).
-  final String name;
-
-  final String status;
-
-  /// The ticket of its last run.
-  final String? ticket;
-
-  /// What its last run said it did.
-  final String? summary;
-
-  /// The pages it wrote (in its folder).
-  final List<String> outputs;
-
-  /// It ran, and something it read changed since (or it comes after a stage that is stale).
-  final bool stale;
-
-  /// Its inputs that changed since it ran.
-  final List<String> changed;
-
-  factory StageState.fromJson(Map<String, Object?> json) => StageState(
-        name: json['name'] as String,
-        status: json['status'] as String,
-        ticket: json['ticket'] == null ? null : json['ticket'] as String,
-        summary: json['summary'] == null ? null : json['summary'] as String,
-        outputs: json['outputs'] == null ? const [] : (json['outputs'] as List).map((e) => e as String).toList(),
-        stale: json['stale'] == null ? false : json['stale'] as bool,
-        changed: json['changed'] == null ? const [] : (json['changed'] as List).map((e) => e as String).toList(),
-      );
-
-  Map<String, Object?> toJson() => {
-        'name': name,
-        'status': status,
-        if (ticket != null) 'ticket': ticket,
-        if (summary != null) 'summary': summary,
-        if (outputs.isNotEmpty) 'outputs': outputs,
-        'stale': stale,
-        if (changed.isNotEmpty) 'changed': changed,
-      };
-}
-
-/// A stage contract (`site://<pipeline>/stages/02_script.md`, `type: stage`).
-class StageSummary {
-  const StageSummary({
-    required this.name,
-    required this.title,
-    required this.gate,
-    this.harness,
-    this.model,
-    required this.worktree,
-  });
-
-  /// `02_script`: its file in `stages/`, and its folder in each work.
-  final String name;
-
-  final String title;
-
-  /// Waits for the human after it.
-  final bool gate;
-
-  /// `composer` or an external one (`claude-code`); `None` is the default.
-  final String? harness;
-
-  final String? model;
-
-  /// Writes code in the linked project, in a ticket worktree.
-  final bool worktree;
-
-  factory StageSummary.fromJson(Map<String, Object?> json) => StageSummary(
-        name: json['name'] as String,
-        title: json['title'] as String,
-        gate: json['gate'] as bool,
-        harness: json['harness'] == null ? null : json['harness'] as String,
-        model: json['model'] == null ? null : json['model'] as String,
-        worktree: json['worktree'] as bool,
-      );
-
-  Map<String, Object?> toJson() => {
-        'name': name,
-        'title': title,
-        'gate': gate,
-        if (harness != null) 'harness': harness,
-        if (model != null) 'model': model,
-        'worktree': worktree,
-      };
-}
-
 /// A ticket's branch that is still there.
 class TicketBranchSummary {
   const TicketBranchSummary({
@@ -5279,52 +4882,6 @@ class WebSession {
         'cookie_name': cookieName,
         'value': value,
         'path': path,
-      };
-}
-
-/// A piece of work in a pipeline (`site://<pipeline>/<work>/index.md`, `type: work`).
-class WorkSummary {
-  const WorkSummary({
-    required this.url,
-    required this.pipeline,
-    required this.title,
-    this.status,
-    this.stages = const [],
-    this.project,
-  });
-
-  final String url;
-
-  /// The pipeline's site.
-  final String pipeline;
-
-  final String title;
-
-  /// Where it is: the stage it is at and its state (`01 spec · waiting`), or `done`.
-  final String? status;
-
-  /// Its stages in order, with their state.
-  final List<StageState> stages;
-
-  /// The project it links (`~/Projects/game`).
-  final String? project;
-
-  factory WorkSummary.fromJson(Map<String, Object?> json) => WorkSummary(
-        url: json['url'] as String,
-        pipeline: json['pipeline'] as String,
-        title: json['title'] as String,
-        status: json['status'] == null ? null : json['status'] as String,
-        stages: json['stages'] == null ? const [] : (json['stages'] as List).map((e) => StageState.fromJson(e as Map<String, Object?>)).toList(),
-        project: json['project'] == null ? null : json['project'] as String,
-      );
-
-  Map<String, Object?> toJson() => {
-        'url': url,
-        'pipeline': pipeline,
-        'title': title,
-        if (status != null) 'status': status,
-        if (stages.isNotEmpty) 'stages': stages.map((e) => e.toJson()).toList(),
-        if (project != null) 'project': project,
       };
 }
 

@@ -1,0 +1,9 @@
+# Actions for the ICM site.
+
+# check the skill's links and input paths
+links:
+    python3 -I _shared/icm-architect/scripts/links.py _shared/icm-architect --skip assets --skip scripts
+
+# list the skill pages
+pages:
+    @find _shared/icm-architect -name '*.md' | sort

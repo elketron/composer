@@ -4,7 +4,7 @@ use crate::action::Action;
 use crate::store::types::PickerKind;
 
 /// Every command, as shown by help: (usage, what it does).
-pub const COMMANDS: [(&str, &str); 24] = [
+pub const COMMANDS: [(&str, &str); 21] = [
     (
         ":new [agent]",
         "start a new session (default agent, or e.g. orchestrator)",
@@ -29,18 +29,6 @@ pub const COMMANDS: [(&str, &str); 24] = [
     (
         ":scope [name|none]",
         "narrow the session picker to a project (space P finds projects)",
-    ),
-    (
-        ":pipeline [new <kind> [name]]",
-        "the pipelines (sites of staged work); new makes one from a template (coding, video, research)",
-    ),
-    (
-        ":work new <pipeline> <name> [project]",
-        "start a piece of work in a pipeline (default project: the project view's or this session's)",
-    ),
-    (
-        ":work run [work] [stage]",
-        "run a work's next stage, or one again (default: the work of the open page; R in the project view)",
     ),
     (
         ":harness [on|off] [name]",
@@ -110,52 +98,6 @@ pub fn parse_command(line: &str) -> Result<Action, String> {
             Some("none") => Action::SetModel(None),
             Some(model) => Action::SetModel(Some(model.to_string())),
         }),
-        "pipeline" | "pipelines" => {
-            let words: Vec<&str> = arg.as_deref().unwrap_or("").split_whitespace().collect();
-            match words[..] {
-                [] => Ok(Action::Pipelines),
-                ["new", kind] => Ok(Action::PipelineNew {
-                    kind: kind.into(),
-                    name: None,
-                }),
-                ["new", kind, name] => Ok(Action::PipelineNew {
-                    kind: kind.into(),
-                    name: Some(name.into()),
-                }),
-                _ => Err("usage: :pipeline [new <kind> [name]]".into()),
-            }
-        }
-        "work" => {
-            let words: Vec<&str> = arg.as_deref().unwrap_or("").split_whitespace().collect();
-            match words[..] {
-                ["new", pipeline, name] => Ok(Action::WorkNew {
-                    pipeline: pipeline.into(),
-                    name: name.into(),
-                    project: None,
-                }),
-                ["new", pipeline, name, project] => Ok(Action::WorkNew {
-                    pipeline: pipeline.into(),
-                    name: name.into(),
-                    project: Some(project.into()),
-                }),
-                ["run"] => Ok(Action::WorkRun {
-                    work: None,
-                    stage: None,
-                }),
-                ["run", work] => Ok(Action::WorkRun {
-                    work: Some(work.into()),
-                    stage: None,
-                }),
-                ["run", work, stage] => Ok(Action::WorkRun {
-                    work: Some(work.into()),
-                    stage: Some(stage.into()),
-                }),
-                _ => Err(
-                    "usage: :work new <pipeline> <name> [project] · :work run [work] [stage]"
-                        .into(),
-                ),
-            }
-        }
         "harness" => {
             let words: Vec<&str> = arg.as_deref().unwrap_or("").split_whitespace().collect();
             let (on, rest) = match words.first() {
@@ -268,32 +210,8 @@ mod tests {
             Action::TicketDiscard("7".into())
         );
         assert!(parse_command("discard").is_err());
-        assert_eq!(parse_command("pipeline").unwrap(), Action::Pipelines);
         assert_eq!(parse_command("mcp").unwrap(), Action::McpServers);
         assert_eq!(parse_command("reload").unwrap(), Action::ReloadConfig);
-        assert_eq!(
-            parse_command("pipeline new video shorts").unwrap(),
-            Action::PipelineNew {
-                kind: "video".into(),
-                name: Some("shorts".into())
-            }
-        );
-        assert_eq!(
-            parse_command("work new coding save-system").unwrap(),
-            Action::WorkNew {
-                pipeline: "coding".into(),
-                name: "save-system".into(),
-                project: None
-            }
-        );
-        assert!(parse_command("work new coding").is_err());
-        assert_eq!(
-            parse_command("work run coding/save-system 02_plan").unwrap(),
-            Action::WorkRun {
-                work: Some("coding/save-system".into()),
-                stage: Some("02_plan".into())
-            }
-        );
         assert_eq!(
             parse_command("project view").unwrap(),
             Action::ProjectView(None)

@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>composer next · 09 phone — the workflow sheet</title>
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="../base.css">
+<link rel="stylesheet" href="../phone.css">
+<style>
+  .s9 .psession { position: absolute; inset: 0; display: flex; flex-direction: column; background: var(--bg); opacity: .42; }
+  .s9 .psession .pchat { opacity: 1; }
+  .s9 .pnotes .ann { padding: 10px 0; }
+</style>
+</head>
+<body class="s9">
+<div class="doc">
+  <header class="masthead">
+    <div>
+      <div class="kicker">composer / next · platform study · screen 09</div>
+      <h1>The switch is a sheet, not a settings page.</h1>
+      <p class="lede">A workflow is one tap from the session: a native bottom sheet with 56px rows, 44px hit targets, a 5px top radius and the same switch as <code>:workflow</code>. Entering says what will happen — <b>blender</b> launches and its MCP tools are granted — and leaving keeps the application open.</p>
+    </div>
+    <div class="side">
+      <div class="row"><span>surface</span><b>workflow_sheet.dart</b></div>
+      <div class="row"><span>rows</span><b>56px · 44px target</b></div>
+      <div class="row"><span>sheet</span><b>5px top radius</b></div>
+      <div class="row"><span>switch</span><b>site.set</b></div>
+    </div>
+  </header>
+
+  <figure class="screen" id="phone-sheet">
+    <div class="screen-head">
+      <span class="snum">09</span>
+      <div>
+        <h2>Phone — the workflow sheet over the session</h2>
+        <p>The same session stays behind the scrim. The live view is still visible; the sheet answers what changes when the workflow does.</p>
+      </div>
+      <div class="source">workflows.md · apps/composer_app/ui/chat/workflow_sheet.dart</div>
+    </div>
+
+    <div class="fit">
+    <div class="pstage">
+      <div class="phone">
+        <div class="psession">
+          <div class="pstatus"><span>9:41</span><span>5G ▮ 84%</span></div>
+          <header class="pappbar">
+            <span class="back">‹</span>
+            <div class="who"><b>orchestrator</b><span><span class="dot"></span> working · #a3f1</span></div>
+            <span class="act stop"><svg viewBox="0 0 20 20"><rect x="5" y="5" width="10" height="10" rx="1"/></svg></span>
+            <span class="act"><svg viewBox="0 0 20 20"><circle cx="10" cy="4.5" r="1.3" fill="currentColor" stroke="none"/><circle cx="10" cy="10" r="1.3" fill="currentColor" stroke="none"/><circle cx="10" cy="15.5" r="1.3" fill="currentColor" stroke="none"/></svg></span>
+          </header>
+          <div class="pstrip"></div>
+          <div class="pwork"><span class="chip">3D</span><span class="proj">composer</span><span class="model">haiku</span></div>
+          <section class="plive">
+            <div class="pview">
+              <svg viewBox="0 0 390 220" preserveAspectRatio="xMidYMid meet">
+                <g stroke="var(--grid-strong)" stroke-width="1"><path d="M0 220 195 96 390 220" fill="none"/><path d="M48 220 195 120 342 220" fill="none"/><path d="M0 190h390"/></g>
+                <ellipse cx="195" cy="178" rx="80" ry="9" fill="var(--accent)" opacity=".06"/>
+                <g stroke="var(--accent)" fill="none" stroke-linejoin="miter">
+                  <path d="M195 44 262 79 195 114 128 79z" fill="var(--accent)" fill-opacity=".1"/>
+                  <path d="M128 79 195 114 195 188 128 153z"/><path d="M262 79 195 114 195 188 262 153z"/>
+                  <path d="M125 70h140v126h-140z" stroke="var(--warn)" stroke-dasharray="4 4" opacity=".5"/>
+                </g>
+                <circle cx="195" cy="51" r="3" fill="var(--warn)"/>
+              </svg>
+              <div class="tag"><b>blender</b><span class="pill accent">view only</span></div>
+              <div class="pin">1</div>
+            </div>
+            <div class="phandle"><span class="dot" style="background:var(--err)"></span><b>blender · live</b><span class="grow"></span><span class="size">M</span><span class="grip"></span><span class="size" style="width:72px;text-align:right">view only</span></div>
+          </section>
+          <section class="pchat">
+            <div class="pagent">Bevel is in: three segments, the top face softened. The thread is resolved.</div>
+            <div class="puser">Bevel the top edges — 0.03, three segments.</div>
+          </section>
+        </div>
+
+        <div class="pscrim"></div>
+        <div class="psheet">
+          <div class="grab"></div>
+          <header>
+            <div><div class="title">Workflow</div><div class="sub">one workflow at a time · the conversation stays</div></div>
+            <div class="close">×</div>
+          </header>
+          <div class="row on"><span class="ic">3D</span><div class="txt"><div class="name">3D</div><div class="desc">blender · mcp granted</div></div><span class="check">✓</span></div>
+          <div class="row"><span class="ic">co</span><div class="txt"><div class="name">coding</div><div class="desc">terminal · worktree</div></div></div>
+          <div class="row"><span class="ic">vi</span><div class="txt"><div class="name">video</div><div class="desc">storyboard · project/ write</div></div></div>
+          <div class="row"><span class="ic">ca</span><div class="txt"><div class="name">cad</div><div class="desc">FreeCAD · mcp requested</div></div></div>
+          <div class="row"><span class="ic">—</span><div class="txt"><div class="name">leave the workflow</div><div class="desc">tools drop · blender stays open</div></div></div>
+          <div class="note">entering 3d: blender already running · mcp blender granted</div>
+          <div class="safe"></div>
+        </div>
+      </div>
+
+      <aside class="pnotes">
+        <div class="eyebrow">sheet grammar</div>
+        <h3>One choice, the consequence written under it.</h3>
+        <div class="ann"><span class="n">01</span><div><b>Native bottom sheet</b><p>5px top corners, a drag grip, a scrim over the session. It is a sheet because the session is the screen, not a settings page.</p></div></div>
+        <div class="ann"><span class="n">02</span><div><b>56px rows</b><p>The row is 56 tall; the icon is 32 and every row is a 44px-plus touch target. The current workflow has the accent tint.</p></div></div>
+        <div class="ann"><span class="n">03</span><div><b>Say what changes</b><p>“blender · mcp granted” and “tools drop · blender stays open” are the switch's two most important facts.</p></div></div>
+        <div class="ann"><span class="n">04</span><div><b>The same switch as the TUI</b><p>This is <code>site.set</code>; the reply arrives as a note and <code>session.updated</code>, exactly as <code>:workflow 3d</code>.</p></div></div>
+        <div class="quote">“the workflow chip needs the switch”<span>workflows.md · board E</span></div>
+      </aside>
+    </div>
+    </div>
+
+    <div class="notes">
+      <div><b>behind the sheet</b>The live view stays visible; the session is not replaced by a picker screen.</div>
+      <div><b>one tap</b>Leaving is a row too, not a hidden gesture; it says what stays open.</div>
+      <div><b>no second navigation</b>The bottom bar does not change; the sheet is over the session it belongs to.</div>
+    </div>
+  </figure>
+
+  <footer class="docfoot">
+    <a href="../index.html">← all screens</a>
+    <span class="grow"></span>
+    <span>static html · no build</span>
+    <span>phone: apps/composer_app</span>
+  </footer>
+</div>
+<script>
+(function () {
+  if (location.search.includes('embed')) document.documentElement.classList.add('embed');
+  function fit() {
+    document.querySelectorAll('.fit').forEach(function (box) {
+      var frame = box.firstElementChild;
+      if (!frame) return;
+      var natural = 1360;
+      frame.style.width = natural + 'px';
+      var s = Math.min(1, box.clientWidth / natural);
+      frame.style.transformOrigin = 'top left';
+      frame.style.transform = 'scale(' + s + ')';
+      box.style.height = Math.round(frame.offsetHeight * s) + 'px';
+    });
+  }
+  window.addEventListener('resize', fit);
+  window.addEventListener('load', fit);
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fit);
+  else fit();
+  setTimeout(fit, 250);
+})();
+</script>
+</body>
+</html>

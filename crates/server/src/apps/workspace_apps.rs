@@ -5,7 +5,6 @@ use composer_protocol::http::{AppInfo, AppList, ProjectInfo};
 
 use crate::apps::{AppManifest, AttachReason, AttachedApp, LocalApp, ProjectFacts, ProjectName};
 use crate::harness::project_settings;
-use crate::pipeline::Pipeline;
 use crate::project::{ProjectPath, ProjectRef, project_list};
 use crate::server::Server;
 
@@ -104,7 +103,7 @@ pub fn attached_apps(
     let (project, folder) = find_project(server, name)?;
     let config = server.config();
     let settings = project_settings(&config, &folder.display().to_string());
-    let facts = ProjectFacts::gather(&folder, linking_pipelines(server, &folder), settings.tags);
+    let facts = ProjectFacts::gather(&folder, project_sites(server, &folder), settings.tags);
     let (apps, mut errors) = workspace_apps(server);
     let mut attached = AttachedApp::for_project(&apps, &facts, &settings.apps, &settings.hide_apps);
     let (locals, local_errors) = LocalApp::discover(&folder);
@@ -169,7 +168,7 @@ pub fn project_info(server: &Server, project: &crate::apps::GrantedProject) -> P
     let config = server.config();
     let folder = &project.folder;
     let settings = project_settings(&config, &folder.display().to_string());
-    let pipelines = linking_pipelines(server, folder);
+    let sites = project_sites(server, folder);
     let page = ProjectRef::resolve(server, &folder.display().to_string())
         .ok()
         .and_then(|project| project.page_url());
@@ -181,34 +180,17 @@ pub fn project_info(server: &Server, project: &crate::apps::GrantedProject) -> P
         page,
         root: folder.display().to_string(),
         branch: folder.join(".git").exists().then_some(branch).flatten(),
-        pipeline: pipelines.first().cloned(),
-        sites: pipelines.clone(),
-        pipelines,
+        sites,
         tags: settings.tags,
     }
 }
 
-/// The pipelines (sites) with a work whose `project:` is `folder`.
-fn linking_pipelines(server: &Server, folder: &Path) -> Vec<String> {
-    let projects_dir = server.config().projects.dir.clone();
-    let same = |linked: &str| {
-        ProjectPath::resolve(linked, &projects_dir)
-            .is_ok_and(|p| canonical(p.as_path()) == canonical(folder))
-    };
-    let sites = server.web.sites().unwrap_or_default();
-    let pipelines = sites
-        .iter()
-        .filter_map(|s| Pipeline::from_dir(&s.name, &server.web.root().join(&s.name)));
-    pipelines
-        .filter(|pipeline| {
-            pipeline.works().iter().any(|work| {
-                index_of(server, &pipeline.name, &format!("{work}/index.md"))
-                    .and_then(|p| p.frontmatter.get_str("project"))
-                    .is_some_and(|linked| same(&linked))
-            })
-        })
-        .map(|pipeline| pipeline.name)
-        .collect()
+/// The sites a project page lists (`sites:`). They are the project's capabilities: its apps and
+/// workflows. A project without a page has none yet.
+fn project_sites(server: &Server, folder: &Path) -> Vec<String> {
+    ProjectRef::resolve(server, &folder.display().to_string())
+        .map(|project| project.sites)
+        .unwrap_or_default()
 }
 
 fn listing(

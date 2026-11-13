@@ -1,0 +1,219 @@
+/* composer next — the phone as it actually is: Flutter, Inter 15, 44px targets.
+   Sizes from apps/composer_app (56px bars, 52px workflow row, 44px handle and
+   buttons, 5px card radius, bottom sheets). The palette is tokens.css. */
+
+:root {
+  --p-ui:   'Inter', 'Noto Sans', system-ui, sans-serif;
+  --p-mono: 'JetBrainsMono Nerd Font Mono', 'JetBrains Mono', ui-monospace, monospace;
+  --p-r:    4px;    /* radiusControl */
+  --p-card: 5px;    /* radiusCard */
+  --p-ws:   #7fb2d8;
+  --p-shadow: #00000099;
+}
+
+.pstage {
+  width: 1360px; min-height: 900px; display: grid; grid-template-columns: 440px minmax(0, 1fr);
+  gap: 56px; align-items: center; padding: 38px 52px;
+  border: 1px solid var(--border-strong);
+  background:
+    radial-gradient(circle at 26% 44%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 42%),
+    var(--stage);
+  font-family: var(--p-ui);
+}
+.phone {
+  position: relative;
+  width: 390px; height: 844px; margin-left: 6px; display: flex; flex-direction: column;
+  background: var(--bg); border: 1px solid var(--border-strong); border-radius: 10px;
+  box-shadow: 0 34px 90px var(--p-shadow), 0 0 0 1px var(--p-shadow); overflow: hidden;
+  font-family: var(--p-ui);
+}
+
+/* status + app bar */
+.pstatus {
+  height: 24px; flex: none; display: flex; align-items: center; padding: 0 18px;
+  font: 500 11px var(--p-ui); color: var(--muted);
+}
+.pstatus span:last-child { margin-left: auto; }
+.pappbar {
+  height: 56px; flex: none; display: flex; align-items: center; gap: 4px; padding: 0 4px;
+  background: var(--surface); border-bottom: 1px solid var(--border);
+}
+.pappbar .back {
+  width: 48px; height: 44px; display: flex; align-items: center; justify-content: center;
+  color: var(--accent); font: 26px/1 var(--p-ui);
+}
+.pappbar .who { min-width: 0; flex: 1; }
+.pappbar .who b { display: block; font: 600 15px/1.25 var(--p-ui); color: var(--text); }
+.pappbar .who span { display: flex; align-items: center; gap: 5px; font: 11px var(--p-ui); color: var(--muted); }
+.pappbar .who .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); }
+.pappbar .act {
+  width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;
+  color: var(--muted);
+}
+.pappbar .act svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.pappbar .act.stop { color: var(--err); }
+.pstrip { height: 2px; flex: none; background: var(--p-ws); }
+
+/* workflow row */
+.pwork {
+  min-height: 52px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 14px;
+  border-bottom: 1px solid var(--border); background: var(--bg);
+}
+.pwork .chip {
+  height: 32px; display: inline-flex; align-items: center; padding: 0 10px;
+  border: 1px solid var(--accent); border-radius: var(--p-r);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent); font: 600 12px var(--p-ui);
+}
+.pwork .proj { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 12px var(--p-ui); color: var(--muted); }
+.pwork .model { font: 11px var(--p-ui); color: var(--muted); }
+
+/* live view */
+.plive { flex: none; background: var(--stage); }
+.pview {
+  position: relative; height: 220px; overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--accent) 6%, transparent), transparent 55%),
+    var(--stage);
+}
+.pview svg { width: 100%; height: 100%; display: block; }
+.pview .tag {
+  position: absolute; left: 10px; top: 8px; display: flex; gap: 5px; align-items: center;
+  font: 11px var(--p-ui); color: var(--muted);
+}
+.pview .tag b { color: var(--text); font-weight: 500; }
+.pview .tag .pill {
+  border: 1px solid var(--border-strong); border-radius: var(--p-r); padding: 1px 5px; font-size: 10px;
+}
+.pview .tag .pill.accent { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 55%, transparent); }
+.pview .pin {
+  position: absolute; left: 68%; top: 26%; width: 20px; height: 20px;
+  background: var(--warn); color: var(--bg); display: flex; align-items: center; justify-content: center;
+  font: 700 10px var(--p-mono); border-radius: 3px; box-shadow: 0 0 0 2px var(--stage);
+}
+.pview .pin::after {
+  content: "top bevel"; position: absolute; left: 22px; top: 1px; white-space: nowrap;
+  background: var(--warn); color: var(--bg); font: 9px/18px var(--p-ui); padding: 0 5px; border-radius: 2px;
+}
+.phandle {
+  height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 14px;
+  border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); background: var(--surface);
+  font: 12px var(--p-ui); color: var(--muted);
+}
+.phandle .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
+.phandle b { color: var(--text); font-weight: 500; }
+.phandle .grow { flex: 1; }
+.phandle .grip { width: 32px; height: 4px; border-radius: 2px; background: var(--border-strong); }
+.phandle .size { font: 10px var(--p-mono); color: var(--faint); }
+
+/* chat */
+.pchat {
+  flex: 1; min-height: 0; overflow: hidden; padding: 12px 14px 8px;
+  display: flex; flex-direction: column; gap: 11px; background: var(--bg);
+}
+.pmeta { font: 11px var(--p-ui); color: var(--faint); display: flex; align-items: center; gap: 6px; }
+.pagent { font: 15px/1.5 var(--p-ui); color: var(--text); }
+.pagent b { font-weight: 600; }
+.puser {
+  align-self: flex-end; max-width: 86%; padding: 8px 11px;
+  background: var(--you); border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+  border-radius: var(--p-card); font: 15px/1.45 var(--p-ui); color: var(--text);
+}
+.papproval {
+  border: 1px solid var(--warn); border-radius: var(--p-card); background: var(--raised); overflow: hidden;
+}
+.papproval .body { padding: 9px 10px 8px; }
+.papproval .k { font: 600 11px var(--p-ui); color: var(--warn); }
+.papproval .q { margin-top: 2px; font: 13px/1.45 var(--p-ui); color: var(--muted); }
+.papproval .q b { color: var(--text); font-weight: 500; }
+.papproval .meta { margin-top: 6px; display: flex; gap: 6px; }
+.papproval .meta .pill { border: 1px solid var(--border-strong); border-radius: var(--p-r); padding: 1px 6px; font: 10px var(--p-ui); color: var(--muted); }
+.papproval .meta .pill.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 55%, transparent); }
+.papproval .acts { display: flex; border-top: 1px solid var(--border); }
+.papproval .acts span { flex: 1; height: 44px; display: flex; align-items: center; justify-content: center; font: 13px var(--p-ui); }
+.papproval .acts .ok { color: var(--ok); font-weight: 600; }
+.papproval .acts .no { color: var(--err); border-left: 1px solid var(--border); }
+.pworker {
+  display: flex; align-items: center; gap: 7px; border: 1px solid var(--border); border-radius: var(--p-card);
+  background: var(--surface); padding: 8px 9px; font: 12px var(--p-ui); color: var(--muted);
+}
+.pworker b { color: var(--text); font-weight: 500; }
+.pworker .grow { flex: 1; }
+.pworker .done { color: var(--ok); font-size: 11px; }
+
+/* composer + nav */
+.pcompose {
+  flex: none; border-top: 1px solid var(--border); background: var(--bg);
+  padding: 8px 14px 8px; display: flex; align-items: flex-end; gap: 8px;
+}
+.pcompose .sq {
+  width: 44px; height: 44px; flex: none; display: flex; align-items: center; justify-content: center;
+  background: var(--raised); border-radius: var(--p-r); color: var(--muted);
+}
+.pcompose .sq svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; }
+.pcompose .field {
+  flex: 1; height: 44px; display: flex; align-items: center; padding: 0 12px;
+  border: 1px solid var(--border-strong); border-radius: var(--p-r); background: var(--bg);
+  font: 15px var(--p-ui); color: var(--faint);
+}
+.pcompose .send { width: 44px; height: 44px; flex: none; display: flex; align-items: center; justify-content: center; background: var(--accent); color: var(--bg); border-radius: var(--p-r); }
+.pcompose .send svg { width: 19px; height: 19px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.pnav {
+  flex: none; height: 56px; border-top: 1px solid var(--border); background: var(--surface);
+  display: grid; grid-template-columns: repeat(4, 1fr);
+}
+.pnav a {
+  position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  color: var(--muted); font: 11px var(--p-ui); text-decoration: none;
+}
+.pnav a.on { color: var(--accent); font-weight: 600; }
+.pnav a.on::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2px; background: var(--accent); }
+.pnav svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.pnav .n { position: absolute; top: 7px; left: 50%; margin-left: 4px; min-width: 14px; height: 14px; padding: 0 3px; border-radius: 7px; background: var(--warn); color: var(--bg); font: 700 9px/14px var(--p-ui); text-align: center; }
+.phome { flex: none; height: 16px; background: var(--surface); display: flex; align-items: center; justify-content: center; }
+.phome i { width: 118px; height: 4px; border-radius: 2px; background: var(--border-strong); }
+
+/* the annotations beside the phone */
+.pnotes { max-width: 470px; font-family: var(--p-ui); }
+.pnotes .eyebrow { font: 600 11px var(--p-ui); letter-spacing: .14em; text-transform: uppercase; color: var(--accent); margin-bottom: 12px; }
+.pnotes h3 { font: 600 24px/1.3 var(--p-ui); letter-spacing: -.02em; margin: 0 0 17px; }
+.pnotes .ann { display: flex; gap: 12px; padding: 11px 0; border-top: 1px solid var(--border); }
+.pnotes .ann .n { flex: none; width: 20px; font: 600 11px var(--p-ui); color: var(--accent); }
+.pnotes .ann b { display: block; font: 600 13px var(--p-ui); color: var(--text); margin-bottom: 2px; }
+.pnotes .ann p { margin: 0; font-size: 12px; line-height: 1.55; color: var(--muted); }
+.pnotes .quote { margin-top: 18px; padding-left: 12px; border-left: 2px solid var(--accent); font: 13px/1.6 var(--p-ui); color: var(--muted); }
+.pnotes .quote span { display: block; margin-top: 5px; font: 10px var(--p-mono); color: var(--faint); }
+
+/* ---------- the native bottom sheet (workflow picker) ---------- */
+.pscrim { position: absolute; inset: 0; background: color-mix(in srgb, var(--p-shadow) 55%, transparent); z-index: 2; }
+.psheet {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 3;
+  background: var(--surface); border-top: 1px solid var(--border-strong);
+  border-radius: var(--p-card) var(--p-card) 0 0;
+  box-shadow: 0 -18px 50px var(--p-shadow); overflow: hidden;
+  font-family: var(--p-ui);
+}
+.psheet .grab { width: 36px; height: 4px; border-radius: 2px; background: var(--border-strong); margin: 8px auto 2px; }
+.psheet header { display: flex; align-items: flex-start; gap: 8px; padding: 4px 14px 8px; }
+.psheet header .title { font: 600 16px/1.3 var(--p-ui); color: var(--text); }
+.psheet header .sub { font: 12px var(--p-ui); color: var(--muted); }
+.psheet header .close { margin-left: auto; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 20px; }
+.psheet .row {
+  min-height: 56px; display: flex; align-items: center; gap: 10px; padding: 0 14px;
+  border-top: 1px solid var(--border);
+}
+.psheet .row .ic {
+  width: 32px; height: 32px; flex: none; display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border-strong); border-radius: var(--p-r);
+  color: var(--muted); font: 600 11px var(--p-mono);
+}
+.psheet .row.on .ic {
+  color: var(--accent); border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.psheet .row .txt { min-width: 0; }
+.psheet .row .name { font: 15px var(--p-ui); color: var(--text); }
+.psheet .row .desc { font: 12px var(--p-ui); color: var(--muted); }
+.psheet .row .check { margin-left: auto; color: var(--accent); font: 600 14px var(--p-ui); }
+.psheet .note { padding: 10px 14px 4px; font: 11px/1.5 var(--p-ui); color: var(--faint); }
+.psheet .safe { height: 16px; }

@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>composer next · 08 phone — the touch-first session</title>
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="../base.css">
+<link rel="stylesheet" href="../phone.css">
+<style>
+  /* screen-local: the live view is view-only; the dot is the app's red "live" dot */
+  .s8 .pview svg { width: 100%; height: 100%; display: block; }
+  .s8 .phandle .dot { background: var(--err); }
+  .s8 .pnotes { padding-right: 20px; }
+</style>
+</head>
+<body class="s8">
+<div class="doc">
+  <header class="masthead">
+    <div>
+      <div class="kicker">composer / next · platform study · screen 08</div>
+      <h1>A phone screen that behaves like a phone.</h1>
+      <p class="lede">Flutter, not a shrunken desktop: Inter 15px for the conversation, <b>44px</b> touch targets, a 56px app bar and bottom bar, a 52px workflow row, a live view with a 44px resize handle, and approvals answered in place. The ids and URLs stay mono; everything else is the app's UI font.</p>
+    </div>
+    <div class="side">
+      <div class="row"><span>surface</span><b>apps/composer_app</b></div>
+      <div class="row"><span>type</span><b>Inter 15 · mono ids</b></div>
+      <div class="row"><span>targets</span><b>44px minimum</b></div>
+      <div class="row"><span>radius</span><b>4 control · 5 card</b></div>
+    </div>
+  </header>
+
+  <figure class="screen" id="phone-touch">
+    <div class="screen-head">
+      <span class="snum">08</span>
+      <div>
+        <h2>Phone — one session, touch first</h2>
+        <p>The session screen: app bar and stop/menu at 44px, the workflow chip, the live view with its handle, the chat, an approval card, the composer and the four-tab bottom bar.</p>
+      </div>
+      <div class="source">plan-app.md · apps/composer_app/ui</div>
+    </div>
+
+    <div class="fit">
+    <div class="pstage">
+      <div class="phone">
+        <div class="pstatus"><span>9:41</span><span>5G ▮ 84%</span></div>
+        <header class="pappbar">
+          <span class="back">‹</span>
+          <div class="who">
+            <b>orchestrator</b>
+            <span><span class="dot"></span> working · #a3f1</span>
+          </div>
+          <span class="act stop" title="Stop the turn"><svg viewBox="0 0 20 20"><rect x="5" y="5" width="10" height="10" rx="1"/></svg></span>
+          <span class="act" title="Chat menu"><svg viewBox="0 0 20 20"><circle cx="10" cy="4.5" r="1.3" fill="currentColor" stroke="none"/><circle cx="10" cy="10" r="1.3" fill="currentColor" stroke="none"/><circle cx="10" cy="15.5" r="1.3" fill="currentColor" stroke="none"/></svg></span>
+        </header>
+        <div class="pstrip"></div>
+
+        <div class="pwork">
+          <span class="chip">3D</span>
+          <span class="proj">composer</span>
+          <span class="model">haiku</span>
+        </div>
+
+        <section class="plive">
+          <div class="pview">
+            <svg viewBox="0 0 390 220" preserveAspectRatio="xMidYMid meet" aria-label="The cube in Blender">
+              <g stroke="var(--grid-strong)" stroke-width="1">
+                <path d="M0 220 195 96 390 220" fill="none"/>
+                <path d="M48 220 195 120 342 220" fill="none"/>
+                <path d="M0 190h390"/>
+              </g>
+              <ellipse cx="195" cy="178" rx="80" ry="9" fill="var(--accent)" opacity=".06"/>
+              <g stroke="var(--accent)" fill="none" stroke-linejoin="miter">
+                <path d="M195 44 262 79 195 114 128 79z" fill="var(--accent)" fill-opacity=".1"/>
+                <path d="M128 79 195 114 195 188 128 153z"/>
+                <path d="M262 79 195 114 195 188 262 153z"/>
+                <path d="M195 53 251 80 195 107 139 80z" fill="var(--accent)" fill-opacity=".08"/>
+                <path d="M195 114 195 188" stroke="var(--faint)" stroke-dasharray="3 4"/>
+                <path d="M125 70h140v126h-140z" stroke="var(--warn)" stroke-dasharray="4 4" opacity=".5"/>
+              </g>
+              <circle cx="195" cy="51" r="3" fill="var(--warn)"/>
+            </svg>
+            <div class="tag"><b>blender</b><span class="pill accent">view only</span><span class="pill">10 fps</span></div>
+            <div class="pin">1</div>
+          </div>
+          <div class="phandle">
+            <span class="dot"></span><b>blender · live</b>
+            <span class="grow"></span><span class="size">M</span><span class="grip"></span><span class="size" style="width:72px; text-align:right">view only</span>
+          </div>
+        </section>
+
+        <section class="pchat">
+          <div class="pmeta">newest first</div>
+          <div class="pagent">Bevel is in: three segments, the top face softened. The thread is resolved.</div>
+          <div class="puser">Bevel the top edges — 0.03, three segments.</div>
+
+          <div class="papproval">
+            <div class="body">
+              <div class="k">APPROVAL · #a3f1</div>
+              <div class="q">merge <b>ticket 0014</b>? <span style="font-family:var(--p-mono); font-size:12px; color:var(--muted)">coding / game-save</span></div>
+              <div class="meta"><span class="pill ok">1 commit</span><span class="pill">+12 −4</span><span class="pill">worktree</span></div>
+            </div>
+            <div class="acts"><span class="no">deny</span><span class="ok">approve</span></div>
+          </div>
+
+          <div class="pworker"><span class="dot" style="width:7px;height:7px;border-radius:50%;background:var(--ok)"></span><b>worker #0014</b><span class="done">done · 1 commit</span><span class="grow"></span><span>3 files</span></div>
+        </section>
+
+        <div class="pcompose">
+          <div class="sq" title="Attach"><svg viewBox="0 0 20 20"><path d="M7 10.5 12 5.5a2.6 2.6 0 0 1 3.7 3.7l-5.8 5.8a4.2 4.2 0 0 1-6-6l5.8-5.8"/></svg></div>
+          <div class="field">message the agent</div>
+          <div class="send"><svg viewBox="0 0 20 20"><path d="M10 16V4M5 9l5-5 5 5"/></svg></div>
+        </div>
+
+        <nav class="pnav">
+          <a class="on" href="#"><svg viewBox="0 0 20 20"><path d="M3 4h14v11H9l-4 3v-3H3z"/><path d="M6 8h8M6 11h5"/></svg>inbox · 2</a>
+          <a href="#"><svg viewBox="0 0 20 20"><rect x="3" y="3" width="6" height="6"/><rect x="11" y="3" width="6" height="6"/><rect x="3" y="11" width="6" height="6"/><rect x="11" y="11" width="6" height="6"/></svg>workflows</a>
+          <a href="#"><svg viewBox="0 0 20 20"><path d="M4 3h8l4 4v10H4z"/><path d="M12 3v4h4"/></svg>pages</a>
+          <a href="#"><svg viewBox="0 0 20 20"><rect x="3" y="4" width="14" height="4"/><rect x="3" y="12" width="14" height="4"/></svg>server</a>
+        </nav>
+        <div class="phome"><i></i></div>
+      </div>
+
+      <aside class="pnotes">
+        <div class="eyebrow">touch grammar</div>
+        <h3>One thumb, one session, no desktop furniture.</h3>
+        <div class="ann"><span class="n">01</span><div><b>44px everywhere</b><p>Back, stop, menu, attach, send, approval actions and sheet rows are all 44 tall. The chip is drawn at 32 inside a 44 target.</p></div></div>
+        <div class="ann"><span class="n">02</span><div><b>The live view has a handle</b><p>Drag it to grow or shrink the application; tap to step sizes. It says <code>view only</code> on a paired device.</p></div></div>
+        <div class="ann"><span class="n">03</span><div><b>Inter for the conversation</b><p>15px body and a 15px field; mono only for session ids, branches and URLs. The phone is not a terminal.</p></div></div>
+        <div class="ann"><span class="n">04</span><div><b>The approval stays where it is</b><p>Deny / approve are 44px rows on the card. No separate approval screen, no modal to dismiss.</p></div></div>
+        <div class="ann"><span class="n">05</span><div><b>Four tabs, one bar</b><p>Inbox · workflows · pages · server, with the count on inbox and a 2px accent line over the active tab.</p></div></div>
+        <div class="quote">“check in, approve, watch”<span>the phone direction · workflows.md</span></div>
+      </aside>
+    </div>
+    </div>
+
+    <div class="notes">
+      <div><b>not a desktop</b>The phone keeps the same session and shared view, but the screen is one column with the controls a thumb reaches.</div>
+      <div><b>the live view</b>View-only on a paired device; the desktop's local token is the one that may drive.</div>
+      <div><b>the app bar is the state</b>Agent and activity on the left, stop and menu on the right, the workspace line under it.</div>
+    </div>
+  </figure>
+
+  <footer class="docfoot">
+    <a href="../index.html">← all screens</a>
+    <span class="grow"></span>
+    <span>static html · no build</span>
+    <span>phone: apps/composer_app</span>
+  </footer>
+</div>
+<script>
+(function () {
+  if (location.search.includes('embed')) document.documentElement.classList.add('embed');
+  function fit() {
+    document.querySelectorAll('.fit').forEach(function (box) {
+      var frame = box.firstElementChild;
+      if (!frame) return;
+      var natural = 1360;
+      frame.style.width = natural + 'px';
+      var s = Math.min(1, box.clientWidth / natural);
+      frame.style.transformOrigin = 'top left';
+      frame.style.transform = 'scale(' + s + ')';
+      box.style.height = Math.round(frame.offsetHeight * s) + 'px';
+    });
+  }
+  window.addEventListener('resize', fit);
+  window.addEventListener('load', fit);
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fit);
+  else fit();
+  setTimeout(fit, 250);
+})();
+</script>
+</body>
+</html>

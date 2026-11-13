@@ -1,5 +1,5 @@
 //! Scoped mounts: a folder inside a site may be a symlink into an allowed root (ticket 0122),
-//! so a pipeline work can hold the code and outputs its stages execute without them leaving
+//! so a site's work can hold its code and outputs without them leaving
 //! the web. With an allowed list set, the web follows a symlink inside a site for reads,
 //! listings and writes only when it lands inside the web itself or inside an allowed root
 //! (the projects directory, from config); a symlink that lands elsewhere is refused, not

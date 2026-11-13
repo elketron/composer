@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 
 import '../../state/actions.dart';
 import '../../state/projects.dart';
-import '../../state/works.dart';
 import '../../state/server_status.dart';
 import '../../theme/composer_theme.dart';
 import '../../theme/tokens.dart' as t;
@@ -14,11 +13,9 @@ import '../format.dart';
 import '../home/activity_dot.dart';
 import '../home/section_label.dart';
 import '../pages/page_navigation.dart';
-import '../pipelines/new_work_dialog.dart';
-import '../pipelines/stage_dots.dart';
 import '../store_scope.dart';
 
-/// What is going on in one project: its works across pipelines, branches waiting to merge, its
+/// What is going on in one project: its sites, branches waiting to merge, its
 /// sessions, its memory page and its switches. The desktop's Project tab and the phone's project
 /// screen.
 class ProjectOverviewView extends StatefulWidget {
@@ -83,26 +80,6 @@ class _ProjectOverviewViewState extends State<ProjectOverviewView> {
           decoration: BoxDecoration(border: Border.all(color: t.borderStrong), borderRadius: BorderRadius.circular(t.radiusSm)),
           child: Text(text, style: mono(size: 10.5)),
         );
-    Widget workRow(WorkSummary w) => row(
-          key: Key('work-${w.url}'),
-          onTap: () => openPage(context, url, w.url),
-          children: [
-            chip(w.pipeline),
-            const SizedBox(width: 8),
-            if (w.stages.isNotEmpty) ...[StageDots(w.stages), const SizedBox(width: 6)],
-            Expanded(child: Text(w.title, overflow: TextOverflow.ellipsis, style: mono(size: 12.5, color: t.text))),
-            Text(w.status ?? '', style: mono(size: 11, color: t.muted)),
-            if (runnable(w)) ...[
-              const SizedBox(width: 8),
-              InkWell(
-                key: Key('work-run-${w.url}'),
-                onTap: () => store.dispatch(WorkRunRequested(url, workSpec(w.url), project: widget.folder)),
-                child: Text(runLabel(w), style: mono(size: 11.5, color: t.accent)),
-              ),
-            ],
-          ],
-        );
-
     return ListView(key: const Key('project-overview'), padding: const EdgeInsets.fromLTRB(16, 12, 16, 16), children: [
       Row(children: [
         Text(projectName(widget.folder), style: mono(size: 15, color: t.text, weight: FontWeight.w600)),
@@ -122,30 +99,17 @@ class _ProjectOverviewViewState extends State<ProjectOverviewView> {
       ]),
       if (o == null) const Padding(padding: EdgeInsets.only(top: 24), child: Center(child: CircularProgressIndicator(strokeWidth: 2))),
       if (o != null && o.sites.isNotEmpty) ...[
-        const SectionLabel('Works'),
-        for (final site in o.sites) ...[
-          Row(children: [
-            Text(site.title, style: mono(size: 12.5, color: t.text, weight: FontWeight.w600)),
-            const SizedBox(width: 6),
-            Text('site://${site.site}', style: mono(size: 10.5, color: t.faint)),
-            if (site.running > 0) ...[
-              const SizedBox(width: 8),
-              Text('${site.running} running', style: mono(size: 11, color: t.warn)),
+        const SectionLabel('Sites'),
+        for (final site in o.sites)
+          row(
+            onTap: () => openPage(context, url, 'site://${site.site}'),
+            children: [
+              Text(site.title, style: mono(size: 12.5, color: t.text, weight: FontWeight.w600)),
+              const SizedBox(width: 6),
+              Expanded(child: Text('site://${site.site}', overflow: TextOverflow.ellipsis, style: mono(size: 10.5, color: t.faint))),
+              if (site.app != null) Text('app', style: mono(size: 10.5, color: t.accent)),
             ],
-            if (site.waiting > 0) ...[
-              const SizedBox(width: 8),
-              Text('${site.waiting} waiting', style: mono(size: 11, color: t.info)),
-            ],
-            if (site.app != null) ...[
-              const SizedBox(width: 8),
-              Text('app', style: mono(size: 10.5, color: t.accent)),
-            ],
-          ]),
-          for (final w in site.works) workRow(w),
-        ],
-      ] else if (o != null && o.works.isNotEmpty) ...[
-        const SectionLabel('Works'),
-        for (final w in o.works) workRow(w),
+          ),
       ],
       if (o != null && o.branches.isNotEmpty) ...[
         const SectionLabel('Branches to merge'),
@@ -237,11 +201,6 @@ class _ProjectOverviewViewState extends State<ProjectOverviewView> {
             pushChat(context, url);
           },
           child: const Text('New chat here'),
-        ),
-        OutlinedButton(
-          key: const Key('project-new-work'),
-          onPressed: () => showNewWork(context, url, project: widget.folder),
-          child: const Text('New work here'),
         ),
       ]),
     ]);

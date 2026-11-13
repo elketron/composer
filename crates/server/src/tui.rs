@@ -2,7 +2,7 @@
 //! command and where it runs; the terminal is the human's view. The agent drives the program's
 //! own control surface (for hunk, the `hunk` tool), not its keys.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use composer_core::Page;
 
@@ -86,14 +86,13 @@ impl TuiPage {
         let raw = self.cwd.trim();
         let path = match raw {
             "project" => {
-                // A page inside a work (`<work>/review.md`) runs in that work's `project/`
+                // A page inside a work (`<work>/review.md`) or an ICM run
+                // (`works/<ticket>/review.md`) runs in that folder's `project/`
                 // (the worktree while a stage runs); a site-level page uses the session's.
-                if let Some(work) =
-                    page.url.path().split('/').next().filter(|w| {
-                        page.url.path().contains('/') && !w.is_empty() && *w != "index.md"
-                    })
+                if let Some(parent) = Path::new(page.url.path()).parent()
+                    && !parent.as_os_str().is_empty()
                 {
-                    let link = site.join(work).join("project");
+                    let link = site.join(parent).join("project");
                     if link.is_dir() {
                         return link
                             .canonicalize()
@@ -202,6 +201,15 @@ mod tests {
         assert_eq!(p.command, ["hunk", "diff"]);
         assert_eq!((p.cwd.as_str(), p.control.as_str()), ("project", "hunk"));
         assert_eq!((p.columns, p.rows), (120, 40));
+    }
+
+    #[test]
+    fn parses_a_hunk_page_against_a_base_branch() {
+        let p = TuiPage::parse(&page(
+            "type: tui\ncommand: hunk diff main\ncontrol: hunk\ncwd: project",
+        ))
+        .unwrap();
+        assert_eq!(p.command, ["hunk", "diff", "main"]);
     }
 
     #[test]

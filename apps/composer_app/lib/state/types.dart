@@ -35,25 +35,6 @@ class ProjectSearch {
   final String? error;
 }
 
-/// The pipelines on a server (`pipeline.list`) and the templates new ones are made from.
-class Pipelines {
-  const Pipelines({this.pipelines = const [], this.templates = const [], this.works = const []});
-  final List<PipelineSummary> pipelines;
-
-  /// Every work in them, with its stages.
-  final List<WorkSummary> works;
-  /// What `pipeline.new` makes pipelines from (`site` is the kind).
-  final List<PipelineSummary> templates;
-}
-
-/// New work being made: waiting for the server, why it failed, or the work's page once made.
-class NewWork {
-  const NewWork({this.busy = false, this.error, this.created});
-  final bool busy;
-  final String? error;
-  final String? created;
-}
-
 /// A server's WebSocket.
 enum LinkState { connecting, online, offline }
 
@@ -80,7 +61,7 @@ class NotificationTap {
   final String? approval;
   final String? page;
 
-  /// A site whose app it opens (a pipeline's board).
+  /// A site whose app it opens.
   final String? app;
 
   /// `approve` / `deny`; null for the notification itself.

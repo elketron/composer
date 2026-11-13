@@ -1,0 +1,479 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>composer next · 02 mockups — the shared view that isn't a window</title>
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="../base.css">
+<style>
+  /* the mockups app, in the stage */
+  .mv { display: flex; flex-direction: column; height: 100%; background: var(--bg); }
+  .mvbar {
+    height: 32px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 10px;
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    font: 9.5px var(--font-mono); color: var(--faint); white-space: nowrap;
+  }
+  .mvbar .brand { color: var(--muted); }
+  .wm { color: var(--text); font-weight: 500; }
+  .vsep { color: var(--border-strong); }
+  .toolbar {
+    height: 30px; display: flex; align-items: center; gap: 4px; padding: 0 9px;
+    border-bottom: 1px solid var(--border); background: var(--stage);
+    font: 9px var(--font-mono); color: var(--faint);
+  }
+  .tool { height: 19px; padding: 0 6px; display: inline-flex; align-items: center; gap: 4px; color: var(--faint); }
+  .tool.on { background: var(--raised); color: var(--text); box-shadow: inset 0 -1px 0 var(--warn); }
+  .mbody { flex: 1; min-height: 0; display: grid; grid-template-columns: 156px minmax(0, 1fr) 268px; }
+  .mlist { border-right: 1px solid var(--border); display: flex; flex-direction: column; background: var(--bg); min-width: 0; }
+  .mlist header {
+    height: 29px; display: flex; align-items: center; gap: 7px; padding: 0 9px;
+    border-bottom: 1px solid var(--border); background: var(--surface);
+    font: 9px var(--font-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--faint);
+  }
+  .mlist header .n { color: var(--muted); letter-spacing: 0; }
+  .mlist .rows { padding: 5px 0; }
+  .mrow { display: flex; align-items: center; gap: 7px; padding: 6px 9px 6px 8px; border-left: 2px solid transparent; }
+  .mrow.on { background: var(--raised); border-left-color: var(--accent); }
+  .mrow .thumb { width: 18px; height: 24px; border: 1px solid var(--border-strong); flex: none; position: relative; background: var(--surface); }
+  .mrow .thumb::before { content: ""; position: absolute; left: 3px; top: 4px; width: 10px; height: 2px; background: var(--border-strong); box-shadow: 0 4px 0 var(--border-strong), 0 8px 0 var(--border); }
+  .mrow.on .thumb { border-color: var(--accent-soft); }
+  .mrow .t { flex: 1; min-width: 0; }
+  .mrow .t b { display: block; font: 500 10.5px var(--font-mono); color: var(--muted); }
+  .mrow.on .t b { color: var(--text); }
+  .mrow .t span { display: block; font: 8.5px var(--font-mono); color: var(--faint); }
+  .mrow .pin-n { min-width: 14px; height: 14px; padding: 0 3px; background: var(--warn); color: var(--bg); font: 700 8px/14px var(--font-mono); text-align: center; }
+  .mlist .foot { margin-top: auto; padding: 7px 9px; border-top: 1px solid var(--border); font: 9px var(--font-mono); color: var(--faint); display: flex; gap: 5px; }
+  .mlist .foot .v { color: var(--text); }
+
+  /* canvas */
+  .mcanvas { position: relative; min-width: 0; background: var(--bg); overflow: hidden; }
+  .mcanvas::before {
+    content: ""; position: absolute; inset: 0;
+    background:
+      radial-gradient(circle at 46% 44%, color-mix(in srgb, var(--accent) 5%, transparent), transparent 50%),
+      radial-gradient(var(--grid) 1px, transparent 1px);
+    background-size: auto, 18px 18px;
+  }
+  .canvas-top {
+    position: absolute; left: 10px; right: 10px; top: 7px; z-index: 2;
+    display: flex; align-items: center; gap: 7px;
+    font: 9px var(--font-mono); color: var(--faint);
+  }
+  .canvas-top .grow { flex: 1; }
+  .device-wrap {
+    position: absolute; left: 50%; top: 36px; transform: translateX(-50%);
+    width: 258px; height: 520px;
+  }
+  .device-label {
+    position: absolute; left: 0; right: 0; top: -17px; display: flex; justify-content: space-between;
+    font: 8.5px var(--font-mono); color: var(--faint);
+  }
+  .device {
+    position: relative; width: 258px; height: 500px; background: var(--surface);
+    border: 1px solid var(--border-strong); box-shadow: 0 18px 50px var(--shadow-soft);
+  }
+  .device .notch {
+    position: absolute; left: 50%; top: 0; transform: translateX(-50%);
+    width: 64px; height: 5px; background: var(--stage); border: 1px solid var(--border); border-top: 0;
+  }
+  .login {
+    position: absolute; inset: 0; padding: 34px 22px 20px; display: flex; flex-direction: column;
+    background: var(--surface);
+  }
+  .login .status {
+    position: absolute; left: 18px; right: 18px; top: 8px; display: flex;
+    font: 8px var(--font-mono); color: var(--faint);
+  }
+  .login .status span:last-child { margin-left: auto; }
+  .homebar {
+    position: absolute; left: 50%; bottom: 6px; transform: translateX(-50%);
+    width: 58px; height: 2px; background: var(--border-strong);
+  }
+  .login .brandline { display: flex; align-items: center; gap: 6px; font: 9px var(--font-mono); color: var(--faint); }
+  .login .brandline .b { width: 14px; height: 14px; border: 1px solid var(--accent-soft); color: var(--accent); display: flex; align-items: center; justify-content: center; font: 700 8px/1 var(--font-mono); }
+  .login h3 { font: 500 17px/1.2 var(--font-mono); letter-spacing: -.02em; margin: 30px 0 5px; color: var(--text); }
+  .login .sub { font-size: 10px; color: var(--muted); margin-bottom: 22px; }
+  .field { margin-bottom: 10px; }
+  .field label { display: block; font: 8.5px var(--font-mono); color: var(--faint); text-transform: uppercase; letter-spacing: .1em; margin-bottom: 4px; }
+  .field .inp {
+    height: 30px; border: 1px solid var(--border-strong); background: var(--bg);
+    display: flex; align-items: center; padding: 0 8px; font: 10px var(--font-mono); color: var(--muted);
+  }
+  .field .inp.focus { border-color: var(--accent-soft); color: var(--text); }
+  .login .remember { display: flex; align-items: center; gap: 6px; font: 9px var(--font-mono); color: var(--muted); margin: 3px 0 14px; }
+  .login .remember .box { width: 10px; height: 10px; border: 1px solid var(--border-strong); }
+  .login .primary {
+    height: 32px; background: var(--accent); color: var(--bg); display: flex; align-items: center;
+    justify-content: center; font: 600 10px var(--font-mono);
+  }
+  .login .or { display: flex; align-items: center; gap: 7px; margin: 17px 0 12px; font: 8px var(--font-mono); color: var(--faint); }
+  .login .or::before, .login .or::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+  .login .alt {
+    height: 30px; border: 1px solid var(--border-strong); display: flex; align-items: center;
+    justify-content: center; font: 9.5px var(--font-mono); color: var(--muted);
+  }
+  .login .fine { margin-top: auto; text-align: center; font: 8.5px var(--font-mono); color: var(--faint); line-height: 1.9; }
+  .login .fine b { color: var(--muted); font-weight: 400; }
+  .comment-pin {
+    position: absolute; width: 17px; height: 17px; background: var(--warn); color: var(--bg);
+    display: flex; align-items: center; justify-content: center; font: 700 9px var(--font-mono);
+    box-shadow: 0 0 0 2px var(--surface);
+  }
+  .comment-pin.p1 { right: -8px; top: 279px; }
+  .comment-pin.p2 { right: -8px; top: 178px; background: var(--accent); }
+  .region {
+    position: absolute; left: 22px; right: 22px; top: 350px; height: 38px;
+    outline: 1px dashed var(--warn); background: color-mix(in srgb, var(--warn) 5%, transparent);
+    pointer-events: none;
+  }
+  .region span { left: auto; right: -1px; }
+  .region span {
+    position: absolute; left: -1px; bottom: 100%; padding: 0 4px; background: var(--warn); color: var(--bg);
+    font: 8px/14px var(--font-mono); white-space: nowrap;
+  }
+  .canvas-foot {
+    position: absolute; left: 10px; right: 10px; bottom: 8px; display: flex; gap: 8px;
+    font: 8px var(--font-mono); color: var(--faint); white-space: nowrap; overflow: hidden;
+  }
+  .canvas-foot .grow { flex: 1; }
+
+  /* threads panel */
+  .threadpane { border-left: 1px solid var(--border-strong); background: var(--surface); display: flex; flex-direction: column; min-width: 0; }
+  .threadpane header {
+    height: 30px; flex: none; display: flex; align-items: center; gap: 7px; padding: 0 8px;
+    border-bottom: 1px solid var(--border); font: 9.5px var(--font-mono); color: var(--muted);
+  }
+  .threadpane header b { color: var(--text); font-weight: 500; }
+  .threadpane header .grow { flex: 1; }
+  .threadpane header .x { color: var(--faint); }
+  .threadpane .on { padding: 8px 9px; border-bottom: 1px solid var(--border); font: 10px var(--font-mono); }
+  .threadpane .on .lbl { color: var(--faint); }
+  .threadpane .on b { color: var(--text); font-weight: 500; }
+  .threadpane .msgs { flex: 1; min-height: 0; overflow: hidden; padding: 2px 0; display: block; }
+  .threadpane .tm { padding: 7px 9px; border-left: 2px solid transparent; }
+  .threadpane .tm.agent { border-left-color: var(--info); }
+  .threadpane .who { display: flex; gap: 6px; font: 8.5px var(--font-mono); color: var(--faint); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 2px; }
+  .threadpane .tm.agent .who { color: var(--info); }
+  .threadpane .who time { margin-left: auto; letter-spacing: 0; text-transform: none; }
+  .threadpane .tm p { margin: 0; font-size: 10.5px; line-height: 1.5; color: var(--muted); }
+  .threadpane .compose { margin-top: auto; border-top: 1px solid var(--border); padding: 7px 8px; }
+  .threadpane .compose .box { height: 46px; border: 1px solid var(--border-strong); background: var(--bg); padding: 6px; font: 10px var(--font-mono); color: var(--faint); }
+  .threadpane .compose .row { display: flex; gap: 4px; align-items: center; margin-top: 5px; }
+  .threadpane .compose .grow { flex: 1; }
+</style>
+</head>
+<body class="s2">
+<div class="doc">
+  <header class="masthead">
+    <div>
+      <div class="kicker">composer / next · single-chrome study · screen 02</div>
+      <h1>A comment that knows what it is about.</h1>
+      <p class="lede">The mockups view is the first view type on the shared shell. The agent writes files; the renderer is fixed; threads are pages beside the work. Point at a card or drag a region, say the thing, and the agent gets the anchor with the message.</p>
+    </div>
+    <div class="side">
+      <div class="row"><span>surface</span><b>docs/mockups/next</b></div>
+      <div class="row"><span>tokens</span><b>templates/sdk/theme.css</b></div>
+      <div class="row"><span>anchors</span><b>mockup/login · region</b></div>
+      <div class="row"><span>source</span><b><a href="../../../workflows.md">workflows.md</a> · Threads</b></div>
+    </div>
+  </header>
+
+  <figure class="screen" id="mockups">
+    <div class="screen-head">
+      <span class="snum">02</span>
+      <div>
+        <h2>Desktop — a view type, and a thread on the button</h2>
+        <p>The login mockup is open in the stage. Two threads sit on it; the selected one is anchored to the primary button, the region anchor is a rectangle the user dragged.</p>
+      </div>
+      <div class="source">workflows.md · phase 4 · templates/sdk/Threads.svelte</div>
+    </div>
+
+    <div class="fit">
+    <div class="win">
+      <div class="winbar">
+        <span class="mark">c</span>
+        <span class="brand">composer</span>
+        <span class="slash">/</span><span class="crumb">demo</span>
+        <span class="slash">/</span><span class="crumb">default #a3f1</span>
+        <span class="right">
+          <span class="kbd">ctrl shift p</span>
+          <span class="pill plain"><span class="dot ok"></span> my-pc</span>
+          <span class="lights"><i></i><i></i><i></i></span>
+        </span>
+      </div>
+      <div class="app wide-stage">
+        <nav class="rail">
+          <div class="ws on">D<span class="st"></span></div>
+          <div class="rule"></div>
+          <span class="ic on" title="chat">
+            <svg viewBox="0 0 20 20"><path d="M3 4h14v10H9l-4 3v-3H3z"/><path d="M6 8h8M6 11h5"/></svg>
+          </span>
+          <span class="ic" title="stage">
+            <svg viewBox="0 0 20 20"><rect x="3" y="4" width="14" height="10"/><path d="M7 17h6M10 14v3"/></svg>
+          </span>
+          <span class="ic" title="projects">
+            <svg viewBox="0 0 20 20"><path d="M3 6h5l2 2h7v8H3z"/></svg>
+          </span>
+          <span class="ic"><svg viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.2"/><path d="M10.2 10.2 14 14"/></svg></span>
+          <span class="grow"></span>
+          <span class="ic"><svg viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10"/><path d="M5 8h6M8 5v6"/></svg></span>
+          <div class="avatar">od</div>
+        </nav>
+
+        <section class="sessions">
+          <header class="sesshead">
+            <span class="t">sessions</span><span class="n">5</span>
+            <span class="grow"></span><span class="add">+</span>
+          </header>
+          <div class="sesssearch">
+            <svg viewBox="0 0 16 16"><circle cx="6.5" cy="6.5" r="4" fill="none" stroke="currentColor"/><path d="M9.5 9.5 13 13" stroke="currentColor"/></svg>
+            filter sessions
+            <span class="kbd">⌘K</span>
+          </div>
+          <div class="sesslist">
+            <div class="sgroup">needs you <span class="n">1</span></div>
+            <div class="srow">
+              <div class="top"><span class="dot warn pulse"></span><span class="a">orchestrator</span><span class="id">#a3f1</span><span class="when warn">now</span></div>
+              <div class="preview">Merge ticket 0014? The ship bevel is one commit.</div>
+              <div class="proj">composer <span class="br">/</span> 3d</div>
+            </div>
+            <div class="sgroup">running <span class="n quiet">1</span></div>
+            <div class="srow on">
+              <div class="top"><span class="dot info"></span><span class="a">default</span><span class="id">#a3f1</span><span class="when">12s</span></div>
+              <div class="preview">Changed the button width; thread stays open.</div>
+              <div class="proj">composer <span class="br">/</span> mockups</div>
+              <div class="workers">
+                <div class="run"><span class="dot warn"></span><span class="d">you · on login / button</span><span class="s">open</span></div>
+              </div>
+            </div>
+            <div class="sgroup">recent</div>
+            <div class="srow">
+              <div class="top"><span class="dot"></span><span class="a">reviewer</span><span class="id">#91b2</span><span class="when">1h</span></div>
+              <div class="preview">Ticket 0011 merged. Two follow-ups left open.</div>
+              <div class="proj">composer <span class="br">/</span> coding</div>
+            </div>
+            <div class="srow">
+              <div class="top"><span class="dot"></span><span class="a">default</span><span class="id">#77ce</span><span class="when">3h</span></div>
+              <div class="preview">Release notes are on the board; tag waits for you.</div>
+              <div class="proj">composer <span class="br">/</span> orchestration</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="chat">
+          <header class="chathead">
+            <span class="dot info"></span><span class="a">default</span><span class="id">#a3f1</span>
+            <span class="pill accent">mockups</span>
+            <span class="pill plain"><span class="dot warn"></span> 2 threads</span>
+            <span class="grow"></span>
+            <span class="iconbtn"><svg viewBox="0 0 16 16"><path d="M3 3h10v8H8l-3 2v-2H3z"/></svg></span>
+            <span class="more">⋮</span>
+          </header>
+          <div class="wfbar">
+            <span>site mockups</span><span class="sep">·</span><span>view mockup/login</span><span class="sep">·</span><span class="accent">threads 2 open</span>
+          </div>
+          <div class="msgs">
+            <div class="event">
+              <span class="dot warn"></span>
+              <span class="t"><b>comment mode</b> · click a card, or drag a region · <span class="accent">esc</span> leaves</span>
+              <span class="s">on</span>
+            </div>
+
+            <div class="msg you">
+              <div class="who">you <time>14:02</time></div>
+              <p>The login button is too small on a phone — make it match the fields.</p>
+            </div>
+
+            <div class="msg agent">
+              <div class="who">default <time>14:05</time></div>
+              <p>Made it full width below 600px. There is still a thread open on the button; answer it if the height should change too.</p>
+              <div class="toolrow">
+                <div class="h"><span class="tool">putPage</span><span class="arg">site://mockups/login.html</span><span class="ok">ok</span></div>
+                <div class="lines">
+                  <div><span class="k">+</span>8 lines · -2 lines · +0.3kB</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="msg you">
+              <div class="who">you <time>14:06</time></div>
+              <p>Match the field height too — 34px. Keep the thread open until I see it on my phone.</p>
+            </div>
+          </div>
+          <div class="composer">
+            <div class="box">Type a message<span class="cursor"></span></div>
+            <div class="row">
+              <span class="kbd">esc</span><span class="kbd">enter</span> send
+              <span class="grow"></span>
+              <span class="pill">mockups</span>
+              <span class="send">↵</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="stage">
+          <div class="tabs">
+            <div class="tab"><span class="dot ok"></span> live · blender</div>
+            <div class="tab">scene</div>
+            <div class="tab on">mockups <span class="pill warn">2</span></div>
+            <div class="tab">changes</div>
+            <div class="tab add">+</div>
+          </div>
+          <div class="stagetool">
+            <span class="t">mockups</span><span class="dot ok"></span><span>live</span>
+            <span class="faint">/</span><span>login · 390 × 844</span>
+            <span class="grow"></span>
+            <span class="pill accent">comment mode</span>
+            <span class="pill">v3 · current</span>
+          </div>
+          <div class="stageview">
+            <div class="mv">
+              <div class="mvbar">
+                <span class="brand">composer</span><span class="vsep">/</span><span class="brand">mockups</span><span class="vsep">/</span><span class="wm">login</span>
+                <span class="grow"></span>
+                <span class="pill plain"><span class="dot ok"></span> #a3f1</span>
+                <span class="btn sm">comment</span>
+                <span class="btn sm ghost">+ mockup</span>
+              </div>
+              <div class="toolbar">
+                <span class="tool">select</span>
+                <span class="tool">box</span>
+                <span class="tool on">comment</span>
+                <span class="tool">text</span>
+                <span class="grow" style="flex:1"></span>
+                <span>100%</span><span class="vsep">·</span><span>⌘↵ send</span>
+              </div>
+              <div class="mbody">
+                <aside class="mlist">
+                  <header>mockups <span class="n">4</span><span style="margin-left:auto">+</span></header>
+                  <div class="rows">
+                    <div class="mrow on"><span class="thumb"></span><span class="t"><b>login</b><span>sign-in · empty state</span></span><span class="pin-n">2</span></div>
+                    <div class="mrow"><span class="thumb"></span><span class="t"><b>settings</b><span>device · pairing</span></span><span class="pin-n">1</span></div>
+                    <div class="mrow"><span class="thumb"></span><span class="t"><b>ticket view</b><span>board · detail</span></span></div>
+                    <div class="mrow"><span class="thumb"></span><span class="t"><b>empty</b><span>no sessions</span></span></div>
+                  </div>
+                  <div class="foot"><span>versions</span><span class="v">v3</span><span class="faint">current</span><span class="grow" style="flex:1"></span><span>+</span></div>
+                </aside>
+                <div class="mcanvas">
+                  <div class="canvas-top">
+                    <span class="pill">phone · 390</span><span class="pill">dark</span>
+                    <span class="grow"></span>
+                    <span>zoom 100%</span><span class="vsep">·</span><span>fit</span>
+                  </div>
+                  <div class="device-wrap">
+                    <div class="device-label"><span>login</span><span>390 × 844</span></div>
+                    <div class="device">
+                      <span class="notch"></span>
+                      <div class="login">
+                        <div class="status"><span>9:41</span><span>5G ▮</span></div>
+                        <div class="brandline"><span class="b">c</span> composer</div>
+                        <h3>Sign in</h3>
+                        <div class="sub">to continue to demo</div>
+                        <div class="field">
+                          <label>email</label>
+                          <div class="inp focus">you@demo.dev</div>
+                        </div>
+                        <div class="field">
+                          <label>password</label>
+                          <div class="inp">••••••••••</div>
+                        </div>
+                        <div class="remember"><span class="box"></span> remember this device</div>
+                        <div class="primary">Sign in</div>
+                        <div class="or">or</div>
+                        <div class="alt">Continue with passkey</div>
+                        <div class="fine"><b>Forgot password?</b><br><b>Create account</b></div>
+                      </div>
+                      <div class="homebar"></div>
+                      <div class="comment-pin p1">2</div>
+                      <div class="comment-pin p2">1</div>
+                      <div class="region"><span>passkey · region 42,74 84×6</span></div>
+                    </div>
+                  </div>
+                  <div class="canvas-foot">
+                    <span>select button</span><span class="vsep">·</span><span>region 42,74,84,6</span>
+                    <span class="grow"></span>
+                    <span>esc exits</span>
+                  </div>
+                </div>
+                <aside class="threadpane">
+                  <header><span>‹ threads</span><span class="grow"></span><span><b>2</b> open</span><span class="x">×</span></header>
+                  <div class="on"><span class="lbl">on</span> <b>login / button</b> <span class="pill warn">open</span></div>
+                  <div class="msgs">
+                    <div class="tm">
+                      <div class="who">you <time>14:02</time></div>
+                      <p>The button is too small on a phone.</p>
+                    </div>
+                    <div class="tm agent">
+                      <div class="who">default <time>14:05</time></div>
+                      <p>Made it full width below 600px. Height still matches the fields at 34px.</p>
+                    </div>
+                    <div class="tm">
+                      <div class="who">you <time>14:06</time></div>
+                      <p>Keep it open until I see it on my phone.</p>
+                    </div>
+                  </div>
+                  <div class="compose">
+                    <div class="box">Reply… (⌘↵ sends to the agent)</div>
+                    <div class="row">
+                      <span class="btn sm ghost">Resolve</span>
+                      <span class="grow"></span>
+                      <span class="btn sm">Reply</span>
+                      <span class="btn sm primary">Send to agent</span>
+                    </div>
+                  </div>
+                </aside>
+              </div>
+            </div>
+          </div>
+          <div class="stagefoot">
+            <span><span class="dot ok"></span> site://mockups</span>
+            <span>threads 2 open</span>
+            <span>v3</span>
+            <span class="grow"></span>
+            <span>live reload</span>
+            <span>sdk</span>
+          </div>
+        </section>
+      </div>
+    </div>
+    </div>
+
+    <div class="notes">
+      <div><b>fixed shell</b>The top bar, footer and thread panel come from the SDK. A view type only renders the object and names its anchors.</div>
+      <div><b>anchors are paths</b><code>mockup/login</code> counts its parts; the dragged region is <code>mockup/login/region/42,74,84,6</code>.</div>
+      <div><b>the hand-off</b>Send to agent writes the thread, then sends the comment with the thread page attached; the reply appears live.</div>
+    </div>
+  </figure>
+
+  <footer class="docfoot">
+    <a href="../index.html">← all screens</a>
+    <span class="grow"></span>
+    <span>static html · no build</span>
+    <span>tokens: templates/sdk/theme.css</span>
+  </footer>
+</div>
+<script>
+(function () {
+  if (location.search.includes('embed')) document.documentElement.classList.add('embed');
+  function fit() {
+    document.querySelectorAll('.fit').forEach(function (box) {
+      var frame = box.firstElementChild;
+      if (!frame) return;
+      var natural = 1360;
+      frame.style.width = natural + 'px';
+      var s = Math.min(1, box.clientWidth / natural);
+      frame.style.transformOrigin = 'top left';
+      frame.style.transform = 'scale(' + s + ')';
+      box.style.height = Math.round(frame.offsetHeight * s) + 'px';
+    });
+  }
+  window.addEventListener('resize', fit);
+  window.addEventListener('load', fit);
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fit);
+  else fit();
+  setTimeout(fit, 250);
+})();
+</script>
+</body>
+</html>

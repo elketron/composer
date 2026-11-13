@@ -66,26 +66,6 @@ pub enum Action {
     Unselect,
     /// `:reload`: the server reads config.toml again.
     ReloadConfig,
-    /// `:pipeline`: the pipelines and the templates new ones come from.
-    Pipelines,
-    /// `:pipeline new <kind> [name]`: a pipeline site from a template.
-    PipelineNew {
-        kind: String,
-        name: Option<String>,
-    },
-    /// `:work new <pipeline> <name> [project]`: a piece of work in a pipeline (default project:
-    /// the project view's, else this session's).
-    WorkNew {
-        pipeline: String,
-        name: String,
-        project: Option<String>,
-    },
-    /// `:work run [work] [stage]`: run a work's next stage (or `stage`); default work: the one
-    /// the open page is in.
-    WorkRun {
-        work: Option<String>,
-        stage: Option<String>,
-    },
     /// Narrow the session picker to a project (a name or folder); `None`: all.
     Scope(Option<String>),
     /// The project list for the picker, for `query`.

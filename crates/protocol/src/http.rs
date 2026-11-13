@@ -72,7 +72,7 @@ pub struct AgentSummary {
     pub title: String,
     /// `description:`, else the title.
     pub description: String,
-    /// A worker agent (`role: worker`): runs tickets, not chats.
+    /// A legacy worker page (`role: worker`); current workers are the default agent.
     pub worker: bool,
 }
 
@@ -124,9 +124,7 @@ pub struct ProjectOverview {
     pub branch: Option<String>,
     /// Files changed and not committed (git).
     pub uncommitted: u32,
-    /// Works of any pipeline that link it.
-    pub works: Vec<WorkSummary>,
-    /// The sites operating on it, each with its works and its app tile.
+    /// The sites operating on it, each with its app tile.
     #[serde(default)]
     pub sites: Vec<ProjectSiteSummary>,
     /// Tickets whose worktree of it is still there: their branch waits to be merged or discarded.
@@ -147,62 +145,9 @@ pub struct ProjectOverview {
 pub struct ProjectSiteSummary {
     pub site: String,
     pub title: String,
-    #[serde(default)]
-    pub works: Vec<WorkSummary>,
-    /// Its works' stages running now.
-    #[serde(default)]
-    pub running: u32,
-    /// Its works' stages waiting for review.
-    #[serde(default)]
-    pub waiting: u32,
     /// Its tile, when it has one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub app: Option<AppInfo>,
-}
-
-/// A piece of work in a pipeline (`site://<pipeline>/<work>/index.md`, `type: work`).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-pub struct WorkSummary {
-    pub url: Url,
-    /// The pipeline's site.
-    pub pipeline: String,
-    pub title: String,
-    /// Where it is: the stage it is at and its state (`01 spec · waiting`), or `done`.
-    pub status: Option<String>,
-    /// Its stages in order, with their state.
-    #[serde(default)]
-    pub stages: Vec<StageState>,
-    /// The project it links (`~/Projects/game`).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub project: Option<String>,
-}
-
-/// A work's stage and where it is: `waiting`, `running`, `review`, `approved`, `rerun`,
-/// `stopped`, `done` (the work page's `stage`, `status` and `done`).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-pub struct StageState {
-    /// Its folder in the work (`02_script`).
-    pub name: String,
-    pub status: String,
-    /// The ticket of its last run.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub ticket: Option<String>,
-    /// What its last run said it did.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub summary: Option<String>,
-    /// The pages it wrote (in its folder).
-    #[serde(default)]
-    pub outputs: Vec<Url>,
-    /// It ran, and something it read changed since (or it comes after a stage that is stale).
-    #[serde(default)]
-    pub stale: bool,
-    /// Its inputs that changed since it ran.
-    #[serde(default)]
-    pub changed: Vec<Url>,
 }
 
 /// An app (a site with a `ui/` or an `app:` block) in a project's rail or on the workspace's Home:
@@ -260,12 +205,7 @@ pub struct ProjectInfo {
     /// The branch checked out, for a git repository.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub branch: Option<String>,
-    /// The first pipeline with a work linking it (`cad`), if any; `pipelines` has them all.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub pipeline: Option<String>,
-    #[serde(default)]
-    pub pipelines: Vec<String>,
-    /// The sites operating on it (the same list as `pipelines`; the project hub's name).
+    /// The sites operating on it (the project page's `sites:`).
     #[serde(default)]
     pub sites: Vec<String>,
     /// `[projects."<path>"] tags`.
@@ -342,43 +282,6 @@ pub struct McpServerInfo {
     pub tools: Vec<String>,
     /// The agents whose `tools:` include some of them.
     pub agents: Vec<String>,
-}
-
-/// A pipeline: a site of staged work (`type: pipeline`), or a template one is made from
-/// (`templates/pipelines/<kind>/`: `site` is the kind).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-pub struct PipelineSummary {
-    pub site: String,
-    pub title: String,
-    /// One line: what kind of work it is for.
-    pub about: String,
-    /// Its stage contracts in order.
-    pub stages: Vec<StageSummary>,
-    /// Whether a work must link a project (coding: where the code lives).
-    pub needs_project: bool,
-    /// How many works it holds.
-    pub works: u32,
-}
-
-/// A stage contract (`site://<pipeline>/stages/02_script.md`, `type: stage`).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-pub struct StageSummary {
-    /// `02_script`: its file in `stages/`, and its folder in each work.
-    pub name: String,
-    pub title: String,
-    /// Waits for the human after it.
-    pub gate: bool,
-    /// `composer` or an external one (`claude-code`); `None` is the default.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub harness: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub model: Option<String>,
-    /// Writes code in the linked project, in a ticket worktree.
-    pub worktree: bool,
 }
 
 /// A ticket's branch that is still there.

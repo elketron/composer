@@ -73,30 +73,10 @@ impl AgentDefinition {
         })
     }
 
-    /// Can run a ticket: `role: worker`, or (pages from before `role:`) no role and the
-    /// `finish` tool.
+    /// A page from before the two-agent model, with an explicit `role: worker`. The current
+    /// worker is the default agent in worker mode; it is not a different agent page.
     pub fn is_worker(&self) -> bool {
-        match self.role.as_deref() {
-            Some(role) => role == "worker" || role == "stage",
-            None => self
-                .tools
-                .as_ref()
-                .is_some_and(|tools| tools.iter().any(|t| t == "finish")),
-        }
-    }
-
-    /// A worker that runs pipeline stages only (`role: stage`).
-    pub fn is_stage(&self) -> bool {
-        self.role.as_deref() == Some("stage")
-    }
-
-    /// Every worker agent in `site://agents` `spawn_worker` can start, by name (not the
-    /// stage ones).
-    pub fn workers(workspace: &Web, index: &Index) -> Vec<Self> {
-        Self::all(workspace, index)
-            .into_iter()
-            .filter(|a| a.is_worker() && !a.is_stage())
-            .collect()
+        self.role.as_deref() == Some("worker")
     }
 
     /// Every agent in `site://agents` (`type: agent` pages), by name.

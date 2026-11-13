@@ -7,10 +7,10 @@ use serde_json::Value;
 use crate::library::LibraryEntry;
 
 /// The part of a site that is its definition, and so what the library holds, installs and
-/// publishes: `index.md`, `justfile`, `ui/` (source only), `stages/`, `_config/`, `templates/`, and
-/// every path the index lists under `library:` (`library: [tools/, comfy-workflows/, "*.md"]`).
+/// publishes: `index.md`, `justfile`, `ui/` (source only), and every path the index lists under
+/// `library:` (`library: [tools/, comfy-workflows/, "*.md"]`).
 ///
-/// Never in it: pipeline works, tickets and other pages outside those paths; `node_modules/` and
+/// Never in it: works, tickets and other pages outside those paths; `node_modules/` and
 /// `dist/` anywhere; hidden files; symlinks (not followed, not copied). A `library:` entry that
 /// leaves the site is refused, so a definition can't carry anything from outside its folder.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -26,14 +26,7 @@ pub struct SiteDefinition {
 }
 
 /// Always part of a definition, when present.
-const CORE: [&str; 6] = [
-    "index.md",
-    "justfile",
-    "ui",
-    "stages",
-    "_config",
-    "templates",
-];
+const CORE: [&str; 3] = ["index.md", "justfile", "ui"];
 /// Never part of one, at any depth.
 pub(crate) const NEVER: [&str; 2] = ["node_modules", "dist"];
 
@@ -159,7 +152,7 @@ mod tests {
         write(
             site,
             "index.md",
-            "---\ntitle: Cad\ntype: pipeline\nlibrary: [tools/, notes.md]\n---\n# Cad\n",
+            "---\ntitle: Cad\ntype: index\nlibrary: [tools/, notes.md]\n---\n# Cad\n",
         );
         write(site, "justfile", "build:\n    true\n");
         write(site, "ui/src/main.ts", "x");
@@ -167,11 +160,9 @@ mod tests {
         write(site, "ui/node_modules/dep/index.js", "x");
         write(site, "ui/dist/index.html", "x");
         write(site, "ui/.env", "SECRET=1");
-        write(site, "stages/01_plan.md", "# plan");
-        write(site, "_config/defaults.toml", "");
         write(site, "tools/run.py", "print()");
         write(site, "notes.md", "# notes");
-        // Content: a pipeline work, tickets, a scratch folder.
+        // Content: a work, tickets, a scratch folder.
         write(site, "moonlander/index.md", "---\ntype: work\n---\n");
         write(site, "tickets/0001.md", "# t");
         write(site, "tmp/out.png", "x");
@@ -186,11 +177,9 @@ mod tests {
         assert_eq!(
             files,
             [
-                "_config/defaults.toml",
                 "index.md",
                 "justfile",
                 "notes.md",
-                "stages/01_plan.md",
                 "tools/run.py",
                 "ui/package.json",
                 "ui/src/main.ts",

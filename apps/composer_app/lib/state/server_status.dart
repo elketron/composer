@@ -9,7 +9,7 @@ const _keep = Object();
 
 /// What the app knows about a server right now (not persisted).
 class ServerStatus {
-  const ServerStatus({this.link = LinkState.connecting, this.error, this.retryAt, this.info, this.sessions = const [], this.approvals = const [], this.chat, this.page = const PageState(), this.sites = const [], this.workers = const {}, this.agents = const [], this.projects = const [], this.unread = const {}, this.recent = const [], this.search = const PageSearch(), this.slotsUsed = 0, this.harnesses = const {}, this.reviews = const {}, this.reader, this.projectSearch = const ProjectSearch(), this.overviews = const {}, this.pipelines, this.newWork = const NewWork(), this.models});
+  const ServerStatus({this.link = LinkState.connecting, this.error, this.retryAt, this.info, this.sessions = const [], this.approvals = const [], this.chat, this.page = const PageState(), this.sites = const [], this.workers = const {}, this.agents = const [], this.projects = const [], this.unread = const {}, this.recent = const [], this.search = const PageSearch(), this.slotsUsed = 0, this.harnesses = const {}, this.reviews = const {}, this.reader, this.projectSearch = const ProjectSearch(), this.overviews = const {}, this.models});
 
   static const initial = ServerStatus();
 
@@ -75,11 +75,6 @@ class ServerStatus {
   /// Project overviews as last asked (`project.overview`), by folder.
   final Map<String, ProjectOverview> overviews;
 
-  /// The pipelines and their templates, once asked (`pipeline.list`).
-  final Pipelines? pipelines;
-
-  /// The New work dialog's request.
-  final NewWork newWork;
 
   /// The sites that are workflows (an application and/or MCP servers).
   List<SiteSummary> get workflows => workflowsOf(sites);
@@ -143,8 +138,6 @@ class ServerStatus {
     Object? reader = _keep,
     ProjectSearch? projectSearch,
     Map<String, ProjectOverview>? overviews,
-    Pipelines? pipelines,
-    NewWork? newWork,
     CommandResultModels? models,
   }) =>
       ServerStatus(
@@ -169,8 +162,6 @@ class ServerStatus {
         reader: identical(reader, _keep) ? this.reader : reader as ReaderTab?,
         projectSearch: projectSearch ?? this.projectSearch,
         overviews: overviews ?? this.overviews,
-        pipelines: pipelines ?? this.pipelines,
         models: models ?? this.models,
-        newWork: newWork ?? this.newWork,
       );
 }

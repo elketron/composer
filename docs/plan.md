@@ -34,6 +34,8 @@ The workspace is the web; each top-level folder is a **site**.
 
 ### Addressing
 
+Packing a site for GitHub and installing it on another PC: [site-packs.md](site-packs.md) (proposal). Workflow state is site + app + JSON: [workflow-state.md](workflow-state.md) (proposal; replaces pipeline stages and the generic board). ICM read correctly: [icm.md](icm.md) (folder method, five forms; Pipeline is one).
+
 - `site://<site>/<path>` — e.g. `site://memory/projects/composer.md`
 - `site://<site>` resolves to `<site>/index.md`
 - Relative markdown links resolve within the current site.
@@ -182,7 +184,7 @@ Each site's `index.md` explains its purpose and conventions; the agent opens it 
 
 - Orchestrator writes a ticket: `site://orchestration/tickets/0001.md`.
 - `spawn_worker(ticket)` creates the worker session (ticket + parent set, visible at once), sets the ticket `claimed` and starts `composer worker --session … --ticket … --agent … --parent http://…` as a child process (`agent.max_workers`, default 1). Its log: `state/workers/<id>.log`.
-- Worker agents: an agent page with `role: worker` (or, from before `role:`, no role and the `finish` tool) is one `spawn_worker` can start, e.g. a `coder`, `reviewer` or `tester`. Which one: `spawn_worker`'s `agent`, else the ticket's `agent:`, else `worker`; anything else is refused with the list. Agents that may call `spawn_worker` get the worker agents and their `description:` in their Environment.
+- Workers: the default agent in worker mode (the server adds `finish` and the worker prompt); `spawn_worker(id)` takes no agent. The ticket's Context and its site page say how the work is done; roles are pages, not agents.
 - The worker process is a server instance without an API: model slots are lent by the parent (`slot.acquire`/`slot.release`), recipe approvals are asked through the parent (`approval.ask`; approval prompts reach every client), and its session events go to the parent (`worker.event`), which re-sequences them into the worker session's transcript. The worker keeps its model history in `state/workers/sessions/<id>/`.
 - **Harnesses** (`crates/server/src/harness/`): the registry claims the ticket and creates the session, then a harness starts the run: `composer` (own agent loop, the default) or the one a ticket's `harness:` names. Runs are child processes in their own process group. Cancelling a worker session (`turn.cancel`) stops the whole group and fails the ticket as "cancelled by the user"; a message to a running worker goes to its harness (own workers refuse it for now).
 - `finish(done|failed, summary)` (worker only) ends it: the server sets the ticket status and sends the orchestrator a message (source: the worker), which starts its next turn. A worker that ends its turn without `finish` is reminded once; a process that exits without it fails the ticket.
@@ -504,16 +506,18 @@ Use the server from another laptop or the phone, over Tailscale. Tested end to e
 
 ## Visual design
 
-Mockups: [tui.html](mockups/tui.html), [apps.html](mockups/apps.html). Tokens: [theme.css](mockups/theme.css) → becomes `templates/sdk/theme.css`; the TUI uses the same values as RGB.
+Mockups: the current direction is [mockups/next/](mockups/next/) (2026-11-11: the shared view, threads, the project hub, the phone and the TUI in the shipped chrome). Older boards: [tui.html](mockups/tui.html), [apps.html](mockups/apps.html). Tokens: `templates/sdk/theme.css`; the TUI uses the same values as RGB.
 
 - Dark and minimal: four surfaces (`bg`, `surface`, `raised`, `overlay`), three text levels (`text`, `muted`, `faint`).
 - **One accent** (soft blue) for links, focus, selection and Normal mode. State colours (`ok`, `warn`, `err`) only where state matters; `info` (violet) marks the agent, tool rows and thinking.
 - Approvals always use `warn`, never the accent.
-- Fonts: JetBrains Mono (TUI, code, URLs, ids), Inter (app UI).
-- **TUI: no rounded corners** (plain borders everywhere).
+- Fonts: JetBrains Mono for the UI, code, URLs and ids. The shared app chrome moved to mono on 2026-11-08; Inter is no longer used there.
+- **TUI and the shared app chrome: no rounded corners** (plain borders everywhere; `--radius: 0`).
+- **Phone only: corner radius 2px–5px.** The phone keeps a native feel; the desktop chrome and the TUI stay square.
 - **Chat messages are background bands:** yours use `--you` (bg tinted toward the accent), the agent's use `--surface`, system messages (e.g. a worker's ticket) are bordered with no fill.
-- **Apps: corner radius 2px–5px.** `--radius-sm: 2px` for badges, chips, kbd, markers and status dots; `--radius: 5px` for buttons, inputs, cards and panels. No pills, no circles.
-- **Shared app shell:** top bar (site / page breadcrumb, session chip, slots, primary action) and a footer with keyboard hints. Every app is keyboard-driven and shows its keys.
+- **Shared app shell:** a 34px top bar (brand / site / crumb / session + actions) and a 24px key-hint footer. Every app is keyboard-driven and shows its keys. Dense is the point: small labels, one-pixel rules, no decorative space.
+- **The desktop shell has its own chrome.** `apps/desktop` is gpui, not the web SDK: two panes (the TUI on the left, a CEF stage on the right), a 4px splitter, amber focus `#e0a040`, and 14/18 JetBrains Mono in the terminal. Screens [06](mockups/next/screens/06-desktop-gpui.html) and [07](mockups/next/screens/07-desktop-gpui-palette.html).
+- **The phone is Flutter.** Inter 15px for the conversation, 44px touch targets, 56px app bar and bottom bar, 52px workflow row, 4–5px cards, native bottom sheets. Mockups [08](mockups/next/screens/08-phone-touch.html) and [09](mockups/next/screens/09-phone-workflow-sheet.html).
 
 ## Seed sites
 
@@ -824,6 +828,10 @@ it when the project allows it (click: on / off); a worker's header has none (its
 19. ✅ **desktop app** — mockups, then the wide layout.
 
 ## Phase 5: pipelines (staged, scoped, gated work)
+
+> **Historical, removed 2026-11-12.** The pipeline engine, stages, gates and board are gone.
+> A workflow is a site with an app and its own JSON state: [workflow-state.md](workflow-state.md).
+> Do not implement this section.
 
 From [Interpretable Context Methodology](https://arxiv.org/abs/2603.16021) (Van Clief & McDermott, 2026): for sequential
 work that a human reviews step by step, numbered folders of markdown are the orchestration. Each stage has a

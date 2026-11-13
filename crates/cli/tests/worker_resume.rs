@@ -50,7 +50,7 @@ async fn a_stopped_worker_goes_on_from_its_history() {
     let ticket_file = dir.path().join("sites/orchestration/tickets/0001.md");
     std::fs::write(
         &ticket_file,
-        "---\ntitle: Read\ntype: ticket\nid: \"0001\"\nstatus: open\nagent: worker\n---\n# Read\n\n## Task\nRead Home.\n\n## Result\n",
+        "---\ntitle: Read\ntype: ticket\nid: \"0001\"\nstatus: open\nagent: default\n---\n# Read\n\n## Task\nRead Home.\n\n## Result\n",
     )
     .unwrap();
     std::fs::write(

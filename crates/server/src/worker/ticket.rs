@@ -73,10 +73,10 @@ mod tests {
 
     #[test]
     fn status() {
-        let raw = "---\ntitle: X\nstatus: open          # open | claimed\nagent: worker\n---\n# X\nstatus: body text\n";
+        let raw = "---\ntitle: X\nstatus: open          # open | claimed\nagent: default\n---\n# X\nstatus: body text\n";
         assert_eq!(
             set_status(raw, "claimed"),
-            "---\ntitle: X\nstatus: claimed # open | claimed\nagent: worker\n---\n# X\nstatus: body text\n"
+            "---\ntitle: X\nstatus: claimed # open | claimed\nagent: default\n---\n# X\nstatus: body text\n"
         );
         assert_eq!(
             set_status("---\ntitle: X\n---\nbody", "done"),

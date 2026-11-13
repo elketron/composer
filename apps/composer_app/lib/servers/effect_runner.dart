@@ -136,24 +136,6 @@ class EffectRunner {
               (result) => dispatch(TicketReplied(url, ticket, result: result)),
               onError: (Object e) => dispatch(TicketReplied(url, ticket, error: describeError(e))),
             );
-      case RunWork(:final url, :final command, :final project):
-        _request(url, command, dispatch).then((result) {
-          if (result is! CommandResultWork) return;
-          dispatch(NoticeShown('${command.work}: ${result.work.status ?? 'started'}'));
-          if (project != null) dispatch(ProjectOverviewRequested(url, project));
-        });
-      case CreateWork(:final url, :final work, :final template):
-        final connection = _connections[url];
-        if (connection == null) {
-          dispatch(WorkReplied(url, error: 'not connected'));
-          return;
-        }
-        Future<void> run() async {
-          if (template != null) await connection.request(ClientCommandPipelineNew(kind: template, name: work.pipeline));
-          final result = await connection.request(work);
-          if (result is CommandResultWork) dispatch(WorkReplied(url, work: result.work));
-        }
-        run().catchError((Object e) => dispatch(WorkReplied(url, error: describeError(e))));
       case CreateSession(:final url, :final agent, :final project, :final site):
         _request(url, ClientCommandSessionCreate(agent: agent, project: project), dispatch).then((result) {
           if (result is! CommandResultSession) return;

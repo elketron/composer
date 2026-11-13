@@ -32,7 +32,6 @@ use crate::actions::{Justfile, RecipeEnv, check_args, run_recipe};
 use crate::api::auth::{Audience, origin_refused};
 use crate::api::{ApiError, action_routes, app_routes, http_routes, ws_routes};
 use crate::apps::AppGrant;
-use crate::pipeline::{Pipeline, Work};
 use crate::project::ProjectMode;
 use crate::server::Server;
 
@@ -510,42 +509,19 @@ async fn put_project_file(
 /// The project folder an app reads/writes: the main folder, or the work's `project/` (which is
 /// the project root or its worktree). A work must belong to the project the app was opened on.
 fn project_root(
-    server: &Server,
+    _server: &Server,
     grant: &AppGrant,
     work: Option<&str>,
 ) -> Result<(PathBuf, ProjectMode), ApiError> {
     let project = granted(grant)?;
-    let Some(work) = work.map(str::trim).filter(|w| !w.is_empty()) else {
-        return Ok((project.folder.clone(), ProjectMode::Write));
-    };
-    let dir = server.web.root().join(&grant.site);
-    let pipeline = Pipeline::from_dir(&grant.site, &dir).ok_or_else(|| {
-        ApiError(
-            StatusCode::NOT_FOUND,
-            format!("site://{} is not a pipeline", grant.site),
-        )
-    })?;
-    let work = Work::load(pipeline, work).ok_or_else(|| {
-        ApiError(
-            StatusCode::NOT_FOUND,
-            format!("no work `{work}` in site://{}", grant.site),
-        )
-    })?;
-    if work.project.as_deref() != Some(project.folder.to_str().unwrap_or("")) {
+    if work.is_some_and(|w| !w.trim().is_empty()) {
         return Err(ApiError(
-            StatusCode::FORBIDDEN,
-            format!("the work `{}` is not on this project", work.name),
+            StatusCode::BAD_REQUEST,
+            "works are not a server concept: an app reads its project directly or a site's JSON"
+                .into(),
         ));
     }
-    let link = work.dir.join("project");
-    let root = link.canonicalize().unwrap_or(link);
-    // The live mount mode: a `worktree` run is writable even though the work's default is `read`.
-    let mode = server
-        .web
-        .project_mode(&work.dir.join("project"))
-        .map(ProjectMode::from_mount)
-        .unwrap_or_else(|| work.project_mode(None));
-    Ok((root, mode))
+    Ok((project.folder.clone(), ProjectMode::Write))
 }
 
 /// The app's work data on its project (`APP_DATA` for its recipes): `GET <app>/api/data/<path>`.

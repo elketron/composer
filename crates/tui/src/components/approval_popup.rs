@@ -56,7 +56,6 @@ impl Component for ApprovalPopup {
             ApprovalKind::Merge => "merge?",
             ApprovalKind::Tool => "allow tool?",
             ApprovalKind::Mcp => "allow MCP tool?",
-            ApprovalKind::Amendment => "amend the pipeline?",
             ApprovalKind::Publish => "publish to the library?",
         };
         let title = if more > 0 {
@@ -127,9 +126,6 @@ impl Component for ApprovalPopup {
             }
             ApprovalKind::Merge => {
                 "merges into the project's branch, then removes the worktree and branch".to_string()
-            }
-            ApprovalKind::Amendment => {
-                "learned from your edits: every work reads it from then on".to_string()
             }
             ApprovalKind::Publish => {
                 "every workspace can install or update from it then · asked each time".to_string()

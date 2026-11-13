@@ -168,7 +168,7 @@ mod tests {
     #[test]
     fn a_full_block() {
         let m = parse(
-            "app:\n  scope: project\n  when: [\"pipeline:cad\", \"files:*.FCStd\"]\n  rail: { icon: cube, label: CAD }\n  tile: true\n  opens: [\"*.FCStd\", \"*.step\"]\n  on_open: [refresh]\n",
+            "app:\n  scope: project\n  when: [\"site:cad\", \"files:*.FCStd\"]\n  rail: { icon: cube, label: CAD }\n  tile: true\n  opens: [\"*.FCStd\", \"*.step\"]\n  on_open: [refresh]\n",
         )
         .unwrap()
         .unwrap();

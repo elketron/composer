@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>composer next · 03 project hub — sites operating on one folder</title>
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="../base.css">
+<style>
+  /* the project hub app */
+  .hub { height: 100%; display: flex; flex-direction: column; background: var(--bg); }
+  .hubbar {
+    height: 32px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 10px;
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    font: 9.5px var(--font-mono); color: var(--faint);
+  }
+  .hubbar .wm { color: var(--text); font-weight: 500; }
+  .hubbar .grow { flex: 1; }
+  .hubbody { flex: 1; min-height: 0; overflow: hidden; padding: 13px 14px 12px; display: flex; flex-direction: column; gap: 11px; }
+  .hubhead { display: flex; align-items: flex-end; gap: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--border); flex: none; }
+  .hubhead .name { font: 600 20px/1.1 var(--font-mono); letter-spacing: -.03em; }
+  .hubhead .path { font: 9px var(--font-mono); color: var(--faint); padding-bottom: 3px; }
+  .hubhead .tags { display: flex; gap: 4px; padding-bottom: 1px; }
+  .hubhead .grow { flex: 1; }
+  .stats { display: grid; grid-template-columns: repeat(5, 1fr); border: 1px solid var(--border); background: var(--surface); flex: none; }
+  .stat { padding: 6px 9px 7px; border-right: 1px solid var(--border); }
+  .stat:last-child { border-right: 0; }
+  .stat b { display: block; font: 600 16px/1.1 var(--font-mono); color: var(--text); }
+  .stat b.warn { color: var(--warn); }
+  .stat b.ok { color: var(--ok); }
+  .stat span { display: block; font: 8px var(--font-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--faint); margin-top: 2px; }
+  .hubgrid { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, .9fr); gap: 11px; }
+  .sites { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; align-content: start; min-width: 0; }
+  .site { border: 1px solid var(--border); background: var(--surface); display: flex; flex-direction: column; min-width: 0; }
+  .site > header { display: flex; align-items: center; gap: 6px; padding: 7px 8px; border-bottom: 1px solid var(--border); }
+  .site > header .sq {
+    width: 16px; height: 16px; border: 1px solid var(--border-strong); display: flex; align-items: center; justify-content: center;
+    color: var(--accent); font: 700 8px/1 var(--font-mono); flex: none;
+  }
+  .site > header b { font: 500 10.5px var(--font-mono); color: var(--text); }
+  .site > header .mode { margin-left: auto; }
+  .site .work { padding: 6px 8px 7px; border-bottom: 1px solid var(--hairline); }
+  .site .work:last-of-type { border-bottom: 0; }
+  .site .work .line { display: flex; align-items: center; gap: 5px; }
+  .site .work .line b { font: 500 10px var(--font-mono); color: var(--muted); }
+  .site .work .line .st { margin-left: auto; }
+  .site .work .meta { margin-top: 3px; display: flex; align-items: center; gap: 5px; font: 8.5px var(--font-mono); color: var(--faint); white-space: nowrap; }
+  .site .work .meta .br { color: var(--border-strong); }
+  .site .work .meta .t { color: var(--muted); }
+  .site .open {
+    display: flex; align-items: center; gap: 5px; padding: 5px 8px; border-top: 1px solid var(--border);
+    font: 8.5px var(--font-mono); color: var(--accent); background: var(--bg);
+  }
+  .site .open .grow { flex: 1; }
+  .worktree { grid-column: 1 / -1; border: 1px solid var(--border); background: var(--surface); }
+  .worktree > header { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-bottom: 1px solid var(--border); font: 8.5px var(--font-mono); color: var(--faint); }
+  .worktree > header b { color: var(--muted); font-weight: 400; }
+  .worktree > header .grow { flex: 1; }
+  .wt { display: grid; grid-template-columns: 178px minmax(0, 1fr); min-height: 0; }
+  .wt .files { border-right: 1px solid var(--border); padding: 5px 0; font: 8.5px/1.9 var(--font-mono); color: var(--faint); }
+  .wt .files div { padding: 0 8px; display: flex; gap: 6px; white-space: nowrap; }
+  .wt .files div.on { background: var(--raised); color: var(--text); box-shadow: inset 2px 0 0 var(--accent); }
+  .wt .files .add { margin-left: auto; color: var(--ok); }
+  .wt .diff { padding: 5px 8px; font: 8.5px/1.75 var(--font-mono); color: var(--muted); white-space: pre; overflow: hidden; }
+  .wt .diff .a { color: var(--ok); } .wt .diff .d { color: var(--err); } .wt .diff .h { color: var(--faint); }
+  .wt .files .dir { color: var(--muted); }
+  .side { display: flex; flex-direction: column; gap: 9px; min-width: 0; }
+  .card { border: 1px solid var(--border); background: var(--surface); }
+  .card header { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-bottom: 1px solid var(--border); font: 8.5px var(--font-mono); text-transform: uppercase; letter-spacing: .13em; color: var(--faint); }
+  .card header b { color: var(--muted); font-weight: 400; letter-spacing: 0; text-transform: none; }
+  .card header .grow { flex: 1; }
+  .card .body { padding: 7px 8px; }
+  .card p { margin: 0; font-size: 10px; line-height: 1.55; color: var(--muted); }
+  .card p b { color: var(--text); font-weight: 500; }
+  .card .link { display: inline-flex; gap: 4px; margin-top: 6px; font: 8.5px var(--font-mono); color: var(--accent); }
+  .threadrow { display: block; padding: 6px 8px; border-bottom: 1px solid var(--hairline); }
+  .threadrow:last-child { border-bottom: 0; }
+  .threadrow .top { display: flex; align-items: center; gap: 5px; }
+  .threadrow .top b { font: 500 9.5px var(--font-mono); color: var(--muted); }
+  .threadrow .top .st { margin-left: auto; }
+  .threadrow .ex { margin-top: 2px; font-size: 9.5px; line-height: 1.45; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .parity {
+    border: 1px solid var(--border-strong); background: var(--bg); padding: 7px 8px;
+    font: 8.5px/1.6 var(--font-mono); color: var(--faint);
+  }
+  .parity b { color: var(--info); font-weight: 400; }
+  .parity .row { display: flex; gap: 6px; }
+  .parity .row span:first-child { width: 34px; color: var(--faint); flex: none; }
+  .parity code { color: var(--muted); }
+</style>
+</head>
+<body class="s3">
+<div class="doc">
+  <header class="masthead">
+    <div>
+      <div class="kicker">composer / next · single-chrome study · screen 03</div>
+      <h1>The project is the hub; the sites come to it.</h1>
+      <p class="lede">A project is a folder on disk and a page in the web. A workflow operates on it; a work is one run with its own <b>project/</b> view. The hub shows every site, what each is doing, and the same worktree the agent and the app both see.</p>
+    </div>
+    <div class="side">
+      <div class="row"><span>surface</span><b>docs/mockups/next</b></div>
+      <div class="row"><span>tokens</span><b>templates/sdk/theme.css</b></div>
+      <div class="row"><span>model</span><b>project + site + work</b></div>
+      <div class="row"><span>source</span><b><a href="../../../project-hub.md">project-hub.md</a></b></div>
+    </div>
+  </header>
+
+  <figure class="screen" id="hub">
+    <div class="screen-head">
+      <span class="snum">03</span>
+      <div>
+        <h2>Desktop — the project hub, with the agent beside it</h2>
+        <p>One project page lists the sites attached to it and every work each site is running. A work's <code>project/</code> is a mount: the folder itself, or the ticket's worktree when it writes code.</p>
+      </div>
+      <div class="source">project-hub.md · phase 5</div>
+    </div>
+
+    <div class="fit">
+    <div class="win">
+      <div class="winbar">
+        <span class="mark">c</span>
+        <span class="brand">composer</span>
+        <span class="slash">/</span><span class="crumb">demo</span>
+        <span class="slash">/</span><span class="crumb">orchestrator #a3f1</span>
+        <span class="right">
+          <span class="kbd">ctrl shift p</span>
+          <span class="pill plain"><span class="dot ok"></span> my-pc</span>
+          <span class="lights"><i></i><i></i><i></i></span>
+        </span>
+      </div>
+      <div class="app wide-stage">
+        <nav class="rail">
+          <div class="ws on">D<span class="st"></span></div>
+          <div class="rule"></div>
+          <span class="ic on"><svg viewBox="0 0 20 20"><path d="M3 4h14v10H9l-4 3v-3H3z"/><path d="M6 8h8M6 11h5"/></svg></span>
+          <span class="ic"><svg viewBox="0 0 20 20"><rect x="3" y="4" width="14" height="10"/><path d="M7 17h6M10 14v3"/></svg></span>
+          <span class="ic"><svg viewBox="0 0 20 20"><path d="M3 6h5l2 2h7v8H3z"/></svg></span>
+          <span class="ic"><svg viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.2"/><path d="M10.2 10.2 14 14"/></svg></span>
+          <span class="grow"></span>
+          <span class="ic"><svg viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10"/><path d="M5 8h6M8 5v6"/></svg></span>
+          <div class="avatar">od</div>
+        </nav>
+
+        <section class="sessions">
+          <header class="sesshead">
+            <span class="t">sessions</span><span class="n">5</span>
+            <span class="grow"></span><span class="add">+</span>
+          </header>
+          <div class="sesssearch">
+            <svg viewBox="0 0 16 16"><circle cx="6.5" cy="6.5" r="4" fill="none" stroke="currentColor"/><path d="M9.5 9.5 13 13" stroke="currentColor"/></svg>
+            filter sessions
+            <span class="kbd">⌘K</span>
+          </div>
+          <div class="sesslist">
+            <div class="sgroup">needs you <span class="n">1</span></div>
+            <div class="srow on">
+              <div class="top"><span class="dot warn pulse"></span><span class="a">orchestrator</span><span class="id">#a3f1</span><span class="when warn">now</span></div>
+              <div class="preview">Two things need you: 0014 and the ship bevel.</div>
+              <div class="proj">composer <span class="br">/</span> projects</div>
+              <div class="workers">
+                <div class="run"><span class="dot warn"></span><span class="d">default · hub review</span><span class="s">run</span></div>
+              </div>
+            </div>
+            <div class="sgroup">running <span class="n quiet">2</span></div>
+            <div class="srow">
+              <div class="top"><span class="dot info"></span><span class="a">default</span><span class="id">#b712</span><span class="when">4m</span></div>
+              <div class="preview">Reading the 3D work and the ship in project/models…</div>
+              <div class="proj">composer <span class="br">/</span> 3d</div>
+            </div>
+            <div class="srow">
+              <div class="top"><span class="dot info"></span><span class="a">worker</span><span class="id">#0014</span><span class="when">8m</span></div>
+              <div class="preview">Ticket 0014: the bevel constant, moved and tested.</div>
+              <div class="proj">composer <span class="br">/</span> coding</div>
+            </div>
+            <div class="sgroup">recent</div>
+            <div class="srow">
+              <div class="top"><span class="dot"></span><span class="a">reviewer</span><span class="id">#91b2</span><span class="when">1h</span></div>
+              <div class="preview">Ticket 0011 merged. Two follow-ups left open.</div>
+              <div class="proj">composer <span class="br">/</span> coding</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="chat">
+          <header class="chathead">
+            <span class="dot info"></span><span class="a">orchestrator</span><span class="id">#a3f1</span>
+            <span class="pill accent">projects</span>
+            <span class="pill plain"><span class="dot ok"></span> composer</span>
+            <span class="grow"></span>
+            <span class="iconbtn"><svg viewBox="0 0 16 16"><path d="M3 3h10v8H8l-3 2v-2H3z"/></svg></span>
+            <span class="more">⋮</span>
+          </header>
+          <div class="wfbar">
+            <span>project composer</span><span class="sep">·</span><span>3 sites</span><span class="sep">·</span><span>5 works</span><span class="sep">·</span><span class="accent">2 threads</span>
+          </div>
+          <div class="msgs">
+            <div class="event">
+              <span class="dot ok"></span>
+              <span class="t"><b>project composer</b> · main · 4 uncommitted · branch ticket/0014</span>
+              <span class="s">hub</span>
+            </div>
+            <div class="msg you">
+              <div class="who">you <time>14:12</time></div>
+              <p>What should I pick up?</p>
+            </div>
+            <div class="msg agent">
+              <div class="who">orchestrator <time>14:12</time></div>
+              <p>Two things. <b>0014</b> is ready to merge — the review is the same worktree the app shows. The <b>crashed-ship</b> work has a thread on the top bevel; answer it and I’ll adjust.</p>
+              <div class="toolrow">
+                <div class="h"><span class="tool">project.overview</span><span class="arg">composer · sites 3 · works 5</span><span class="ok">ok</span></div>
+                <div class="lines">
+                  <div><span class="k">›</span>coding · game-save · inventory · worktree</div>
+                  <div><span class="k">›</span>3d · crashed-ship · write · blender running</div>
+                </div>
+              </div>
+            </div>
+            <div class="msg you">
+              <div class="who">you <time>14:13</time></div>
+              <p>Open the ship work in the stage. I’ll take the thread.</p>
+            </div>
+          </div>
+          <div class="composer">
+            <div class="box">Type a message<span class="cursor"></span></div>
+            <div class="row">
+              <span class="kbd">esc</span><span class="kbd">enter</span> send
+              <span class="grow"></span>
+              <span class="pill">projects</span>
+              <span class="send">↵</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="stage">
+          <div class="tabs">
+            <div class="tab on">project · composer</div>
+            <div class="tab"><span class="dot ok"></span> live · blender</div>
+            <div class="tab">mockups <span class="pill warn">2</span></div>
+            <div class="tab">changes</div>
+            <div class="tab add">+</div>
+          </div>
+          <div class="stagetool">
+            <span class="t">projects</span><span class="dot ok"></span><span>composer</span>
+            <span class="faint">/</span><span>~/Projects/composer</span>
+            <span class="pill">main</span>
+            <span class="grow"></span>
+            <span class="btn sm">open app</span>
+            <span class="btn sm ghost">new work</span>
+          </div>
+          <div class="stageview">
+            <div class="hub">
+              <div class="hubbar">
+                <span class="wm">composer</span><span class="faint">/</span><span>projects</span><span class="faint">/</span><span>composer</span>
+                <span class="grow"></span>
+                <span class="pill plain"><span class="dot ok"></span> local</span>
+                <span class="pill">page · site://projects/composer.md</span>
+              </div>
+              <div class="hubbody">
+                <div class="hubhead">
+                  <div class="name">composer</div>
+                  <div class="path">~/Projects/composer</div>
+                  <div class="tags"><span class="pill">rust</span><span class="pill">tui</span><span class="pill accent">active</span></div>
+                  <div class="grow"></div>
+                  <span class="pill"><span class="dot ok"></span> main</span>
+                  <span class="pill warn">4 uncommitted</span>
+                </div>
+
+                <div class="stats">
+                  <div class="stat"><b>3</b><span>sites</span></div>
+                  <div class="stat"><b>5</b><span>works</span></div>
+                  <div class="stat"><b class="warn">2</b><span>waiting</span></div>
+                  <div class="stat"><b class="ok">1</b><span>running</span></div>
+                  <div class="stat"><b>2</b><span>open threads</span></div>
+                </div>
+
+                <div class="hubgrid">
+                  <div class="sites">
+                    <section class="site">
+                      <header><span class="sq">{}</span><b>coding</b><span class="mode pill">worktree</span></header>
+                      <div class="work">
+                        <div class="line"><span class="dot warn"></span><b>game-save</b><span class="st pill warn">review</span></div>
+                        <div class="meta"><span>plan</span><span class="br">·</span><span class="t">ticket/0014</span><span class="br">·</span><span>4 files</span><span class="br">·</span><span>2 threads</span></div>
+                      </div>
+                      <div class="work">
+                        <div class="line"><span class="dot info"></span><b>inventory</b><span class="st pill info">running</span></div>
+                        <div class="meta"><span>implement</span><span class="br">·</span><span class="t">ticket/0012</span><span class="br">·</span><span>4 files</span></div>
+                      </div>
+                      <a class="open" href="#">open app <span class="grow"></span>worktree · project/ <span class="faint">↗</span></a>
+                    </section>
+
+                    <section class="site">
+                      <header><span class="sq">or</span><b>orchestration</b><span class="mode pill">write</span></header>
+                      <div class="work">
+                        <div class="line"><span class="dot warn"></span><b>release 0014</b><span class="st pill warn">to merge</span></div>
+                        <div class="meta"><span>review</span><span class="br">·</span><span class="t">ticket/0014</span><span class="br">·</span><span class="ok">+12 −4</span></div>
+                      </div>
+                      <div class="work">
+                        <div class="line"><span class="dot ok"></span><b>changelog 0012</b><span class="st pill ok">merged</span></div>
+                        <div class="meta"><span>done</span><span class="br">·</span><span class="faint">1 commit · 2 files</span></div>
+                      </div>
+                      <a class="open" href="#">open app <span class="grow"></span>write · project/ <span class="faint">↗</span></a>
+                    </section>
+
+                    <section class="site">
+                      <header><span class="sq">3d</span><b>3d</b><span class="mode pill">write</span></header>
+                      <div class="work">
+                        <div class="line"><span class="dot warn"></span><b>crashed-ship</b><span class="st pill warn">open</span></div>
+                        <div class="meta"><span>review</span><span class="br">·</span><span class="t">ship.glb</span><span class="br">·</span><span>1 thread</span></div>
+                      </div>
+                      <div class="work">
+                        <div class="line"><span class="dot ok"></span><b>scene pass</b><span class="st pill ok">done</span></div>
+                        <div class="meta"><span>render</span><span class="br">·</span><span class="faint">blender · 3 frames</span></div>
+                      </div>
+                      <a class="open" href="#">open app <span class="grow"></span>write · project/ <span class="faint">↗</span></a>
+                    </section>
+
+                    <section class="site">
+                      <header><span class="sq">+</span><b>attach a site</b></header>
+                      <div class="work">
+                        <div class="meta" style="margin:0"><span>coding</span><span class="br">·</span><span>orchestration</span><span class="br">·</span><span>3d</span><span class="br">·</span><span>video</span></div>
+                      </div>
+                      <a class="open" href="#">browse sites <span class="grow"></span>project: required <span class="faint">↗</span></a>
+                    </section>
+                    <section class="worktree">
+                      <header><b>worktree · ticket/0014</b><span class="pill warn">review</span><span class="grow"></span><span>same view for agent and app</span><span class="faint">project/</span></header>
+                      <div class="wt">
+                        <div class="files">
+                          <div class="dir">project/</div>
+                          <div>├ src/</div>
+                          <div class="on">│ scene.rs <span class="add">+8 −2</span></div>
+                          <div>├ Cargo.toml</div>
+                          <div>└ README.md</div>
+                        </div>
+                        <pre class="diff"><span class="h">@@ src/scene.rs</span>
+<span class="d">-const BEVEL: f32 = 0.02;</span>
+<span class="a">+const BEVEL: f32 = 0.03;</span>
+<span class="a">+const BEVEL_SEGMENTS: u32 = 3;</span>
+<span class="h"> </span>
+<span class="h"> fn bevel_top(mesh: &amp;mut Mesh) {</span>
+<span class="d">-    mesh.bevel(top_edges(), BEVEL);</span>
+<span class="a">+    mesh.bevel(top_edges(), BEVEL, 3);</span></pre>
+                      </div>
+                    </section>
+                  </div>
+
+                  <div class="side">
+                    <div class="card">
+                      <header>memory <span class="grow"></span><b>site://projects/composer.md</b></header>
+                      <div class="body">
+                        <p><b>Local-first agent workspace.</b> One server, one agent, several clients. The TUI is where the work happens; the desktop and phone follow the same sessions.</p>
+                        <span class="link">open page →</span>
+                      </div>
+                    </div>
+                    <div class="card">
+                      <header>threads <span class="grow"></span><b>2 open</b></header>
+                      <div class="threadrow">
+                        <div class="top"><span class="dot warn"></span><b>crashed-ship / top bevel</b><span class="st pill warn">open</span></div>
+                        <div class="ex">Three segments reads softer at this size — try it.</div>
+                      </div>
+                      <div class="threadrow">
+                        <div class="top"><span class="dot accent"></span><b>mockup login / button</b><span class="st pill warn">open</span></div>
+                        <div class="ex">The button is too small on a phone.</div>
+                      </div>
+                    </div>
+                    <div class="parity">
+                      <div class="row"><span>agent</span><span>open <code>project/src/main.rs</code></span></div>
+                      <div class="row"><span>app</span><span><code>projectFile(path, work)</code></span></div>
+                      <div class="row"><span>same</span><span><b>the ticket's worktree</b></span></div>
+                    </div>
+                    <div class="card">
+                      <header>recent <span class="grow"></span><b>pages</b></header>
+                      <div class="threadrow">
+                        <div class="top"><span class="dot info"></span><b>plans/release.md</b><span class="st pill">2m</span></div>
+                        <div class="ex">worker 0014 · edited</div>
+                      </div>
+                      <div class="threadrow">
+                        <div class="top"><span class="dot ok"></span><b>mockups/login.html</b><span class="st pill">8m</span></div>
+                        <div class="ex">default · thread reply</div>
+                      </div>
+                      <div class="threadrow">
+                        <div class="top"><span class="dot warn"></span><b>3d/crashed-ship</b><span class="st pill">12m</span></div>
+                        <div class="ex">review · ship.glb changed</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="stagefoot">
+            <span><span class="dot ok"></span> site://projects/composer.md</span>
+            <span>3 sites · 5 works</span>
+            <span>main</span>
+            <span class="grow"></span>
+            <span>project.overview</span>
+            <span>hub app</span>
+          </div>
+        </section>
+      </div>
+    </div>
+    </div>
+
+    <div class="notes">
+      <div><b>one folder</b>Every spelling resolves to the same canonical root; the project page is the handle, not a copy.</div>
+      <div><b>one view</b><code>project/</code> is a symlink to the project root or the ticket's worktree — the agent and the app read the same files.</div>
+      <div><b>the hub</b>Sites are the capabilities; works are their runs. A site with no work still shows when the page attaches it.</div>
+    </div>
+  </figure>
+
+  <footer class="docfoot">
+    <a href="../index.html">← all screens</a>
+    <span class="grow"></span>
+    <span>static html · no build</span>
+    <span>tokens: templates/sdk/theme.css</span>
+  </footer>
+</div>
+<script>
+(function () {
+  if (location.search.includes('embed')) document.documentElement.classList.add('embed');
+  function fit() {
+    document.querySelectorAll('.fit').forEach(function (box) {
+      var frame = box.firstElementChild;
+      if (!frame) return;
+      var natural = 1360;
+      frame.style.width = natural + 'px';
+      var s = Math.min(1, box.clientWidth / natural);
+      frame.style.transformOrigin = 'top left';
+      frame.style.transform = 'scale(' + s + ')';
+      box.style.height = Math.round(frame.offsetHeight * s) + 'px';
+    });
+  }
+  window.addEventListener('resize', fit);
+  window.addEventListener('load', fit);
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fit);
+  else fit();
+  setTimeout(fit, 250);
+})();
+</script>
+</body>
+</html>

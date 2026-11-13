@@ -14,12 +14,12 @@ impl Tool for SpawnWorkerTool {
     }
 
     fn description(&self) -> &'static str {
-        "Start a worker agent on a ticket (site://orchestration/tickets/<id>). The ticket becomes \
-         `claimed`; the worker runs in its own session and process. You get a message when it \
-         finishes; then read the ticket's Result. Returns immediately. `agent` picks which worker \
-         agent (listed in your Environment); default: the ticket's `agent:`, else `worker`. \
-         `harness` picks what runs it: `composer` (default) or `claude-code` (only in projects \
-         that allow it); default: the ticket's `harness:`."
+        "Start a worker on a ticket (site://orchestration/tickets/<id>). The ticket becomes \
+         `claimed`; the worker runs in its own session and process, using the default agent and \
+         the how-to-work in the ticket's Context and its site. You get a message when it \
+         finishes; then read the ticket's Result. Returns immediately. `harness` picks what \
+         runs it: `composer` (default) or `claude-code` (only in projects that allow it); \
+         default: the ticket's `harness:`."
     }
 
     fn parameters(&self) -> Value {
@@ -27,7 +27,6 @@ impl Tool for SpawnWorkerTool {
             "type": "object",
             "properties": {
                 "ticket": { "type": "string", "description": "ticket id, e.g. 0003" },
-                "agent": { "type": "string", "description": "worker agent, e.g. coder (optional)" },
                 "harness": { "type": "string", "description": "composer or claude-code (optional)" }
             },
             "required": ["ticket"]
@@ -47,7 +46,6 @@ impl Tool for SpawnWorkerTool {
                 &context.server,
                 &context.session,
                 &ticket,
-                args.agent.as_deref(),
                 args.harness.as_deref(),
             )
             .await?;

@@ -336,7 +336,7 @@ path has proven itself.
 | thing | why it can go |
 |---|---|
 | `desk`, `show_app`, `show_page`, `selection` tools | candidates once entering a workflow sets what the shell's pane shows; the desk becomes client view state (open question 12) |
-| the seven agent pages | one agent page; roles become workflow instructions |
+| the seven agent pages | default and orchestrator remain; a worker is the default agent in worker mode; roles become how-to pages in sites |
 | `wayai__*` in agent pages' `tools:` | a workflow grants it |
 | `pipeline.list` / `work.run` shims, the generic board in `templates/board` and its copies | already planned in project-hub phase E and the workflow-native apps plan |
 
@@ -437,6 +437,8 @@ answers in the thread and resolves it, and the view reloads.
 Built (2026-11-11): the shell (see Threads above), the app template marks its page list as anchors, and
 a mockups site with card and region anchors (delivered for the owner's workspace, not in the seed).
 Checked with a scripted model; a real agent doing the change, the reply and the resolve is not yet run.
+The screen set for the shared view is [mockups/next/](mockups/next/) (2026-11-11): desktop, mockups,
+project hub, phone and TUI in the shipped mono/square chrome.
 
 ### Phase 5: a model per workflow
 
@@ -448,7 +450,8 @@ Checked with a scripted model; a real agent doing the change, the reply and the 
 
 - The table above, in the order use shows is safe.
 
-**Done when:** one agent page remains, no workflow verb is in the base set, and the shell shows
+**Done when:** two agent pages remain (default and orchestrator), no workflow verb is in the
+base set, and the shell shows
 nothing a browser tab can't.
 
 ## Non-goals
@@ -475,7 +478,7 @@ nothing a browser tab can't.
 6. **Does leaving a workflow close its application?** Keeping it open is cheaper to return to; closing
    frees wayai's one screen.
 7. **Is a workflow a new `type:` or any site with `app:` / `mcp:` / `view:`?** The examples use
-   `type: workflow`; pipelines are `type: pipeline` today.
+   `type: workflow`; the old `type: pipeline` and `stages/` are removed (2026-11-12).
 8. **Where are threads stored?** Decided (phase 4): a file per thread, in `threads/` beside the work.
 9. **Bundles per workspace.** Files are shared and every workspace sees every bundle; a workspace can
    turn one off with `enabled = false`. Whether that default should be the other way round.

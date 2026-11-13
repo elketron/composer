@@ -93,7 +93,7 @@ async fn setup() -> (
     let cad = dir.path().join("sites/cad");
     write(
         &cad.join("index.md"),
-        "---\ntitle: CAD\ntype: pipeline\napp:\n  scope: project\n  when: [\"files:*.FCStd\"]\n---\n# CAD\n",
+        "---\ntitle: CAD\ntype: index\napp:\n  scope: project\n  when: [\"files:*.FCStd\"]\n---\n# CAD\n",
     );
     write(
         &cad.join("arm/index.md"),
@@ -143,9 +143,7 @@ async fn an_app_knows_its_project_and_keeps_its_data_in_the_workspace() {
             "name": "game",
             "root": root.join("game").display().to_string(),
             "branch": "main",
-            "pipeline": "cad",
-            "pipelines": ["cad"],
-            "sites": ["cad"],
+            "sites": [],
             "tags": ["hardware"],
         })
     );

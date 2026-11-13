@@ -25,7 +25,6 @@ pub mod mcp;
 pub mod mcp_bundles;
 pub mod mcp_clients;
 mod migrate;
-pub mod pipeline;
 pub mod project;
 pub mod provider;
 pub mod reminders;
@@ -54,8 +53,8 @@ mod workspace_template_file;
 pub use config::Config;
 pub use config_sections::{
     AgentConfig, ApplicationConfig, AppsConfig, AttachmentsConfig, ClaudeCodeConfig, LauncherEntry,
-    McpServerConfig, PipelinesConfig, ProjectSettings, ProjectsConfig, ProviderConfig,
-    RemindersConfig, SandboxConfig, ServerConfig,
+    McpServerConfig, ProjectSettings, ProjectsConfig, ProviderConfig, RemindersConfig,
+    SandboxConfig, ServerConfig,
 };
 pub use error::{Result, ServerError};
 pub use hash::content_hash;

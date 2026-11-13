@@ -196,8 +196,6 @@ pub enum ApprovalKind {
     Recipe,
     Merge,
     Tool,
-    /// A change to a pipeline's stage contract or `_config` page, learned from your edits.
-    Amendment,
     /// A call to an MCP server's tool (`rule`: the tool, for `always`; it holds everywhere).
     Mcp,
     /// Publishing a workspace site to the library (the only write that leaves a workspace).

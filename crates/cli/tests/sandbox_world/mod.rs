@@ -386,7 +386,7 @@ impl World {
         std::fs::write(
             &file,
             format!(
-                "---\ntitle: Ticket 0001\ntype: ticket\nid: \"0001\"\nstatus: open\nagent: worker\n\
+                "---\ntitle: Ticket 0001\ntype: ticket\nid: \"0001\"\nstatus: open\nagent: default\n\
                  project: {}\n---\n# Ticket 0001\n\n## Task\nProbe.\n\n## Result\n",
                 self.project.display()
             ),
@@ -398,7 +398,6 @@ impl World {
                 &self.server,
                 &orchestrator,
                 &TicketId::parse("0001").unwrap(),
-                None,
                 Some("claude-code"),
             )
             .await?;

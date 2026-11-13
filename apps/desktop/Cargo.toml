@@ -1,7 +1,7 @@
 [package]
 name = "composer-desktop"
 description = "The composer desktop app: the chat (your TUI) on the left, the stage on the right"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2024"
 license = "Apache-2.0"
 publish = false

@@ -54,8 +54,10 @@ The live notes are the writeback: the user presses `c`, the agent reads `notes`,
 from the work or plan. A hunk the user started outside Composer works too, as long as the session
 project or the only live review points at its repo.
 
-The site lists `hunk` in its `tools:`. The coding pipeline template ships `review.md` and
-`tools: [hunk]`, so a coding site has the capability as soon as it exists.
+The site lists `hunk` in its `tools:`. The coding site's run template ships
+`review.md`; `works/<ticket>/review.md` opens Hunk in that run's `project/`,
+against its base branch, and `tools: [hunk]` lives in the site, not the
+pipeline template.
 
 ## Later
 

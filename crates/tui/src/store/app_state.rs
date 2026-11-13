@@ -381,63 +381,6 @@ impl AppState {
                 self.send(ClientCommand::McpList, Pending::McpServers)
             }
             Action::ReloadConfig => self.send(ClientCommand::ConfigReload, Pending::ReloadConfig),
-            Action::Pipelines => self.send(ClientCommand::PipelineList, Pending::Pipelines),
-            Action::PipelineNew { kind, name } => {
-                self.send(ClientCommand::PipelineNew { kind, name }, Pending::Pipeline)
-            }
-            Action::WorkNew {
-                pipeline,
-                name,
-                project,
-            } => {
-                let project = project
-                    .or_else(|| {
-                        self.project_view
-                            .open
-                            .then(|| {
-                                self.project_view
-                                    .overview
-                                    .as_ref()
-                                    .map(|o| o.folder.clone())
-                            })
-                            .flatten()
-                    })
-                    .or_else(|| {
-                        self.session
-                            .current_info()
-                            .and_then(|s| self.session.project_of(s))
-                    });
-                self.send(
-                    ClientCommand::WorkNew {
-                        pipeline,
-                        name,
-                        project,
-                        brief: None,
-                    },
-                    Pending::Work,
-                )
-            }
-            Action::WorkRun { work, stage } => {
-                let work = work.or_else(|| {
-                    // The work the open page is in: site://<pipeline>/<work>/….
-                    let url = &self.page.current.as_ref()?.url;
-                    let parts: Vec<&str> = url.strip_prefix("site://")?.split('/').collect();
-                    (parts.len() >= 3).then(|| format!("{}/{}", parts[0], parts[1]))
-                });
-                let Some(work) = work else {
-                    self.ui
-                        .flash("which work? :work run <pipeline>/<work>", FlashLevel::Warn);
-                    return vec![];
-                };
-                self.send(
-                    ClientCommand::WorkRun {
-                        work,
-                        stage,
-                        session: self.session.current.clone(),
-                    },
-                    Pending::WorkRun,
-                )
-            }
             Action::Scope(scope) => {
                 self.session.scope = scope.filter(|s| s != "none");
                 let text = match &self.session.scope {
@@ -606,7 +549,6 @@ impl AppState {
                         ApprovalKind::Merge => format!("merge-{}.txt", a.request),
                         ApprovalKind::Tool => format!("tool-{}.txt", a.request),
                         ApprovalKind::Mcp => format!("mcp-{}.json", a.request),
-                        ApprovalKind::Amendment => format!("amendment-{}.diff", a.request),
                         ApprovalKind::Publish => format!("publish-{}.diff", a.request),
                     },
                     text: a.body.clone(),
@@ -919,34 +861,6 @@ impl AppState {
                 self.selection = selection;
                 vec![]
             }
-            ServerMessage::StageEnded {
-                work,
-                title,
-                stage,
-                status,
-                ..
-            } => {
-                let site = work
-                    .trim_start_matches("site://")
-                    .split('/')
-                    .next()
-                    .unwrap_or_default()
-                    .to_string();
-                let stage = stage.replacen('_', " ", 1);
-                let (text, level) = match status.as_str() {
-                    "review" => (
-                        format!("{title} · {stage} waits for review (:app {site} for the board)"),
-                        FlashLevel::Warn,
-                    ),
-                    "failed" => (format!("{title} · {stage} failed"), FlashLevel::Error),
-                    other => (format!("{title} · {stage} {other}"), FlashLevel::Info),
-                };
-                self.ui.flash(text, level);
-                if self.project_view.open {
-                    return self.reduce(Action::ProjectView(self.project_view.project.clone()));
-                }
-                vec![]
-            }
             ServerMessage::SessionUpdated { session } => {
                 self.session.upsert(session);
                 vec![]
@@ -1222,64 +1136,6 @@ impl AppState {
             }
             (Pending::Overview, CommandResult::Project { overview }) => {
                 self.project_view.loaded(overview);
-                vec![]
-            }
-            (
-                Pending::Pipelines,
-                CommandResult::Pipelines {
-                    pipelines,
-                    templates,
-                    ..
-                },
-            ) => {
-                let made: Vec<String> = pipelines
-                    .iter()
-                    .map(|p| format!("{} ({} stages, {} works)", p.site, p.stages.len(), p.works))
-                    .collect();
-                let kinds: Vec<&str> = templates.iter().map(|t| t.site.as_str()).collect();
-                let text = if made.is_empty() {
-                    format!("no pipelines yet: :pipeline new <{}>", kinds.join("|"))
-                } else {
-                    format!(
-                        "pipelines: {} · templates: {}",
-                        made.join(", "),
-                        kinds.join(", ")
-                    )
-                };
-                self.ui.flash(text, FlashLevel::Info);
-                vec![]
-            }
-            (Pending::Pipeline, CommandResult::Pipeline { pipeline }) => {
-                self.ui.flash(
-                    format!(
-                        "created site://{}: :work new {} <name> starts a piece of work",
-                        pipeline.site, pipeline.site
-                    ),
-                    FlashLevel::Info,
-                );
-                self.project_view.open = false;
-                self.reduce(Action::OpenUrl(format!("site://{}", pipeline.site)))
-            }
-            (Pending::Work, CommandResult::Work { work }) => {
-                self.ui.flash(
-                    format!("created {}: write its brief (e), then run 01", work.url),
-                    FlashLevel::Info,
-                );
-                self.project_view.open = false;
-                self.reduce(Action::OpenUrl(work.url))
-            }
-            (Pending::WorkRun, CommandResult::Work { work }) => {
-                self.ui.flash(
-                    format!(
-                        "{}: {} (its worker shows under this session)",
-                        work.url.trim_end_matches("/index.md"),
-                        work.status.unwrap_or_default()
-                    ),
-                    FlashLevel::Info,
-                );
-                if self.project_view.open {
-                    return self.reduce(Action::ProjectView(self.project_view.project.clone()));
-                }
                 vec![]
             }
             (Pending::Merged(ticket), CommandResult::Merged { commit }) => {

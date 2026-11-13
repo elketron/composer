@@ -12,7 +12,6 @@ String approvalQuestion(ServerMessageApprovalRequest a) => switch (a.kind ?? App
       ApprovalKind.merge => 'Merge?',
       ApprovalKind.tool => 'Allow tool?',
       ApprovalKind.mcp => 'Allow MCP tool?',
-      ApprovalKind.amendment => 'Amend the pipeline?',
       ApprovalKind.publish => 'Publish to the library?',
     };
 
@@ -26,7 +25,6 @@ String approvalNote(ServerMessageApprovalRequest a) => switch (a.kind ?? Approva
       ApprovalKind.mcp => a.rule == null
           ? "A call to an MCP server's tool."
           : 'Always allows ${a.rule} from now on, for any agent that lists it.',
-      ApprovalKind.amendment => 'Learned from your edits at its gate: every work reads the change from then on. Dismiss leaves it as it is.',
       ApprovalKind.publish => 'Every workspace can install or update from it then. Asked every time.',
     };
 

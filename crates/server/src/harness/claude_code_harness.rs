@@ -135,15 +135,7 @@ impl Harness for ClaudeCodeHarness {
             .flat_map(|(_, rule)| [format!("Edit({rule})"), format!("Write({rule})")])
             .collect();
 
-        // A pipeline stage: its scoped context too.
-        let appended = match crate::pipeline::stage_context(
-            &server.web,
-            request.ticket.as_str(),
-            Some(&folder),
-        ) {
-            Some(stage) => format!("{}\n\n---\n\n{stage}", system_prompt(&request.agent)),
-            None => system_prompt(&request.agent),
-        };
+        let appended = system_prompt(&request.agent);
         let appended = if read_dirs.is_empty() {
             appended
         } else {

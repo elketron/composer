@@ -6,7 +6,6 @@ import '../../state/server_status.dart';
 import '../../theme/composer_theme.dart';
 import '../../theme/tokens.dart' as t;
 import '../chat/navigation.dart';
-import '../pipelines/gate_tile.dart';
 import 'approval_tile.dart';
 import 'new_chat_sheet.dart';
 import 'section_label.dart';
@@ -24,7 +23,7 @@ class InboxTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final sessions = status.sessions;
     final inbox = Inbox.of(status);
-    final (approvals, gates, unread, busy, rest, needsYou) = (inbox.approvals, inbox.gates, inbox.unread, inbox.busy, inbox.rest, inbox.needsYou);
+    final (approvals, unread, busy, rest, needsYou) = (inbox.approvals, inbox.unread, inbox.busy, inbox.rest, inbox.needsYou);
 
     Widget card(SessionInfo s) => Padding(
       padding: const EdgeInsets.only(bottom: 8),
@@ -55,8 +54,6 @@ class InboxTab extends StatelessWidget {
                     agent: status.session(a.session)?.agent,
                   ),
                 ),
-              for (final w in gates)
-                GateTile(url: url, status: status, work: w),
               for (final s in unread) card(s),
             ],
             if (busy.isNotEmpty) ...[

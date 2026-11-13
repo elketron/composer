@@ -465,8 +465,6 @@ impl Server {
         let _ = self.route_base.set(route_base.to_string());
         *self.watcher.lock().expect("watcher lock") = Some(crate::watcher::watch(self)?);
         tokio::spawn(crate::reminders::run_reminders(self.clone()));
-        crate::pipeline::ensure_project_mounts(self);
-        crate::pipeline::learning::ask_open_proposals(self);
         tokio::spawn(crate::watches::run_watches(self.clone()));
         self.workers.recover_orphans(self);
         self.workers.schedule_paused(self);

@@ -136,7 +136,7 @@ async fn publishing_writes_the_library_and_nothing_of_the_other_workspace() {
     assert_eq!(snapshot(f.b.root()), b_before);
     let published = snapshot(&f.home.library().join("cad"));
     let names: Vec<String> = published.keys().map(|p| p.display().to_string()).collect();
-    assert_eq!(names, ["index.md", "stages/01_plan.md", "tools/slice.py"]);
+    assert_eq!(names, ["index.md", "tools/slice.py"]);
 }
 
 #[tokio::test]
@@ -195,7 +195,7 @@ async fn publishing_a_site_never_removes_library_files_outside_its_definition() 
     .unwrap();
     publish(&f.a, "agents").unwrap();
     // The stock agents stay in the library, and in b after its update.
-    for agent in ["default.md", "orchestrator.md", "worker.md", "stage.md"] {
+    for agent in ["default.md", "orchestrator.md"] {
         assert!(
             f.home.library().join("agents").join(agent).is_file(),
             "library lost {agent}"
@@ -245,12 +245,12 @@ async fn a_file_deleted_in_a_workspace_stays_deleted_on_update() {
     b.install(&site("cad"), None, &b.approvals().unwrap())
         .await
         .unwrap();
-    std::fs::remove_file(f.b.sites().join("cad/stages/01_plan.md")).unwrap();
-    std::fs::write(f.a.sites().join("cad/stages/01_plan.md"), "# Plan v2\n").unwrap();
+    std::fs::remove_file(f.b.sites().join("cad/tools/slice.py")).unwrap();
+    std::fs::write(f.a.sites().join("cad/tools/slice.py"), "# Slice v2\n").unwrap();
     publish(&f.a, "cad").unwrap();
     let items = b.update(false, &b.approvals().unwrap()).await.unwrap();
     assert!(items.is_empty(), "{items:?}");
-    assert!(!f.b.sites().join("cad/stages/01_plan.md").exists());
+    assert!(!f.b.sites().join("cad/tools/slice.py").exists());
 }
 
 #[tokio::test]

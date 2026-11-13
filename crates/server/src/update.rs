@@ -411,8 +411,8 @@ mod tests {
         // Deleted by the user: stays deleted.
         installed(&ws, "sites/plans/index.md", "old plans\n", None);
         // A new stock file.
-        std::fs::remove_file(ws.root().join("sites/agents/worker.md")).unwrap();
-        std::fs::remove_file(ws.seed_base().join("sites/agents/worker.md")).unwrap();
+        std::fs::remove_file(ws.root().join("sites/home/threads.md")).unwrap();
+        std::fs::remove_file(ws.seed_base().join("sites/home/threads.md")).unwrap();
         // No base (an older install) and different: left for review.
         std::fs::remove_file(ws.seed_base().join("sites/agents/orchestrator.md")).unwrap();
         std::fs::write(ws.root().join("sites/agents/orchestrator.md"), "mine\n").unwrap();
@@ -465,10 +465,7 @@ mod tests {
 
         assert_eq!(outcome("sites/plans/index.md"), None);
         assert!(!ws.root().join("sites/plans/index.md").exists());
-        assert_eq!(
-            outcome("sites/agents/worker.md"),
-            Some(UpdateOutcome::Added)
-        );
+        assert_eq!(outcome("sites/home/threads.md"), Some(UpdateOutcome::Added));
         assert!(matches!(
             outcome("sites/agents/orchestrator.md"),
             Some(UpdateOutcome::Review { .. })

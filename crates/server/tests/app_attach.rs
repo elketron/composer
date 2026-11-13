@@ -98,17 +98,6 @@ async fn projects_get_the_apps_that_match_them() {
     );
     std::fs::create_dir_all(sites.join("calendar/ui")).unwrap();
     write(
-        &sites.join("video/index.md"),
-        "---\ntitle: Video\ntype: pipeline\napp:\n  scope: project\n  when: [\"pipeline:video\"]\n---\n# Video\n",
-    );
-    write(
-        &sites.join("video/teaser/index.md"),
-        &format!(
-            "---\ntitle: Teaser\ntype: work\nproject: {}\n---\n# Teaser\n",
-            notes.display()
-        ),
-    );
-    write(
         &sites.join("broken/index.md"),
         "---\ntitle: Broken\napp:\n  scope: everywhere\n---\n# Broken\n",
     );
@@ -146,7 +135,6 @@ async fn projects_get_the_apps_that_match_them() {
         [
             ("calendar".into(), "pinned".into()),
             ("board".into(), "matched tag:writing".into()),
-            ("video".into(), "matched pipeline:video".into()),
         ]
     );
     // A renamed project isn't found by its folder's name.
@@ -191,6 +179,6 @@ async fn projects_get_the_apps_that_match_them() {
     else {
         panic!("{reply:?}")
     };
-    assert_eq!(list.apps.len(), 3);
+    assert_eq!(list.apps.len(), 2);
     assert_eq!(list.apps[0].site, "calendar");
 }

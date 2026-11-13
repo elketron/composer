@@ -17,7 +17,7 @@ fn ticket(dir: &std::path::Path, id: &str, harness_session: &str) {
     std::fs::write(
         dir.join(format!("sites/orchestration/tickets/{id}.md")),
         format!(
-            "---\ntitle: Ticket {id}\ntype: ticket\nid: \"{id}\"\nstatus: claimed\nagent: worker\nharness_session: \"{harness_session}\"\n---\n# Ticket {id}\n"
+            "---\ntitle: Ticket {id}\ntype: ticket\nid: \"{id}\"\nstatus: claimed\nagent: default\nharness_session: \"{harness_session}\"\n---\n# Ticket {id}\n"
         ),
     )
     .unwrap();

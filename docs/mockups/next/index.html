@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>composer next — the shared view in the composer look</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="base.css">
+<style>
+  .index .doc { padding-top: 54px; }
+  .hero {
+    display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 56px;
+    align-items: end; padding-bottom: 34px; margin-bottom: 0;
+    border-bottom: 1px solid var(--border);
+    position: relative;
+  }
+  .hero::before {
+    content: ""; position: absolute; left: -40px; right: -40px; top: -54px; height: 440px;
+    pointer-events: none;
+    background:
+      radial-gradient(ellipse at 28% 10%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 55%),
+      radial-gradient(var(--grid) 1px, transparent 1px);
+    background-size: auto, 22px 22px;
+    mask-image: linear-gradient(180deg, var(--shadow) 25%, transparent 100%);
+  }
+  .hero > * { position: relative; }
+  .hero h1 {
+    font: 600 58px/1.02 var(--font-mono); letter-spacing: -.045em; margin: 16px 0 18px; max-width: 860px;
+  }
+  .hero h1 span { color: var(--accent); }
+  .hero .lede { max-width: 760px; font-size: 13.5px; }
+  .hero .signals { display: flex; gap: 6px; margin-top: 20px; flex-wrap: wrap; }
+  .hero .signals .pill { height: 21px; padding: 0 8px; font-size: 9px; }
+  .hero-side { border-left: 1px solid var(--border); padding-left: 20px; }
+  .hero-side .row { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; font: 10px var(--font-mono); color: var(--faint); }
+  .hero-side .row b { color: var(--muted); font-weight: 400; }
+  .swatches { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; margin-top: 16px; border: 1px solid var(--border); }
+  .swatches div { height: 28px; background: var(--c); display: flex; align-items: flex-end; padding: 3px; font: 7px var(--font-mono); color: var(--faint); }
+  .manifest {
+    display: grid; grid-template-columns: repeat(4, 1fr); border-bottom: 1px solid var(--border);
+    margin-bottom: 44px;
+  }
+  .manifest div { padding: 16px 16px 18px 0; border-right: 1px solid var(--border); }
+  .manifest div + div { padding-left: 16px; }
+  .manifest div:last-child { border-right: 0; }
+  .manifest .k { font: 9px var(--font-mono); letter-spacing: .16em; text-transform: uppercase; color: var(--accent); margin-bottom: 5px; }
+  .manifest b { display: block; font: 500 12px var(--font-mono); color: var(--text); margin-bottom: 4px; }
+  .manifest p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.55; }
+  .section-head {
+    display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: 36px; align-items: end;
+    padding: 34px 0 14px; border-top: 1px solid var(--border); margin-top: 6px;
+  }
+  .section-head.single { margin-top: 22px; }
+  .section-head h2 { font: 500 21px/1.3 var(--font-mono); letter-spacing: -.025em; margin: 0; }
+  .section-head p { margin: 0; color: var(--muted); font-size: 11.5px; line-height: 1.6; }
+  .compare {
+    display: flex; gap: 18px; flex-wrap: wrap; padding: 8px 10px; margin-bottom: 18px;
+    border: 1px solid var(--border); background: var(--surface);
+    font: 9.5px var(--font-mono); color: var(--muted);
+  }
+  .compare span { display: inline-flex; gap: 5px; }
+  .compare b { color: var(--text); font-weight: 500; }
+  .gallery { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin-bottom: 52px; }
+  .card {
+    display: block; border: 1px solid var(--border); background: var(--surface);
+    color: var(--text); position: relative; overflow: hidden;
+  }
+  .card:hover { border-color: var(--accent-soft); text-decoration: none; }
+  .card:hover .go { color: var(--accent); }
+  .thumb { position: relative; height: calc(var(--h) * var(--s)); overflow: hidden; background: var(--stage); border-bottom: 1px solid var(--border); }
+  .thumb iframe {
+    position: absolute; left: 0; top: 0; width: 1360px; height: var(--h); border: 0; display: block; pointer-events: none;
+    transform: scale(var(--s)); transform-origin: top left; will-change: transform;
+  }
+  .thumb::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 3%, transparent);
+  }
+  .card .cap { display: flex; align-items: flex-start; gap: 11px; padding: 12px 13px 13px; }
+  .card .cap .snum { margin-top: 2px; }
+  .card .cap h2 { font: 500 12.5px/1.35 var(--font-mono); margin: 0; }
+  .card .cap p { margin: 3px 0 0; color: var(--muted); font-size: 10.5px; line-height: 1.5; }
+  .card .cap .go { margin-left: auto; font: 9px var(--font-mono); color: var(--faint); white-space: nowrap; padding-top: 2px; }
+  .card .cap .source { font: 8.5px var(--font-mono); color: var(--faint); margin-top: 4px; }
+  .card.direction { background: var(--bg); display: flex; }
+  .card.direction .direction-body { margin: auto 0; }
+  .direction-body { padding: 18px 18px 19px; }
+  .direction-body h2 { font: 500 15px/1.35 var(--font-mono); margin: 0 0 10px; }
+  .direction-body p { margin: 0 0 10px; color: var(--muted); font-size: 11px; line-height: 1.6; }
+  .direction-body .row { display: flex; gap: 6px; flex-wrap: wrap; }
+  .direction-body .quote { margin-top: 14px; padding-left: 10px; border-left: 2px solid var(--accent); font: 10px/1.6 var(--font-mono); color: var(--muted); }
+  .changes { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 52px; }
+  .changes .panel { border: 1px solid var(--border); background: var(--surface); }
+  .panel header { display: flex; align-items: center; gap: 7px; padding: 7px 10px; border-bottom: 1px solid var(--border); font: 9px var(--font-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--faint); }
+  .panel header b { color: var(--muted); font-weight: 400; letter-spacing: 0; text-transform: none; margin-left: auto; }
+  .panel .body { padding: 10px 12px 12px; }
+  .panel p { margin: 0 0 8px; color: var(--muted); font-size: 11px; line-height: 1.6; }
+  .panel p:last-child { margin-bottom: 0; }
+  .panel code { color: var(--text); }
+  .panel .swatchrow { display: flex; gap: 4px; margin: 8px 0 2px; }
+  .panel .swatchrow i { width: 16px; height: 16px; background: var(--c); border: 1px solid var(--border); }
+  .takeaway { border-top: 1px solid var(--border); padding: 18px 0 0; display: flex; align-items: baseline; gap: 16px; }
+  .takeaway b { font: 500 12px var(--font-mono); color: var(--text); }
+  .takeaway p { margin: 0; color: var(--muted); font-size: 11px; }
+  .takeaway .grow { flex: 1; }
+  @media (max-width: 980px) {
+    .hero { grid-template-columns: 1fr; gap: 24px; }
+    .hero-side { border-left: 0; border-top: 1px solid var(--border); padding: 16px 0 0; }
+    .manifest { grid-template-columns: 1fr 1fr; }
+    .manifest div:nth-child(2) { border-right: 0; }
+    .gallery, .changes, .section-head { grid-template-columns: 1fr; }
+    .section-head { gap: 8px; }
+    .hero h1 { font-size: 42px; }
+  }
+</style>
+</head>
+<body class="s0 index">
+<div class="doc">
+  <header class="hero">
+    <div>
+      <div class="kicker">composer / next · 2026-11-11</div>
+      <h1>One shared view. <span>Two native grammars.</span></h1>
+      <p class="lede">The first pass put one web chrome on every client. These are the platform-specific directions: gpui's two-pane workbench with an amber focus and a real terminal, and Flutter's touch-first session with 44px targets and bottom sheets. The shared view, the threads and the project are the same in both.</p>
+      <div class="signals">
+        <span class="pill accent">mono</span>
+        <span class="pill">square</span>
+        <span class="pill">dense chrome</span>
+        <span class="pill">one accent</span>
+        <span class="pill">threads anchored</span>
+      </div>
+    </div>
+    <aside class="hero-side">
+      <div class="row"><span>screens</span><b>09</b></div>
+      <div class="row"><span>tokens</span><b>templates/sdk/theme.css</b></div>
+      <div class="row"><span>surface</span><b>docs/mockups/next</b></div>
+      <div class="row"><span>shape</span><b>project + workflow + work</b></div>
+      <div class="swatches">
+        <div style="--c:var(--bg)">bg</div>
+        <div style="--c:var(--surface)">sf</div>
+        <div style="--c:var(--raised)">ra</div>
+        <div style="--c:var(--accent)">ac</div>
+        <div style="--c:var(--info)" class="faint">in</div>
+        <div style="--c:var(--warn)">wa</div>
+        <div style="--c:var(--ok)">ok</div>
+        <div style="--c:var(--err)">er</div>
+      </div>
+    </aside>
+  </header>
+
+  <section class="manifest">
+    <div><div class="k">01 / desktop</div><b>Two panes, one terminal</b><p>The gpui shell is the TUI on the left, the stage on the right, a 4px splitter between. Amber focus; flat fills; no web layout engine.</p></div>
+    <div><div class="k">02 / phone</div><b>One thumb, one session</b><p>Flutter: Inter 15px, 44px targets, 56px bars, a 52px workflow row and a bottom sheet for the switch.</p></div>
+    <div><div class="k">03 / shared</div><b>Point at the thing</b><p>A pin on a mockup, a region on a preview, a note on a hunk: one thread model, stored beside the work.</p></div>
+    <div><div class="k">04 / project</div><b>The folder is the truth</b><p>Sites operate on a project; a work's <code>project/</code> is a symlink to the root or the ticket's worktree.</p></div>
+  </section>
+
+  <section class="section-head">
+    <div>
+      <div class="kicker">platform studies · 06–09</div>
+      <h2>GPUI gets a workbench. Flutter gets a phone screen.</h2>
+    </div>
+    <p>The same shared view, drawn in the grammar each toolkit actually has: amber and mono with a native splitter for gpui; Inter, 44px targets and bottom sheets for Flutter.</p>
+  </section>
+
+  <div class="compare">
+    <span><b>gpui</b> <span class="faint">·</span> amber #e0a040 <span class="faint">·</span> 14/18 JetBrains Mono <span class="faint">·</span> 480px chat <span class="faint">·</span> 4px splitter <span class="faint">·</span> CEF stage</span>
+    <span><b>flutter</b> <span class="faint">·</span> Inter 15 <span class="faint">·</span> 44px targets <span class="faint">·</span> 56px bars <span class="faint">·</span> 5px cards <span class="faint">·</span> bottom sheets</span>
+  </div>
+
+  <section class="gallery platform">
+    <a class="card" href="screens/06-desktop-gpui.html">
+      <div class="thumb" style="--s:.49; --h:840px">
+        <iframe src="screens/06-desktop-gpui.html?embed=1" title="Desktop GPUI workbench" loading="eager"></iframe>
+      </div>
+      <div class="cap">
+        <span class="snum">06</span>
+        <div><h2>Desktop — the GPUI workbench</h2><p>The TUI in the left pane, the stage on the right, the 4px splitter and the amber focus accent.</p><div class="source">apps/desktop/src/shell.rs</div></div>
+        <span class="go">open →</span>
+      </div>
+    </a>
+
+    <a class="card" href="screens/07-desktop-gpui-palette.html">
+      <div class="thumb" style="--s:.49; --h:840px">
+        <iframe src="screens/07-desktop-gpui-palette.html?embed=1" title="Desktop GPUI picker" loading="eager"></iframe>
+      </div>
+      <div class="cap">
+        <span class="snum">07</span>
+        <div><h2>Desktop — the GPUI picker</h2><p>gpui's own overlay: workflows, sessions, pages and actions in one flat, keyboard-first list.</p><div class="source">apps/desktop/src/picker.rs</div></div>
+        <span class="go">open →</span>
+      </div>
+    </a>
+
+    <a class="card" href="screens/08-phone-touch.html">
+      <div class="thumb" style="--s:.49; --h:922px">
+        <iframe src="screens/08-phone-touch.html?embed=1" title="Phone touch-first session" loading="eager"></iframe>
+      </div>
+      <div class="cap">
+        <span class="snum">08</span>
+        <div><h2>Phone — the touch-first session</h2><p>Inter 15px, 44px controls, a 52px workflow row, the live view handle and approvals in place.</p><div class="source">apps/composer_app/ui</div></div>
+        <span class="go">open →</span>
+      </div>
+    </a>
+
+    <a class="card" href="screens/09-phone-workflow-sheet.html">
+      <div class="thumb" style="--s:.49; --h:922px">
+        <iframe src="screens/09-phone-workflow-sheet.html?embed=1" title="Phone workflow sheet" loading="eager"></iframe>
+      </div>
+      <div class="cap">
+        <span class="snum">09</span>
+        <div><h2>Phone — the workflow sheet</h2><p>One tap from the session: 56px rows, 44px targets, and the consequence written under each choice.</p><div class="source">workflow_sheet.dart · site.set</div></div>
+        <span class="go">open →</span>
+      </div>
+    </a>
+  </section>
+
+  <section class="section-head single">
+    <div>
+      <div class="kicker">single-chrome study · 01–05</div>
+      <h2>The first pass: one web chrome everywhere.</h2>
+    </div>
+    <p>Kept as a reference. The shared-view ideas are here; the desktop and phone implementation should follow 06–09, not the dense web shell in these five.</p>
+  </section>
+
+  <section class="gallery single">
+    <a class="card" href="screens/01-desktop-live.html">
+      <div class="thumb" style="--s:.49; --h:822px">
+        <iframe src="screens/01-desktop-live.html?embed=1" title="Desktop, the live shared view" loading="eager"></iframe>
+      </div>
+      <div class="cap">
+        <span class="snum">01</span>
+        <div><h2>Desktop — the live shared view</h2><p>Blender on the stage, the chat beside it, drive and threads in one window.</p><div class="source">workflows.md · desktop.md</div></div>
+        <span class="go">open →</span>
+      </div>
+    </a>
+
+    <a class="card" href="screens/02-desktop-mockups.html">
+      <div class="thumb" style="--s:.49; --h:822px">
+        <iframe src="screens/02-desktop-mockups.html?embed=1" title="Desktop, the mockups view and threads" loading="eager"></iframe>
+      </div>
+      <div class="cap">
+        <span class="snum">02</span>
+        <div><h2>Desktop — a view type with threads</h2><p>The login mockup, two pins, a dragged region and a thread panel that is already a page.</p><div class="source">workflows.md · phase 4</div></div>
+        <span class="go">open →</span>
+      </div>
+    </a>
+
+    <a class="card" href="screens/03-desktop-project.html">
+      <div class="thumb" style="--s:.49; --h:822px">
+        <iframe src="screens/03-desktop-project.html?embed=1" title="Desktop, the project hub" loading="eager"></iframe>
+      </div>
+      <div class="cap">
+        <span class="snum">03</span>
+        <div><h2>Desktop — the project hub</h2><p>Sites, works, the worktree preview, and the same files the agent and the app see.</p><div class="source">project-hub.md</div></div>
+        <span class="go">open →</span>
+      </div>
+    </a>
+
+    <a class="card" href="screens/04-phone-session.html">
+      <div class="thumb" style="--s:.49; --h:922px">
+        <iframe src="screens/04-phone-session.html?embed=1" title="Phone, one session" loading="eager"></iframe>
+      </div>
+      <div class="cap">
+        <span class="snum">04</span>
+        <div><h2>Phone — check in, approve, watch</h2><p>The same session, view-only live view, newest-first chat, approval in place.</p><div class="source">workflows.md · phase 3</div></div>
+        <span class="go">open →</span>
+      </div>
+    </a>
+
+    <a class="card" href="screens/05-tui-workflow.html">
+      <div class="thumb" style="--s:.49; --h:774px">
+        <iframe src="screens/05-tui-workflow.html?embed=1" title="TUI, the chat and the hunk" loading="eager"></iframe>
+      </div>
+      <div class="cap">
+        <span class="snum">05</span>
+        <div><h2>TUI — the chat and the hunk beside it</h2><p>The workflow switch, the artifact and its notes, all in the terminal's square chrome.</p><div class="source">tui-mode.md · plan.md</div></div>
+        <span class="go">open →</span>
+      </div>
+    </a>
+
+    <div class="card direction">
+      <div class="direction-body">
+        <div class="kicker" style="margin-bottom:8px">the direction</div>
+        <h2>Not a theme refresh: the same object in every client.</h2>
+        <p>The terminal keeps the work; the desktop hosts the interactive thing; the phone checks in. All three point at one session, one view URL, one worktree, and the same thread pages.</p>
+        <div class="row"><span class="pill accent">workflow</span><span class="pill">threads</span><span class="pill">project hub</span><span class="pill">drive</span></div>
+        <div class="quote">“the agent follows me to whatever I am working in; I don’t go to where the agent is.”<br><span class="faint">owner · 2026-11-10</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="changes">
+    <div class="panel">
+      <header>before <b>docs/mockups/*.html</b></header>
+      <div class="body">
+        <p>The older boards pair Inter with JetBrains Mono and keep 2–5px corners in the app chrome. They are still the record of the earlier phone and desktop passes.</p>
+        <p class="faint">Their <code>theme.css</code> predates the SDK change; the shipped tokens moved on.</p>
+      </div>
+    </div>
+    <div class="panel">
+      <header>now <b>templates/sdk/theme.css</b></header>
+      <div class="body">
+        <p>The chrome is monospace, square and dense, with a 34px top bar and a 24px key-hint footer. These screens extend that chrome to the stage, the thread panel, the project hub, the phone and the terminal.</p>
+        <div class="swatchrow"><i style="--c:var(--bg)"></i><i style="--c:var(--surface)"></i><i style="--c:var(--raised)"></i><i style="--c:var(--accent)"></i><i style="--c:var(--info)"></i><i style="--c:var(--warn)"></i><i style="--c:var(--ok)"></i><i style="--c:var(--err)"></i></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="takeaway">
+    <b>Open a screen and look.</b>
+    <p>Each is a static HTML page; the cards above are live previews at 49%. Serve the folder for the real thing: <code>python3 -m http.server 8765 --directory docs/mockups/next</code>.</p>
+    <span class="grow"></span>
+    <span class="pill">no build</span>
+  </div>
+
+  <footer class="docfoot">
+    <a href="../">docs/mockups</a>
+    <span class="faint">/</span>
+    <a href="../../workflows.md">workflows.md</a>
+    <span class="faint">/</span>
+    <a href="../../project-hub.md">project-hub.md</a>
+    <span class="grow"></span>
+    <span>2026-11-11</span>
+    <span>static html</span>
+  </footer>
+</div>
+<script>
+(function () {
+  function fitThumbs() {
+    document.querySelectorAll('.thumb').forEach(function (thumb) {
+      var h = parseFloat(getComputedStyle(thumb).getPropertyValue('--h')) || 822;
+      var s = thumb.clientWidth / 1360;
+      thumb.style.setProperty('--s', s);
+      thumb.style.height = Math.round(h * s) + 'px';
+    });
+  }
+  window.addEventListener('resize', fitThumbs);
+  window.addEventListener('load', fitThumbs);
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fitThumbs);
+  else fitThumbs();
+  setTimeout(fitThumbs, 250);
+})();
+</script>
+</body>
+</html>

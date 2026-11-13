@@ -153,64 +153,6 @@
   },
   {
     "type": "ok",
-    "id": 54,
-    "result": {
-      "kind": "pipelines",
-      "pipelines": [
-        {
-          "site": "coding",
-          "title": "Coding",
-          "about": "Staged changes to a project.",
-          "stages": [
-            {
-              "name": "03_implement",
-              "title": "Implement",
-              "gate": false,
-              "harness": "claude-code",
-              "worktree": true
-            }
-          ],
-          "needs_project": true,
-          "works": 2
-        }
-      ],
-      "templates": [
-        {
-          "site": "video",
-          "title": "Video",
-          "about": "Short videos from an idea.",
-          "stages": [],
-          "needs_project": false,
-          "works": 0
-        }
-      ],
-      "works": []
-    }
-  },
-  {
-    "type": "stage.ended",
-    "work": "site://video/launch-video/index.md",
-    "title": "launch-video",
-    "stage": "02_script",
-    "status": "review",
-    "summary": "Wrote script.md: 6 scenes, 1:52."
-  },
-  {
-    "type": "ok",
-    "id": 55,
-    "result": {
-      "kind": "work",
-      "work": {
-        "url": "site://coding/save-system/index.md",
-        "pipeline": "coding",
-        "title": "save-system",
-        "status": "01 spec · waiting",
-        "stages": []
-      }
-    }
-  },
-  {
-    "type": "ok",
     "id": 51,
     "result": {
       "kind": "tool_output",

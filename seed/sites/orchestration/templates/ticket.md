@@ -3,7 +3,6 @@ title: {{title}}
 type: ticket
 id: "{{id}}"
 status: open
-agent: worker
 plan:
 project:
 created: {{date}}

@@ -8,6 +8,9 @@ use crate::agent::AgentDefinition;
 /// Memory pages listed in the prompt, at most.
 const MEMORY_LIST_MAX: usize = 60;
 
+/// The default agent in worker mode: the ticket and its site say how this kind of work is done.
+const WORKER_PROMPT: &str = "# Worker\n\nYou are working exactly one ticket. Do not ask questions: decide, act, and record why in the ticket. Open the ticket and every page in its Context; the site's index says how this kind of work is done. Stay in the ticket's project/ view. Check every \"Done when\" item, write the Result section, then call `finish(done, summary)` or `finish(failed, reason)`.";
+
 /// The system prompt: agent body → `site://home` → environment → relevant memory.
 pub fn system_prompt(
     agent: &AgentDefinition,
@@ -20,10 +23,6 @@ pub fn system_prompt(
         .site
         .as_deref()
         .and_then(|name| crate::agent::Site::load(workspace, name).ok());
-    let stage = session.ticket.as_deref().and_then(|ticket| {
-        crate::pipeline::stage_context(workspace, ticket, session.project.as_deref())
-    });
-
     if let Some(site) = &site {
         sections.push(format!(
             "<page url=\"site://{}/\">\n{}\n</page>",
@@ -54,16 +53,12 @@ pub fn system_prompt(
              base tools.",
             site.name, site.title
         ));
-    } else if stage.is_none()
-        && let Some(home) = page_body(workspace, "site://home")
-    {
+    } else if let Some(home) = page_body(workspace, "site://home") {
         sections.push(format!("<page url=\"site://home\">\n{home}\n</page>"));
     }
 
-    // A pipeline stage's worker gets its stage's scoped context instead of the usual environment.
-    if let Some(stage) = stage {
-        sections.push(stage);
-        return sections.join("\n\n---\n\n");
+    if session.ticket.is_some() {
+        sections.push(WORKER_PROMPT.to_string());
     }
 
     let mut env = format!(
@@ -79,20 +74,6 @@ pub fn system_prompt(
             git_branch(Path::new(project))
         )),
         None => env.push_str("\n- active project: none (set one with `set_project`)"),
-    }
-    if agent.allows_tool("spawn_worker") {
-        let workers: Vec<String> = AgentDefinition::workers(workspace, index)
-            .into_iter()
-            .map(|w| format!("\n  - `{}`: {}", w.name, w.description))
-            .collect();
-        env.push_str(&format!(
-            "\n- worker agents (`spawn_worker`'s `agent`):{}",
-            if workers.is_empty() {
-                " none".to_string()
-            } else {
-                workers.concat()
-            }
-        ));
     }
     sections.push(env);
 

@@ -84,10 +84,10 @@ mod tests {
             ("board".into(), app(AppScope::Both, &["git"])),
             (
                 "cad".into(),
-                app(AppScope::Project, &["pipeline:cad", "files:*.FCStd"]),
+                app(AppScope::Project, &["site:cad", "files:*.FCStd"]),
             ),
             ("calendar".into(), app(AppScope::Global, &[])),
-            ("video".into(), app(AppScope::Project, &["pipeline:video"])),
+            ("video".into(), app(AppScope::Project, &["site:video"])),
         ]
     }
 

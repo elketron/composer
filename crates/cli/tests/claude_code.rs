@@ -86,7 +86,7 @@ fn ticket(dir: &Path, id: &str, project: &Path) {
     std::fs::write(
         dir.join(format!("sites/orchestration/tickets/{id}.md")),
         format!(
-            "---\ntitle: Ticket {id}\ntype: ticket\nid: \"{id}\"\nstatus: open\nagent: worker\nproject: {}\n---\n# Ticket {id}\n\n## Task\nSomething.\n\n## Result\n",
+            "---\ntitle: Ticket {id}\ntype: ticket\nid: \"{id}\"\nstatus: open\nagent: default\nproject: {}\n---\n# Ticket {id}\n\n## Task\nSomething.\n\n## Result\n",
             project.display()
         ),
     )
@@ -129,7 +129,6 @@ async fn spawn(server: &Arc<Server>, parent: &Arc<Session>, id: &str) -> Result<
             server,
             parent,
             &composer_server::worker::ticket::TicketId::parse(id).unwrap(),
-            None,
             Some("claude-code"),
         )
         .await
@@ -260,9 +259,9 @@ async fn claude_code_works_tickets() {
     .unwrap();
     let file = root.join("sites/orchestration/tickets/0002.md");
     let text = std::fs::read_to_string(&file).unwrap().replace(
-        "agent: worker\n",
+        "agent: default\n",
         &format!(
-            "agent: worker\nattachments: [\"{}/{}\", \"{}/{}\"]\n",
+            "agent: default\nattachments: [\"{}/{}\", \"{}/{}\"]\n",
             orchestrator.id(),
             mine.file,
             elsewhere.id(),

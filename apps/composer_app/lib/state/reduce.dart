@@ -220,21 +220,6 @@ import 'types.dart';
         ),
       ProjectOverviewRequested(:final url, :final project) => (s, [SendCommand(url, ClientCommandProjectOverview(project: project))]),
       CatalogRequested(:final url) => (s, [FetchCatalog(url)]),
-      PipelinesRequested(:final url) => (s, [SendCommand(url, const ClientCommandPipelineList())]),
-      WorkCreateRequested(:final url, :final pipeline, :final name, :final project, :final brief, :final template) => (
-          _updateStatus(s, url, (x) => x.copyWith(newWork: const NewWork(busy: true))),
-          [CreateWork(url, ClientCommandWorkNew(pipeline: pipeline, name: name, project: project, brief: brief), template: template)],
-        ),
-      WorkReplied(:final url, :final work, :final error) => (
-          _updateStatus(s, url, (x) => x.copyWith(newWork: NewWork(error: error, created: work?.url))),
-          // The new work (and maybe pipeline) shows in the lists.
-          [if (work != null) SendCommand(url, const ClientCommandPipelineList())],
-        ),
-      WorkRunRequested(:final url, :final work, :final stage, :final project) => (
-          s,
-          [RunWork(url, ClientCommandWorkRun(work: work, stage: stage, session: s.status[url]?.chat?.session), project: project)],
-        ),
-      NewWorkReset(:final url) => (_updateStatus(s, url, (x) => x.copyWith(newWork: const NewWork())), const []),
       SitesLoaded(:final url, :final sites) => (_updateStatus(s, url, (x) => x.copyWith(sites: sites)), const []),
       NoticeShown(:final text) => (s.copyWith(notice: Notice((s.notice?.id ?? 0) + 1, text)), const []),
     };
@@ -304,8 +289,6 @@ import 'types.dart';
     next,
     [
       FetchCatalog(url),
-      // Works waiting at a gate (Needs you).
-      SendCommand(url, const ClientCommandPipelineList()),
       if (chat != null) ...[
         _reattach(url, chat),
         FetchDesk(url, chat.session),
@@ -481,9 +464,7 @@ AppState _withUpload(AppState s, String url, int id, Upload Function(Upload uplo
   final (next, notes) = _notifications(s, handedBack, url, message);
   final (paged, effects) = _pageEffects(s, next, url, message);
   final (state, reviews) = _reviewEffects(paged, url, message);
-  // A stage ended: the works (Needs you, the project view) are fetched again.
-  final works = message is ServerMessageStageEnded ? [SendCommand(url, const ClientCommandPipelineList())] : const <AppEffect>[];
-  return (state, [...switches, ...notes, ...effects, ...reviews, ...works]);
+  return (state, [...switches, ...notes, ...effects, ...reviews]);
 }
 
 /// Tools after which a ticket's files may differ.
@@ -571,24 +552,6 @@ bool stopped(WorkerState state) => state == WorkerState.done || state == WorkerS
       );
     case ServerMessageApprovalResolved(:final request):
       return (s, [CancelNotification('approval:$request')]);
-    // A stage waits for you at its gate, or failed: its pipeline's board (or the work's page).
-    case ServerMessageStageEnded(:final work, :final title, :final stage, :final status, :final summary)
-        when status == 'review' || status == 'failed':
-      final site = work.replaceFirst('site://', '').split('/').first;
-      final label = stage.replaceFirst('_', ' ');
-      return (
-        s,
-        [
-          Notify(
-            key: 'stage:$work:$stage',
-            title: status == 'review' ? '$title · $label ready for review' : '$title · $label failed',
-            body: summary.isEmpty ? 'on $server' : summary,
-            url: url,
-            page: work,
-            app: s.status[url]?.hasApp(site) ?? false ? site : null,
-          ),
-        ],
-      );
     case ServerMessageWorkerStatus(:final worker, :final ticket, :final parent, state: final state)
         when stopped(state) && !viewing(parent):
       return (
@@ -730,8 +693,6 @@ AppState _event(AppState s, String url, ServerMessage message) => switch (messag
         }),
       ServerMessageOk(result: CommandResultProject(:final overview)) =>
         _updateStatus(s, url, (x) => x.copyWith(overviews: {...x.overviews, overview.folder: overview})),
-      ServerMessageOk(result: CommandResultPipelines(:final pipelines, :final templates, :final works)) =>
-        _updateStatus(s, url, (x) => x.copyWith(pipelines: Pipelines(pipelines: pipelines, templates: templates, works: works))),
       ServerMessageOk(result: final CommandResultModels models) => _updateStatus(s, url, (x) => x.copyWith(models: models)),
       ServerMessageOk(result: CommandResultHarnesses(:final project, :final harnesses)) =>
         _updateStatus(s, url, (x) => x.copyWith(harnesses: {...x.harnesses, project: harnesses})),

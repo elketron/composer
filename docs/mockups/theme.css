@@ -1,3 +1,5 @@
+/* Historical: kept for the older boards in this folder. The shipped chrome is
+   templates/sdk/theme.css (mono, square, dense); current screens: next/. */
 /* composer theme — shared by TUI (as RGB values) and micro apps (templates/sdk). */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:ital,wght@0,400;0,600;1,400&display=swap');
 

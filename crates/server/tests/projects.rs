@@ -1,5 +1,5 @@
 //! Projects: the list (search, folders outside the projects directory, session counts) and one
-//! project's overview (git state, works, ticket branches, memory, switches).
+//! project's overview (git state, ticket branches, memory, switches).
 #![allow(
     clippy::disallowed_methods,
     reason = "tests set up repos and fakes outside the sandbox"
@@ -72,7 +72,7 @@ async fn list_search_and_overview() {
         std::fs::create_dir_all(dir.path().join("sites").join(site)).unwrap();
         std::fs::write(
             dir.path().join("sites").join(site).join("index.md"),
-            format!("---\ntitle: {site}\ntype: pipeline\n---\n# {site}\n"),
+            format!("---\ntitle: {site}\ntype: index\n---\n# {site}\n"),
         )
         .unwrap();
     }
@@ -187,15 +187,6 @@ async fn list_search_and_overview() {
     assert_eq!(overview.folder, game_folder);
     assert_eq!(overview.branch.as_deref(), Some("main"));
     assert_eq!(overview.uncommitted, 1);
-    assert_eq!(overview.works.len(), 1, "only the work linking game");
-    assert_eq!(
-        (
-            overview.works[0].pipeline.as_str(),
-            overview.works[0].title.as_str(),
-            overview.works[0].status.as_deref()
-        ),
-        ("coding", "Save system", Some("03 implement"))
-    );
     assert_eq!(overview.branches.len(), 1);
     let branch = &overview.branches[0];
     assert_eq!(
@@ -238,5 +229,4 @@ async fn list_search_and_overview() {
     };
     assert_eq!((overview.branch.clone(), overview.uncommitted), (None, 0));
     assert!(overview.branches.is_empty() && overview.memory.is_none());
-    assert_eq!(overview.works.len(), 1, "the work linking notes by name");
 }

@@ -12,14 +12,17 @@ Agent definitions. Each page is one agent: frontmatter configures it, the body i
 
 | agent | role |
 |-------|------|
-| [default](default.md) | general assistant; the agent you chat with |
-| [orchestrator](orchestrator.md) | breaks plans into tickets and runs workers |
-| [worker](worker.md) | carries out one ticket |
-| [stage](stage.md) | runs one stage of a pipeline work (`run_stage`), with only that stage's context |
+| [default](default.md) | the agent you chat with; the same agent runs a ticket as a worker |
+| [orchestrator](orchestrator.md) | splits plans into tickets, starts default workers, reviews and merges |
 
-Worker agents (`role: worker`) are the ones `spawn_worker` can start. Add more for specific jobs
-(a `coder`, a `reviewer`, a `tester`): copy [worker](worker.md), change its prompt and tools, keep
-`role: worker` and the `finish` tool, and give it a `description:`. Orchestrators see the list.
+There are two agents, not one per kind of work. How a ticket is worked is **Context**, not an
+agent: the ticket links the site pages that say how to code, review or design. A worker is the
+default agent with the server's worker mode (it gets the `finish` tool and a worker prompt) and
+the ticket in its first message.
+
+`spawn_worker(id)` starts the default agent on a ticket. The ticket's Context must name the
+how-to page for that kind of work. `continue_worker` sends a finished worker back with a note;
+`stop_worker` ends it.
 
 ## Base tools and site tools
 
@@ -32,7 +35,7 @@ conventions when it gains its verbs.
 - Put a verb that only makes sense on one kind of thing in that site: `merge_ticket` in
   [orchestration](site://orchestration), `new_project` in [projects](site://projects),
   `new_site`/`new_app` in [home](site://home).
-- A worker starts with its agent's base tools; it enters a site the same way any agent does.
+- A worker runs the default agent with the worker prompt and the ticket in its first message; the site pages in its Context say how the work is done.
 - `sites:` (read/write access) is separate from tools: it decides which sites the agent may read
   and write at all.
 
@@ -42,9 +45,8 @@ conventions when it gains its verbs.
 ---
 title: Worker
 type: agent
-name: worker
-role: worker            # spawn_worker can start it (needs the finish tool)
-description: carries out one ticket   # shown to orchestrators
+name: default
+description: what this agent is for
 model: default          # "default" = the provider's model
 tools: [open, search, list_sites, write, edit, set_project, enter_site, leave_site, actions, run, finish]
 sites: all              # or a list: [memory, plans]

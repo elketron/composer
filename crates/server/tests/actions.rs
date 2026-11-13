@@ -992,7 +992,7 @@ async fn stock_recipes_stay_preapproved_for_apps_also_on_a_home_from_before_call
 fn worker_info(parent: &str, state: TurnState) -> SessionInfo {
     SessionInfo {
         id: "w1".into(),
-        agent: "worker".into(),
+        agent: "default".into(),
         project: None,
         site: None,
         ticket: Some("0001".into()),

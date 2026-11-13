@@ -475,7 +475,7 @@ dependencies = [
 
 [[package]]
 name = "composer-cli"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -498,7 +498,7 @@ dependencies = [
 
 [[package]]
 name = "composer-client"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -517,7 +517,7 @@ dependencies = [
 
 [[package]]
 name = "composer-core"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "pulldown-cmark",
  "serde",
@@ -530,7 +530,7 @@ dependencies = [
 
 [[package]]
 name = "composer-protocol"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "schemars",
  "serde",
@@ -540,7 +540,7 @@ dependencies = [
 
 [[package]]
 name = "composer-server"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -576,7 +576,7 @@ dependencies = [
 
 [[package]]
 name = "composer-tui"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "arboard",

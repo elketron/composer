@@ -5,8 +5,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::config_sections::{
     AgentConfig, ApplicationConfig, AppsConfig, AttachmentsConfig, ClaudeCodeConfig, DesktopConfig,
-    LauncherEntry, McpServerConfig, PipelinesConfig, ProjectsConfig, ProviderConfig,
-    RemindersConfig, SandboxConfig, ServerConfig, System1Config, TerminalsConfig, ViewerConfig,
+    LauncherEntry, McpServerConfig, ProjectsConfig, ProviderConfig, RemindersConfig, SandboxConfig,
+    ServerConfig, System1Config, TerminalsConfig, ViewerConfig,
 };
 use crate::error::{Result, ServerError};
 
@@ -25,8 +25,6 @@ pub struct Config {
     pub projects: ProjectsConfig,
     #[serde(default = "section")]
     pub reminders: RemindersConfig,
-    #[serde(default = "section")]
-    pub pipelines: PipelinesConfig,
     #[serde(default = "section")]
     pub claude_code: ClaudeCodeConfig,
     #[serde(default = "section")]

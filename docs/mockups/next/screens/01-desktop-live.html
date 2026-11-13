@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>composer next · 01 desktop — the live shared view</title>
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="../base.css">
+<style>
+  /* ===== 01 · desktop: the workflow's live view ---------- */
+  .s1 .masthead h1 { max-width: 720px; }
+
+  /* the stage's canvas */
+  .s1 .scene { position: absolute; inset: 0; }
+  .s1 .scene svg { width: 100%; height: 100%; display: block; }
+  .s1 .cube { filter: drop-shadow(0 0 10px var(--accent-dim)); }
+  .hud {
+    position: absolute; font: 9px var(--font-mono); color: var(--faint);
+    letter-spacing: .06em; line-height: 1.6;
+  }
+  .hud.tl { left: 12px; top: 10px; }
+  .hud.tr { right: 12px; top: 10px; text-align: right; }
+  .hud b { color: var(--muted); font-weight: 400; }
+  .hud .bar { display: inline-block; width: 46px; height: 2px; background: var(--border-strong); vertical-align: 2px; }
+  .axis { position: absolute; left: 12px; bottom: 12px; width: 56px; height: 52px; }
+  .axis svg { width: 100%; height: 100%; }
+
+  .tcard {
+    position: absolute; right: 14px; bottom: 38px; width: 236px;
+    background: var(--surface); border: 1px solid var(--border-strong);
+    border-left: 2px solid var(--warn); box-shadow: 0 12px 30px var(--shadow-soft);
+  }
+  .tcard header {
+    display: flex; align-items: center; gap: 6px; padding: 6px 8px;
+    border-bottom: 1px solid var(--border); font: 10px var(--font-mono);
+  }
+  .tcard header b { color: var(--text); font-weight: 500; }
+  .tcard .x { margin-left: auto; color: var(--faint); font-size: 12px; }
+  .tcard .tm { padding: 7px 9px; border-bottom: 1px solid var(--hairline); }
+  .tcard .tm:last-of-type { border-bottom: 0; }
+  .tcard .who {
+    display: block; font: 9px var(--font-mono); letter-spacing: .1em; text-transform: uppercase;
+    color: var(--faint); margin-bottom: 2px;
+  }
+  .tcard .tm.agent .who { color: var(--info); }
+  .tcard p { margin: 0; font-size: 11px; line-height: 1.5; color: var(--muted); }
+  .tcard .tfoot {
+    display: flex; align-items: center; gap: 6px; padding: 5px 9px;
+    border-top: 1px solid var(--border); font: 9px var(--font-mono); color: var(--faint);
+  }
+  .pin {
+    position: absolute; left: 59.5%; top: 21%; width: 18px; height: 18px;
+    background: var(--warn); color: var(--bg); display: flex; align-items: center; justify-content: center;
+    font: 700 10px var(--font-mono); box-shadow: 0 0 0 3px color-mix(in srgb, var(--warn) 14%, transparent);
+  }
+  .pin::after {
+    content: "top bevel"; position: absolute; left: 20px; top: 1px; white-space: nowrap;
+    background: var(--warn); color: var(--bg); font: 9px/16px var(--font-mono); padding: 0 5px;
+  }
+  .viewchip {
+    position: absolute; left: 12px; top: 42px; display: flex; gap: 5px;
+  }
+</style>
+</head>
+<body class="s1">
+<div class="doc">
+  <header class="masthead">
+    <div>
+      <div class="kicker">composer / next · single-chrome study · screen 01</div>
+      <h1>The agent is in the room, not in another window.</h1>
+      <p class="lede">One workflow at a time. The chat and the thing being worked on share one window: a real application through <b>wayai</b>, a view type for what no application shows, and threads that put a comment exactly where you mean it. The chrome is the shipped composer look — monospace, square, dense, one accent.</p>
+    </div>
+    <div class="side">
+      <div class="row"><span>surface</span><b>docs/mockups/next</b></div>
+      <div class="row"><span>tokens</span><b>templates/sdk/theme.css</b></div>
+      <div class="row"><span>screen</span><b>1360 × 820</b></div>
+      <div class="row"><span>source</span><b><a href="../../../workflows.md">workflows.md</a> · desktop.md</b></div>
+    </div>
+  </header>
+
+  <figure class="screen" id="shared">
+    <div class="screen-head">
+      <span class="snum">01</span>
+      <div>
+        <h2>Desktop — the live shared view</h2>
+        <p>A workflow runs Blender in wayai. The chat is on the left, the same application on the stage; a comment on the top edge is already a thread the agent is answering.</p>
+      </div>
+      <div class="source">workflows.md · desktop.md</div>
+    </div>
+
+    <div class="fit">
+    <div class="win">
+      <div class="winbar">
+        <span class="mark">c</span>
+        <span class="brand">composer</span>
+        <span class="slash">/</span><span class="crumb">demo</span>
+        <span class="slash">/</span><span class="crumb">orchestrator #a3f1</span>
+        <span class="right">
+          <span class="kbd">ctrl shift p</span>
+          <span class="pill plain"><span class="dot ok"></span> my-pc</span>
+          <span class="lights"><i></i><i></i><i></i></span>
+        </span>
+      </div>
+      <div class="app">
+        <nav class="rail">
+          <div class="ws on">D<span class="st"></span></div>
+          <div class="rule"></div>
+          <span class="ic on" title="chat">
+            <svg viewBox="0 0 20 20"><path d="M3 4h14v10H9l-4 3v-3H3z"/><path d="M6 8h8M6 11h5"/></svg>
+          </span>
+          <span class="ic" title="stage">
+            <svg viewBox="0 0 20 20"><rect x="3" y="4" width="14" height="10"/><path d="M7 17h6M10 14v3"/></svg>
+          </span>
+          <span class="ic" title="projects">
+            <svg viewBox="0 0 20 20"><path d="M3 6h5l2 2h7v8H3z"/></svg>
+          </span>
+          <span class="ic">
+            <svg viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.2"/><path d="M10.2 10.2 14 14"/></svg>
+          </span>
+          <span class="grow"></span>
+          <span class="ic"><svg viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10"/><path d="M5 8h6M8 5v6"/></svg></span>
+          <div class="avatar">od</div>
+        </nav>
+
+        <section class="sessions">
+          <header class="sesshead">
+            <span class="t">sessions</span><span class="n">5</span>
+            <span class="grow"></span><span class="add">+</span>
+          </header>
+          <div class="sesssearch">
+            <svg viewBox="0 0 16 16"><circle cx="6.5" cy="6.5" r="4" fill="none" stroke="currentColor"/><path d="M9.5 9.5 13 13" stroke="currentColor"/></svg>
+            filter sessions
+            <span class="kbd">⌘K</span>
+          </div>
+          <div class="sesslist">
+            <div class="sgroup">needs you <span class="n">1</span></div>
+            <a class="srow on" href="#">
+              <span class="top"><span class="dot warn pulse"></span><span class="a">orchestrator</span><span class="id">#a3f1</span><span class="when warn">now</span></span>
+              <div class="preview">Merge ticket 0014? The ship bevel is one commit.</div>
+              <div class="proj">composer <span class="br">/</span> 3d</div>
+              <div class="workers">
+                <div class="run"><span class="dot warn"></span><span class="d">default · bevel top edge</span><span class="s">run</span></div>
+                <div class="ok"><span class="dot ok"></span><span class="d">worker · ticket 0014</span><span class="s">done</span></div>
+              </div>
+            </a>
+            <div class="sgroup">running <span class="n quiet">1</span></div>
+            <div class="srow">
+              <div class="top"><span class="dot info"></span><span class="a">default</span><span class="id">#a3f1</span><span class="when">12s</span></div>
+              <div class="preview">Rendering the top face with three segments…</div>
+              <div class="proj">composer <span class="br">/</span> 3d</div>
+            </div>
+            <div class="sgroup">recent</div>
+            <div class="srow">
+              <div class="top"><span class="dot"></span><span class="a">reviewer</span><span class="id">#91b2</span><span class="when">1h</span></div>
+              <div class="preview">Ticket 0011 merged. Two follow-ups left open.</div>
+              <div class="proj">composer <span class="br">/</span> coding</div>
+            </div>
+            <div class="srow">
+              <div class="top"><span class="dot"></span><span class="a">default</span><span class="id">#77ce</span><span class="when">3h</span></div>
+              <div class="preview">Release notes are on the board; tag waits for you.</div>
+              <div class="proj">composer <span class="br">/</span> orchestration</div>
+            </div>
+            <div class="srow">
+              <div class="top"><span class="dot"></span><span class="a">orchestrator</span><span class="id">#3fa1</span><span class="when">1d</span></div>
+              <div class="preview">Spawned a worker for 0014 and stopped at the approval.</div>
+              <div class="proj">composer <span class="br">/</span> orchestration</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="chat">
+          <header class="chathead">
+            <span class="dot info"></span><span class="a">default</span><span class="id">#a3f1</span>
+            <span class="pill accent">3D</span>
+            <span class="pill plain"><span class="dot ok"></span> blender</span>
+            <span class="grow"></span>
+            <span class="iconbtn"><svg viewBox="0 0 16 16"><path d="M3 3h10v8H8l-3 2v-2H3z"/></svg></span>
+            <span class="more">⋮</span>
+          </header>
+          <div class="wfbar">
+            <span>site 3d</span><span class="sep">·</span><span>mcp blender</span><span class="sep">·</span><span>project composer</span><span class="sep">·</span><span class="accent">drive: you</span>
+          </div>
+          <div class="msgs">
+            <div class="event">
+              <span class="dot ok"></span>
+              <span class="t"><b>entered 3d</b> · blender already running · wayai 127.0.0.1:7878</span>
+              <span class="s">ok</span>
+            </div>
+
+            <div class="msg you">
+              <div class="who">you <time>14:02</time></div>
+              <p>Bevel the cube's top edges — 0.03, three segments. Keep the bottom sharp.</p>
+            </div>
+
+            <div class="msg agent">
+              <div class="who">default <time>14:02</time></div>
+              <p>The cube is selected. I’ll bevel the top face only and leave the base sitting on the grid.</p>
+              <div class="toolrow">
+                <div class="h"><span class="tool">blender__execute_blender_code</span><span class="arg">bpy.ops.mesh.bevel(offset=0.03, segments=3)</span><span class="ok">2.1s</span></div>
+                <div class="lines">
+                  <div><span class="k">›</span>12 edges · 3 segments · shade_smooth</div>
+                  <div><span class="k">✓</span>scene / cube · 1 object changed</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="approval">
+              <div class="k">approval · blender</div>
+              <div class="q">Run unrestricted Python in Blender?</div>
+              <pre>bpy.ops.object.shade_smooth()
+# 1 object · scene / cube</pre>
+              <div class="btns">
+                <span class="btn primary">Allow once <span class="kbd">y</span></span>
+                <span class="btn ghost">Always</span>
+                <span class="btn ghost">Deny</span>
+              </div>
+            </div>
+
+            <div class="msg agent">
+              <div class="who">default <time>14:04</time></div>
+              <p>Bevel is in. I left a thread on the top edge — answer there and I’ll adjust it in place.</p>
+            </div>
+          </div>
+          <div class="composer">
+            <div class="box">Type a message<span class="cursor"></span></div>
+            <div class="row">
+              <span class="kbd">esc</span><span class="kbd">enter</span> send
+              <span class="grow"></span>
+              <span class="pill">3d</span>
+              <span class="send">↵</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="stage">
+          <div class="tabs">
+            <div class="tab on"><span class="dot ok"></span> live · blender</div>
+            <div class="tab">scene</div>
+            <div class="tab">mockups <span class="pill warn">1</span></div>
+            <div class="tab">changes</div>
+            <div class="tab add">+</div>
+          </div>
+          <div class="stagetool">
+            <span class="t">Blender 4.2</span><span class="dot ok"></span><span>running</span>
+            <span class="faint">/</span><span>scene / cube</span>
+            <span class="grow"></span>
+            <span class="pill"><span class="dot ok"></span> 10 fps</span>
+            <span class="btn primary">Drive</span>
+            <span class="pill ok"><span class="dot ok"></span> follow agent</span>
+          </div>
+          <div class="stageview">
+            <div class="canvas"></div>
+            <div class="scene">
+              <svg viewBox="0 0 700 620" preserveAspectRatio="xMidYMid meet" aria-label="A wireframe cube in Blender's viewport">
+                <defs>
+                  <linearGradient id="top" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0" stop-color="var(--accent)" stop-opacity=".22"/>
+                    <stop offset="1" stop-color="var(--accent)" stop-opacity=".05"/>
+                  </linearGradient>
+                </defs>
+                <g stroke="var(--grid-strong)" stroke-width="1">
+                  <path d="M0 620 L400 250 L800 620" fill="none"/>
+                  <path d="M80 620 400 300 720 600" fill="none"/>
+                  <path d="M170 600 400 310 630 600" fill="none"/>
+                  <path d="M0 500h800M0 560h800"/>
+                </g>
+                <ellipse cx="400" cy="438" rx="150" ry="16" fill="var(--accent)" opacity=".05"/>
+
+                <g class="cube" stroke-linejoin="miter">
+                  <!-- hidden back edges -->
+                  <path d="M400 420 400 260" stroke="var(--faint)" stroke-dasharray="3 4" opacity=".7"/>
+                  <path d="M280 200 280 360" stroke="var(--accent)" fill="none"/>
+                  <path d="M520 200 520 360" stroke="var(--accent)" fill="none"/>
+                  <path d="M280 360 400 420 520 360" fill="none" stroke="var(--accent)"/>
+                  <!-- faces */
+                  <path d="M400 130 528 195 400 260 272 195z" fill="var(--accent)" fill-opacity=".08" stroke="var(--accent)"/>
+                  <path d="M272 195 400 260 400 420 272 360z" fill="none" stroke="var(--accent)"/>
+                  <path d="M528 195 400 260 400 420 528 360z" fill="none" stroke="var(--accent)"/>
+                  <!-- top bevel: the thing the thread is about -->
+                  <path d="M400 145 510 196 400 247 290 196z" fill="url(#top)" stroke="var(--accent)" stroke-width="1.5"/>
+                  <path d="M400 130 400 145M528 195 510 196M400 260 400 247M272 195 290 196" stroke="var(--accent)" stroke-width="1"/>
+                  <!-- selection -->
+                  <path d="M260 120h280v320h-280z" fill="none" stroke="var(--warn)" stroke-dasharray="4 4" opacity=".55"/>
+                  <circle cx="400" cy="138" r="4" fill="var(--warn)"/>
+                  <circle cx="400" cy="248" r="4" fill="var(--warn)"/>
+                </g>
+              </svg>
+            </div>
+            <div class="hud tl"><b>perspective</b> · studio<br><span class="bar"></span> solid</div>
+            <div class="hud tr"><b>wayai</b> · 10 fps<br>scene / cube<br>1 object selected</div>
+            <div class="viewchip"><span class="pill accent">live</span><span class="pill">user has drive</span></div>
+            <div class="pin">1</div>
+            <div class="axis">
+              <svg viewBox="0 0 56 52">
+                <g stroke="var(--faint)" stroke-width="1">
+                  <path d="M28 28V6"/><path d="M28 28 8 40"/><path d="M28 28 48 40"/>
+                </g>
+                <g font-family="var(--font-mono)" font-size="8" fill="var(--muted)">
+                  <text x="25" y="4">z</text><text x="2" y="45">x</text><text x="50" y="45">y</text>
+                </g>
+                <circle cx="28" cy="28" r="2.5" fill="var(--accent)"/>
+              </svg>
+            </div>
+            <aside class="tcard">
+              <header><span class="dot warn"></span><b>top bevel</b><span class="pill warn">open</span><span class="x">×</span></header>
+              <div class="tm"><span class="who">you</span><p>Three segments reads softer at this size — try it.</p></div>
+              <div class="tm agent"><span class="who">default</span><p>Bumped to 3 and re-rendered the top face.</p></div>
+              <div class="tfoot"><span class="kbd">⌘↵</span> send to agent <span class="grow"></span>1 of 1</div>
+            </aside>
+          </div>
+          <div class="stagefoot">
+            <span><span class="dot ok"></span> 127.0.0.1:7878</span>
+            <span>wayai</span>
+            <span>drive: you</span>
+            <span class="grow"></span>
+            <span>frame 10/s</span>
+            <span>cef</span>
+          </div>
+        </section>
+      </div>
+    </div>
+    </div>
+
+    <div class="notes">
+      <div><b>workflow</b><code>3D</code> is a site: its <code>app: blender</code> launches in wayai, its MCP tools arrive with it, and both leave together.</div>
+      <div><b>one shared view</b>The stage is the application itself. The user's pointer and the agent's input share one screen; <code>drive: you</code> says who has it.</div>
+      <div><b>point and say</b>The pin on the top edge is a thread. The comment reaches the agent with the anchor attached; the answer lands in the same card.</div>
+    </div>
+  </figure>
+
+  <footer class="docfoot">
+    <a href="../index.html">← all screens</a>
+    <span class="grow"></span>
+    <span>static html · no build</span>
+    <span>tokens: templates/sdk/theme.css</span>
+  </footer>
+</div>
+<script>
+(function () {
+  if (location.search.includes('embed')) document.documentElement.classList.add('embed');
+  function fit() {
+    document.querySelectorAll('.fit').forEach(function (box) {
+      var frame = box.firstElementChild;
+      if (!frame) return;
+      var natural = 1360;
+      frame.style.width = natural + 'px';
+      var s = Math.min(1, box.clientWidth / natural);
+      frame.style.transformOrigin = 'top left';
+      frame.style.transform = 'scale(' + s + ')';
+      box.style.height = Math.round(frame.offsetHeight * s) + 'px';
+    });
+  }
+  window.addEventListener('resize', fit);
+  window.addEventListener('load', fit);
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fit);
+  else fit();
+  setTimeout(fit, 250);
+})();
+</script>
+</body>
+</html>
