@@ -15,7 +15,7 @@ fn cef_dir() -> String {
             return dir;
         }
         eprintln!(
-            "composer-desktop: CEF_PATH={dir} has no libcef.so; run apps/desktop/scripts/fetch-cef.sh \
+            "composer-desktop: CEF_PATH={dir} has no CEF library; \
              (falling back to the runtime beside the binary)"
         );
     }
@@ -36,6 +36,7 @@ fn runtime_in(dir: &std::path::Path) -> bool {
 
 fn cache_root() -> PathBuf {
     let cache = std::env::var_os("XDG_CACHE_HOME")
+        .or_else(|| std::env::var_os("LOCALAPPDATA"))
         .map(PathBuf::from)
         .unwrap_or_else(|| {
             PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".cache")
@@ -105,24 +106,19 @@ wrap_app! {
 
 /// CEF re-runs this binary for its renderer, GPU and utility processes: those end here. Must be
 /// the first thing `main` does.
-pub fn run_helper_process() {
+pub fn run_helper_process(sandbox_info: *mut u8) -> Option<i32> {
     let _ = api_hash(sys::CEF_API_VERSION_LAST, 0);
     let args = Args::new();
     let mut app = ComposerApp::new();
-    let code = execute_process(
-        Some(args.as_main_args()),
-        Some(&mut app),
-        std::ptr::null_mut(),
-    );
-    if code >= 0 {
-        std::process::exit(code);
-    }
+    let code = execute_process(Some(args.as_main_args()), Some(&mut app), sandbox_info);
+    (code >= 0).then_some(code)
 }
 
 /// Starts CEF for this process; its cache folder is removed by [`shutdown`].
-pub fn start() -> Result<PathBuf, String> {
+pub fn start(sandbox_info: *mut u8) -> Result<PathBuf, String> {
     let dir = cef_dir();
     let root = cache_root();
+    #[cfg(target_os = "linux")]
     forget_dead_caches(&root);
     let cache = root.join(std::process::id().to_string());
     // CEF falls back to a shared default profile (and opens a browser window of its own) when it
@@ -151,7 +147,7 @@ pub fn start() -> Result<PathBuf, String> {
         Some(args.as_main_args()),
         Some(&settings),
         Some(&mut app),
-        std::ptr::null_mut(),
+        sandbox_info,
     ) != 1
     {
         return Err(format!(
@@ -167,6 +163,7 @@ pub fn shutdown(cache: PathBuf) {
 }
 
 /// Caches of instances that are gone (crashed, killed).
+#[cfg(target_os = "linux")]
 fn forget_dead_caches(root: &std::path::Path) {
     let Ok(entries) = std::fs::read_dir(root) else {
         return;

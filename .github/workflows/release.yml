@@ -92,7 +92,7 @@ jobs:
           name: android
           path: dist/*.apk
 
-  desktop:
+  desktop-linux:
     runs-on: ubuntu-latest
     container: archlinux:latest
     steps:
@@ -105,12 +105,27 @@ jobs:
           scripts/package-desktop.sh "${VERSION#v}"
       - uses: actions/upload-artifact@v4
         with:
-          name: desktop
+          name: desktop-linux
           path: dist/*.tar.gz
+
+  desktop-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: ilammy/msvc-dev-cmd@v1
+      - name: Build and package GPUI desktop
+        shell: pwsh
+        run: ./scripts/package-desktop-windows.ps1 -Version ($env:VERSION.TrimStart('v'))
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-windows
+          path: dist/*.zip
+          if-no-files-found: error
 
   publish:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [server, android, desktop]
+    needs: [server, android, desktop-linux, desktop-windows]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4

@@ -1,4 +1,4 @@
-# The desktop app (Linux)
+# The desktop app
 
 One window per workspace: the chat on the left is your composer TUI (the server starts it for
 the window), the stage on the right shows the session's desk as tabs: apps, pages, a project's
@@ -11,6 +11,10 @@ It talks to a composer server, never runs one: start `composer serve` first.
 From a release: unpack `composer-desktop-<version>-linux-x86_64.tar.gz`, run `./install.sh`
 (installs to `~/.local/lib/composer-desktop`, links `~/.local/bin/composer-desktop`, adds the
 menu entry). Keep the folder's files together: the Chromium runtime (CEF) is beside the binary.
+
+On Windows, unpack `composer-desktop-<version>-windows-x86_64.zip` and run
+`composer_desktop.exe`. The server still runs on Linux (for example in WSL); see the archive's
+README for pointing `COMPOSER_HOME` at its workspace. Keep the CEF files together.
 
 From source:
 
@@ -129,4 +133,4 @@ frame. On Nov 8 the fixed GPU-enabled run exited normally, with sampled process-
 491–521 MiB and no swap. This is a short targeted regression check, not proof that every source of
 long-running memory growth is eliminated. Unset `COMPOSER_CEF_GPU` to exercise software compositing.
 
-Windows (with the server in WSL) comes later: see [wsl.md](wsl.md).
+For the server in WSL, see [wsl.md](wsl.md).

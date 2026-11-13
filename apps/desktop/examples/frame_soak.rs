@@ -100,8 +100,10 @@ impl Render for FrameSoak {
 pub fn trace(_step: &str) {}
 
 fn main() {
-    cef_runtime::run_helper_process();
-    let cache = cef_runtime::start().expect("CEF runtime installed");
+    if let Some(code) = cef_runtime::run_helper_process(std::ptr::null_mut()) {
+        std::process::exit(code);
+    }
+    let cache = cef_runtime::start(std::ptr::null_mut()).expect("CEF runtime installed");
     gpui_platform::application().run(|cx: &mut App| {
         browser_pump::start(cx);
         let bounds = Bounds::centered(None, size(px(1280.), px(800.)), cx);

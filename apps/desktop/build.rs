@@ -12,13 +12,19 @@ fn main() {
         .map(|p| p.display().to_string())
         .unwrap_or(dir);
     // Beside the binary first (a package), then the development runtime.
-    println!("cargo::rustc-link-arg=-Wl,-rpath,$ORIGIN");
+    let linux = std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("linux");
+    if linux {
+        println!("cargo::rustc-link-arg=-Wl,-rpath,$ORIGIN");
+    } else if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
+        // The bootstrap initializes Chromium's sandbox before the client loads CEF.
+        println!("cargo::rustc-link-arg-cdylib=/DELAYLOAD:libcef.dll");
+    }
     if packaged {
         println!("cargo::rustc-env=COMPOSER_CEF_DIR=");
     } else {
         println!("cargo::rustc-env=COMPOSER_CEF_DIR={dir}");
     }
-    if !dir.is_empty() {
+    if linux && !dir.is_empty() {
         if !packaged {
             println!("cargo::rustc-link-arg=-Wl,-rpath,{dir}");
         }

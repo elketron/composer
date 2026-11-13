@@ -50,9 +50,9 @@ and `export BROWSER=wslview`.
 
 ## 3. Reaching it: the app on this PC
 
-WSL2 forwards `localhost`, so the Windows app reaches the server at `http://127.0.0.1:7420`.
-Pair it: `composer pair --name work-pc-app` in WSL, then paste the `composer login …` line into the
-app's "Add server" (or the address and the code).
+WSL2 forwards `localhost`, so the Windows desktop can reach the server at `http://127.0.0.1:7420`.
+Point the desktop's `COMPOSER_HOME` at the WSL server's home as described below; it reads the
+workspace's token from there.
 
 ## 4. Reaching it: your other devices (Tailscale)
 
@@ -67,11 +67,17 @@ Expose it to your tailnet only, with one of:
 - **Tailscale inside WSL** (its own tailnet node): install it in WSL, `sudo tailscale up`, then
   `tailscale serve --bg http://127.0.0.1:7420`. `composer pair` then shows the tailnet link and QR.
 
-On the home PC and the phone, the app keeps both servers connected; switch with the server list
-(ctrl-1 / ctrl-2 on desktop).
+The phone can pair separately with the server using the code from `composer pair`.
 
 ## 5. The Windows app
 
-Install `composer-app-<version>-windows-x64-setup.exe` from a release (per user, no admin). Micro
-apps use WebView2, which Windows 10/11 ship with. Notifications are Windows toasts; approvals
-have Approve / Deny buttons.
+Unpack `composer-desktop-<version>-windows-x86_64.zip` from a release. In PowerShell, point the
+desktop at the WSL home (substitute your distribution and Linux username) and run it:
+
+```powershell
+$env:COMPOSER_HOME = '\\wsl.localhost\Ubuntu\home\yourname\.composer'
+.\composer_desktop.exe
+```
+
+Keep the archive's files together. The native GPUI desktop uses the included CEF runtime; the
+server and its terminals continue to run in WSL. This setup has not yet been tested on a real PC.

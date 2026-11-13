@@ -9,6 +9,9 @@ publish = false
 # Its own workspace: gpui (and, from 0183, CEF) stay out of the main build and its CI job.
 [workspace]
 
+[lib]
+crate-type = ["rlib", "cdylib"]
+
 [[bin]]
 name = "composer-desktop"
 path = "src/main.rs"
