@@ -114,6 +114,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: ilammy/msvc-dev-cmd@v1
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop -> target
+          cache-on-failure: true
       - name: Build and package GPUI desktop
         shell: pwsh
         run: ./scripts/package-desktop-windows.ps1 -Version ($env:VERSION.TrimStart('v'))

@@ -4,6 +4,7 @@
 # downloads its own 1.5 GB copy into every build directory.
 #   scripts/fetch-cef.sh            (CEF_DIR overrides ~/.local/share/composer/cef/<version>)
 set -euo pipefail
+export PATH="${CARGO_HOME:-$HOME/.cargo}/bin:$PATH"
 cd "$(dirname "$0")/.."
 version=156.0.15                        # CEF of the `cef` crate in Cargo.toml (156.3.x)
 tool_version=156.3.1+156.0.15           # export-cef-dir for that CEF

@@ -16,6 +16,8 @@ try {
     }
     $env:CEF_PATH = $cef
     $env:COMPOSER_PACKAGE = '1'
+    # Rust's Windows test executables live below target/release/build, not beside CEF.
+    $env:PATH = "$cef;$env:PATH"
     cargo build --release --locked --lib
     if ($LASTEXITCODE -ne 0) { throw 'Desktop build failed' }
     cargo test --release --locked --lib
