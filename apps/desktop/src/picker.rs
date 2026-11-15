@@ -137,6 +137,7 @@ impl Picker {
             "session" => ("Switch session", "Find a session", "session"),
             "workspace" => ("Switch workspace", "Find a workspace", "workspace"),
             "project" => ("Set the session's project", "Find a project", "project"),
+            "new-session" => ("New session · orchestrator", "Find a project", "project"),
             "model" => ("The session's model", "Find a model", "model"),
             _ => ("Commands", "Type a command", "command"),
         }

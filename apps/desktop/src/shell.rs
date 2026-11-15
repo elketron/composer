@@ -869,7 +869,12 @@ impl Shell {
         self.subscriptions.push(cx.subscribe_in(
             &picker,
             window,
-            move |shell, _, event: &PickerEvent, window, cx| {
+            move |shell, from, event: &PickerEvent, window, cx| {
+                // A click on a row lands on the scrim under it too, and its late `Dismissed`
+                // must not close the picker the row just opened.
+                if shell.overlay.as_ref() != Some(from) {
+                    return;
+                }
                 shell.overlay = None;
                 window.focus(&back, cx);
                 match event {
@@ -917,6 +922,7 @@ impl Shell {
     fn open_projects_menu(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let current = self.shown_info().and_then(|s| s.project.clone());
         self.open_project_list(
+            "project",
             move |projects| pick_lists::projects(projects, current.as_deref()),
             window,
             cx,
@@ -925,17 +931,18 @@ impl Shell {
 
     /// New session: the projects it can start in (it always runs as the orchestrator).
     fn open_new_session_menu(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.open_project_list(pick_lists::new_session_projects, window, cx);
+        self.open_project_list("new-session", pick_lists::new_session_projects, window, cx);
     }
 
     /// A project picker over `GET /api/projects`, its rows built by `items` once they arrive.
     fn open_project_list(
         &mut self,
+        title: &'static str,
         items: impl FnOnce(&[composer_protocol::http::ProjectSummary]) -> Vec<Item> + 'static,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let picker = cx.new(|cx| Picker::new("project", vec![], cx));
+        let picker = cx.new(|cx| Picker::new(title, vec![], cx));
         let endpoint = self.endpoint.clone();
         let fetched = cx.global::<Desktop>().spawn(async move {
             endpoint
