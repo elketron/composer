@@ -17,21 +17,34 @@ const SHARED: [&str; 6] = [
     "plugins",
 ];
 
-/// The sandbox of a Claude Code run in `folder` (a project or ticket worktree), and its login.
-/// `None` when the sandbox is off: the run then goes as before, on the machine's own login.
+/// The one file of the user's own `~/.claude` a run gets read-write: its login. A sandboxed run
+/// without a stored token authenticates as the user, and an OAuth refresh writes through to the
+/// real file (decided 2026-11-15): every workspace's runs share one live login, so a revoke or a
+/// rate limit hits them all. The shared files above stay read-only, and memory, history and
+/// sessions stay per workspace.
+const SHARED_RW: &str = ".credentials.json";
+
+/// The sandbox of a Claude Code run in `folder` (a project or ticket worktree), and its login:
+/// the stored token when the home has one, else the user's own login file, mounted read-write.
+/// Refused when neither exists. `None` when the sandbox is off: the run then goes as before, on
+/// the machine's own login.
 pub fn claude_code_world(
     server: &Server,
     folder: &Path,
     attachments: &[&Path],
     read_dirs: &[PathBuf],
-) -> Result<Option<(SandboxSpec, ClaudeToken)>, String> {
+) -> Result<Option<(SandboxSpec, Option<ClaudeToken>)>, String> {
     let spec = server.sandbox();
     if !spec.enabled() {
         return Ok(None);
     }
-    let token =
-        ClaudeToken::load(&Home::new(server.home.home_root())).ok_or_else(ClaudeToken::missing)?;
+    let token = ClaudeToken::load(&Home::new(server.home.home_root()));
     let user_home = spec.user_home().to_path_buf();
+    // Fails closed: without a stored token the run logs in through the mounted login file; with
+    // neither, it does not start.
+    if token.is_none() && !login_file(&user_home).exists() {
+        return Err(ClaudeToken::missing());
+    }
     let mut spec = spec.with_rw(folder).in_dir(folder);
     // For a worktree, the main repository's `.git` (commits need it), only when that repository
     // names the worktree back: a run that rewrote its `.git` file gets no other repository.
@@ -51,7 +64,8 @@ pub fn claude_code_world(
     Ok(Some((spec, token)))
 }
 
-/// The workspace's own `.claude` and `.claude.json` at `~`, then the user's shared files over it.
+/// The workspace's own `.claude` and `.claude.json` at `~`, then the user's shared files over it:
+/// read-only, except their login ([`SHARED_RW`]), the one file mounted read-write.
 fn claude_home(own: &Path, user_home: &Path) -> Result<Vec<Mount>, String> {
     let dot = own.join(".claude");
     let json = own.join(".claude.json");
@@ -75,5 +89,14 @@ fn claude_home(own: &Path, user_home: &Path) -> Result<Vec<Mount>, String> {
         .filter(|path| path.exists())
         .map(Mount::Ro);
     mounts.extend(shared);
+    let login = login_file(user_home);
+    if login.exists() {
+        mounts.push(Mount::Rw(login));
+    }
     Ok(mounts)
+}
+
+/// The user's own login file: mounted into a run that has no stored token.
+fn login_file(user_home: &Path) -> PathBuf {
+    user_home.join(".claude").join(SHARED_RW)
 }

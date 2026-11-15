@@ -598,8 +598,11 @@ Built (milestone 13):
   `~/.rustup/toolchains`, `~/.cache/huggingface/hub`, Go, Dart, NuGet, Bun, uv, Gradle, Maven; each existing one
   is an `--add-dir` with `Read(…/**)` allowed and `Edit`/`Write` in `--disallowedTools`, and is named in the
   appended prompt; source folders only, never `~/.cargo` or `~/.cache/huggingface` themselves, which hold tokens).
-- **Login:** only an already logged-in CLI is used: `claude auth status --json` (with the same cleared
-  environment) must say `loggedIn`. Never read or reuse its token. Not logged in or not installed: the
+- **Login:** in the sandbox (the default) a run uses the home's stored `composer claude-token` token when
+  there is one, and otherwise the user's own `~/.claude/.credentials.json`, mounted read-write so a
+  refresh writes through (the one shared live file, decided 2026-11-15); with neither, refused. Only with
+  `[sandbox] enabled = false` is the machine's logged-in CLI used instead: `claude auth status --json`
+  (with the same cleared environment) must say `loggedIn`. Not logged in or not installed: the
   spawn fails with the error and the ticket stays as it was; no retry.
 - **Environment:** cleared; only `PATH`, `HOME`, `USER`, `LOGNAME`, `SHELL`, `TERM`, `LANG`, `LC_*`,
   `TMPDIR`, `XDG_*` and `CLAUDE_CONFIG_DIR` pass. A set `ANTHROPIC_API_KEY` would win over the login and

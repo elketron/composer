@@ -56,7 +56,8 @@ check("a's state: only the run's own parts", shown == (["worktrees"] if kind == 
 if kind == "claude":
     check("a's worktrees: only its own", os.listdir(os.path.join(state, "worktrees")) == ["0001"])
     check("own ~/.claude writable", can_write(os.path.join(os.environ["HOME"], ".claude")))
-# The user's own files a spawn is lent are read-only (asked, never written: they are real).
+# The user's own files a spawn is lent are read-only (asked, never written: they are
+# real), except the Claude Code login: for a claude run that one file is the mount, read-write.
 lent = ["/usr/bin", "/etc", paths["home_templates"], paths["ws_templates"]] + [os.path.join(os.environ["HOME"], p) for p in [".cargo/bin", ".rustup", ".gitconfig"]]
 if kind == "claude":
     lent += [os.path.join(os.environ["HOME"], ".claude", n) for n in ["CLAUDE.md", "settings.json", "skills", "agents", "commands", "plugins"]]
@@ -73,7 +74,14 @@ for name in paths["home_entries"] + (paths["home_entries_no_claude"] if kind != 
     if name in lent_to_terminals:
         continue
     check("hidden: ~/" + name, not os.path.exists(os.path.join(os.environ["HOME"], name)))
+# The Claude Code login (0202): a claude run gets the user login file read-write, mounted over
+# the workspace own .claude - the one shared file it may write; every other spawn does not see it.
+if kind == "claude":
+    check("login mounted rw", os.path.exists(paths["login"]) and os.access(paths["login"], os.W_OK))
+else:
+    check("login hidden", not os.path.exists(paths["login"]))
 for ns in ["pid", "ipc", "uts", "cgroup"]:
+
     check("own " + ns + " namespace", os.readlink("/proc/self/ns/" + ns) != paths["ns"][ns])
 check("hostname", os.uname().nodename == "sandbox")
 if kind == "claude":
@@ -293,7 +301,6 @@ pub async fn world() -> World {
                 "a's token": a.state().join("token"),
                 "a's config": a.config_file(),
                 "another project": theirs.join("README.md"),
-                "~/.claude/.credentials.json": user_home.join(".claude/.credentials.json"),
                 "~/.ssh": user_home.join(".ssh"),
                 "~/.composer": user_home.join(".composer"),
             },
@@ -309,6 +316,7 @@ pub async fn world() -> World {
             "host_tmp": host_tmp.path().join("marker"),
             "ns": { "pid": ns("pid"), "ipc": ns("ipc"), "uts": ns("uts"), "cgroup": ns("cgroup") },
             "token": TOKEN,
+            "login": user_home.join(".claude/.credentials.json"),
             "worktree": a.worktrees().join("0001"),
             "project": project,
             "out": out,

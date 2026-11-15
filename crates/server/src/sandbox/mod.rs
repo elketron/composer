@@ -11,7 +11,8 @@
 //! In the sandbox (anything an agent or a site controls):
 //! - recipes (`actions/run.rs`): a site's `just` recipe, with the project it runs on;
 //! - Claude Code runs (`harness/claude_code_world.rs`): the ticket's worktree and the main repo's
-//!   `.git`, the workspace's own `~/.claude`, the login token in its env;
+//!   `.git`, the workspace's own `~/.claude` (the user's shared files read-only on top, their
+//!   `.credentials.json` the one file read-write), and a stored login token in its env;
 //! - stdio MCP servers (`mcp_clients/mcp_client.rs`): the workspace's sites plus the entry's
 //!   `binds_ro`/`binds_rw`. (MCP over HTTP is a connection, not a spawn: untouched.)
 //! - composer's own `git` on a repository (ticket branches and merges, worktrees, diffs, the
@@ -29,7 +30,10 @@
 //! - what the user starts: launcher entries, the TUI's editor and opener, `tailscale`;
 //! - `claude auth status`, only when the sandbox is off.
 //!
-//! Not covered: a `commit.gpgsign` user's merges fail in the git jail (no `~/.gnupg` inside).
+//! Not covered: a `commit.gpgsign` user's merges fail in the git jail (no `~/.gnupg` inside). The
+//! Claude Code login is shared on purpose: a run with no stored token mounts the user's
+//! `~/.claude/.credentials.json` read-write, so it authenticates as them and a refresh writes
+//! through - every workspace's runs read and replace one live login (decided 2026-11-15).
 
 mod bwrap;
 mod git_jail;

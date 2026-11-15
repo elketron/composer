@@ -4,7 +4,9 @@ use crate::home::Home;
 
 /// Claude Code's login for sandboxed runs: a long-lived token from `claude setup-token`, kept in
 /// the home's `state/claude-token` (owner-only; no sandbox mounts it) and given to each run as
-/// `CLAUDE_CODE_OAUTH_TOKEN`, so no credentials file is shared with a sandbox.
+/// `CLAUDE_CODE_OAUTH_TOKEN`, where it wins. Without one, a run logs in through the user's own
+/// `~/.claude/.credentials.json`, mounted read-write (see `claude_code_world`);
+/// with neither, it is refused.
 #[derive(Clone, PartialEq, Eq)]
 pub struct ClaudeToken(String);
 
@@ -46,10 +48,11 @@ impl ClaudeToken {
         &self.0
     }
 
-    /// What a run is told when there is none.
+    /// What a run is told when it has neither: the stored token, or a login file to mount.
     pub fn missing() -> String {
-        "Claude Code runs in the sandbox, which needs its own login: run `claude setup-token`, \
-         then `composer claude-token` and paste the token it printed"
+        "Claude Code runs in the sandbox, which needs a login: run `claude setup-token`, then \
+         `composer claude-token` and paste the token it printed, or log in on this machine \
+         (`claude auth login`) so its `~/.claude/.credentials.json` can be mounted into the run"
             .into()
     }
 }

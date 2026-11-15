@@ -77,9 +77,12 @@ default_time = "09:00"
 [claude_code]
 # The Claude Code CLI, for tickets with `harness: claude-code` in projects that allow it.
 # In the sandbox (the default) each workspace has its own ~/.claude (your CLAUDE.md, settings,
-# skills, agents, commands and plugins are lent read-only) and runs log in with a token: run
-# `claude setup-token`, then `composer claude-token` and paste it. The run gets it as
+# skills, agents, commands and plugins are lent read-only). A run logs in with a stored token:
+# run `claude setup-token`, then `composer claude-token` and paste it; the run gets it as
 # CLAUDE_CODE_OAUTH_TOKEN (so its own tools can read it: it is the login it already uses).
+# Without a stored token it logs in as you: your ~/.claude/.credentials.json is mounted
+# read-write into the run (the one file of yours a sandbox writes; a revoke or usage limit then
+# hits every workspace's runs). With neither, the run is refused.
 # With [sandbox] enabled = false it runs on this machine's `claude auth login` instead.
 command = "claude"
 # --model; empty: the CLI's default.
