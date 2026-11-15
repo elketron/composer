@@ -36,9 +36,10 @@ const KEEP_ENV: &[&str] = &[
 ];
 
 /// The official Claude Code CLI (`claude -p`), for personal use on this machine. Sandboxed (the
-/// default), it runs in its workspace's world with its own `~/.claude` and logs in with the
-/// home's `claude setup-token` token; with the sandbox off, it runs on the machine's own login and
-/// composer never reads its credentials.
+/// default), it runs in its workspace's world with its own `~/.claude` and logs in with the home's
+/// stored `claude setup-token` token, or - when there is none - with the user's own login, their
+/// `~/.claude/.credentials.json` mounted read-write so a refresh writes through. With the sandbox
+/// off, it runs on the machine's own login and composer never reads its credentials.
 pub struct ClaudeCodeHarness;
 
 #[async_trait]
@@ -221,10 +222,12 @@ impl Harness for ClaudeCodeHarness {
             WorkerScope::keep_env(&mut command);
         }
         if let Some((_, token)) = &world {
-            // Its login is in the sandbox's own ~/.claude and this token, nowhere else.
-            command
-                .env_remove("CLAUDE_CONFIG_DIR")
-                .env(ClaudeToken::ENV, token.as_str());
+            // Its login is the sandbox's own ~/.claude: the user's credential file mounted
+            // read-write (the one shared file), and a stored token on top of it when there is one.
+            command.env_remove("CLAUDE_CONFIG_DIR");
+            if let Some(token) = token {
+                command.env(ClaudeToken::ENV, token.as_str());
+            }
         }
         if config.ask {
             // Its MCP calls (a question to the user) may wait as long as the run may.
@@ -248,7 +251,7 @@ impl Harness for ClaudeCodeHarness {
 /// `claude auth status`: logged in, with the same cleared environment the run gets.
 #[allow(
     clippy::disallowed_methods,
-    reason = "only with the sandbox off (a sandboxed run logs in by token)"
+    reason = "only with the sandbox off (a sandboxed run logs in through its mounted files)"
 )]
 async fn check_login(command: &str) -> Result<(), String> {
     let output = tokio::process::Command::new(command)

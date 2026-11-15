@@ -1,10 +1,12 @@
 //! The sandbox review's boundary suite (ticket 0160): the same probe from inside each kind of
 //! spawn (a recipe, a stdio MCP server, a Claude Code run) of workspace `default`, in a home with
 //! a second workspace. None of them sees or writes the other workspace, the library, any `state/`
-//! (tokens, the Claude Code login), the user's `$HOME` (`~/.ssh`, the real Claude credentials),
-//! another project or the host's `/tmp`; each has its own pid, ipc, uts and cgroup namespaces;
-//! each writes its own sites and `/tmp`. A Claude Code run works in its worktree, not the main
-//! checkout, with its token in its env.
+//! (tokens, the stored Claude Code login), the user's `$HOME` (`~/.ssh`), another project or the
+//! host's `/tmp`; each has its own pid, ipc, uts and cgroup namespaces; each writes its own sites
+//! and `/tmp`. A Claude Code run works in its worktree, not the main checkout, with its token in
+//! its env. The user's live login (`~/.claude/.credentials.json`) is the one shared live file
+//! (0202): only a Claude Code run sees it, read-write, so a run without a stored token
+//! authenticates as the user; the other spawns do not see it at all.
 #![allow(
     clippy::disallowed_methods,
     reason = "tests set up repos and fakes outside the sandbox"
@@ -35,10 +37,15 @@ async fn every_kind_of_spawn_stays_in_its_workspace() {
             .report(kind)
             .unwrap_or_else(|| panic!("{kind} didn't report"));
         assert_eq!(failed(&report), Vec::<String>::new(), "{kind}: {report:#}");
+        let login = if kind == "claude" {
+            "login mounted rw"
+        } else {
+            "login hidden"
+        };
         for check in [
             "hidden: claude-token",
             "hidden: b's page",
-            "hidden: ~/.claude/.credentials.json",
+            login,
             "own pid namespace",
             "a's state: only the run's own parts",
         ] {

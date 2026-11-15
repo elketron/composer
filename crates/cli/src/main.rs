@@ -159,8 +159,9 @@ enum Command {
         #[arg(long)]
         resume: Option<String>,
     },
-    /// Store the Claude Code login sandboxed runs use: run `claude setup-token`, then this, and
-    /// paste the token it printed (read from stdin; kept in the home's state/, owner-only).
+    /// Store a Claude Code login that sandboxed runs prefer over the machine's own login:
+    /// run `claude setup-token`, then this, and paste the token it printed (read from stdin;
+    /// kept in the home's state/, owner-only).
     ClaudeToken,
     /// Serve a running worker's tools over MCP on stdin/stdout (started for external harnesses).
     #[command(hide = true)]
