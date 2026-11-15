@@ -12,13 +12,16 @@ use std::ops::Range;
 
 use gpui::{
     AnyElement, Bounds, ClipboardItem, Context, ElementInputHandler, EntityInputHandler,
-    EventEmitter, FocusHandle, Focusable, FontWeight, HighlightStyle, KeyDownEvent, Pixels, Point,
-    ScrollHandle, SharedString, StyledText, UTF16Selection, UnderlineStyle, Window, canvas, div,
-    prelude::*, px, rgb,
+    EventEmitter, FocusHandle, Focusable, FontStyle, FontWeight, HighlightStyle, InteractiveText,
+    KeyDownEvent, Pixels, Point, ScrollHandle, SharedString, StrikethroughStyle, StyledText,
+    UTF16Selection, UnderlineStyle, Window, canvas, div, prelude::*, px, rgb,
 };
 
+use composer_core::{LinkTarget, SiteUrl};
+
 use crate::draft::{Draft, DraftKey, Mode};
-use crate::prose::{Block, blocks, head, thinking_preview};
+use crate::markdown;
+use crate::prose::{head, thinking_preview};
 use crate::term_pane::FONT;
 use crate::theme::*;
 use crate::uploads::{Upload, Uploads};
@@ -43,6 +46,10 @@ pub enum ChatEvent {
     Cancel,
     /// Older messages, before the first shown.
     LoadOlder,
+    /// A link in the chat was clicked: the shell opens it as it opens any other.
+    Open {
+        target: LinkTarget,
+    },
     /// Pick files to attach.
     Attach,
     /// Attach these: an image pasted from the clipboard (named), or copied files.
@@ -372,16 +379,6 @@ fn message(you: bool, label: Option<String>, body: Vec<AnyElement>) -> AnyElemen
         .into_any_element()
 }
 
-fn prose(text: &str) -> AnyElement {
-    div()
-        .font_family(PROSE)
-        .text_size(px(TEXT_SIZE))
-        .line_height(px(23.))
-        .text_color(rgb(FG))
-        .child(text.to_string())
-        .into_any_element()
-}
-
 fn code(text: &str) -> AnyElement {
     div()
         .font_family(FONT)
@@ -398,14 +395,82 @@ fn code(text: &str) -> AnyElement {
         .into_any_element()
 }
 
-fn agent_text(text: &str) -> Vec<AnyElement> {
-    blocks(text)
-        .iter()
-        .map(|b| match b {
-            Block::Prose(p) => prose(p),
-            Block::Code(c) => code(c),
+/// The heading sizes: the body size, stepped up (the mockups type scale), every one of them
+/// SemiBold like the mockups heads.
+fn heading_size(level: u8) -> f32 {
+    match level {
+        1 => TEXT_SIZE + 4.,
+        2 => TEXT_SIZE + 3.,
+        3 => TEXT_SIZE + 2.,
+        _ => TEXT_SIZE + 1.,
+    }
+}
+
+/// A model style as a gpui highlight: the weight and the slant have faces bundled for them.
+/// How a run looks. Strong is SemiBold in Inter, but Bold in the mono face (a table, inline
+/// code): JetBrains Mono is registered without a SemiBold, and would fall back to Regular.
+fn highlight(style: &markdown::Style, mono_block: bool) -> HighlightStyle {
+    let strong = if mono_block || style.mono {
+        FontWeight::BOLD
+    } else {
+        FontWeight::SEMIBOLD
+    };
+    HighlightStyle {
+        color: Some(
+            rgb(if style.link.is_some() {
+                ACCENT_SOFT
+            } else {
+                FG
+            })
+            .into(),
+        ),
+        font_weight: style.strong.then_some(strong),
+        font_style: style.emphasis.then_some(FontStyle::Italic),
+        strikethrough: style.strike.then_some(StrikethroughStyle {
+            thickness: px(1.),
+            color: None,
+        }),
+        ..HighlightStyle::default()
+    }
+}
+
+/// A line across the message: the model rule, in the dim of a rule.
+fn rule_line() -> AnyElement {
+    div()
+        .h(px(1.))
+        .bg(rgb(BORDER))
+        .my(px(8.))
+        .into_any_element()
+}
+
+/// The quote wrap: a 2px left rule and a 12px indent, nothing when it is not quoted.
+fn quoted(block: &markdown::Block, inner: AnyElement) -> AnyElement {
+    if block.quote == 0 {
+        return inner;
+    }
+    div()
+        .border_l_2()
+        .border_color(rgb(BORDER_2))
+        .pl(px(12.))
+        .child(inner)
+        .into_any_element()
+}
+
+/// What the body of a block looks like: the prose font at the body size, tables in mono.
+fn block_style(block: &markdown::Block) -> gpui::Div {
+    let mono = matches!(block.kind, markdown::Kind::TableRow { .. });
+    let size = match block.kind {
+        markdown::Kind::Heading(level) => heading_size(level),
+        _ => TEXT_SIZE,
+    };
+    div()
+        .font_family(if mono { FONT } else { PROSE })
+        .text_size(px(size))
+        .line_height(px(23.))
+        .text_color(rgb(FG))
+        .when(matches!(block.kind, markdown::Kind::Heading(_)), |d| {
+            d.font_weight(FontWeight::SEMIBOLD)
         })
-        .collect()
 }
 
 /// A line between rules: something that happened (`cancelled`, a summary, a system note).
@@ -457,6 +522,102 @@ fn button(
 }
 
 impl ChatPane {
+    /// A message as markdown: its blocks, each drawn at its own type; GPUI does the wrapping.
+    /// Links written relative to a page resolve against the session's site.
+    fn markdown(&self, text: &str, key: &str, cx: &mut Context<Self>) -> Vec<AnyElement> {
+        let base = self
+            .site
+            .as_deref()
+            .and_then(|site| SiteUrl::new(site, "").ok());
+        markdown::blocks(text, base.as_ref())
+            .iter()
+            .enumerate()
+            .map(|(n, block)| self.block(block, &format!("{key}-{n}"), cx))
+            .collect()
+    }
+
+    /// One block of a message.
+    fn block(&self, block: &markdown::Block, key: &str, cx: &mut Context<Self>) -> AnyElement {
+        match block.kind {
+            markdown::Kind::Code => code(&block.text),
+            markdown::Kind::Rule => rule_line(),
+            markdown::Kind::Item(marker) => {
+                // the hanging indent: the marker in its own column, the text beside it
+                let dim = if marker == markdown::Marker::Task(true) {
+                    OK
+                } else {
+                    FG_DIM
+                };
+                quoted(
+                    block,
+                    div()
+                        .flex()
+                        .flex_row()
+                        .ml(px(14. * block.depth as f32))
+                        .child(
+                            div()
+                                .font_family(PROSE)
+                                .text_size(px(TEXT_SIZE))
+                                .line_height(px(23.))
+                                .text_color(rgb(dim))
+                                .child(marker.glyph()),
+                        )
+                        .child(
+                            block_style(block)
+                                .flex_1()
+                                .child(self.block_text(block, key, cx)),
+                        )
+                        .into_any_element(),
+                )
+            }
+            _ => quoted(
+                block,
+                block_style(block)
+                    .child(self.block_text(block, key, cx))
+                    .into_any_element(),
+            ),
+        }
+    }
+
+    /// A block's text: the model runs as gpui highlights and font overrides (sorted, not
+    /// overlapping, on character boundaries), and its link ranges as the click targets gpui
+    /// hit-tests through the text layout (it shows the pointer cursor over them itself).
+    fn block_text(&self, block: &markdown::Block, key: &str, cx: &mut Context<Self>) -> AnyElement {
+        let plain = markdown::Style::default();
+        let mono_block = matches!(block.kind, markdown::Kind::TableRow { .. });
+        let highlights: Vec<(Range<usize>, HighlightStyle)> = block
+            .runs
+            .iter()
+            .filter(|run| run.style != plain)
+            .map(|run| (run.range.clone(), highlight(&run.style, mono_block)))
+            .collect();
+        let fonts: Vec<(Range<usize>, SharedString)> = block
+            .runs
+            .iter()
+            .filter(|run| run.style.mono)
+            .map(|run| (run.range.clone(), FONT.into()))
+            .collect();
+        let mut styled = StyledText::new(block.text.clone());
+        if !highlights.is_empty() {
+            styled = styled.with_highlights(highlights);
+        }
+        if !fonts.is_empty() {
+            styled = styled.with_font_family_overrides(fonts);
+        }
+        if block.links.is_empty() {
+            return styled.into_any_element();
+        }
+        let (ranges, targets): (Vec<Range<usize>>, Vec<LinkTarget>) =
+            markdown::click_targets(block).into_iter().unzip();
+        let entity = cx.entity();
+        InteractiveText::new(gpui::ElementId::Name(key.into()), styled)
+            .on_click(ranges, move |ix, _window, cx| {
+                let target = targets[ix].clone();
+                entity.update(cx, |_, cx| cx.emit(ChatEvent::Open { target }));
+            })
+            .into_any_element()
+    }
+
     /// Consecutive tool calls, in one box: a row each, opened to show what it changed and said.
     fn tools(&self, calls: &[&ChatItem], cx: &mut Context<Self>) -> AnyElement {
         let mut rows = Vec::new();
@@ -880,7 +1041,7 @@ impl ChatPane {
                     if let ChatItem::Thinking { .. } = item {
                         body.push(self.thinking(n, text, false, cx));
                     } else {
-                        body.extend(agent_text(text));
+                        body.extend(self.markdown(text, &format!("md-{n}"), cx));
                     }
                 }
                 ChatItem::User {
@@ -891,7 +1052,9 @@ impl ChatPane {
                     flush_tools(&mut tools, &mut body, self, cx);
                     flush(&mut body, &mut body_label, &mut rows);
                     let label = source.clone().unwrap_or_else(|| "you".into());
-                    let mut parts = vec![prose(text)];
+                    // Your messages are markdown too, like the agent's (a desktop choice: the
+                    // phone shows them plain).
+                    let mut parts = self.markdown(text, &format!("you-{n}"), cx);
                     if !files.is_empty() {
                         parts.push(
                             div()
@@ -935,7 +1098,7 @@ impl ChatPane {
                 ));
             }
             if !streaming.content.is_empty() {
-                body.extend(agent_text(&format!("{}▍", streaming.content)));
+                body.extend(self.markdown(&format!("{}▍", streaming.content), "md-stream", cx));
             }
         } else if self.busy() {
             if last != Some(false) {
