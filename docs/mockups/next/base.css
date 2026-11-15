@@ -86,15 +86,18 @@ kbd { font: inherit; font-size: .9em; padding: 0 3px; border: 1px solid var(--no
 .bevel { position: absolute; bottom: 12px; right: 12px; border: 1px solid var(--noema-border); background: var(--noema-panel); padding: 10px; line-height: 1.9; font-size: 10px; color: var(--noema-fg-dim); }
 .bevel strong { color: var(--noema-fg-bright); font-weight: 400; display: block; margin-bottom: 4px; }
 .statusbar { display: flex; align-items: center; gap: 16px; padding: 0 12px; border-top: 1px solid var(--noema-border-2); background: var(--noema-panel); color: var(--noema-fg-faint); white-space: nowrap; font-size: 10px; }
-.chat-scrim { position: absolute; inset: 0; z-index: 2; background: var(--noema-bg-deep); opacity: .72; }
-.overlay { position: absolute; top: 72px; left: 54px; right: 54px; z-index: 3; border: 1px solid var(--noema-border-2); background: var(--noema-panel); color: var(--noema-fg); font-size: 11px; }
+/* Floating panes sit dead centre of the window between the two bars (44px title, 26px status),
+   over both panes; the scrim dims both. The app's OverlayFrame does the same math: 532px at most,
+   at least 54px (24 / 16 at the steps below) each side, 24px clear of either bar. */
+.chat-scrim { position: fixed; top: 44px; bottom: 26px; left: 0; right: 0; z-index: 2; background: var(--noema-bg-deep); opacity: .72; }
+.overlay { position: fixed; top: calc(44px + (100dvh - 70px) / 2); left: 50%; transform: translate(-50%, -50%); width: min(532px, calc(100% - 108px)); max-height: calc(100dvh - 70px - 48px); display: flex; flex-direction: column; z-index: 3; border: 1px solid var(--noema-border-2); background: var(--noema-panel); color: var(--noema-fg); font-size: 11px; box-shadow: 0 0 28px 2px color-mix(in srgb, black 55%, transparent); }
 .overlay-head { display: flex; align-items: center; padding: 9px 13px; color: var(--noema-fg-dim); border-bottom: 1px solid var(--noema-border); }
 .overlay-head a { margin-left: auto; }
 .search { display: flex; align-items: center; gap: 14px; padding: 16px 13px; border-bottom: 1px solid var(--noema-border); color: var(--noema-fg-faint); }
 .search input { background: none; border: 0; outline: none; width: 100%; color: var(--noema-fg-bright); font-size: 12px; padding: 0; }
 .search:focus-within { box-shadow: inset 2px 0 var(--noema-accent); }
 .search input::placeholder { color: var(--noema-fg-faint); opacity: 1; }
-.options { padding: 4px 0; max-height: calc(100dvh - 290px); overflow-y: auto; scrollbar-width: thin; }
+.options { padding: 4px 0; flex: 1 1 auto; min-height: 0; max-height: calc(100dvh - 290px); overflow-y: auto; scrollbar-width: thin; }
 .option { display: flex; align-items: flex-start; gap: 12px; padding: 12px 13px; border-left: 2px solid transparent; }
 .option.selected { background: var(--noema-surface-2); border-left-color: var(--noema-accent); }
 .option .dot { margin-top: 5px; }
@@ -123,7 +126,7 @@ kbd { font: inherit; font-size: .9em; padding: 0 3px; border: 1px solid var(--no
   .workbench { --chat-width: 40%; }
   .titlebar { gap: 9px; }
   .titlebar .following { display: none; }
-  .overlay { left: 24px; right: 24px; }
+  .overlay { width: min(532px, calc(100% - 48px)); }
   .option .location { display: none; }
   .command .category { width: 48px; }
   .command .hint { max-width: 95px; }
@@ -141,7 +144,7 @@ kbd { font: inherit; font-size: .9em; padding: 0 3px; border: 1px solid var(--no
   .composer { margin: 0 10px 10px; padding: 10px; }
   .tab { padding: 0 10px; gap: 5px; }
   .cef, .statusbar .secondary, .viewer-bar .drive-label { display: none; }
-  .overlay { left: 16px; right: 16px; }
+  .overlay { width: min(532px, calc(100% - 32px)); }
   .command { gap: 8px; }
   .command .hint { max-width: 80px; font-size: 8px; }
   .command .category { width: 42px; }

@@ -23,6 +23,7 @@ use crate::desktop::{self, Desktop};
 use crate::home_view::{HomeEvent, HomeTab, HomeView};
 use crate::link_state::LinkState;
 use crate::notice::Notice;
+use crate::overlay_frame::OverlayFrame;
 use crate::pick_lists;
 use crate::picker::{Item, Pick, Picker, PickerEvent};
 use crate::project_binding::ProjectBinding;
@@ -57,6 +58,9 @@ actions!(
 );
 
 const FIRST_IDS: u64 = 1;
+/// The title bar's and the status bar's heights.
+const TITLE_BAR: f32 = 44.;
+const STATUS_BAR: f32 = 26.;
 /// Messages a chat opens with (older ones come as you ask).
 const HISTORY: u32 = 60;
 
@@ -1430,9 +1434,13 @@ impl Render for Shell {
                 )
         };
         let chat_width = self.chat_width.get();
-        // The palette and pickers float over the chat, not the stage: 54px in at a comfortable
-        // width, nearer the edges when the chat is narrow.
-        let inset = if chat_width > 520. { 54. } else { 14. };
+        // The palette and pickers float dead centre of the window, between the two bars.
+        let viewport = window.viewport_size();
+        let window_width = f32::from(viewport.width);
+        let frame = OverlayFrame::within(
+            window_width,
+            f32::from(viewport.height) - TITLE_BAR - STATUS_BAR,
+        );
 
         div()
             .size_full()
@@ -1505,7 +1513,7 @@ impl Render for Shell {
             // shown session, the link and follow; Sessions and Commands at the right.
             .child(
                 div()
-                    .h(px(44.))
+                    .h(px(TITLE_BAR))
                     .flex_none()
                     .flex()
                     .flex_row()
@@ -1712,7 +1720,7 @@ impl Render for Shell {
             // The status bar: what is live, what waits for you, workers; the keys at the right.
             .child(
                 div()
-                    .h(px(26.))
+                    .h(px(STATUS_BAR))
                     .flex_none()
                     .flex()
                     .flex_row()
@@ -1755,15 +1763,18 @@ impl Render for Shell {
                             ),
                     ),
             )
-            // The palette or a picker, over the chat (painted last, above the panes): the chat
-            // dims under it, the stage stays as it is.
+            // The palette or a picker, over both panes (painted last): the window dims under it,
+            // the bars stay as they are.
             .children(self.overlay.clone().map(|picker| {
                 div()
                     .absolute()
-                    .top(px(44.))
-                    .bottom(px(26.))
+                    .top(px(TITLE_BAR))
+                    .bottom(px(STATUS_BAR))
                     .left_0()
-                    .w(px(chat_width))
+                    .right_0()
+                    .flex()
+                    .flex_row()
+                    .items_center()
                     .child(
                         // The scrim takes the clicks (none reach the chat under it); a click
                         // on it closes the picker.
@@ -1782,10 +1793,11 @@ impl Render for Shell {
                     )
                     .child(
                         div()
-                            .absolute()
-                            .top(px(72.))
-                            .left(px(inset))
-                            .right(px(inset))
+                            .ml(px(frame.left(window_width)))
+                            .w(px(frame.width()))
+                            .max_h(px(frame.max_height()))
+                            .flex()
+                            .flex_col()
                             .child(picker),
                     )
             }))

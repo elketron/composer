@@ -45,8 +45,12 @@ try {
         assert(metrics.stage.width > 0, 'Missing stage');
         assert(!metrics.optionsOverflow, `Overlay row overflow: ${rel} @${width}`);
         if (metrics.overlay) {
-          assert(metrics.overlay.right <= metrics.chat.right, 'Overlay obscures stage');
-          assert(metrics.overlay.bottom < metrics.composer.y, 'Overlay obscures composer');
+          // Dead centre of the window between the bars, inside the area, never under a bar.
+          const middle = 44 + (height - 70) / 2;
+          assert(Math.abs(metrics.overlay.x + metrics.overlay.width / 2 - width / 2) <= 1, `Overlay not centred across: ${rel} @${width}`);
+          assert(Math.abs(metrics.overlay.y + metrics.overlay.height / 2 - middle) <= 1, `Overlay not centred down: ${rel} @${width}`);
+          assert(metrics.overlay.x >= 16 && metrics.overlay.right <= width - 16, `Overlay leaves the window: ${rel} @${width}`);
+          assert(metrics.overlay.y >= 44 && metrics.overlay.bottom <= height - 26, `Overlay covers a bar: ${rel} @${width}`);
         }
       }
       const name = rel.replace('screens/', '').replace('.html', '');

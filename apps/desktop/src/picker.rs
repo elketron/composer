@@ -284,12 +284,23 @@ impl Render for Picker {
             .key_context("picker")
             .on_key_down(cx.listener(Self::on_key_down))
             .w_full()
+            .max_h_full()
+            .flex()
+            .flex_col()
             .bg(rgb(PANEL))
             .border_1()
             .border_color(rgb(BORDER_2))
             .rounded(px(R_CARD))
             .overflow_hidden()
-            .shadow_lg()
+            // An even halo, not Tailwind's bottom-heavy `shadow_lg`: the panel floats dead
+            // centre, with room for it on every side (`base.css`'s `.overlay`).
+            .shadow(vec![gpui::BoxShadow {
+                color: gpui::hsla(0., 0., 0., 0.55),
+                offset: gpui::point(px(0.), px(0.)),
+                blur_radius: px(28.),
+                spread_radius: px(2.),
+                inset: false,
+            }])
             .text_size(px(TEXT_SIZE))
             .text_color(rgb(FG))
             .child(
@@ -332,7 +343,11 @@ impl Render for Picker {
                     }),
             )
             .child(
+                // The list gives way when the window is short, so the head and the footer stay.
                 div()
+                    .flex_1()
+                    .min_h_0()
+                    .overflow_hidden()
                     .py(px(4.))
                     .children(rows)
                     .when(self.shown.is_empty(), |d| {
