@@ -1321,21 +1321,31 @@ impl Render for Shell {
             let active = shown.as_deref() == Some(entry.id.as_str());
             div()
                 .id(gpui::SharedString::from(format!("tab-{}", entry.id)))
+                .relative()
                 .flex()
                 .flex_row()
                 .flex_none()
                 .items_center()
                 .gap(px(9.))
                 .px(px(18.))
+                // `base.css`: `border-top: 2px transparent`, `border-right: 1px border`, the shown
+                // tab's top edge in the accent. gpui has one border colour per element, so the
+                // divider is the border (every tab, the same colour) and the accent is a bar of
+                // its own, inside the padding box: it never reaches the divider.
+                .pt(px(2.))
                 .border_r_1()
-                .border_t_2()
                 .border_color(rgb(BORDER))
                 .text_size(px(TEXT_SIZE))
                 .when(active, |d| {
-                    d.bg(rgb(BG_DEEP))
-                        .text_color(rgb(FG_BRIGHT))
-                        .border_t_2()
-                        .border_color(rgb(ACCENT))
+                    d.bg(rgb(BG_DEEP)).text_color(rgb(FG_BRIGHT)).child(
+                        div()
+                            .absolute()
+                            .top_0()
+                            .left_0()
+                            .right_0()
+                            .h(px(2.))
+                            .bg(rgb(ACCENT)),
+                    )
                 })
                 .when(!active, |d| {
                     d.text_color(rgb(FG_DIM))
