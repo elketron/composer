@@ -439,7 +439,7 @@ impl World {
         let session = self
             .server
             .sessions
-            .create("default", Some(self.project.display().to_string()))
+            .create("orchestrator", Some(self.project.display().to_string()))
             .map_err(|e| e.to_string())?;
         let (id, _) = self
             .server

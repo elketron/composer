@@ -49,8 +49,12 @@ async fn agents_projects_and_sites() {
             .cloned()
             .unwrap()
     };
-    assert_eq!(agent("default")["worker"], false);
     assert_eq!(agent("orchestrator")["worker"], false);
+    assert_eq!(
+        agent("worker")["worker"],
+        true,
+        "the worker page is the one spawn_worker runs"
+    );
 
     let listed: Vec<String> = get("/api/projects")
         .await

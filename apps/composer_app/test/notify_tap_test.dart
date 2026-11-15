@@ -26,7 +26,7 @@ import 'package:flutter_test/flutter_test.dart';
 const home = ServerEntry(url: 'https://home.ts.net', name: 'home', token: 't1');
 
 SessionInfo session(String id) =>
-    SessionInfo(id: id, agent: 'default', state: TurnState.idle, lastSeq: 1, updated: '2026-10-27');
+    SessionInfo(id: id, agent: 'orchestrator', state: TurnState.idle, lastSeq: 1, updated: '2026-10-27');
 
 class Harness {
   final bool loadFirst;

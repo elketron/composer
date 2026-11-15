@@ -132,7 +132,7 @@ fn has(program: &str) -> bool {
 async fn an_attachment_id_cannot_climb_into_another_workspace() {
     let two = Two::start(|_, _| {}, |_, _| {}).await;
     let (a, b) = (two.a(), two.b());
-    let session = b.sessions.create("default", None).unwrap();
+    let session = b.sessions.create("orchestrator", None).unwrap();
     let saved = composer_server::attachments::save(
         &b.home,
         &b.config().attachments,

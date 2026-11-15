@@ -110,7 +110,10 @@ async fn list_search_and_overview() {
         game_folder.clone(),
         tools.canonicalize().unwrap().display().to_string(),
     ] {
-        server.sessions.create("default", Some(project)).unwrap();
+        server
+            .sessions
+            .create("orchestrator", Some(project))
+            .unwrap();
     }
 
     // The list: all three; `game` and `tools` have a session; a search narrows it.

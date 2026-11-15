@@ -216,7 +216,7 @@ async fn an_agent_can_only_ask_and_the_user_decides_each_time() {
         .workspace(&WorkspaceName::default_workspace())
         .unwrap()
         .clone();
-    let session = server.sessions.create("default", None).unwrap();
+    let session = server.sessions.create("orchestrator", None).unwrap();
     let site = Arc::new(
         composer_server::agent::Site::load(&server.web, "home")
             .map_err(|e| panic!("{e}"))
@@ -225,7 +225,7 @@ async fn an_agent_can_only_ask_and_the_user_decides_each_time() {
     let context = ToolContext {
         server: server.clone(),
         session,
-        agent: Arc::new(AgentDefinition::load(&server.web, "default").unwrap()),
+        agent: Arc::new(AgentDefinition::load(&server.web, "orchestrator").unwrap()),
         site: Some(site),
         cancel: CancellationToken::new(),
     };

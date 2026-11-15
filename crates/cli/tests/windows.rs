@@ -161,7 +161,7 @@ async fn a_window_gets_its_tui_and_follows_its_session() {
     // The window picks another session (the desktop's switcher): its TUI shows it (ticket 0185).
     let other = server
         .sessions
-        .create("default", None)
+        .create("orchestrator", None)
         .unwrap()
         .id()
         .to_string();

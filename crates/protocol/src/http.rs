@@ -71,7 +71,7 @@ pub struct AgentSummary {
     pub title: String,
     /// `description:`, else the title.
     pub description: String,
-    /// A legacy worker page (`role: worker`); current workers are the default agent.
+    /// A worker page (`role: worker`): the agent `spawn_worker` runs, not one to start a chat with.
     pub worker: bool,
 }
 

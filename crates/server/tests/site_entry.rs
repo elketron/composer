@@ -367,7 +367,7 @@ async fn entering_succeeds_when_the_application_cannot_start() {
         &dir.path().join("sites/3d/index.md"),
         "---\ntitle: 3D\napp: blender\n---\n# 3D\n",
     );
-    let session = server.sessions.create("default", None).unwrap();
+    let session = server.sessions.create("orchestrator", None).unwrap();
     let entered = enter_site_as_client(&server, &session, "3d").await.unwrap();
     let AppLaunch::Skipped { reason, .. } = &entered.app else {
         panic!("{:?}", entered.app)
@@ -518,7 +518,7 @@ async fn the_live_view_needs_a_viewer_and_a_started_application() {
         &dir.path().join("sites/3d/index.md"),
         "---\ntitle: 3D\napp: blender\n---\n# 3D\n",
     );
-    let session = server.sessions.create("default", None).unwrap();
+    let session = server.sessions.create("orchestrator", None).unwrap();
     let entered = enter_site_as_client(&server, &session, "3d").await.unwrap();
     assert!(matches!(entered.app, AppLaunch::Skipped { .. }));
     assert!(!entered.live_view);

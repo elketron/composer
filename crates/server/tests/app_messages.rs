@@ -50,8 +50,8 @@ async fn an_app_messages_only_the_session_it_was_opened_from() {
         &sites.join("cal/ui/dist/assets/a.js"),
         "d=\"composer-sdk:3\"",
     );
-    let a = server.sessions.create("default", None).unwrap();
-    let b = server.sessions.create("default", None).unwrap();
+    let a = server.sessions.create("orchestrator", None).unwrap();
+    let b = server.sessions.create("orchestrator", None).unwrap();
     let workspace = server.token.clone();
     let open = |session: Option<&str>| {
         let path = match session {

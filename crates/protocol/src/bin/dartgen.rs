@@ -563,7 +563,7 @@ fn variant_name(parent: &str, value: &str) -> String {
 fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
     let info = SessionInfo {
         id: "a3f1".into(),
-        agent: "default".into(),
+        agent: "orchestrator".into(),
         project: Some("/home/me/project".into()),
         site: Some("orchestration".into()),
         ticket: None,
@@ -848,7 +848,7 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
     ];
     let commands = vec![
         ClientCommand::SessionCreate {
-            agent: "default".into(),
+            agent: "orchestrator".into(),
             project: None,
         },
         ClientCommand::SessionList,

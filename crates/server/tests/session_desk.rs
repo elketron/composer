@@ -34,7 +34,7 @@ fn ids(desk: &Desk) -> Vec<&str> {
 #[tokio::test]
 async fn a_sessions_desk_comes_back_with_it() {
     let (dir, server, _provider, addr) = start(vec![]).await;
-    let session = server.sessions.create("default", None).unwrap();
+    let session = server.sessions.create("orchestrator", None).unwrap();
     let id = session.id().to_string();
     let mut attached = connect(addr, &server.token).await;
     send(
@@ -160,7 +160,7 @@ async fn the_live_view_opens_by_hand_only_with_a_viewer() {
     let (_dir, server, _provider, addr) = start(vec![]).await;
     let id = server
         .sessions
-        .create("default", None)
+        .create("orchestrator", None)
         .unwrap()
         .id()
         .to_string();
@@ -175,7 +175,7 @@ async fn the_live_view_opens_by_hand_only_with_a_viewer() {
     let (_dir, server, _provider, addr) = start_with(config, vec![]).await;
     let id = server
         .sessions
-        .create("default", None)
+        .create("orchestrator", None)
         .unwrap()
         .id()
         .to_string();

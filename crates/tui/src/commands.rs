@@ -7,7 +7,7 @@ use crate::store::types::PickerKind;
 pub const COMMANDS: [(&str, &str); 21] = [
     (
         ":new [agent]",
-        "start a new session (default agent, or e.g. orchestrator)",
+        "start a new session (the orchestrator, or name an agent)",
     ),
     (":attach <id>", "switch to a session by id (or Space w)"),
     (

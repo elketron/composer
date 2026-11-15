@@ -15,7 +15,7 @@ impl Tool for SpawnWorkerTool {
 
     fn description(&self) -> &'static str {
         "Start a worker on a ticket (site://orchestration/tickets/<id>). The ticket becomes \
-         `claimed`; the worker runs in its own session and process, using the default agent and \
+         `claimed`; the worker runs in its own session and process, using the worker agent and \
          the how-to-work in the ticket's Context and its site. You get a message when it \
          finishes; then read the ticket's Result. Returns immediately. `harness` picks what \
          runs it: `composer` (default) or `claude-code` (only in projects that allow it); \

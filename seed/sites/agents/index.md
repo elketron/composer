@@ -12,15 +12,15 @@ Agent definitions. Each page is one agent: frontmatter configures it, the body i
 
 | agent | role |
 |-------|------|
-| [default](default.md) | the agent you chat with; the same agent runs a ticket as a worker |
-| [orchestrator](orchestrator.md) | splits plans into tickets, starts default workers, reviews and merges |
+| [orchestrator](orchestrator.md) | the agent you talk to: every session you start; splits plans into tickets, starts workers, reviews and merges |
+| [worker](worker.md) | the agent a ticket is run on: `spawn_worker` starts it, never you |
 
 There are two agents, not one per kind of work. How a ticket is worked is **Context**, not an
 agent: the ticket links the site pages that say how to code, review or design. A worker is the
-default agent with the server's worker mode (it gets the `finish` tool and a worker prompt) and
-the ticket in its first message.
+worker agent in the server's worker mode (a worker prompt, the `finish` tool) with the ticket in
+its first message. A session started without naming an agent runs the orchestrator.
 
-`spawn_worker(id)` starts the default agent on a ticket. The ticket's Context must name the
+`spawn_worker(id)` starts the worker agent on a ticket. The ticket's Context must name the
 how-to page for that kind of work. `continue_worker` sends a finished worker back with a note;
 `stop_worker` ends it.
 
@@ -35,18 +35,21 @@ conventions when it gains its verbs.
 - Put a verb that only makes sense on one kind of thing in that site: `merge_ticket` in
   [orchestration](site://orchestration), `new_project` in [projects](site://projects),
   `new_site`/`new_app` in [home](site://home).
-- A worker runs the default agent with the worker prompt and the ticket in its first message; the site pages in its Context say how the work is done.
+- A worker runs the worker agent with the worker prompt and the ticket in its first message; the site pages in its Context say how the work is done.
 - `sites:` (read/write access) is separate from tools: it decides which sites the agent may read
   and write at all.
 
 ## Page format
 
+Both pages above are in it; [worker](worker.md), for one:
+
 ```markdown
 ---
 title: Worker
 type: agent
-name: default
-description: what this agent is for
+name: worker
+role: worker            # the agent spawn_worker runs; the phone's New chat leaves it out
+description: works one ticket, started by the orchestrator
 model: default          # "default" = the provider's model
 tools: [open, search, list_sites, write, edit, set_project, enter_site, leave_site, actions, run, finish]
 sites: all              # or a list: [memory, plans]

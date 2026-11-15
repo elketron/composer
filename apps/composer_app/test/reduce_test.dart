@@ -13,7 +13,7 @@ const work = ServerEntry(url: 'https://work.ts.net', name: 'work', token: 't2');
 const info = ServerInfo(name: 'home-pc', version: '0.1.0', model: 'qwen', slots: 2);
 
 SessionInfo session(String id, String updated) =>
-    SessionInfo(id: id, agent: 'default', state: TurnState.idle, lastSeq: 0, updated: updated);
+    SessionInfo(id: id, agent: 'orchestrator', state: TurnState.idle, lastSeq: 0, updated: updated);
 
 AppState loaded(List<ServerEntry> servers) => reduce(AppState.initial, ServersLoaded(servers)).$1;
 
@@ -387,7 +387,7 @@ void main() {
     test('follows the agent in the open session, live events only, unless turned off', () {
       final sessions = ServerEvent(
         home.url,
-        ServerMessageOk(id: 1, result: CommandResultSessions(sessions: [SessionInfo(id: 'a', agent: 'default', state: TurnState.idle, lastSeq: 5, updated: '')])),
+        ServerMessageOk(id: 1, result: CommandResultSessions(sessions: [SessionInfo(id: 'a', agent: 'orchestrator', state: TurnState.idle, lastSeq: 5, updated: '')])),
       );
       var state = reduce(loaded([home]), sessions).$1;
       state = withChat(state, 'a');
@@ -492,7 +492,7 @@ void main() {
     ServerMessageApprovalRequest approval(String id) => ServerMessageApprovalRequest(
           request: id, session: 'a', site: 'tools', recipe: 'greet', args: const ['bob'], body: 'b', hash: 'h');
     SessionInfo info(String id, TurnState state, {String? ticket}) =>
-        SessionInfo(id: id, agent: 'default', state: state, lastSeq: 1, updated: '', ticket: ticket, preview: 'hi');
+        SessionInfo(id: id, agent: 'orchestrator', state: state, lastSeq: 1, updated: '', ticket: ticket, preview: 'hi');
     AppState withSessions(AppState s, List<SessionInfo> sessions) =>
         reduce(s, ServerEvent(home.url, ServerMessageOk(id: 1, result: CommandResultSessions(sessions: sessions)))).$1;
     AppState background(AppState s) => reduce(s, const ForegroundChanged(false)).$1;
@@ -579,7 +579,7 @@ void main() {
 
     test('the worker you watch finishing hands back to its orchestrator, unless you are writing', () {
       SessionInfo member(String id, {String? parent, TurnState state = TurnState.idle}) =>
-          SessionInfo(id: id, agent: 'default', state: state, lastSeq: 0, updated: '', parent: parent, ticket: parent == null ? null : '0001');
+          SessionInfo(id: id, agent: 'orchestrator', state: state, lastSeq: 0, updated: '', parent: parent, ticket: parent == null ? null : '0001');
       final sessions = [member('x'), member('o'), member('w1', parent: 'o'), member('w2', parent: 'o', state: TurnState.running)];
       var state = reduce(withSessions(loaded([home]), sessions), SessionOpened(home.url, 'w1')).$1;
       final status = state.statusOf(home.url);
@@ -606,7 +606,7 @@ void main() {
     });
 
     test('the phone home: unread work, recent pages, search, new chats with a project', () {
-      SessionInfo s(String id, TurnState state) => SessionInfo(id: id, agent: 'default', state: state, lastSeq: 0, updated: '');
+      SessionInfo s(String id, TurnState state) => SessionInfo(id: id, agent: 'orchestrator', state: state, lastSeq: 0, updated: '');
       var state = withSessions(loaded([home]), [s('a', TurnState.running), s('b', TurnState.running)]);
       state = withChat(state, 'b');
       ServerEvent idle(String id) => ServerEvent(home.url, ServerMessageSessionUpdated(session: s(id, TurnState.idle)));

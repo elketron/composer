@@ -166,8 +166,8 @@ impl WorkerRegistry {
             }
             _ => {}
         }
-        // Workers run the default agent; the ticket and its site are the "how to work".
-        let agent = "default".to_string();
+        // Workers run the worker agent; the ticket and its site are the "how to work".
+        let agent = crate::agent::WORKER.to_string();
         let harness = Self::harness(
             &harness
                 .map(|h| h.trim().to_string())

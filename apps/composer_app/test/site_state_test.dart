@@ -22,7 +22,7 @@ SiteSummary site(String name, {String? app, List<String> mcp = const []}) =>
     SiteSummary(name: name, title: name.toUpperCase(), hasJustfile: false, hasUi: false, app: app, mcp: mcp);
 
 SessionInfo session(String id, {String? site, TurnState state = TurnState.idle, String? parent}) =>
-    SessionInfo(id: id, agent: 'default', site: site, parent: parent, state: state, lastSeq: 0, updated: '2026-11-10T10:0$id');
+    SessionInfo(id: id, agent: 'orchestrator', site: site, parent: parent, state: state, lastSeq: 0, updated: '2026-11-10T10:0$id');
 
 ServerInfo info({String? viewer}) => ServerInfo(name: 'pc', version: '0.1', model: 'qwen', slots: 1, viewer: viewer);
 
@@ -129,7 +129,7 @@ void main() {
 
     test('a new chat in a site carries the site to the effect', () {
       final create = reduce(loaded(), NewSessionRequested(home.url, project: 'game', site: '3d')).$2.single as CreateSession;
-      expect((create.agent, create.project, create.site), ('default', 'game', '3d'));
+      expect((create.agent, create.project, create.site), ('orchestrator', 'game', '3d'));
       expect((reduce(loaded(), NewSessionRequested(home.url)).$2.single as CreateSession).site, isNull);
     });
   });

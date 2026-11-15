@@ -162,7 +162,7 @@ final class SessionClosed extends AppAction {
 }
 
 final class NewSessionRequested extends AppAction {
-  const NewSessionRequested(this.url, {this.agent = 'default', this.project, this.site});
+  const NewSessionRequested(this.url, {this.agent = 'orchestrator', this.project, this.site});
   final String url;
   final String agent;
 

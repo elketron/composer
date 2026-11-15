@@ -386,12 +386,12 @@ mod tests {
             updated: String::new(),
         };
         state.session.sessions = vec![
-            session("a3f1", "default", "fix the login bug"),
+            session("a3f1", "orchestrator", "fix the login bug"),
             session("b2c3", "orchestrator", "plan the release"),
             SessionInfo {
                 ticket: Some("0001".into()),
                 parent: Some("b2c3".into()),
-                ..session("c4d5", "default", "ticket 0001: release notes")
+                ..session("c4d5", "orchestrator", "ticket 0001: release notes")
             },
         ];
         let site = |name: &str, title: &str, has_ui: bool| SiteSummary {
@@ -426,8 +426,8 @@ mod tests {
                 page("site://memory/user.md", "User"),
                 page("site://memory/topics/rust.md", "Rust"),
                 page("site://agents/index.md", "Agents"),
-                page("site://agents/default.md", "Default agent"),
                 page("site://agents/orchestrator.md", "Orchestrator"),
+                page("site://agents/worker.md", "Worker"),
             ],
             models: vec![
                 ModelInfo {
@@ -500,7 +500,7 @@ mod tests {
 
     #[test]
     fn agents_from_the_agents_site() {
-        assert_eq!(texts("new "), ["default", "orchestrator"]);
+        assert_eq!(texts("new "), ["orchestrator", "worker"]);
         assert_eq!(texts("new orch"), ["orchestrator"]);
     }
 

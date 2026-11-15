@@ -80,7 +80,8 @@ async fn a_sessions_terminal_runs_in_its_sandbox() {
     let (dir, server, _provider, addr) = start_with(config, vec![]).await;
     let session = server
         .sessions
-        .create("default", Some(game.display().to_string()))
+        // The worker page has the terminal tools; the orchestrator's base set does not (0200).
+        .create("worker", Some(game.display().to_string()))
         .unwrap();
     let sid = session.id().to_string();
     let mut client = connect(addr, &server.token).await;
@@ -162,7 +163,7 @@ async fn a_sessions_terminal_runs_in_its_sandbox() {
     let context = ToolContext {
         server: server.clone(),
         session: session.clone(),
-        agent: Arc::new(AgentDefinition::load(&server.web, "default").unwrap()),
+        agent: Arc::new(AgentDefinition::load(&server.web, "worker").unwrap()),
         site: None,
         cancel: CancellationToken::new(),
     };
@@ -173,7 +174,7 @@ async fn a_sessions_terminal_runs_in_its_sandbox() {
     assert!(read.text.contains("sum-42"), "{}", read.text);
 
     // Another session's agent can't read or type into it.
-    let other = server.sessions.create("default", None).unwrap();
+    let other = server.sessions.create("orchestrator", None).unwrap();
     let elsewhere = ToolContext {
         session: other,
         ..context.clone()

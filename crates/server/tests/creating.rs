@@ -37,7 +37,7 @@ async fn run_tools(
         &mut socket,
         1,
         ClientCommand::SessionCreate {
-            agent: "default".into(),
+            agent: "orchestrator".into(),
             project: None,
         },
     )

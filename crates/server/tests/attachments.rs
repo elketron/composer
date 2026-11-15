@@ -74,7 +74,7 @@ async fn long_filenames_can_be_uploaded_downloaded_and_sent() {
         finished(vec![]),
     ]])
     .await;
-    let session = server.sessions.create("default", None).unwrap();
+    let session = server.sessions.create("orchestrator", None).unwrap();
     let name = format!("{}.txt", "notes-".repeat(20));
     let response = upload(
         addr,
@@ -151,7 +151,7 @@ async fn uploads_reach_the_model() {
         &mut socket,
         1,
         ClientCommand::SessionCreate {
-            agent: "default".into(),
+            agent: "orchestrator".into(),
             project: None,
         },
     )

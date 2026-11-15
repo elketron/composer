@@ -395,7 +395,7 @@ mod tests {
     async fn keeps_what_the_user_changed() {
         let (_dir, home, ws) = fresh().await;
         let new_home = stock_text("sites/home/index.md");
-        let new_default = stock_text("sites/agents/default.md");
+        let new_default = stock_text("sites/agents/worker.md");
         let new_memory = stock_text("sites/memory/index.md");
 
         // Untouched by the user: replaced.
@@ -403,7 +403,7 @@ mod tests {
         // Changed by both, in different places: merged.
         let old_default = new_default.replacen("Be direct", "Be brief", 1);
         let mine = old_default.replacen("title: Default", "title: My default", 1);
-        installed(&ws, "sites/agents/default.md", &old_default, Some(&mine));
+        installed(&ws, "sites/agents/worker.md", &old_default, Some(&mine));
         // Changed by both in the same place: conflict, untouched.
         let old_memory = new_memory.replacen("# Memory", "# Old memory", 1);
         let my_memory = new_memory.replacen("# Memory", "# My memory", 1);
@@ -440,10 +440,10 @@ mod tests {
         assert_eq!(page(&ws, "sites/home/index.md"), new_home);
 
         assert_eq!(
-            outcome("sites/agents/default.md"),
+            outcome("sites/agents/worker.md"),
             Some(UpdateOutcome::Merged)
         );
-        let merged = page(&ws, "sites/agents/default.md");
+        let merged = page(&ws, "sites/agents/worker.md");
         assert!(
             merged.contains("title: My default") && merged.contains("Be direct"),
             "{merged}"

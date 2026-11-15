@@ -33,7 +33,7 @@ class NewChatSheet extends StatefulWidget {
 }
 
 class _NewChatSheetState extends State<NewChatSheet> {
-  String _agent = 'default';
+  String _agent = 'orchestrator';
   String? _project;
   bool _picked = false;
 
@@ -117,7 +117,7 @@ class _NewChatSheetState extends State<NewChatSheet> {
           const SizedBox(height: 12),
           Text('AGENT', style: mono(size: 10.5, color: t.faint)),
           const SizedBox(height: 8),
-          if (agents.isEmpty) choice('default', 'general assistant'),
+          if (agents.isEmpty) choice('orchestrator', 'the agent you talk to'),
           for (final a in agents) choice(a.name, a.description),
           const SizedBox(height: 10),
           Text('PROJECT', style: mono(size: 10.5, color: t.faint)),

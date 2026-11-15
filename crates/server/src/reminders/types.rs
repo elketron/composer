@@ -12,7 +12,7 @@ pub struct DueReminder {
     pub due_at: NaiveDateTime,
     /// The session it belongs to (`session:`; the write tools fill in the writer's).
     pub session: Option<String>,
-    /// Who gets a new session for it when it has none (`agent:`, default `default`).
+    /// Who gets a new session for it when it has none (`agent:`, default `orchestrator`).
     pub agent: String,
     /// How often it comes back (`recurs:`); `None` for a one-off.
     pub recurs: Option<Recurrence>,

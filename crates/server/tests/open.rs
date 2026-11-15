@@ -28,11 +28,11 @@ async fn a_folder_lists_and_a_page_shows_its_hash() {
         &dir.path().join("sites/flow/notes/b.md"),
         "---\ntitle: B\n---\n# B\n",
     );
-    let session = server.sessions.create("default", None).unwrap();
+    let session = server.sessions.create("orchestrator", None).unwrap();
     let context = ToolContext {
         server: server.clone(),
         session,
-        agent: std::sync::Arc::new(AgentDefinition::load(&server.web, "default").unwrap()),
+        agent: std::sync::Arc::new(AgentDefinition::load(&server.web, "orchestrator").unwrap()),
         site: None,
         cancel: CancellationToken::new(),
     };

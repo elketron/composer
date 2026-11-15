@@ -247,7 +247,7 @@ async fn claude_code_works_tickets() {
     .unwrap();
     let elsewhere = server
         .sessions
-        .create("default", Some(other.display().to_string()))
+        .create("orchestrator", Some(other.display().to_string()))
         .unwrap();
     let theirs = composer_server::attachments::save(
         &WorkspaceHome::new(&root),
