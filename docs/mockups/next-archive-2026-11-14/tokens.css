@@ -1,0 +1,50 @@
+/* composer next — the palette of templates/sdk/theme.css (the shipped, TUI-look chrome).
+   The mockups only add derived values; no new colours. */
+:root {
+  /* surfaces: one step apart, never more than four */
+  --bg:        #0c0d0f;
+  --surface:   #121317;
+  --raised:    #191b20;
+  --overlay:   #1f2228;
+
+  /* lines */
+  --border:        #24272d;
+  --border-strong: #363a42;
+
+  /* text */
+  --text:   #d5d8de;
+  --muted:  #868c96;
+  --faint:  #50555e;
+
+  /* one accent; links, focus, selection */
+  --accent:      #8fb3e8;
+  --accent-dim:  #8fb3e81f;
+  --you:         #151a22;   /* your messages: bg tinted ~7% toward accent */
+
+  /* state */
+  --ok:    #8cc29a;
+  --warn:  #d6b06a;
+  --err:   #e07c7c;
+  --info:  #b39ce0;   /* agent / thinking / tool rows */
+
+  /* terminal feel: the UI is monospaced, squared off and dense */
+  --font-ui:   'JetBrainsMono Nerd Font Mono', 'JetBrains Mono', ui-monospace, monospace;
+  --font-mono: 'JetBrainsMono Nerd Font Mono', 'JetBrains Mono', ui-monospace, monospace;
+
+  --radius-sm: 0px;
+  --radius: 0px;
+  --gap: 10px;
+
+  /* derived, for mockup canvas surfaces only */
+  --grid:        color-mix(in srgb, var(--text) 5%, transparent);
+  --grid-strong: color-mix(in srgb, var(--text) 9%, transparent);
+  --hairline:    color-mix(in srgb, var(--text) 4%, transparent);
+  --accent-soft: color-mix(in srgb, var(--accent) 55%, transparent);
+  --warn-soft:   color-mix(in srgb, var(--warn) 55%, transparent);
+  --ok-soft:     color-mix(in srgb, var(--ok) 55%, transparent);
+  --err-soft:    color-mix(in srgb, var(--err) 55%, transparent);
+  --info-soft:   color-mix(in srgb, var(--info) 55%, transparent);
+  --stage:       #090a0c;
+  --shadow:      #000000;
+  --shadow-soft: #00000066;
+}

@@ -1,5 +1,8 @@
 # The harness, the capabilities, and the workflows
 
+> Historical proposal: there is no separate workflow category. Sites, with or without apps and
+> MCP servers, use the same entry and app-opening controls.
+
 Status: phases 1–2 built (site tools and the project hub); phase 4's file/state model is built.
 The `pipeline.*` engine was removed 2026-11-12. Phases 3, 5 and 6 are proposals.
 

@@ -22,11 +22,9 @@ and adds its tools from the next turn; leaving returns.
 
 **If you need a verb that isn't in your base set, enter the site that owns it.**
 
-## Workflows
-
-A workflow is a site with `app:` (an application in wayai) and/or `mcp:` (server tools). Entering it
-puts its page in the prompt and grants its tools; leaving drops them and keeps the conversation.
-`:workflow <name>` or `enter_site` switches.
+Any site can be entered with `:site <name>` or `enter_site`. A site may also name an application
+with `app:` or server tools with `mcp:`; neither is required. Leaving drops the site's context and
+tools while keeping the conversation.
 
 ## Addresses
 

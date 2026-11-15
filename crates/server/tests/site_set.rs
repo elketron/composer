@@ -1,4 +1,4 @@
-//! `site.set` over the socket: the user enters a workflow site or leaves it. The reply is a
+//! `site.set` over the socket: the user enters a site or leaves it. The reply is a
 //! `note` with what happened (the application's outcome included); the session's new state
 //! arrives as `session.updated`.
 #![allow(

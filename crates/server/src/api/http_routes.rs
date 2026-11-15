@@ -185,7 +185,7 @@ pub async fn sites(State(server): State<Arc<Server>>) -> Result<Json<Vec<SiteSum
         sites
             .into_iter()
             .map(|s| {
-                // A workflow declares `app:` / `mcp:` in its index.
+                // A site may declare `app:` / `mcp:` in its index.
                 let site = Site::load(&server.web, &s.name).ok();
                 SiteSummary {
                     app: site.as_ref().and_then(|site| site.app.clone()),

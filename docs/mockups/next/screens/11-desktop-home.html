@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Composer — workspace home · Noema study</title>
+  <link rel="stylesheet" href="../tokens.css">
+  <link rel="stylesheet" href="../base.css">
+  <script src="../prototype.js" defer></script>
+</head>
+<body class="screen-home">
+<main class="workbench" aria-label="Composer desktop mockup: workspace home">
+  <header class="titlebar">
+    <span class="window-controls" aria-hidden="true"><i></i><i></i><i></i></span>
+    <span class="violet">•</span><strong>demo</strong><span class="faint">/</span><span>home</span>
+    <span class="connection"><i class="dot green"></i> connected</span>
+    <span class="grow"></span>
+    <a class="button" href="01-workspace.html">↩ default <span class="faint">#a3f1</span> <kbd>Esc</kbd></a>
+    <a class="button" href="03-commands.html">Commands <kbd>Ctrl ⇧ P</kbd></a>
+  </header>
+  <div class="home">
+    <section class="home-main" aria-label="Sessions">
+      <header class="home-head">
+        <div class="session-title"><strong>demo</strong><span class="faint">workspace</span><span class="grow"></span><button disabled title="Visual preview only">＋ New session</button></div>
+        <nav class="home-tabs" aria-label="Workspace screens"><a class="active" href="11-desktop-home.html" aria-current="page">sessions <span class="faint">4</span></a><a href="12-desktop-projects.html">projects <span class="faint">3</span></a></nav>
+      </header>
+      <div class="home-list">
+        <h2 class="list-label">NEEDS YOU <span class="yellow">2</span></h2>
+        <a class="row selected" href="01-workspace.html"><i class="dot violet"></i><div><div class="row-line">default <span class="faint">#a3f1</span><span class="yellow">! approve write</span></div><div class="row-preview">Want me to export a fresh ship.glb for the site?</div></div><span class="row-where">3d/crashed-ship</span><span class="row-time">14:02</span><span class="row-go">›</span></a>
+        <a class="row" href="10-desktop-review.html"><i class="dot reviewer"></i><div><div class="row-line">review-0014 <span class="faint">#9c02</span><span class="yellow">! review waiting</span></div><div class="row-preview">4 files, 2 hunks need a reply.</div></div><span class="row-where">coding/composer</span><span class="row-time">15:18</span><span class="row-go">›</span></a>
+        <h2 class="list-label">RECENT <span>2</span></h2>
+        <a class="row" aria-disabled="true" title="Fixture session — preview only"><i class="dot planner"></i><div><div class="row-line">plan-phase-8 <span class="faint">#71be</span><span class="faint">idle</span></div><div class="row-preview">Drafted tui-mode.md, waiting on you.</div></div><span class="row-where">coding/composer</span><span class="row-time">11:40</span><span class="row-go">›</span></a>
+        <a class="row" aria-disabled="true" title="Fixture session — preview only"><i class="dot yellow"></i><div><div class="row-line">ship-textures <span class="faint">#e4d9</span><span class="faint">idle</span></div><div class="row-preview">Baked 3 maps · roughness looks off.</div></div><span class="row-where">3d/crashed-ship</span><span class="row-time">09:12</span><span class="row-go">›</span></a>
+      </div>
+    </section>
+    <aside class="home-side" aria-label="Selected session preview">
+      <div class="side-head"><i class="dot violet"></i><strong>default</strong><span class="faint">#a3f1</span><span class="grow"></span><span class="faint">slots 1/2</span></div>
+      <div class="context"><span>site <b>3d</b></span><span>project <b>crashed-ship</b></span><span>mcp <b>blender</b></span></div>
+      <h3 class="side-label">WAITING</h3>
+      <div class="approval"><span class="violet">⚑ approve write</span><span class="grow truncate faint">site://3d/crashed-ship/models/ship.glb · 1 file</span><button disabled title="Visual preview only">Deny</button><button class="allow" disabled title="Visual preview only">Allow</button></div>
+      <h3 class="side-label">LAST</h3>
+      <article class="message"><header class="speaker">default <time>14:02</time></header><p>Bevel is in. I left a thread on the top edge.</p></article>
+      <article class="message continuation"><p>Want me to export a fresh ship.glb for the site?</p></article>
+      <h3 class="side-label">STAGE</h3>
+      <div class="desk-list">
+        <div class="desk-item"><i class="dot green"></i><span><span class="green">live</span> · blender</span><span class="grow"></span><span class="faint">drive: you</span></div>
+        <div class="desk-item"><span>▥</span><span>mockups</span><span class="grow"></span><span class="faint">page</span></div>
+        <div class="desk-item"><span>›_</span><span>terminal</span><span class="grow"></span><span class="faint">crashed-ship</span></div>
+      </div>
+      <div class="side-actions"><a class="button primary" href="01-workspace.html">Open session <kbd>Enter</kbd></a></div>
+    </aside>
+  </div>
+  <footer class="statusbar"><span>demo · 4 sessions</span><span class="yellow">! 2 waiting</span><span class="grow"></span><span class="secondary">↑↓ move</span><span class="secondary"><kbd>Enter</kbd> open</span><a href="01-workspace.html"><kbd>Esc</kbd> back to default</a><a href="03-commands.html"><kbd>Ctrl ⇧ P</kbd> palette</a><span class="secondary">composer · gpui mockup</span></footer>
+</main>
+</body>
+</html>

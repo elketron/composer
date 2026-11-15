@@ -100,16 +100,16 @@ impl Tool for NewProjectTool {
         }
 
         let path = tilde(&folder);
-        let workflow = template.as_ref().map(|(site, _)| site.as_str());
+        let site = template.as_ref().map(|(site, _)| site.as_str());
         server
             .write_page(
                 &page_url,
-                &project_page(name, &about, &path, workflow),
+                &project_page(name, &about, &path, site),
                 ChangedBy::Agent,
             )
             .map_err(|e| e.to_string())?;
-        let registered = register(context, name, &about, &path, workflow);
-        let from = workflow
+        let registered = register(context, name, &about, &path, site);
+        let from = site
             .map(|s| format!(" from site://{s}'s template"))
             .unwrap_or_default();
         let active = folder
@@ -151,9 +151,9 @@ fn one_line(text: &str) -> String {
         .replace('|', "/")
 }
 
-fn project_page(name: &str, about: &str, path: &str, workflow: Option<&str>) -> String {
+fn project_page(name: &str, about: &str, path: &str, site: Option<&str>) -> String {
     let today = chrono::Local::now().format("%Y-%m-%d");
-    let sites = workflow
+    let sites = site
         .map(|site| format!("sites: [{site}]\n"))
         .unwrap_or_else(|| "sites: []\n".to_string());
     format!(
@@ -168,7 +168,7 @@ fn register(
     name: &str,
     about: &str,
     path: &str,
-    workflow: Option<&str>,
+    site: Option<&str>,
 ) -> String {
     let server = &context.server;
     let mut notes: Vec<String> = Vec::new();
@@ -176,7 +176,7 @@ fn register(
     let index_url = SiteUrl::new("projects", "").expect("valid");
     if let Ok(page) = server.web.read_page(&index_url) {
         let link = format!("[{name}]({name}.md)");
-        let row = format!("| {link} | `{path}` | {} |", workflow.unwrap_or(""));
+        let row = format!("| {link} | `{path}` | {} |", site.unwrap_or(""));
         let text = append_table_row(&page.raw, "Projects", &row).unwrap_or_else(|| {
             let table = format!("| project | root | sites |\n|---------|------|-------|\n{row}");
             add_section(&page.raw, "Projects", &table, "Projects")

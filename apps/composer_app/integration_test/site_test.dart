@@ -1,5 +1,5 @@
-// Workflows on the phone: switch a session into the demo workflow from the chip, see its live view
-// appear, resize it with the handle, leave and see it go; the Workflows tab lists the workflow and
+// Sites on the phone: switch a session into the demo site from the chip, see its live view
+// appear, resize it with the handle, leave and see it go; the Sites tab lists the site and
 // starts a chat in it. Run on the emulator by scripts/phone-e2e.sh against a server with a `demo`
 // site (`app: demoapp`), `[applications.demoapp]` and a `[viewer]` pointing at a running wayai.
 // SHOT_PAUSE=<seconds> stops at the interesting screens (see support.dart's `shot`).
@@ -12,10 +12,10 @@ import 'package:integration_test/integration_test.dart';
 
 import 'support.dart';
 
-/// How many sessions the demo tile says are in the workflow ("no sessions", "1 session", "3 sessions").
+/// How many sessions the demo tile says are in the site ("no sessions", "1 session", "3 sessions").
 int sessionsInDemo(WidgetTester tester) {
   final text = tester
-      .widgetList<Text>(find.descendant(of: find.byKey(const Key('workflow-demo')), matching: find.byType(Text)))
+      .widgetList<Text>(find.descendant(of: find.byKey(const Key('site-demo')), matching: find.byType(Text)))
       .map((t) => t.data ?? '')
       .firstWhere((t) => RegExp(r'^(\d+ sessions?|no sessions)$').hasMatch(t));
   return int.tryParse(text.split(' ').first) ?? 0;
@@ -27,25 +27,25 @@ void main() {
   // pinch) reach the app instead of being dropped by the live test binding.
   if (shotPause > 0) binding.shouldPropagateDevicePointerEvents = true;
 
-  testWidgets('the workflow chip, the live view and the Workflows tab', (tester) async {
+  testWidgets('the site chip, the live view and the Sites tab', (tester) async {
     await startPaired(tester);
     await shot(tester, 'inbox-empty');
 
-    // A new chat has no workflow, and so no live view.
+    // A new chat has no site, and so no live view.
     await tester.tap(find.byKey(const Key('new-chat')));
     await startChat(tester);
-    final chip = find.byKey(const Key('workflow-chip'));
-    expect(find.descendant(of: chip, matching: find.text('no workflow')), findsOneWidget);
+    final chip = find.byKey(const Key('site-chip'));
+    expect(find.descendant(of: chip, matching: find.text('no site')), findsOneWidget);
     expect(find.byKey(const Key('live-view')), findsNothing);
-    await shot(tester, 'session-no-workflow');
+    await shot(tester, 'session-no-site');
 
-    // The chip's sheet lists the demo workflow; choosing it enters it.
+    // The chip's sheet lists the demo site; choosing it enters it.
     await tester.tap(chip);
-    final demo = find.byKey(const Key('workflow-pick-demo'));
+    final demo = find.byKey(const Key('site-pick-demo'));
     await pumpUntil(tester, demo);
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('workflow-leave')), findsNothing, reason: 'nothing to leave yet');
-    await shot(tester, 'workflow-sheet');
+    expect(find.byKey(const Key('site-leave')), findsNothing, reason: 'nothing to leave yet');
+    await shot(tester, 'site-sheet');
     await tester.tap(demo);
     await pumpUntil(tester, find.descendant(of: chip, matching: find.text('demo')), seconds: 60);
     await pumpUntil(tester, find.textContaining('Entered demo'), seconds: 30);
@@ -87,17 +87,17 @@ void main() {
     await tester.pumpAndSettle();
     expect(height(), medium);
 
-    // Leaving the workflow takes the view away.
+    // Leaving the site takes the view away.
     await tester.tap(chip);
-    final leave = find.byKey(const Key('workflow-leave'));
+    final leave = find.byKey(const Key('site-leave'));
     await pumpUntil(tester, leave);
     await tester.pumpAndSettle();
     await tester.tap(leave);
-    await pumpUntil(tester, find.descendant(of: chip, matching: find.text('no workflow')), seconds: 30);
+    await pumpUntil(tester, find.descendant(of: chip, matching: find.text('no site')), seconds: 30);
     await pumpUntilGone(tester, find.byKey(const Key('live-view')));
     expect(find.byType(LiveView), findsNothing);
 
-    // Back in it, so the Workflows tab has a session to list.
+    // Back in it, so the Sites tab has a session to list.
     await tester.tap(chip);
     await pumpUntil(tester, demo);
     await tester.pumpAndSettle();
@@ -106,31 +106,29 @@ void main() {
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
 
-    // The Workflows tab: the demo workflow, its application, the session in it.
-    await tester.tap(find.byKey(const Key('tab-workflows')));
-    await pumpUntil(tester, find.byKey(const Key('workflow-demo')));
-    await shot(tester, 'workflows-tab');
+    // The Sites tab: the demo site, its application, the session in it.
+    await tester.tap(find.byKey(const Key('tab-sites')));
+    await pumpUntil(tester, find.byKey(const Key('site-demo')));
+    await shot(tester, 'sites-tab');
     expect(find.text('demoapp'), findsOneWidget);
     // The server may hold sessions from earlier runs: count against what is there now.
     final before = sessionsInDemo(tester);
     expect(before, greaterThanOrEqualTo(1), reason: 'the session just put in it');
-    expect(find.byKey(const Key('workflow-plain')), findsNothing);
-
-    // A new chat in it starts in the workflow.
-    await tester.tap(find.byKey(const Key('workflow-new-demo')));
+    // A new chat in it starts in the site.
+    await tester.tap(find.byKey(const Key('site-new-demo')));
     await startChat(tester);
     await pumpUntil(tester, find.descendant(of: chip, matching: find.text('demo')), seconds: 60);
     await pumpUntil(tester, find.byKey(const Key('live-view')), seconds: 30);
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('tab-workflows')));
-    await pumpUntil(tester, find.byKey(const Key('workflow-demo')));
+    await tester.tap(find.byKey(const Key('tab-sites')));
+    await pumpUntil(tester, find.byKey(const Key('site-demo')));
     expect(sessionsInDemo(tester), before + 1);
 
-    // The Inbox shows each session's workflow beside its project.
+    // The Inbox shows each session's site beside its project.
     await tester.tap(find.byKey(const Key('tab-inbox')));
     await tester.pumpAndSettle();
     expect(find.text('demo'), findsWidgets);
-    await shot(tester, 'inbox-with-workflows');
+    await shot(tester, 'inbox-with-sites');
   });
 }

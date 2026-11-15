@@ -1,5 +1,8 @@
 # Workflows and the shared view
 
+> Historical design: the separate workflow category has been removed. All sites can be entered;
+> applications and MCP servers are optional site capabilities. Use `:site` rather than `:workflow`.
+
 Status: design, settled 2026-11-10. Built: `.mcpb` bundles (uncommitted), the pieces the switch
 joins (`enter_site`, the launcher, the MCP client), the server half of the switch (`mcp:` grants,
 `app:` launching, the shared enter/leave functions in `agent::site_switch`) and the user-side switch

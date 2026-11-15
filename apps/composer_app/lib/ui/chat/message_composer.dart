@@ -139,9 +139,9 @@ class _MessageComposerState extends State<MessageComposer> {
                   SquareButton(
                     key: const Key('send'),
                     tooltip: 'Send (ctrl-enter)',
-                    color: t.accent,
+                    color: t.accentFill,
                     onPressed: _canSend(uploads) ? _send : null,
-                    child: const Icon(Icons.arrow_upward, size: 18, color: t.bg),
+                    child: const Icon(Icons.arrow_upward, size: 18, color: t.onAccent),
                   ),
               ],
             ),

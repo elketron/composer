@@ -34,7 +34,7 @@ The workspace is the web; each top-level folder is a **site**.
 
 ### Addressing
 
-Packing a site for GitHub and installing it on another PC: [site-packs.md](site-packs.md) (proposal). Workflow state is site + app + JSON: [workflow-state.md](workflow-state.md) (proposal; replaces pipeline stages and the generic board). ICM read correctly: [icm.md](icm.md) (folder method, five forms; Pipeline is one).
+Packing a site for GitHub and installing it on another PC: [site-packs.md](site-packs.md) (proposal). [workflow-state.md](workflow-state.md) is a historical proposal, not a separate site category. ICM read correctly: [icm.md](icm.md) (folder method, five forms; Pipeline is one).
 
 - `site://<site>/<path>` — e.g. `site://memory/projects/composer.md`
 - `site://<site>` resolves to `<site>/index.md`
@@ -506,7 +506,7 @@ Use the server from another laptop or the phone, over Tailscale. Tested end to e
 
 ## Visual design
 
-Mockups: the current direction is [mockups/next/](mockups/next/) (2026-11-11: the shared view, threads, the project hub, the phone and the TUI in the shipped chrome). Older boards: [tui.html](mockups/tui.html), [apps.html](mockups/apps.html). Tokens: `templates/sdk/theme.css`; the TUI uses the same values as RGB.
+Mockups: the current desktop direction is [mockups/next/](mockups/next/) (2026-11-14: a fresh three-screen Noema study based on the user's references; native transcript, larger stage, floating sessions and commands). The previous shared-view, phone and TUI studies are preserved in [mockups/next-archive-2026-11-14/](mockups/next-archive-2026-11-14/). Older boards: [tui.html](mockups/tui.html), [apps.html](mockups/apps.html). The rules below describe the existing shared app/TUI chrome; the proposed desktop palette is separately defined by `mockups/next/tokens.css`. Shipped web/TUI tokens remain `templates/sdk/theme.css`.
 
 - Dark and minimal: four surfaces (`bg`, `surface`, `raised`, `overlay`), three text levels (`text`, `muted`, `faint`).
 - **One accent** (soft blue) for links, focus, selection and Normal mode. State colours (`ok`, `warn`, `err`) only where state matters; `info` (violet) marks the agent, tool rows and thinking.
@@ -516,8 +516,8 @@ Mockups: the current direction is [mockups/next/](mockups/next/) (2026-11-11: th
 - **Phone only: corner radius 2px–5px.** The phone keeps a native feel; the desktop chrome and the TUI stay square.
 - **Chat messages are background bands:** yours use `--you` (bg tinted toward the accent), the agent's use `--surface`, system messages (e.g. a worker's ticket) are bordered with no fill.
 - **Shared app shell:** a 34px top bar (brand / site / crumb / session + actions) and a 24px key-hint footer. Every app is keyboard-driven and shows its keys. Dense is the point: small labels, one-pixel rules, no decorative space.
-- **The desktop shell has its own chrome.** `apps/desktop` is gpui, not the web SDK: two panes (the TUI on the left, a CEF stage on the right), a 4px splitter, amber focus `#e0a040`, and 14/18 JetBrains Mono in the terminal. Screens [06](mockups/next/screens/06-desktop-gpui.html) and [07](mockups/next/screens/07-desktop-gpui-palette.html).
-- **The phone is Flutter.** Inter 15px for the conversation, 44px touch targets, 56px app bar and bottom bar, 52px workflow row, 4–5px cards, native bottom sheets. Mockups [08](mockups/next/screens/08-phone-touch.html) and [09](mockups/next/screens/09-phone-workflow-sheet.html).
+- **The desktop shell has its own chrome.** `apps/desktop` is gpui, not the web SDK: two panes (the TUI on the left, a CEF stage on the right), a 4px splitter, amber focus `#e0a040`, and 14/18 JetBrains Mono in the terminal. Historical screens [06](mockups/next-archive-2026-11-14/screens/06-desktop-gpui.html) and [07](mockups/next-archive-2026-11-14/screens/07-desktop-gpui-palette.html); the new proposal is documented in [desktop.md](desktop.md#native-desktop-direction-proposal).
+- **The phone is Flutter.** Inter 15px for the conversation, 44px touch targets, 56px app bar and bottom bar, 52px workflow row, 4–5px cards, native bottom sheets. Historical mockups [08](mockups/next-archive-2026-11-14/screens/08-phone-touch.html) and [09](mockups/next-archive-2026-11-14/screens/09-phone-workflow-sheet.html).
 
 ## Seed sites
 
@@ -830,7 +830,7 @@ it when the project allows it (click: on / off); a worker's header has none (its
 ## Phase 5: pipelines (staged, scoped, gated work)
 
 > **Historical, removed 2026-11-12.** The pipeline engine, stages, gates and board are gone.
-> A workflow is a site with an app and its own JSON state: [workflow-state.md](workflow-state.md).
+> Historical proposal: a site may have an app and its own state; this is not a separate category. See [workflow-state.md](workflow-state.md).
 > Do not implement this section.
 
 From [Interpretable Context Methodology](https://arxiv.org/abs/2603.16021) (Van Clief & McDermott, 2026): for sequential

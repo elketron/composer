@@ -9,7 +9,7 @@ the chat, the pages, and the micro apps in an embedded browser. No terminal is a
 
 - **Platforms, in order:** Linux desktop (home, Hyprland/Wayland), Android, Windows (work PC; its server runs in WSL). macOS builds where it costs nothing extra.
 - **Several servers:** home computer and work PC, switchable, all kept connected.
-- **Same look:** the tokens from `templates/sdk/theme.css` (dark, one accent); the phone is Inter 15px with 2–5px rounding and 44px targets, not the mono/square web chrome. Screens: [mockups/next/](mockups/next/).
+- **Same look (original plan):** the tokens from `templates/sdk/theme.css` (dark, one accent); the phone is Inter 15px with 2–5px rounding and 44px targets, not the mono/square web chrome. The proposed Noema/monospace refresh is now in [mockups/next/](mockups/next/index.html#phone); see the theme proposal below.
 - **First version is chat-first:** servers, sessions, chat, approvals, reading pages, micro apps. Editing pages, the changes view and a command palette come after.
 - **Input on desktop:** conventional (text fields, clicking) plus shortcuts mirroring the TUI where natural (ctrl-enter sends, ctrl-k palette later).
 - **Notifications** without a push service: the app keeps its connections open (desktop; Android via a foreground service) and shows local notifications.
@@ -17,6 +17,23 @@ the chat, the pages, and the micro apps in an embedded browser. No terminal is a
 - **Distribution:** installable packages built by GitHub Actions on release tags.
 
 ## Architecture
+
+### Noema phone theme (proposal, 2026-11-14)
+
+The fresh [phone mockups](mockups/next/index.html#phone) extend the user's desktop
+reference and exact Noema palette to the Flutter phone. User correction: retain
+the existing phone's Inter prose, technical monospace, separated user bubbles,
+tool/approval cards, small corner radii and newest-first chat instead of adopting
+the desktop transcript. Apply near-black surfaces, warm gray and restrained
+indigo. Keep 44px touch targets, 56px app bars/navigation, a bottom composer and
+site bottom sheets. A paired phone's live view remains view-only. The landscape
+study keeps chat on the left and live on the right, and collapses to a full-width
+conversation. Hide chat / Show chat temporarily expands the view in either
+orientation without leaving the session; production must retain drafts and
+transcript position. This supersedes the older mockup styling direction, not the shipped
+theme; no Flutter code is changed. The [phone contract](mockups/next/PHONE-CONTRACT.md)
+records fixtures and implementation gaps. The rest of this plan includes
+historical platform decisions; the desktop is now GPUI, not Flutter.
 
 ```
 apps/composer_protocol/       Dart package generated from crates/protocol (do not edit)

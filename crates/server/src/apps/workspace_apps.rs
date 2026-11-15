@@ -186,7 +186,7 @@ pub fn project_info(server: &Server, project: &crate::apps::GrantedProject) -> P
 }
 
 /// The sites a project page lists (`sites:`). They are the project's capabilities: its apps and
-/// workflows. A project without a page has none yet.
+/// capabilities. A project without a page has none yet.
 fn project_sites(server: &Server, folder: &Path) -> Vec<String> {
     ProjectRef::resolve(server, &folder.display().to_string())
         .map(|project| project.sites)

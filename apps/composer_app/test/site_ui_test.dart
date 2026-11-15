@@ -1,5 +1,5 @@
-// The session screen's workflow chip and sheet, the live view's handle, the bottom bar, the
-// Workflows tab and the chat order, with the real reducer and widgets.
+// The session screen's site chip and sheet, the live view's handle, the bottom bar, the
+// Sites tab and the chat order, with the real reducer and widgets.
 
 import 'package:composer_app/flux/store.dart';
 import 'package:composer_app/state/actions.dart';
@@ -15,7 +15,7 @@ import 'package:composer_app/ui/chat/chat_view.dart';
 import 'package:composer_app/ui/chat/live_view_request.dart';
 import 'package:composer_app/ui/chat/page_cover.dart';
 import 'package:composer_app/ui/home/phone_tabs.dart';
-import 'package:composer_app/ui/home/workflows_tab.dart';
+import 'package:composer_app/ui/home/sites_tab.dart';
 import 'package:composer_app/ui/store_scope.dart';
 import 'package:composer_protocol/composer_protocol.dart';
 import 'package:flutter/material.dart';
@@ -23,8 +23,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 const home = ServerEntry(url: 'https://home.ts.net', name: 'home', token: 't1');
 
-SiteSummary site(String name, {String? app, List<String> mcp = const []}) =>
-    SiteSummary(name: name, title: 'The $name', hasJustfile: false, hasUi: false, app: app, mcp: mcp);
+SiteSummary site(String name, {String? app, List<String> mcp = const [], bool appBuilt = false}) =>
+    SiteSummary(name: name, title: 'The $name', hasJustfile: false, hasUi: appBuilt, appBuilt: appBuilt, app: app, mcp: mcp);
 
 SessionInfo session(String id, {String? site, TurnState state = TurnState.idle}) =>
     SessionInfo(id: id, agent: 'default', site: site, state: state, lastSeq: 0, updated: '2026-11-10T10:00:0$id');
@@ -62,73 +62,84 @@ void main() {
     await tester.pump();
   }
 
-  group('the workflow chip', () {
-    testWidgets('names the workflow, or says there is none', (tester) async {
+  group('the site chip', () {
+    testWidgets('names the site, or says there is none', (tester) async {
       setUp();
       await pumpPage(tester);
-      expect(find.descendant(of: find.byKey(const Key('workflow-chip')), matching: find.text('no workflow')), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const Key('site-chip')), matching: find.text('no site')), findsOneWidget);
 
       store.dispatch(ServerEvent(home.url, ServerMessageSessionUpdated(session: session('a', site: '3d'))));
       await tester.pump();
-      expect(find.descendant(of: find.byKey(const Key('workflow-chip')), matching: find.text('3d')), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const Key('site-chip')), matching: find.text('3d')), findsOneWidget);
       expect(find.text('qwen3 · local'), findsOneWidget, reason: 'the model is at the right');
     });
 
     testWidgets('the chip is a 44px target', (tester) async {
       setUp();
       await pumpPage(tester);
-      expect(tester.getSize(find.byKey(const Key('workflow-chip'))).height, greaterThanOrEqualTo(44));
+      expect(tester.getSize(find.byKey(const Key('site-chip'))).height, greaterThanOrEqualTo(44));
     });
 
-    testWidgets('the sheet lists the workflows (not plain sites), marks the current one and sends site.set', (tester) async {
+    testWidgets('the sheet lists all sites, marks the current one and sends site.set', (tester) async {
       setUp(inSite: '3d');
       await pumpPage(tester);
-      await tester.tap(find.byKey(const Key('workflow-chip')));
+      await tester.tap(find.byKey(const Key('site-chip')));
       await tester.pumpAndSettle();
       expect(effects.whereType<FetchCatalog>(), hasLength(1), reason: 'the sheet asks for the sites again');
-      expect(find.byKey(const Key('workflow-pick-3d')), findsOneWidget);
-      expect(find.byKey(const Key('workflow-pick-docs')), findsOneWidget);
-      expect(find.byKey(const Key('workflow-pick-plain')), findsNothing);
-      expect(find.descendant(of: find.byKey(const Key('workflow-pick-3d')), matching: find.byIcon(Icons.check)), findsOneWidget);
-      expect(find.descendant(of: find.byKey(const Key('workflow-pick-docs')), matching: find.byIcon(Icons.check)), findsNothing);
+      expect(find.byKey(const Key('site-pick-3d')), findsOneWidget);
+      expect(find.byKey(const Key('site-pick-docs')), findsOneWidget);
+      expect(find.byKey(const Key('site-pick-plain')), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const Key('site-pick-3d')), matching: find.byIcon(Icons.check)), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const Key('site-pick-docs')), matching: find.byIcon(Icons.check)), findsNothing);
 
-      await tester.tap(find.byKey(const Key('workflow-pick-docs')));
+      await tester.tap(find.byKey(const Key('site-pick-docs')));
       await tester.pumpAndSettle();
       final command = effects.whereType<SendCommand>().map((e) => e.command).whereType<ClientCommandSiteSet>().single;
       expect((command.session, command.site), ('a', 'docs'));
-      expect(find.byKey(const Key('workflow-pick-docs')), findsNothing, reason: 'the sheet closed');
+      expect(find.byKey(const Key('site-pick-docs')), findsNothing, reason: 'the sheet closed');
     });
 
-    testWidgets('leave workflow sends site null; without a workflow there is nothing to leave', (tester) async {
+    testWidgets('leave site sends site null; without a site there is nothing to leave', (tester) async {
       setUp(inSite: '3d');
       await pumpPage(tester);
-      await tester.tap(find.byKey(const Key('workflow-chip')));
+      await tester.tap(find.byKey(const Key('site-chip')));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('workflow-leave')));
+      await tester.tap(find.byKey(const Key('site-leave')));
       await tester.pumpAndSettle();
       final command = effects.whereType<SendCommand>().map((e) => e.command).whereType<ClientCommandSiteSet>().single;
       expect(command.site, isNull);
 
       setUp();
       await pumpPage(tester);
-      await tester.tap(find.byKey(const Key('workflow-chip')));
+      await tester.tap(find.byKey(const Key('site-chip')));
       await tester.pumpAndSettle();
-      expect(find.byKey(const Key('workflow-leave')), findsNothing);
+      expect(find.byKey(const Key('site-leave')), findsNothing);
     });
 
-    testWidgets('choosing the current workflow sends nothing', (tester) async {
+    testWidgets('a plain site can be entered', (tester) async {
       setUp(inSite: '3d');
       await pumpPage(tester);
-      await tester.tap(find.byKey(const Key('workflow-chip')));
+      await tester.tap(find.byKey(const Key('site-chip')));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('workflow-pick-3d')));
+      await tester.tap(find.byKey(const Key('site-pick-plain')));
+      await tester.pumpAndSettle();
+      final command = effects.whereType<SendCommand>().map((e) => e.command).whereType<ClientCommandSiteSet>().single;
+      expect((command.session, command.site), ('a', 'plain'));
+    });
+
+    testWidgets('choosing the current site sends nothing', (tester) async {
+      setUp(inSite: '3d');
+      await pumpPage(tester);
+      await tester.tap(find.byKey(const Key('site-chip')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('site-pick-3d')));
       await tester.pumpAndSettle();
       expect(effects.whereType<SendCommand>(), isEmpty);
     });
   });
 
   group('the live view', () {
-    testWidgets('appears for a workflow with an application on a server with a viewer; the token asks for its session, never in its URL', (tester) async {
+    testWidgets('appears for a site with an application on a server with a viewer; the token asks for its session, never in its URL', (tester) async {
       setUp(inSite: '3d');
       await pumpPage(tester);
       expect(find.byKey(const Key('live-view')), findsOneWidget);
@@ -138,7 +149,7 @@ void main() {
 
     testWidgets('is never created otherwise', (tester) async {
       for (final (label, inSite, viewer) in [
-        ('no workflow', null, '/view'),
+        ('no site', null, '/view'),
         ('MCP only', 'docs', '/view'),
         ('a plain site', 'plain', '/view'),
         ('no viewer on the server', '3d', null),
@@ -293,10 +304,13 @@ void main() {
       expect(find.textContaining('drag or tap'), findsNothing);
       // Left, middle, right.
       expect(tester.getCenter(name).dx, lessThan(tester.getCenter(grip).dx));
-      expect(tester.getCenter(grip).dx, closeTo(200, 1));
+      // The grip in the middle of the resize area; Hide chat after "view only", its own target.
+      expect(tester.getCenter(grip).dx, closeTo(tester.getCenter(handle).dx, 1));
       expect(tester.getCenter(only).dx, greaterThan(tester.getCenter(grip).dx));
       expect(tester.getTopLeft(name).dx, lessThan(60));
-      expect(tester.getTopRight(only).dx, greaterThan(340));
+      final toggle = find.byKey(const Key('chat-toggle'));
+      expect(tester.getTopLeft(toggle).dx, greaterThanOrEqualTo(tester.getTopRight(only).dx));
+      expect(tester.getSize(toggle).height, greaterThanOrEqualTo(44));
       // Under the picture, and nothing but the picture inside its box.
       final view = find.byKey(const Key('live-view'));
       expect(tester.getTopLeft(handle).dy, tester.getBottomLeft(view).dy);
@@ -376,6 +390,121 @@ void main() {
     });
   });
 
+  group('hide chat and landscape', () {
+    Future<void> pumpAt(WidgetTester tester, Size size, {Widget Function(BuildContext, LiveViewRequest)? viewBuilder}) async {
+      // The screen's size as MediaQuery reports it, which decides the layout.
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(StoreScope(
+        store: store,
+        child: MaterialApp(
+          home: ChatPage(url: home.url, liveViewBuilder: viewBuilder ?? (_, r) => const ColoredBox(key: Key('stub'), color: Colors.black)),
+        ),
+      ));
+      await tester.pump();
+    }
+
+    Finder visible(Key key) => find.byKey(key).hitTestable();
+
+    testWidgets('the site chip is a 44px target both ways', (tester) async {
+      setUp(inSite: '3d');
+      await pumpAt(tester, const Size(400, 900));
+      final size = tester.getSize(find.byKey(const Key('site-chip')));
+      expect(size.width, greaterThanOrEqualTo(44));
+      expect(size.height, greaterThanOrEqualTo(44));
+    });
+
+    testWidgets('Hide chat gives the view the room and keeps the draft; Show chat brings it back', (tester) async {
+      setUp(inSite: '3d');
+      await pumpAt(tester, const Size(400, 900));
+      await tester.enterText(find.byKey(const Key('message')), 'half a thought');
+      final before = tester.getSize(find.byKey(const Key('live-view'))).height;
+      await tester.tap(find.byKey(const Key('chat-toggle')));
+      await tester.pump();
+      expect(visible(const Key('message')), findsNothing);
+      expect(tester.getSize(find.byKey(const Key('live-view'))).height, greaterThan(before));
+      expect(find.text('Show chat'), findsOneWidget);
+      expect(find.byKey(const Key('live-view-grip')), findsNothing, reason: 'a full view does not resize');
+      await tester.tap(find.byKey(const Key('chat-toggle')));
+      await tester.pump();
+      expect(visible(const Key('message')), findsOneWidget);
+      expect(tester.widget<TextField>(find.byKey(const Key('message'))).controller!.text, 'half a thought');
+    });
+
+    testWidgets('without a live view there is nothing to hide the chat for', (tester) async {
+      setUp();
+      await pumpAt(tester, const Size(400, 900));
+      expect(find.byKey(const Key('chat-toggle')), findsNothing);
+    });
+
+    testWidgets('Hide chat, Show chat and rotation retain the loaded live view', (tester) async {
+      setUp(inSite: '3d');
+      const probe = Key('live-view-state-probe');
+      // A real StatefulWidget stands in for the platform webview: its State must survive.
+      await pumpAt(tester, const Size(400, 900), viewBuilder: (_, _) => const TextField(key: probe));
+      final loaded = tester.state(find.byKey(probe));
+      await tester.enterText(find.byKey(probe), 'viewer state');
+
+      for (var i = 0; i < 2; i++) {
+        await tester.tap(find.byKey(const Key('chat-toggle')));
+        await tester.pump();
+        expect(tester.state(find.byKey(probe)), same(loaded));
+        expect(find.text('viewer state'), findsOneWidget);
+      }
+
+      for (final size in [const Size(844, 390), const Size(400, 900)]) {
+        tester.view.physicalSize = size;
+        await tester.pump();
+        expect(tester.state(find.byKey(probe)), same(loaded));
+        expect(find.text('viewer state'), findsOneWidget);
+      }
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('on its side: chat left under one header row, the view right at full height', (tester) async {
+      setUp(inSite: '3d');
+      await pumpAt(tester, const Size(844, 390));
+      final chat = tester.getRect(find.byKey(const Key('message')));
+      final view = tester.getRect(find.byKey(const Key('live-view')));
+      expect(chat.right, lessThanOrEqualTo(view.left));
+      expect(view.top, lessThan(10), reason: 'the view starts at the top');
+      expect(view.height, greaterThan(300));
+      expect(find.byType(AppBar), findsNothing, reason: 'one header row instead');
+      final chip = tester.getRect(find.byKey(const Key('site-chip')));
+      expect(chip.bottom, lessThanOrEqualTo(50), reason: 'the site chip is in the header row');
+      expect(find.byKey(const Key('session-model')), findsNothing);
+    });
+
+    testWidgets('the view folds into a rail and back; folding while the chat is hidden brings the chat back', (tester) async {
+      setUp(inSite: '3d');
+      await pumpAt(tester, const Size(844, 390));
+      await tester.enterText(find.byKey(const Key('message')), 'kept');
+      await tester.tap(find.byKey(const Key('live-fold')));
+      await tester.pump();
+      expect(find.byKey(const Key('live-view')), findsNothing);
+      expect(tester.getSize(find.byKey(const Key('live-unfold'))).width, 52);
+      expect(tester.getRect(find.byKey(const Key('message'))).right, greaterThan(700), reason: 'the chat takes the width');
+      await tester.tap(find.byKey(const Key('live-unfold')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('chat-toggle')));
+      await tester.pump();
+      expect(visible(const Key('message')), findsNothing);
+      expect(tester.getSize(find.byKey(const Key('live-view'))).width, greaterThan(800), reason: 'the view takes the width');
+      await tester.tap(find.byKey(const Key('live-fold')));
+      await tester.pump();
+      expect(visible(const Key('message')), findsOneWidget);
+      expect(tester.widget<TextField>(find.byKey(const Key('message'))).controller!.text, 'kept');
+    });
+
+    testWidgets('a tall phone stays in portrait even when wide', (tester) async {
+      setUp(inSite: '3d');
+      await pumpAt(tester, const Size(820, 900));
+      expect(find.byType(AppBar), findsOneWidget);
+      expect(find.byKey(const Key('live-fold')), findsNothing);
+    });
+  });
+
   group('the header', () {
     testWidgets('shows the stop control only while a turn runs, 44px, with a label', (tester) async {
       setUp();
@@ -405,19 +534,19 @@ void main() {
   });
 
   group('the bottom bar', () {
-    testWidgets('inbox · workflows · pages · server, in that order, the inbox with its count', (tester) async {
+    testWidgets('inbox · sites · pages · server, in that order, the inbox with its count', (tester) async {
       store = Store(AppState.initial, reduce, (_, _) {});
       await tester.pumpWidget(StoreScope(
         store: store,
-        child: const MaterialApp(home: Scaffold(bottomNavigationBar: PhoneTabs(tab: PhoneTab.workflows, needsYou: 2))),
+        child: const MaterialApp(home: Scaffold(bottomNavigationBar: PhoneTabs(tab: PhoneTab.sites, needsYou: 2))),
       ));
-      final labels = [for (final key in ['inbox', 'workflows', 'pages', 'server']) tester.getTopLeft(find.byKey(Key('tab-$key'))).dx];
+      final labels = [for (final key in ['inbox', 'sites', 'pages', 'server']) tester.getTopLeft(find.byKey(Key('tab-$key'))).dx];
       expect(labels, [...labels]..sort());
       expect(find.text('inbox · 2'), findsOneWidget);
-      expect(find.text('workflows'), findsOneWidget);
+      expect(find.text('sites'), findsOneWidget);
       expect(find.text('pages'), findsOneWidget);
       expect(find.text('server'), findsOneWidget);
-      for (final key in ['inbox', 'workflows', 'pages', 'server']) {
+      for (final key in ['inbox', 'sites', 'pages', 'server']) {
         expect(tester.getSize(find.byKey(Key('tab-$key'))).height, greaterThanOrEqualTo(44));
       }
     });
@@ -429,14 +558,14 @@ void main() {
         child: MaterialApp(home: Scaffold(bottomNavigationBar: PhoneTabs(tab: PhoneTab.inbox, needsYou: 0))),
       ));
       expect(find.text('inbox'), findsOneWidget);
-      await tester.tap(find.byKey(const Key('tab-workflows')));
-      expect(store.state.tab, PhoneTab.workflows);
+      await tester.tap(find.byKey(const Key('tab-sites')));
+      expect(store.state.tab, PhoneTab.sites);
       await tester.tap(find.byKey(const Key('tab-server')));
       expect(store.state.tab, PhoneTab.server);
     });
   });
 
-  group('the Workflows tab', () {
+  group('the Sites tab', () {
     Future<void> pumpTab(WidgetTester tester) async {
       await tester.binding.setSurfaceSize(const Size(400, 900));
       addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -444,7 +573,7 @@ void main() {
         store: store,
         child: MaterialApp(
           home: Scaffold(
-            body: Builder(builder: (context) => WorkflowsTab(url: home.url, status: StoreScope.of(context).state.statusOf(home.url))),
+            body: Builder(builder: (context) => SitesTab(url: home.url, status: StoreScope.of(context).state.statusOf(home.url))),
           ),
         ),
       ));
@@ -452,20 +581,20 @@ void main() {
       await tester.pump();
     }
 
-    testWidgets('rows with the application, MCP servers and sessions; plain sites are left out', (tester) async {
+    testWidgets('all sites show their application, MCP servers and sessions', (tester) async {
       setUp();
       store.dispatch(ServerEvent(home.url, ServerMessageSessionUpdated(session: session('b', site: '3d'))));
       store.dispatch(ServerEvent(home.url, ServerMessageSessionUpdated(session: session('c', site: '3d'))));
       await pumpTab(tester);
-      expect(find.byKey(const Key('workflow-3d')), findsOneWidget);
-      expect(find.byKey(const Key('workflow-docs')), findsOneWidget);
-      expect(find.byKey(const Key('workflow-plain')), findsNothing);
+      expect(find.byKey(const Key('site-3d')), findsOneWidget);
+      expect(find.byKey(const Key('site-docs')), findsOneWidget);
+      expect(find.byKey(const Key('site-plain')), findsOneWidget);
       expect(find.text('blender'), findsOneWidget);
       expect(find.text('search'), findsOneWidget);
       expect(find.text('2 sessions'), findsOneWidget);
-      expect(find.text('no sessions'), findsOneWidget);
-      expect(find.byKey(const Key('workflow-session-b')), findsOneWidget);
-      expect(find.byKey(const Key('workflow-session-c')), findsOneWidget);
+      expect(find.text('no sessions'), findsNWidgets(2));
+      expect(find.byKey(const Key('site-session-b')), findsOneWidget);
+      expect(find.byKey(const Key('site-session-c')), findsOneWidget);
     });
 
     testWidgets('asks for the catalog again when it shows', (tester) async {
@@ -474,11 +603,11 @@ void main() {
       expect(effects.whereType<FetchCatalog>(), hasLength(1));
     });
 
-    testWidgets('the new-chat action opens the sheet for that workflow, and Start creates the chat there', (tester) async {
+    testWidgets('the new-chat action opens the sheet for that site, and Start creates the chat there', (tester) async {
       setUp();
       await pumpTab(tester);
-      expect(tester.getSize(find.byKey(const Key('workflow-new-3d'))), const Size(44, 44));
-      await tester.tap(find.byKey(const Key('workflow-new-3d')));
+      expect(tester.getSize(find.byKey(const Key('site-new-3d'))), const Size(44, 44));
+      await tester.tap(find.byKey(const Key('site-new-3d')));
       await tester.pumpAndSettle();
       expect(find.text('New chat in 3d'), findsOneWidget);
       await tester.tap(find.byKey(const Key('start-chat')));
@@ -487,14 +616,23 @@ void main() {
       expect((create.agent, create.site), ('default', '3d'));
     });
 
-    testWidgets('says what makes a site a workflow when there are none', (tester) async {
+    testWidgets('a built site app can be opened without entering the site', (tester) async {
       setUp();
-      store.dispatch(SitesLoaded(home.url, [site('plain')]));
+      store.dispatch(SitesLoaded(home.url, [site('plain'), site('board', appBuilt: true)]));
       await pumpTab(tester);
-      expect(find.byKey(const Key('workflows-empty')), findsOneWidget);
-      expect(find.textContaining('app:', findRichText: true), findsOneWidget);
-      expect(find.textContaining('mcp:', findRichText: true), findsOneWidget);
-      expect(find.textContaining('index.md', findRichText: true), findsOneWidget);
+      expect(find.byKey(const Key('site-open-app-plain')), findsNothing);
+      await tester.tap(find.byKey(const Key('site-open-app-board')));
+      await tester.pump();
+      expect(store.state.statusOf(home.url).page.appSite, 'board');
+      expect(store.state.statusOf(home.url).session('a')?.site, isNull);
+    });
+
+    testWidgets('shows an empty state when there are no sites', (tester) async {
+      setUp();
+      store.dispatch(SitesLoaded(home.url, []));
+      await pumpTab(tester);
+      expect(find.byKey(const Key('sites-empty')), findsOneWidget);
+      expect(find.text('No sites in this workspace.'), findsOneWidget);
     });
   });
 

@@ -17,9 +17,9 @@ import 'inbox_tab.dart';
 import 'pages_tab.dart';
 import 'phone_tabs.dart';
 import 'server_tab.dart';
-import 'workflows_tab.dart';
+import 'sites_tab.dart';
 
-/// The phone layout: the server switcher on top, Inbox / Workflows / Pages / Server below.
+/// The phone layout: the server switcher on top, Inbox / Sites / Pages / Server below.
 class PhoneHome extends StatelessWidget {
   const PhoneHome({super.key, required this.server, required this.status});
 
@@ -66,7 +66,7 @@ class PhoneHome extends StatelessWidget {
         Expanded(
           child: switch (tab) {
             PhoneTab.inbox => InboxTab(key: ValueKey('inbox ${server.url}'), url: server.url, status: status),
-            PhoneTab.workflows => WorkflowsTab(key: ValueKey('workflows ${server.url}'), url: server.url, status: status),
+            PhoneTab.sites => SitesTab(key: ValueKey('sites ${server.url}'), url: server.url, status: status),
             PhoneTab.pages => PagesTab(key: ValueKey('pages ${server.url}'), url: server.url, status: status),
             PhoneTab.server => ServerTab(server: server, status: status),
           },

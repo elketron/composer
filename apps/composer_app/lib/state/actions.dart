@@ -166,7 +166,7 @@ final class NewSessionRequested extends AppAction {
   final String url;
   final String agent;
 
-  /// A workflow (site) to enter once the session exists; null for none.
+  /// A site to enter once the session exists; null for none.
   final String? site;
 
   /// A name in the projects directory, or a path; null for none.
@@ -471,7 +471,7 @@ final class CatalogRequested extends AppAction {
   final String url;
 }
 
-/// Enter a workflow (`site.set`), or leave it (`site` null). For `session`, else the open chat's.
+/// Enter a site (`site.set`), or leave it (`site` null). For `session`, else the open chat's.
 final class SiteChosen extends AppAction {
   const SiteChosen(this.url, this.site, {this.session});
   final String url;

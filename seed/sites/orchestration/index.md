@@ -14,7 +14,7 @@ app:
 
 Tickets: units handed to workers. A worker is the default agent in worker mode, with its own
 session and exactly one ticket. Entering this site adds `merge_ticket`; the rest are base tools.
-A workflow defines its own structure with its app and JSON, not a generic stage engine.
+Sites and their apps define their own structure; there is no generic stage engine.
 
 ## Layout
 
@@ -65,11 +65,11 @@ Filled in by the worker: what was done, where, anything left over.
 4. **Orchestrator** gets a message when the worker finishes (the server sets `status: done` or `failed`), reads the Result, updates the plan. A worker that dies without `finish` counts as failed.
 5. **Merge:** `merge_ticket(id)` merges the branch into the target branch — the `into` argument, the ticket's `merge_into:` frontmatter, or the project's checked-out branch, in that order (a target that isn't checked out is merged in a temporary worktree) — once the user approves (they see the changes), then removes the worktree and branch; the ticket gets `merged:`. The user can also merge or discard it themselves. Conflicts: send the worker a message to merge the project's branch into its own and resolve them.
 
-## Workflows
+## Sites and apps
 
-A workflow is a site with an app (`ui/`) and the state it owns, usually JSON. The site's
-`index.md` says how the work is done; the app interprets the JSON; tickets and workers do the
-steps. There is no generic stage engine: a coding review is a run whose `review.md` is a Hunk TUI
+A site may have an app (`ui/`) and state it owns, usually JSON. The site's `index.md` can say
+how work is done; its app interprets its state; tickets and workers do the steps. There is no
+generic stage engine: a coding review is a run whose `review.md` is a Hunk TUI
 page; Hunk opens in the run's `project/`, against the base branch, and the user's
 notes are the review.
 

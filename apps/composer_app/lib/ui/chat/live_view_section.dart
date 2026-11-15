@@ -4,7 +4,7 @@ import '../../state/actions.dart';
 import '../../state/frame_size.dart';
 import '../../state/live_view_room.dart';
 import '../../state/live_view_size.dart';
-import '../../state/workflows.dart';
+import '../../state/sites.dart';
 import '../../theme/composer_theme.dart';
 import '../../theme/tokens.dart' as t;
 import '../store_scope.dart';
@@ -17,7 +17,7 @@ import 'page_cover.dart';
 typedef LiveViewBuilder = Widget Function(BuildContext context, LiveViewRequest request);
 
 /// The live view of the session's application with its handle under it. Created only when the
-/// screen decides there is something to show (a viewer on the server, a workflow with an
+/// screen decides there is something to show (a viewer on the server, a site with an
 /// application); while the app is in the background or another page covers the screen, the
 /// webview is not kept: a placeholder of the same height stands in, and the page loads again
 /// when the screen comes back.
@@ -30,6 +30,8 @@ class LiveViewSection extends StatefulWidget {
     required this.token,
     required this.maxHeight,
     this.viewBuilder = webview,
+    this.fill = false,
+    this.trailing = const [],
   });
 
   final String url;
@@ -42,6 +44,13 @@ class LiveViewSection extends StatefulWidget {
   /// The most the view may take of the screen (the chat keeps the rest).
   final double maxHeight;
   final LiveViewBuilder viewBuilder;
+
+  /// Take all the room the parent gives (the chat is hidden, or landscape puts the view beside
+  /// it): the picture fills, and the handle no longer steps sizes.
+  final bool fill;
+
+  /// Controls at the handle's end (Hide chat, fold the view).
+  final List<Widget> trailing;
 
   static Widget webview(BuildContext context, LiveViewRequest request) =>
       LiveView(
@@ -83,22 +92,22 @@ class _LiveViewSectionState extends State<LiveViewSection> {
         final covered = cover != null && cover.top.value != null && cover.top.value != route;
         final shown = state.foreground && !covered;
         final room = LiveViewRoom(width: box.maxWidth, frame: state.liveFrame ?? FrameSize.assumed, maxHeight: widget.maxHeight);
+        final fill = widget.fill;
         final height = _drag == null ? room.heightOf(size) : room.clampDrag(_drag!);
         final request = LiveViewRequest(
           address: liveViewUrl(widget.url, widget.viewer),
           workspace: widget.url,
           token: widget.token,
           app: widget.app,
-          size: size,
+          size: fill ? LiveViewSize.large : size,
           onFrameSize: (frame) => StoreScope.read(context).dispatch(LiveViewFrameSized(frame)),
           onLive: (live) {
             if (mounted && live != _live) setState(() => _live = live);
           },
         );
-        return Column(mainAxisSize: MainAxisSize.min, children: [
-          SizedBox(
+        final picture = SizedBox(
             key: const Key('live-view'),
-            height: height,
+            height: fill ? null : height,
             child: shown
                 ? widget.viewBuilder(context, request)
                 : ColoredBox(
@@ -106,19 +115,26 @@ class _LiveViewSectionState extends State<LiveViewSection> {
                     color: t.surface,
                     child: Center(child: Text('live view paused', style: mono(size: 11, color: t.faint))),
                   ),
-          ),
-          LiveViewHandle(
+          );
+        final handle = LiveViewHandle(
             app: widget.app,
             live: _live,
             size: size,
+            resizable: !fill,
+            trailing: widget.trailing,
             onTap: () => StoreScope.read(context).dispatch(const LiveViewStepped()),
             onDragStart: () => setState(() => _drag = height),
             onDragUpdate: (dy) => setState(() => _drag = room.clampDrag((_drag ?? height) + dy)),
             onDragEnd: () => _dragEnd(room),
             onGrow: size == LiveViewSize.large ? null : () => _resize(LiveViewSize.values[size.index + 1]),
             onShrink: size == LiveViewSize.small ? null : () => _resize(LiveViewSize.values[size.index - 1]),
-          ),
-        ]);
+          );
+        // Keep the same parent chain so changing fill does not recreate the platform webview.
+        return Column(
+          mainAxisSize: fill ? MainAxisSize.max : MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [Flexible(flex: fill ? 1 : 0, fit: FlexFit.tight, child: picture), handle],
+        );
       }),
     );
   }

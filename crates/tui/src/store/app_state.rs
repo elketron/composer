@@ -1342,7 +1342,7 @@ mod tests {
     }
 
     #[test]
-    fn workflow_sends_site_set_and_flashes_the_outcome() {
+    fn site_sends_site_set_and_flashes_the_outcome() {
         let (mut state, _) = connected();
         // No session shown yet: nothing to switch.
         assert!(state.reduce(Action::SetSite(Some("3d".into()))).is_empty());

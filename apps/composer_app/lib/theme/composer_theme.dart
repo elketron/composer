@@ -31,7 +31,7 @@ ThemeData composerTheme() {
     appBarTheme: const AppBarTheme(backgroundColor: t.surface, foregroundColor: t.text, elevation: 0, scrolledUnderElevation: 0),
     cardTheme: CardThemeData(color: t.surface, elevation: 0, margin: EdgeInsets.zero, shape: cardShape.copyWith(side: const BorderSide(color: t.border))),
     filledButtonTheme: FilledButtonThemeData(
-      style: FilledButton.styleFrom(backgroundColor: t.accent, foregroundColor: t.bg, shape: shape, textStyle: const TextStyle(fontWeight: FontWeight.w600)),
+      style: FilledButton.styleFrom(backgroundColor: t.accentFill, foregroundColor: t.onAccent, shape: shape, textStyle: const TextStyle(fontWeight: FontWeight.w600)),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(foregroundColor: t.text, side: const BorderSide(color: t.borderStrong), shape: shape),

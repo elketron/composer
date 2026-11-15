@@ -8,6 +8,18 @@
 <link rel="stylesheet" href="../base.css">
 <link rel="stylesheet" href="../gpui.css">
 <style>
+  .s7 { --g-accent: var(--accent); --g-warn: var(--accent); --g-you: var(--you); }
+  /* Proposed picker hierarchy; groups and the footer are not yet implemented in GPUI. */
+  .s7 .gpalette .search { height: 48px; }
+  .s7 .gpalette .search .in { color: var(--g-muted); }
+  .s7 .gpalette .search .grow { flex: 1; }
+  .s7 .gpalette .glabel { padding: 9px 12px 5px; color: var(--g-text); }
+  .s7 .gpalette .item { height: 38px; }
+  .s7 .gpalette .item .kind { width: 72px; color: var(--g-muted); }
+  .s7 .gpalette .item .label { color: var(--g-text); }
+  .s7 .gpalette .item.on .label { color: var(--g-bright); }
+  .s7 .gpalette .item .detail { color: var(--g-muted); }
+  .s7 .gpalette .foot { height: 30px; }
   /* the stage is a web app (CEF), so it keeps the SDK's blue; the shell is amber gpui */
   .s7 .gmv { height: 100%; display: flex; flex-direction: column; background: var(--bg); color: var(--text); }
   .s7 .gmvbar {
@@ -46,7 +58,7 @@
   .s7 .mini .alt { height: 22px; border: 1px solid var(--border-strong); display: flex; align-items: center; justify-content: center; font: 7px var(--font-ui); color: var(--muted); margin-top: 10px; }
   .s7 .mini .fine { margin-top: 26px; text-align: center; font: 6.5px var(--font-ui); color: var(--faint); line-height: 1.9; }
   .s7 .gpin {
-    position: absolute; width: 16px; height: 16px; background: var(--warn); color: var(--bg);
+    position: absolute; width: 16px; height: 16px; background: var(--accent); color: var(--bg);
     display: flex; align-items: center; justify-content: center; font: 700 9px var(--font-mono);
     box-shadow: 0 0 0 2px var(--surface);
   }
@@ -71,7 +83,7 @@
     <div>
       <div class="kicker">composer / next · platform study · screen 07</div>
       <h1>The picker is a gpui panel, not a web modal.</h1>
-      <p class="lede">Every command is one list: workflows, sessions, pages and actions. It floats over the workbench at 70px, 660px wide, with <b>rounded_md</b>, a selected row in <code>#2a2a36</code> and the amber focus edge. The stage behind it is a CEF web app, so it keeps the web SDK's blue/amber state colours.</p>
+      <p class="lede">One keyboard-first picker for sites, apps, pages and commands. The selected row gets a quiet blue edge; type and context stay in separate columns. The grouping and footer shown here are a proposal, not yet in the GPUI picker.</p>
     </div>
     <div class="side">
       <div class="row"><span>surface</span><b>apps/desktop/src/picker.rs</b></div>
@@ -122,7 +134,7 @@
             </div>
             <div class="ginput"><span class="q">›</span> keep it open until I see it<span class="caret"></span></div>
             <div class="gstatus">
-              <span class="normal">NORMAL</span><span>esc enter send</span><span>ctrl-k palette</span>
+              <span class="normal">NORMAL</span><span>esc enter send</span><span>ctrl shift p palette</span>
               <span class="grow"></span><span>site mockups</span><span>#a3f1</span>
             </div>
           </div>
@@ -192,23 +204,24 @@
       </div>
 
       <div class="gpalette">
-        <div class="search"><span class="q">›</span><span class="in">w</span><span class="caret"></span><span class="esc">esc</span></div>
-        <div class="glabel">workflows</div>
-        <div class="item on"><span class="kind">workflow</span><span class="label"><b>3D</b> · blender · mcp granted</span><span class="detail">enter</span></div>
-        <div class="item"><span class="kind">workflow</span><span class="label">coding · worktree</span><span class="detail">enter</span></div>
-        <div class="item"><span class="kind">workflow</span><span class="label">video · storyboard</span><span class="detail">enter</span></div>
-        <div class="glabel">commands</div>
-        <div class="item"><span class="kind">session</span><span class="label">default #a3f1 · composer</span><span class="detail">open</span></div>
-        <div class="item"><span class="kind">page</span><span class="label">site://mockups/login.html</span><span class="detail">open</span></div>
-        <div class="item"><span class="kind">action</span><span class="label">switch workspace…</span><span class="detail">ctrl shift w</span></div>
+        <div class="search"><span class="q">›</span><span class="in">Search sites, apps, pages and commands</span><span class="grow"></span><span class="esc">esc</span></div>
+        <div class="glabel">Sites</div>
+        <div class="item on"><span class="kind">site</span><span class="label"><b>3d</b></span><span class="detail">app blender · mcp blender</span></div>
+        <div class="item"><span class="kind">site</span><span class="label">memory</span><span class="detail">enter site</span></div>
+        <div class="glabel">Open</div>
+        <div class="item"><span class="kind">app</span><span class="label">Tickets</span><span class="detail">orchestration</span></div>
+        <div class="item"><span class="kind">page</span><span class="label">mockups</span><span class="detail">site://mockups</span></div>
+        <div class="glabel">Session &amp; commands</div>
+        <div class="item"><span class="kind">session</span><span class="label">#a3f1 default ◂ shown</span><span class="detail">composer · idle</span></div>
+        <div class="item"><span class="kind">command</span><span class="label">New terminal</span><span class="detail">+</span></div>
         <div class="foot"><span><kbd>↑↓</kbd> move</span><span><kbd>enter</kbd> run</span><span><kbd>esc</kbd> close</span><span class="grow"></span><span>6 results</span></div>
       </div>
     </div>
     </div>
 
     <div class="notes">
-      <div><b>one list</b>Workflows, sessions, pages and actions live in the same picker; the selected row is one flat fill.</div>
-      <div><b>two themes, on purpose</b>The shell's focus is amber; the CEF stage is the web SDK's blue. That line is the implementation boundary.</div>
+      <div><b>one picker</b>Sites, apps, pages and commands share a search. Group labels and the footer are a proposed refinement.</div>
+      <div><b>one quiet accent</b>The dark shell and the CEF stage share a cool blue; warm colour is kept for actual warnings.</div>
       <div><b>keyboard first</b><code>ctrl shift p</code> opens it, arrows move, enter runs, escape closes. No mouse needed.</div>
     </div>
   </figure>

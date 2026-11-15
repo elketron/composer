@@ -1,5 +1,8 @@
 # Workflow state
 
+> Historical proposal: there is no separate workflow category. A site may have an app and state,
+> but neither is required to be a site.
+
 Status: proposal, 2026-11-12; corrected against ICM 2026-11-13. This replaces the generic pipeline/stage/board
 model.
 

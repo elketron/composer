@@ -8,6 +8,18 @@
 <link rel="stylesheet" href="../base.css">
 <link rel="stylesheet" href="../gpui.css">
 <style>
+  /* Dark, cool shell: blue is shared with the TUI; warm colours remain for warnings. */
+  .s6 { --g-accent: var(--accent); --g-warn: var(--accent); --g-you: var(--you); }
+  /* Match the shipped starting width while keeping the stage visible. */
+  .s6 .gchat { width: 640px; }
+  .s6 .gterm .tmsgs { gap: 5px; padding: 7px; }
+  .s6 .gmsg { border-radius: 0; padding: 7px 10px; }
+  .s6 .gmsg p { font-size: 12.5px; line-height: 1.45; }
+  .s6 .gmsg .meta { color: var(--g-muted); font-size: 9.5px; }
+  .s6 .gmsg.sys, .s6 .gmsg.thread { border-radius: 0; }
+  .s6 .gtab.on { box-shadow: inset 0 -2px 0 var(--g-accent); }
+  .s6 .ginput { padding: 7px 10px; }
+  .s6 .gappbar .chip.hot { border-color: var(--border-strong); color: var(--muted); }
   /* stage app: wayai's live viewer, as a CEF pane inside gpui */
   .s6 .gcanvas {
     background:
@@ -23,7 +35,7 @@
   .s6 .g-hud2 b { color: var(--g-accent); font-weight: 400; }
   .s6 .g-thread {
     position: absolute; right: 14px; bottom: 38px; width: 250px;
-    background: var(--surface); border: 1px solid var(--border-strong); border-left: 2px solid var(--warn);
+    background: var(--surface); border: 1px solid var(--border-strong); border-left: 2px solid var(--accent);
     border-radius: 4px; box-shadow: 0 14px 34px var(--g-shadow);
   }
   .s6 .g-thread header {
@@ -40,13 +52,13 @@
   .s6 .g-thread .foot { display: flex; gap: 6px; padding: 5px 9px; border-top: 1px solid var(--g-line); color: var(--g-muted); font: 9px var(--g-font); }
   .s6 .g-thread .foot .kbd { border: 1px solid var(--g-line); border-radius: 3px; padding: 0 4px; }
   .s6 .g-pin {
-    position: absolute; left: 61%; top: 28%; width: 18px; height: 18px; background: var(--warn);
+    position: absolute; left: 61%; top: 28%; width: 18px; height: 18px; background: var(--accent);
     color: var(--bg); display: flex; align-items: center; justify-content: center;
     font: 700 10px var(--g-font); border-radius: 3px; box-shadow: 0 0 0 2px var(--bg);
   }
   .s6 .g-pin::after {
     content: "top bevel"; position: absolute; left: 20px; top: 1px; white-space: nowrap;
-    background: var(--warn); color: var(--bg); font: 9px/16px var(--g-font); padding: 0 5px; border-radius: 2px;
+    background: var(--accent); color: var(--bg); font: 9px/16px var(--g-font); padding: 0 5px; border-radius: 2px;
   }
   .s6 .g-axis { position: absolute; left: 12px; bottom: 36px; width: 46px; height: 42px; }
   .s6 .g-axis svg { width: 100%; height: 100%; }
@@ -58,13 +70,13 @@
     <div>
       <div class="kicker">composer / next · platform study · screen 06</div>
       <h1>GPUI is not a web page. It is two panes and a terminal.</h1>
-      <p class="lede">The desktop shell is the real thing: a workspace stripe, one top bar, the TUI in the left pane, a 4px splitter, and the stage as a CEF web pane. Its own focus accent is amber <b>#e0a040</b>; the terminal keeps the TUI's blue. The chat is full-width bands — yours tinted, the agent's raised — so turns separate without a rule between them.</p>
+      <p class="lede">A calmer, darker workbench: clear full-width message bands, a balanced resizable split, and an active stage tab that is visible at a glance. The shell and TUI share a restrained cool blue; warm colour is reserved for warnings. Sites can bring applications and tools, but are not a separate category.</p>
     </div>
     <div class="side">
       <div class="row"><span>surface</span><b>apps/desktop/src/shell.rs</b></div>
       <div class="row"><span>font</span><b>14 / 18 JetBrains Mono</b></div>
-      <div class="row"><span>accent</span><b>#e0a040 · focus</b></div>
-      <div class="row"><span>splitter</span><b>4px</b></div>
+        <div class="row"><span>accent</span><b>cool blue · focus</b></div>
+        <div class="row"><span>chat</span><b>640px · resizable</b></div>
     </div>
   </header>
 
@@ -133,7 +145,7 @@
             </div>
             <div class="ginput"><span class="q">›</span> write the review reply<span class="caret"></span></div>
             <div class="gstatus">
-              <span class="normal">NORMAL</span><span>esc enter send</span><span>ctrl-k palette</span>
+              <span class="normal">NORMAL</span><span>esc enter send</span><span>ctrl shift p palette</span>
               <span class="grow"></span><span class="wait">1 waiting</span><span>site 3d</span><span>#a3f1</span>
             </div>
           </div>
@@ -206,7 +218,7 @@
     <div class="notes">
       <div><b>one window</b>No server rail or session list in the shell: the session list is inside the TUI pane, where it already lives.</div>
       <div><b>focus follows</b>The pointer's pane takes the keyboard; the stage and the chat do not share one focus ring.</div>
-      <div><b>cheap and banded</b>Flat fills, 1px lines, a 4px splitter, one amber accent. Each turn is a full-width background band; no blur or CSS layout engine.</div>
+      <div><b>room to read</b>Flat message bands and a clear active tab; the resizable split keeps both conversation and stage in view.</div>
     </div>
   </figure>
 

@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Composer — chat hidden · phone</title>
+  <link rel="stylesheet" href="../tokens.css">
+  <link rel="stylesheet" href="../phone-tokens.css">
+  <link rel="stylesheet" href="../phone.css">
+  <script src="../phone-prototype.js" defer></script>
+</head>
+<body class="phone-study phone-focus">
+<main class="phone-shell" aria-label="Composer phone mockup">
+  <div class="p-app" data-chat-hidden="true">
+    <div class="p-status" aria-label="System status preview"><span>14:04</span><span class="p-system-icons" aria-hidden="true"><i class="i i-18 i-wifi"></i><i class="i i-18 i-battery"></i></span></div>
+    <header class="p-header"><a class="p-icon" href="04-phone-inbox.html" aria-label="Back to inbox"><i class="i i-back"></i></a><div class="p-title"><h1>default</h1><div class="p-sub"><i class="p-dot busy"></i><span>needs approval · #a3f1</span></div></div><button class="p-icon" type="button" disabled aria-label="Menu — preview only"><i class="i i-more"></i></button></header>
+    <div class="p-strip" aria-hidden="true"></div>
+    <div class="p-site-row"><a class="p-site-chip" href="07-phone-site.html" aria-label="Change site"><span>3d</span></a><span class="p-project">crashed-ship</span><span class="p-model">opus · claude-code</span></div>
+    <!-- live-slot-start -->
+    <div class="p-live large">
+      <div class="p-live-view" aria-label="Live view of blender, view only">
+        <svg class="p-ship" viewBox="70 160 510 330" role="img" aria-label="Blender: the ship with its top bevel selected">
+          <ellipse class="ground" cx="325" cy="440" rx="250" ry="34"/>
+          <path class="face" d="M121 414 172 346 223 278 274 227 325 192 376 227 427 278 478 346 529 414Z"/>
+          <path class="edge" d="M325 192V414M172 346H478M223 278H427"/>
+          <path class="selection" d="M172 346 223 278 274 227H376L427 278 478 346M223 278H427"/>
+          <circle class="vertex" cx="172" cy="346" r="4"/><circle class="vertex" cx="223" cy="278" r="4"/><circle class="vertex" cx="274" cy="227" r="4"/><circle class="vertex" cx="376" cy="227" r="4"/><circle class="vertex" cx="427" cy="278" r="4"/><circle class="vertex" cx="478" cy="346" r="4"/>
+        </svg>
+      </div>
+      <div class="p-handle"><a class="p-handle-main" href="05-phone-chat.html" aria-label="Collapse live view"><span class="p-live-name"><i class="p-live-dot"></i>blender · live</span><i class="p-grip"></i><span class="p-view-only">view only</span></a><button class="p-chat-toggle" type="button" aria-expanded="true" data-chat-toggle>Hide chat</button><button class="p-icon p-live-collapse" type="button" aria-label="Hide live view" data-live-collapse><i class="i i-20 i-right"></i></button></div>
+      <button class="p-live-expand" type="button" aria-label="Show live view" data-live-expand><i class="p-live-dot"></i><span>blender · live</span><i class="i i-18 i-left"></i></button>
+    </div>
+    <!-- live-slot-end -->
+    <div class="p-content p-transcript">
+      <article class="p-message"><div class="p-approval"><div class="p-approval-body"><div class="p-approval-title">APPROVAL · #a3f1</div><div class="p-approval-q">Run recipe? <span class="mono">3d › export ship.glb</span></div><div class="p-cmd">blender --background ship.blend --python export.py -- models/ship.glb</div><div class="p-note">Once approved, this recipe runs without asking until it changes.</div></div><div class="p-approval-actions"><span class="p-allow" aria-disabled="true" title="Visual preview only">approve</span><span class="p-deny" aria-disabled="true" title="Visual preview only">deny</span></div></div></article>
+      <article class="p-message"><p>Bevel is in: top edges only, 0.03 with three segments.</p><p>Want me to export a fresh ship.glb for the site?</p></article>
+      <article class="p-message"><div class="p-steps"><span class="mono">▸</span><span><strong>2 steps</strong> · read 1 page, blender execute blender code</span></div></article>
+      <article class="p-message"><p>On it — top edges only; the base stays sharp.</p></article>
+      <article class="p-message p-you-row"><div class="p-you">Bevel the top edge: 0.03, three segments.<br>Keep the bottom sharp — it sits on the grid.</div></article>
+      <article class="p-message"><p>0014 is ready to merge; the ship bevel is the only open job.</p></article>
+      <article class="p-message p-you-row"><div class="p-you">What's ready?</div></article>
+    </div>
+    <section class="p-composer" aria-label="Message composer preview"><span class="p-square" aria-hidden="true"><i class="i i-18 i-attach"></i></span><span class="p-field">message the agent</span><span class="p-square p-send" aria-hidden="true"><i class="i i-18 i-send"></i></span></section>
+    <div class="p-gesture" aria-hidden="true"></div>
+  </div>
+  <!-- sheet-slot -->
+</main>
+</body>
+</html>

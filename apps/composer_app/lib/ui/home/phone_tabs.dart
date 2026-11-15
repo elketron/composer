@@ -5,7 +5,7 @@ import '../../state/types.dart';
 import '../../theme/tokens.dart' as t;
 import '../store_scope.dart';
 
-/// The bottom bar: inbox · workflows · pages · server. Icons over lowercase labels, the active tab
+/// The bottom bar: inbox · sites · pages · server. Icons over lowercase labels, the active tab
 /// in the accent colour under a 2px line; the inbox label carries the count of what needs you.
 /// Square, edge to edge.
 class PhoneTabs extends StatelessWidget {
@@ -49,7 +49,7 @@ class PhoneTabs extends StatelessWidget {
           height: 56,
           child: Row(children: [
             item(PhoneTab.inbox, Icons.inbox_outlined, needsYou > 0 ? 'inbox · $needsYou' : 'inbox'),
-            item(PhoneTab.workflows, Icons.grid_view_outlined, 'workflows'),
+            item(PhoneTab.sites, Icons.grid_view_outlined, 'sites'),
             item(PhoneTab.pages, Icons.description_outlined, 'pages'),
             item(PhoneTab.server, Icons.dns_outlined, 'server'),
           ]),

@@ -5,13 +5,14 @@ import '../../state/server_status.dart';
 import '../../theme/composer_theme.dart';
 import '../../theme/tokens.dart' as t;
 import '../chat/navigation.dart';
+import '../pages/page_navigation.dart';
 import 'activity_dot.dart';
 import 'new_chat_sheet.dart';
 
-/// One workflow: its name and title, its application and MCP servers, how many sessions are in it
+/// One site: its name and title, its application and MCP servers, how many sessions are in it
 /// now (listed under it, tap to open), and an action to start a chat in it.
-class WorkflowTile extends StatelessWidget {
-  const WorkflowTile({super.key, required this.url, required this.status, required this.site});
+class SiteTile extends StatelessWidget {
+  const SiteTile({super.key, required this.url, required this.status, required this.site});
 
   final String url;
   final ServerStatus status;
@@ -28,7 +29,7 @@ class WorkflowTile extends StatelessWidget {
           ]),
         );
     return Container(
-      key: Key('workflow-${site.name}'),
+      key: Key('site-${site.name}'),
       decoration: BoxDecoration(color: t.surface, border: Border.all(color: t.border), borderRadius: BorderRadius.circular(t.radiusCard)),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Padding(
@@ -45,13 +46,20 @@ class WorkflowTile extends StatelessWidget {
                 fact('in it', sessions.isEmpty ? 'no sessions' : '${sessions.length} session${sessions.length == 1 ? '' : 's'}'),
               ]),
             ),
+            if (site.appBuilt)
+              IconButton(
+                key: Key('site-open-app-${site.name}'),
+                tooltip: 'Open app',
+                onPressed: () => openApp(context, url, site.name),
+                icon: const Icon(Icons.open_in_new, size: 20, color: t.accent),
+              ),
             Tooltip(
               message: 'New chat in ${site.name}',
               child: Material(
                 color: t.raised,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(t.radiusControl), side: const BorderSide(color: t.borderStrong)),
                 child: InkWell(
-                  key: Key('workflow-new-${site.name}'),
+                  key: Key('site-new-${site.name}'),
                   borderRadius: BorderRadius.circular(t.radiusControl),
                   onTap: () => showNewChat(context, url, site: site.name),
                   child: const SizedBox(width: 44, height: 44, child: Icon(Icons.add, size: 20, color: t.accent)),
@@ -62,7 +70,7 @@ class WorkflowTile extends StatelessWidget {
         ),
         for (final s in sessions)
           InkWell(
-            key: Key('workflow-session-${s.id}'),
+            key: Key('site-session-${s.id}'),
             onTap: () => openSession(context, url, s.id),
             child: Container(
               constraints: const BoxConstraints(minHeight: 44),

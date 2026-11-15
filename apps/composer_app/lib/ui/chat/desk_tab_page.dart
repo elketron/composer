@@ -5,7 +5,7 @@ import '../../state/actions.dart';
 import '../../state/desk_view.dart';
 import '../../state/frame_size.dart';
 import '../../state/live_view_size.dart';
-import '../../state/workflows.dart';
+import '../../state/sites.dart';
 import '../../state/workspace.dart';
 import '../../theme/composer_theme.dart';
 import '../../theme/tokens.dart' as t;

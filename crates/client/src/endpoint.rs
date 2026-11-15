@@ -108,6 +108,28 @@ impl Endpoint {
             .map_err(|e| e.to_string())?;
         json(response).await
     }
+
+    /// Uploads a file to a session's attachments; what a message then refers to.
+    pub async fn upload(
+        &self,
+        session: &str,
+        name: String,
+        bytes: Vec<u8>,
+    ) -> Result<composer_protocol::Attachment, String> {
+        let part = reqwest::multipart::Part::bytes(bytes).file_name(name);
+        let form = reqwest::multipart::Form::new().part("file", part);
+        let response = reqwest::Client::new()
+            .post(self.url(&format!("/api/sessions/{session}/attachments")))
+            .bearer_auth(&self.token)
+            .multipart(form)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+        let mut stored: Vec<composer_protocol::Attachment> = json(response).await?;
+        stored
+            .pop()
+            .ok_or_else(|| "the server stored nothing".into())
+    }
 }
 
 async fn json<T: serde::de::DeserializeOwned>(response: reqwest::Response) -> Result<T, String> {

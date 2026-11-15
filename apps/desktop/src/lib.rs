@@ -8,21 +8,30 @@ mod browser_frame;
 mod browser_pump;
 mod browser_tabs;
 mod cef_runtime;
+mod chat_pane;
 mod chat_width;
 mod desktop;
 mod dom_keys;
+mod draft;
 mod grid;
+mod home_lists;
+mod home_view;
 mod key_map;
 mod link_state;
 mod matcher;
 mod notice;
 mod pick_lists;
 mod picker;
+mod project_binding;
+mod prose;
 mod shell;
 mod stage_tabs;
 mod term_config;
 mod term_pane;
 mod terminal_link;
+mod theme;
+mod uploads;
+mod user_review;
 mod view_urls;
 mod web_pane;
 mod workspaces;
@@ -35,15 +44,18 @@ use gpui::{App, KeyBinding};
 
 use desktop::Desktop;
 use shell::{
-    FocusChat, FocusStage, NextTab, Palette, PickSession, PickWorkspace, PrevTab, Workspace1,
+    FocusChat, FocusStage, Home, NextTab, Palette, PickSession, PickWorkspace, PrevTab, Workspace1,
     Workspace2, Workspace3, Workspace4, Workspace5, Workspace6, Workspace7, Workspace8, Workspace9,
 };
 
-const FONTS: [&[u8]; 4] = [
+const FONTS: [&[u8]; 6] = [
     include_bytes!("../assets/fonts/JetBrainsMonoNerdFontMono-Regular.ttf"),
     include_bytes!("../assets/fonts/JetBrainsMonoNerdFontMono-Bold.ttf"),
     include_bytes!("../assets/fonts/JetBrainsMonoNerdFontMono-Italic.ttf"),
     include_bytes!("../assets/fonts/JetBrainsMonoNerdFontMono-BoldItalic.ttf"),
+    // The chat's prose.
+    include_bytes!("../assets/fonts/Inter-Regular.ttf"),
+    include_bytes!("../assets/fonts/Inter-SemiBold.ttf"),
 ];
 
 fn home() -> PathBuf {
@@ -120,6 +132,7 @@ pub fn run(sandbox_info: *mut u8) -> i32 {
             KeyBinding::new("ctrl-shift-p", Palette, None),
             KeyBinding::new("ctrl-shift-w", PickWorkspace, None),
             KeyBinding::new("ctrl-shift-s", PickSession, None),
+            KeyBinding::new("ctrl-shift-h", Home, None),
             KeyBinding::new("ctrl-alt-1", Workspace1, None),
             KeyBinding::new("ctrl-alt-2", Workspace2, None),
             KeyBinding::new("ctrl-alt-3", Workspace3, None),

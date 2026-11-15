@@ -1,124 +1,96 @@
-# composer next — platform studies for the shared view
+# Composer — Noema desktop and phone studies
 
-Status: proposal, 2026-11-11. Static HTML + CSS; no build, no framework, no
-remote resources.
+Proposal · 2026-11-14 · **12 screens** (6 desktop, 6 phone) · mockups only, not shipped UI.
 
-This surface has two layers:
+This surface starts again from the user's three Composer Desktop Refresh
+screenshots and supplied Noema theme. The previous twelve-screen study,
+including work in progress, is preserved in
+[`../next-archive-2026-11-14/`](../next-archive-2026-11-14/README.md).
+It is design history, not another current direction.
 
-- **06–09, the platform studies** — the implementation direction. The desktop
-  shell is gpui (`apps/desktop`), so its screens use amber focus, JetBrains
-  Mono, a two-pane workbench and a native overlay. The phone is Flutter
-  (`apps/composer_app`), so its screens use Inter, 44px targets, 56px bars and
-  bottom sheets.
-- **01–05, the single-chrome study** — the first pass, which put one dense web
-  chrome on every client. Kept as a reference for the shared-view ideas, not as
-  the desktop or phone layout.
+## Inventory
 
-Both layers use the same palette (`tokens.css`, copied from
-`templates/sdk/theme.css` where the web SDK uses it) and the same model in
-[workflows.md](../../workflows.md): one agent, one workflow at a time, the chat
-beside the thing being worked on, and comments anchored to the thing itself.
+| Screen | Shows | Content contract |
+|---|---|---|
+| [01 — Workspace](screens/01-workspace.html) | Native conversation, tools, thread, approval, composer and live stage | [CONTRACT.md](CONTRACT.md) |
+| [02 — Sessions](screens/02-sessions.html) | Temporary session switcher above the left transcript | [CONTRACT.md](CONTRACT.md#session-switcher) |
+| [03 — Commands](screens/03-commands.html) | Grouped command palette in the same position | [CONTRACT.md](CONTRACT.md#command-palette) |
+| [04 — Phone inbox](screens/04-phone-inbox.html) | The app's inbox: approval tile and unread session under Needs you, recent cards, New chat | [PHONE-CONTRACT.md](PHONE-CONTRACT.md#04--inbox) |
+| [05 — Phone conversation](screens/05-phone-chat.html) | The app's chat page: site row, small live view and handle, recipe approval, newest first | [PHONE-CONTRACT.md](PHONE-CONTRACT.md#05--conversation) |
+| [06 — Phone live view](screens/06-phone-live.html) | The live view at its large size; Hide chat (proposal) | [PHONE-CONTRACT.md](PHONE-CONTRACT.md#06--larger-live-view) |
+| [07 — Phone site sheet](screens/07-phone-site.html) | The app's site sheet over the chat | [PHONE-CONTRACT.md](PHONE-CONTRACT.md#07--site-sheet) |
+| [08 — Phone landscape](screens/08-phone-landscape.html) | Proposal: chat left with a one-row header, live view right at full height, fold to a rail | [PHONE-CONTRACT.md](PHONE-CONTRACT.md#08--landscape-proposal) |
+| [09 — Phone chat hidden](screens/09-phone-focus.html) | Proposal: the live view takes the screen; Show chat restores it | [PHONE-CONTRACT.md](PHONE-CONTRACT.md#09--hide-chat-proposal) |
+| [10 — Review](screens/10-desktop-review.html) | The same two panes: Hunk on the stage, notes and verdict in the chat | [CONTRACT.md](CONTRACT.md#review) |
+| [11 — Home](screens/11-desktop-home.html) | Workspace screen outside the session: sessions, needing you first, with a preview | [CONTRACT.md](CONTRACT.md#workspace-home) |
+| [12 — Projects](screens/12-desktop-projects.html) | Projects, their tickets' four stages, sessions and pages | [CONTRACT.md](CONTRACT.md#workspace-home) |
 
-The older boards (`docs/mockups/app.html`, `desktop.html`, `apps.html`,
-`tui.html`, `pipelines.html`) remain as design history.
+Start at [index.html](index.html). Screen pages are edge-to-edge app mockups;
+the index carries the design commentary instead of adding chrome to the app.
 
-## Platform studies — the implementation direction
+## Files and rules
 
-| # | screen | shows | source |
-|---|---|---|---|
-| 06 | [Desktop — the GPUI workbench](screens/06-desktop-gpui.html) | the TUI in the left pane, the stage on the right, the 4px splitter, amber focus | `apps/desktop/src/shell.rs`, `term_pane.rs` |
-| 07 | [Desktop — the GPUI picker](screens/07-desktop-gpui-palette.html) | gpui's own command/picker overlay over the mockups view | `apps/desktop/src/picker.rs` |
-| 08 | [Phone — the touch-first session](screens/08-phone-touch.html) | Inter 15, 44px controls, 52px workflow row, live-view handle, approval in place | `apps/composer_app/lib/theme`, `ui/chat` |
-| 09 | [Phone — the workflow sheet](screens/09-phone-workflow-sheet.html) | a native bottom sheet with 56px rows and the consequence of the switch | `ui/chat/workflow_sheet.dart`, `site.set` |
+- `tokens.css`: the supplied Noema palette, verbatim values. No coupling to
+  the web SDK theme, no Tailwind/build step, no remote resources.
+- `base.css`: one shared desktop shell and its components.
+- `phone-tokens.css`: the phone app's colour roles (`tokens.dart`), filled with Noema values.
+- `phone.css`: the phone as it ships, each block following one Flutter widget; landscape is the proposal.
+- `screens/01-workspace.html`: template. Session states 01–03 share one `.workbench`
+  shell; only overlay state differs. 10 keeps the same two panes with another session;
+  11–12 are workspace screens outside the session (`.home`), with the same title and status bars. `screens/05-phone-chat.html`
+  is the phone conversation template; live and sheet states retain its shell.
+  Screen-only CSS belongs in a trailing
+  style block scoped to the screen's root class.
+- `CONTRACT.md`: canonical scenario, copy, layout and honest implementation gaps.
+- `PHONE-CONTRACT.md`: what each phone screen shows and which widget it follows.
+- `DECISIONS.md`: dated decisions. These are proposals until visually approved.
+- `assets/`: local JetBrains Mono and Inter fonts/licenses, and the three original references.
+- `prototype.js`: navigation, local filtering and keyboard focus only. No server
+  calls; actions that would change real data are explicitly disabled.
+- `phone-prototype.js`: Hide/Show chat, the landscape rail, and sheet focus/dismissal;
+  never sends messages, approvals or site changes.
+- `inventory.js`: scales live screen previews on the inventory; original reference
+  images are linked separately so they are never confused with the mockups.
+- `qa/`: static consistency/link checks and Chromium rendering/interaction checks.
 
-## Single-chrome study — kept as a reference
+On desktop, keep the phone's small corners (5/4/3/2px; bars and the stage square), hairlines, restrained indigo and low-contrast
+surfaces: no message bubbles or permanent session sidebar. The phone is drawn
+from the Flutter app as it ships, with only its colours changed to Noema: Inter prose, mono names, its
+cards, tinted user bubbles, 2–5px corners and newest-first chat. Change it only where a
+screen is marked as a proposal (landscape, Hide chat). No gradients or extra decorative navigation. On desktop the stage is the largest region. On
+phone the view-only live section sits above its handle and steps between sizes.
+In landscape keep chat left and live view right, as on desktop.
+Keep 44px touch targets; no desktop modal key hints on phones. Site capabilities
+replace the reference's separate workflow label.
 
-| # | screen | shows | source |
-|---|---|---|---|
-| 01 | [Desktop — the live shared view](screens/01-desktop-live.html) | a workflow running Blender in wayai, chat beside it, drive and a thread pin | workflows.md, desktop.md |
-| 02 | [Desktop — a view type with threads](screens/02-desktop-mockups.html) | the mockups view, two pins, a dragged region, the thread panel | workflows.md (phase 4), `templates/sdk/Threads.svelte` |
-| 03 | [Desktop — the project hub](screens/03-desktop-project.html) | sites, works, the worktree preview, agent/app parity | project-hub.md |
-| 04 | [Phone — check in, approve, watch](screens/04-phone-session.html) | one session, view-only live view, newest-first chat, approval in place | workflows.md (phase 3), plan-app.md |
-| 05 | [TUI — the chat and the hunk beside it](screens/05-tui-workflow.html) | workflow switch, the artifact, notes on a hunk, square chrome | tui-mode.md, plan.md |
+To add a screen: extend the contract, copy the workspace shell, reuse the same
+scenario, add an inventory entry here and in `index.html`, update the screen
+count, record decisions, then run both checks and inspect the screenshots.
 
-The [index](index.html) is the board: platform studies first, the single-chrome
-pass after, and the token story underneath.
-
-## The two grammars
-
-`tokens.css` is the palette for the web SDK and the single-chrome study. The
-platform studies add their own contracts beside it:
-
-- **`gpui.css`** — from the actual shell: `BG #0c0c0f`, `LINE #25252e`,
-  `TEXT #d7d7dd`, `MUTED #85858f`, `ACTIVE_BG #1c1c24`, focus accent
-  `#e0a040`; JetBrains Mono 14/18 in the terminal, 12px chrome, `rounded_md`
-  (6px) for the picker. Two panes, one 4px splitter, a CEF stage. No web layout
-  engine, no blur, no CSS-only effects.
-- **`phone.css`** — from Flutter: Inter for the UI and JetBrains Mono for ids
-  and URLs; 15px body, 11–12px metadata, 44px touch targets, 56px app bar and
-  bottom bar, 52px workflow row, 44px live-view handle, 4px controls and 5px
-  cards, native bottom sheets.
-
-- The live view is the application itself. On a paired device it is view-only;
-  `drive: you` on the desktop is the local token.
-- A thread is one gesture: pin a card, drag a region, note a hunk. The page is
-  stored beside the work, so the agent reads it with `open` / `search`.
-
-## View it
-
-```sh
-python3 -m http.server 8765 --bind 127.0.0.1 --directory docs/mockups/next
-# http://127.0.0.1:8765/
-```
-
-Each screen is also self-contained: open its file directly. Below 1360 px a
-small script scales the whole frame to the viewport, so the composition is
-never clipped; the page stays readable and the `notes` keep their size.
-
-## Add a screen
-
-1. Copy the closest screen; keep the masthead, `.screen`, `.fit` wrapper, the
-   platform frame, `.notes` and `.docfoot` structure.
-2. Put the screen's CSS in its own trailing `<style>` under a `.sN` root class.
-   Do not edit `base.css`, `gpui.css` or `phone.css` for one screen.
-3. Content comes from the contract the inventory names, not invented copy.
-   Ids, times and counts must agree with the sibling screens.
-4. Link it from `index.html`, add a row above, and run the checks.
-5. If the screen settles a decision the contract did not say, write it into the
-   contract. Until then, the mockup runs ahead of shipped code.
-
-## Check it
+## Preview and verify
 
 ```sh
+python3 -m http.server 8766 --bind 127.0.0.1 --directory docs
+# http://127.0.0.1:8766/mockups/next/
 python3 docs/mockups/next/qa/check.py
+PLAYWRIGHT_MODULE=/usr/lib/node_modules/playwright/index.js CHROME=/usr/bin/chromium node docs/mockups/next/qa/render.mjs
 ```
 
-It checks the shared shell, palette-only screen CSS, local links, that the
-colour and radius values in `tokens.css` still match `templates/sdk/theme.css`,
-and that the index links every screen. The render pass is the other half:
+Render sizes: 2000×1246 (reference), 1440×1000 and 820×900 (compact desktop,
+not a phone layout). Screenshots go to `/tmp/opencode/composer-next/`.
+Phone sizes: 390×844, 360×740, and 820×900 (centered preview).
+Landscape phone sizes: 844×390, 740×360, and 932×430. The landscape study
+also opens as a centered wide canvas on desktop; tap Collapse to compare its
+full-width conversation state.
+Open them and check the composition; passing automated checks is not approval.
+Serve the `docs/` parent so links to the archived study and desktop contract also work.
 
-```sh
-PLAYWRIGHT_MODULE=/usr/lib/node_modules/playwright/index.js \
-CHROME=/usr/bin/chromium \
-node docs/mockups/next/qa/render.mjs
-```
-
-It screenshots every screen at 1440, 1100 and 820 into
-`/tmp/composer-next/`, and fails on horizontal overflow or a frame that did not
-fit. Open the images and look: a check can pass while a screen is sparse, ugly
-or off-register with its siblings.
-
-## Decisions recorded here (2026-11-11)
-
-- The desktop shell is **gpui**, not a web app: two panes, the real TUI on the
-  left, a CEF stage on the right, the shell's own amber focus accent. Screens
-  06–07 are the implementation direction.
-- The phone is **Flutter**: Inter 15px, 44px targets, 56px bars, 5px cards,
-  bottom sheets. Screen 08–09 are the implementation direction.
-- The single-chrome web shell in 01–05 is a reference, not the desktop or phone
-  layout. It stays because the shared-view ideas (workflow chip, thread pins,
-  project hub) are still the model.
-- The shared view is the **stage**: a real application, a view type, or a diff,
-  with the chat beside it.
-- Threads are the one gesture across a mockup, a live view and a hunk. The
-  anchor is a path; the thread is a page beside the work.
+The desktop screen buttons and Escape navigate between mockup states. The switcher and
+palette can be filtered and traversed with the arrow keys. This is not a working
+Composer client. Approval, Drive, attachments and send are visual states only.
+On phone, open default from the inbox, expand/collapse its live view, and tap the
+site row to open the sheet. Close or Escape dismisses it; keyboard focus stays
+inside the sheet. Production actions remain disabled.
+The live viewer also offers Hide chat / Show chat in portrait and landscape.
+Hiding chat preserves the conversation and restores its scroll position; it is
+not leaving the session. The editable draft itself is outside this static prototype.

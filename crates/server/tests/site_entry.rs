@@ -409,7 +409,7 @@ fn desk_events(
 }
 
 #[tokio::test]
-async fn entering_a_workflow_with_a_running_application_opens_the_live_view() {
+async fn entering_a_site_with_a_running_application_opens_the_live_view() {
     use composer_protocol::{DeskBy, DeskTab};
     if !has_python() {
         return;

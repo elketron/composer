@@ -1,4 +1,4 @@
-// Workflows, the live view's rules and size, site.set, and the Inbox count: all pure.
+// Sites, the live view's rules and size, site.set, and the Inbox count: all pure.
 
 import 'package:composer_app/state/actions.dart';
 import 'package:composer_app/state/app_state.dart';
@@ -12,7 +12,7 @@ import 'package:composer_app/state/live_view_size.dart';
 import 'package:composer_app/state/reduce.dart';
 import 'package:composer_app/state/server_entry.dart';
 import 'package:composer_app/state/server_status.dart';
-import 'package:composer_app/state/workflows.dart';
+import 'package:composer_app/state/sites.dart';
 import 'package:composer_protocol/composer_protocol.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -32,24 +32,16 @@ ServerMessageApprovalRequest approval(String request, String session) =>
 AppState loaded() => reduce(AppState.initial, const ServersLoaded([home])).$1;
 
 void main() {
-  group('which sites are workflows', () {
-    test('an application or MCP servers make a workflow; nothing else does', () {
-      expect(isWorkflow(site('3d', app: 'blender')), isTrue);
-      expect(isWorkflow(site('docs', mcp: ['search'])), isTrue);
-      expect(isWorkflow(site('both', app: 'blender', mcp: ['x'])), isTrue);
-      expect(isWorkflow(site('plain')), isFalse);
-      expect(isWorkflow(site('empty-app', app: '')), isFalse);
-    });
-
+  group('sites', () {
     test('SiteSummary JSON from /api/sites: app and mcp may be absent', () {
       final with_ = SiteSummary.fromJson({'name': '3d', 'title': '3D', 'has_justfile': false, 'has_ui': false, 'app': 'blender', 'mcp': ['a', 'b']});
       final without = SiteSummary.fromJson({'name': 'p', 'title': 'P', 'has_justfile': false, 'has_ui': false});
-      expect(workflowsOf([with_, without]).map((s) => s.name), ['3d']);
+      expect([with_, without].map((s) => s.name), ['3d', 'p']);
       expect(without.mcp, isEmpty);
       expect(without.app, isNull);
     });
 
-    test('the status lists the workflows from the loaded sites, and counts sessions in each', () {
+    test('the status lists the sites from the loaded sites, and counts sessions in each', () {
       var s = loaded();
       s = reduce(s, SitesLoaded(home.url, [site('3d', app: 'blender'), site('plain'), site('docs', mcp: ['x'])])).$1;
       s = reduce(s, ServerEvent(home.url, ServerMessageSessionUpdated(session: session('1', site: '3d')))).$1;
@@ -57,20 +49,20 @@ void main() {
       s = reduce(s, ServerEvent(home.url, ServerMessageSessionUpdated(session: session('3')))).$1;
       s = reduce(s, ServerEvent(home.url, ServerMessageSessionUpdated(session: session('4', site: '3d', parent: '1')))).$1;
       final status = s.statusOf(home.url);
-      expect(status.workflows.map((w) => w.name), ['3d', 'docs']);
+      expect(status.sites.map((s) => s.name), ['3d', 'plain', 'docs']);
       expect(status.sessionsIn('3d').map((x) => x.id).toSet(), {'1', '2'}, reason: 'workers count with their orchestrator');
       expect(status.sessionsIn('docs'), isEmpty);
     });
   });
 
-  group('the live view is shown only for a workflow with an application on a server with a viewer', () {
+  group('the live view is shown only for a site with an application on a server with a viewer', () {
     final blender = site('3d', app: 'blender');
     test('all three conditions', () {
       expect(liveViewApp(info: info(viewer: '/view'), site: blender), 'blender');
       expect(liveViewApp(info: info(), site: blender), isNull, reason: 'no viewer on this server');
       expect(liveViewApp(info: info(viewer: ''), site: blender), isNull);
       expect(liveViewApp(info: null, site: blender), isNull);
-      expect(liveViewApp(info: info(viewer: '/view'), site: null), isNull, reason: 'no workflow');
+      expect(liveViewApp(info: info(viewer: '/view'), site: null), isNull, reason: 'no site');
       expect(liveViewApp(info: info(viewer: '/view'), site: site('docs', mcp: ['x'])), isNull, reason: 'MCP only: no application to show');
     });
 
@@ -101,7 +93,7 @@ void main() {
       expect((command.session, command.site), ('a', '3d'));
     });
 
-    test('null leaves the workflow', () {
+    test('null leaves the site', () {
       var s = reduce(loaded(), SessionOpened(home.url, 'a')).$1;
       final command = (reduce(s, SiteChosen(home.url, null)).$2.single as SendCommand).command as ClientCommandSiteSet;
       expect(command.site, isNull);
@@ -135,7 +127,7 @@ void main() {
       expect(s.statusOf(home.url).session('a')!.site, isNull);
     });
 
-    test('a new chat in a workflow carries the site to the effect', () {
+    test('a new chat in a site carries the site to the effect', () {
       final create = reduce(loaded(), NewSessionRequested(home.url, project: 'game', site: '3d')).$2.single as CreateSession;
       expect((create.agent, create.project, create.site), ('default', 'game', '3d'));
       expect((reduce(loaded(), NewSessionRequested(home.url)).$2.single as CreateSession).site, isNull);
@@ -277,7 +269,7 @@ void main() {
     });
   });
 
-  test('ServerStatus keeps the default of no workflows', () {
-    expect(ServerStatus.initial.workflows, isEmpty);
+  test('ServerStatus keeps the default of no sites', () {
+    expect(ServerStatus.initial.sites, isEmpty);
   });
 }

@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Composer — switch session · Noema study</title>
+  <link rel="stylesheet" href="../tokens.css">
+  <link rel="stylesheet" href="../base.css">
+  <script src="../prototype.js" defer></script>
+</head>
+<body class="screen-sessions">
+<main class="workbench" aria-label="Composer desktop mockup">
+  <header class="titlebar">
+    <span class="window-controls" aria-hidden="true"><i></i><i></i><i></i></span>
+    <span class="violet">•</span><a class="crumb" href="11-desktop-home.html" title="Workspace home: sessions and projects"><strong>demo</strong></a><span class="faint">/</span><span>default</span><span class="session-id faint">#a3f1</span>
+    <span class="connection"><i class="dot green"></i> connected <span class="following">· following agent</span></span>
+    <span class="grow"></span>
+    <a class="button" href="02-sessions.html">Sessions <kbd>Ctrl ⇧ S</kbd></a>
+    <a class="button" href="03-commands.html">Commands <kbd>Ctrl ⇧ P</kbd></a>
+  </header>
+  <div class="workspace">
+    <section class="chat" aria-label="Conversation">
+      <header class="session-head">
+        <div class="session-title"><strong>default</strong><span class="faint">#a3f1</span><span class="grow"></span><span class="faint">slots 1/2</span><span class="dim">···</span></div>
+        <div class="context"><span>site <b>3d ⌄</b></span><span>project <b>crashed-ship ⌄</b></span><span>mcp <b>blender</b></span></div>
+      </header>
+      <div class="transcript">
+        <div class="event"><span>✦ entered 3d · blender already running · drive: you</span></div>
+        <article class="message you"><header class="speaker">you <time>13:56</time></header><p>What's ready?</p></article>
+        <article class="message"><header class="speaker">default <time>13:56</time></header><p>0014 is ready to merge; the ship bevel is the only open thread.</p></article>
+        <article class="message you"><header class="speaker">you <time>14:02</time></header><p>Bevel the top edge: 0.03, three segments.<br>Keep the bottom sharp — it sits on the grid.</p></article>
+        <article class="message">
+          <header class="speaker">default <time>14:02</time></header>
+          <p>On it — top edges only; the base stays sharp.</p>
+          <div class="tools" aria-label="Two completed tool calls">
+            <div class="tool"><span class="green">✓</span><span class="tool-name">open</span><span class="grow truncate faint">site://3d/crashed-ship/models/ship.glb</span><span class="faint">0.2s ›</span></div>
+            <div class="tool"><span class="green">✓</span><span class="grow truncate"><span class="tool-name">blender__execute_blender_code</span> <span class="faint">bevel(0.03, 3)</span></span><span class="faint">2.1s ›</span></div>
+          </div>
+        </article>
+        <article class="message continuation">
+          <p>Bevel is in. I left a thread on the top edge.</p>
+          <div class="thread"><div class="thread-title"><span class="yellow">◆ 1 thread</span><span class="dim">crashed-ship / top bevel</span></div><div class="dim"><span class="green">you:</span> three segments reads softer from the default camera</div></div>
+        </article>
+        <article class="message continuation">
+          <p>Want me to export a fresh ship.glb for the site?</p>
+          <div class="approval"><span class="violet">⚑ approve write</span><span class="grow truncate faint">site://3d/crashed-ship/models/ship.glb · 1 file</span><button disabled title="Visual preview only">Deny</button><button class="allow" disabled title="Visual preview only">Allow</button></div>
+        </article>
+      </div>
+      <section class="composer" aria-label="Message composer preview">
+        <div class="mode-line"><strong>NORMAL</strong><span><kbd>i</kbd> insert</span><span>·</span><span><kbd>o</kbd> new line</span><span>·</span><span><kbd>Enter</kbd> send</span></div>
+        <div class="placeholder">Press i to write the review reply</div>
+        <div class="composer-actions"><button disabled title="Visual preview only">＋ Attach</button><button disabled title="Visual preview only">♧ Context</button><span class="context-tag">site://3d</span><span class="grow"></span><button disabled title="Visual preview only">Send ↑</button></div>
+      </section>
+      <!-- overlay-slot -->
+      <div class="chat-scrim" aria-hidden="true"></div>
+      <section class="overlay" role="dialog" aria-modal="false" aria-labelledby="overlay-title">
+        <header class="overlay-head"><span id="overlay-title">Switch session</span><a href="01-workspace.html" aria-label="Close session switcher"><kbd>esc</kbd></a></header>
+        <label class="search"><span aria-hidden="true">⌕</span><input type="search" placeholder="Find a session" aria-label="Find a session" role="combobox" aria-controls="session-options" aria-expanded="true" autocomplete="off"></label>
+        <div class="options" id="session-options" role="listbox" aria-label="Sessions">
+          <div class="option selected" id="session-current" role="option" aria-selected="true" data-href="01-workspace.html"><i class="dot violet"></i><div class="grow"><div class="option-line">default <span class="faint">#a3f1</span><span class="violet">· shown</span></div><div class="preview">Bevel is in. I left a thread on the top edge.</div></div><span class="location">3d/crashed-ship</span></div>
+          <div class="option" id="session-review" role="option" aria-selected="false" data-href="10-desktop-review.html"><i class="dot reviewer"></i><div class="grow"><div class="option-line">review-0014 <span class="faint">#9c02</span><span class="yellow">! waiting</span></div><div class="preview">4 files, 2 hunks need a reply.</div></div><span class="location">coding/composer</span></div>
+          <div class="option" id="session-plan" role="option" aria-selected="false" aria-disabled="true" title="Fixture session — preview only"><i class="dot planner"></i><div class="grow"><div class="option-line">plan-phase-8 <span class="faint">#71be</span></div><div class="preview">Drafted tui-mode.md, waiting on you.</div></div><span class="location">coding/composer</span></div>
+          <div class="option" id="session-textures" role="option" aria-selected="false" aria-disabled="true" title="Fixture session — preview only"><i class="dot yellow"></i><div class="grow"><div class="option-line">ship-textures <span class="faint">#e4d9</span></div><div class="preview">Baked 3 maps · roughness looks off.</div></div><span class="location">3d/crashed-ship</span></div>
+          <p class="empty" hidden>No matching sessions.</p>
+        </div>
+        <footer class="overlay-footer"><span>↑↓ move</span><span>Enter open</span><span>Esc close</span><span class="grow"></span><span data-count>4 sessions</span><a href="11-desktop-home.html">All sessions ↗</a><span class="preview-only">plan-phase-8 and ship-textures are preview-only</span></footer>
+      </section>
+    </section>
+    <section class="stage" aria-label="Session stage">
+      <nav class="tabs" aria-label="Stage tabs"><span class="tab active"><i class="dot green"></i><span><span class="green">live</span> · blender</span></span><span class="tab">▥ mockups</span><span class="tab">›_ terminal</span><span class="tab">+</span><span class="cef">cef</span></nav>
+      <div class="viewer-bar"><span class="faint">wayai</span><span class="faint">/</span><span>live</span><span class="faint">/</span><span>blender</span><span class="grow"></span><button disabled title="Schematic viewport — visual preview only">Drive</button><span class="drive-label faint">drive: you</span></div>
+      <div class="viewport">
+        <div class="viewport-caption">perspective · studio solid · 1 object selected</div>
+        <svg class="ship" viewBox="0 0 650 550" role="img" aria-label="Schematic ship mesh with its top bevel selected in yellow">
+          <ellipse class="ground" cx="325" cy="455" rx="255" ry="38"/>
+          <path class="face" d="M121 414 172 346 223 278 274 227 325 192 376 227 427 278 478 346 529 414Z"/>
+          <path class="edge" d="M325 192V414M172 346H478M223 278H427M274 227H376"/>
+          <path class="selection" d="M172 346 223 278 274 227H376L427 278 478 346M223 278H427"/>
+          <circle class="vertex" cx="172" cy="346" r="4"/><circle class="vertex" cx="223" cy="278" r="4"/><circle class="vertex" cx="274" cy="227" r="4"/><circle class="vertex" cx="376" cy="227" r="4"/><circle class="vertex" cx="427" cy="278" r="4"/><circle class="vertex" cx="478" cy="346" r="4"/>
+        </svg>
+        <div class="axes" aria-label="Axes"><span>X</span><span>Y</span><span>Z</span></div>
+        <aside class="bevel"><strong>Bevel</strong>width 0.030<br>segments 3<br>edges <span class="yellow">12 selected</span></aside>
+      </div>
+    </section>
+  </div>
+  <footer class="statusbar"><span class="green">• live · blender</span><span class="yellow">! 1 waiting</span><span class="grow"></span><span class="secondary"><kbd>i</kbd> write</span><a href="03-commands.html"><kbd>Ctrl ⇧ P</kbd> palette</a><a href="02-sessions.html"><kbd>Ctrl ⇧ S</kbd> sessions</a><span class="secondary">composer · gpui mockup</span></footer>
+</main>
+<style>
+  .screen-sessions .reviewer { color: var(--noema-agent-reviewer); }
+  .screen-sessions .planner { color: var(--noema-agent-planner); }
+  .screen-sessions .preview-only { flex-basis: 100%; font-size: 8px; }
+</style>
+</body>
+</html>

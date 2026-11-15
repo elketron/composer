@@ -1,0 +1,55 @@
+/* The phone app's colour roles (apps/composer_app/lib/theme/tokens.dart), filled with Noema.
+   Only the colours change: layout, type, sizes and corners are the app's as it ships.
+   Every role points at a tokens.css value (qa/check.py checks that each role in tokens.dart is here). */
+:root {
+  /* Surfaces, one step apart: bg < surface < raised < overlay. */
+  --app-bg: var(--noema-bg);
+  --app-surface: var(--noema-panel-2);
+  --app-raised: var(--noema-surface);
+  --app-overlay: var(--noema-surface-2);
+  /* Your own messages: bg tinted toward the accent. */
+  --app-you: var(--noema-accent-deep);
+  --app-border: var(--noema-border);
+  --app-border-strong: var(--noema-border-2);
+  --app-text: var(--noema-fg);
+  --app-muted: var(--noema-fg-dim);
+  --app-faint: var(--noema-fg-faint);
+  /* Links, focus, selection, the site chip: the light indigo. Filled controls: the deep one, as on desktop. */
+  --app-accent: var(--noema-accent-soft);
+  --app-accent-fill: var(--noema-accent);
+  --app-on-accent: var(--noema-fg-bright);
+  --app-ok: var(--noema-ok);
+  --app-warn: var(--noema-warn);
+  --app-err: var(--noema-err);
+  /* The agent: tool rows, thinking. */
+  --app-info: var(--noema-agent-coder);
+
+  /* The widgets' alpha blends (withValues(alpha: …)) of the Noema values above. */
+  --app-accent-12: rgba(138, 130, 204, .12);  /* site chip fill */
+  --app-accent-15: rgba(138, 130, 204, .15);  /* your bubble's border */
+  --app-accent-10: rgba(138, 130, 204, .10);  /* site tag fill */
+  --app-accent-60: rgba(138, 130, 204, .60);  /* site tag border */
+  --app-accent-off: rgba(78, 70, 160, .45);   /* send, nothing typed */
+  --app-warn-05: rgba(212, 168, 67, .05);     /* approval tile */
+  --app-warn-40: rgba(212, 168, 67, .40);
+  --app-warn-50: rgba(212, 168, 67, .50);     /* the needs-you count */
+  --app-warn-18: rgba(212, 168, 67, .18);     /* a busy dot's halo */
+  --app-scrim: rgba(0, 0, 0, .54);            /* Material's bottom-sheet barrier */
+
+  /* The workspace's colour (WorkspaceStrip, the title's dot): set per workspace. demo's is the
+     same violet as its dot in the desktop title bar. */
+  --app-workspace: var(--noema-accent-soft);
+
+  /* Blender's picture inside the live view: content, not app chrome. */
+  --scene-bg: #1D1D1D;
+  --scene-grid: #2A2A2A;
+  --scene-face: #3A3A3A;
+  --scene-edge: #8C8C8C;
+  --scene-select: #F29D38;
+
+  /* Radii: the app's. Cards and sheets 5, controls 4, small labels 3, dots 2. */
+  --r-dot: 2px;
+  --r-sm: 3px;
+  --r-control: 4px;
+  --r-card: 5px;
+}

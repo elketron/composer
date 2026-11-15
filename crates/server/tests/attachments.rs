@@ -68,6 +68,78 @@ async fn upload(
 }
 
 #[tokio::test]
+async fn long_filenames_can_be_uploaded_downloaded_and_sent() {
+    let (_dir, server, provider, addr) = start(vec![vec![
+        ModelEvent::Content("Got it.".into()),
+        finished(vec![]),
+    ]])
+    .await;
+    let session = server.sessions.create("default", None).unwrap();
+    let name = format!("{}.txt", "notes-".repeat(20));
+    let response = upload(
+        addr,
+        &server.token,
+        session.id(),
+        &[(&name, b"long name notes")],
+    )
+    .await;
+    assert_eq!(response.status(), 200);
+    let stored: Vec<Attachment> = response.json().await.unwrap();
+    assert_eq!(stored.len(), 1);
+    assert!(stored[0].file.len() > 80);
+
+    let response = reqwest::Client::new()
+        .get(format!(
+            "http://{addr}/api/sessions/{}/attachments/{}",
+            session.id(),
+            stored[0].file
+        ))
+        .bearer_auth(&server.token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 200);
+    assert_eq!(response.text().await.unwrap(), "long name notes");
+
+    let mut socket = connect(addr, &server.token).await;
+    send(
+        &mut socket,
+        1,
+        ClientCommand::SessionAttach {
+            session: session.id().into(),
+            since: None,
+        },
+    )
+    .await;
+    send(
+        &mut socket,
+        2,
+        ClientCommand::MessageSend {
+            session: session.id().into(),
+            text: "read this".into(),
+            pages: vec![],
+            images: vec![],
+            attachments: stored.clone(),
+        },
+    )
+    .await;
+    let events = until(&mut socket, |e| {
+        matches!(
+            e,
+            ServerMessage::TurnDone { .. } | ServerMessage::Error { id: Some(2), .. }
+        )
+    })
+    .await;
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e, ServerMessage::MessageDone { message, .. }
+        if message.attachments == stored))
+    );
+    assert_eq!(provider.requests().len(), 1);
+}
+
+#[tokio::test]
 async fn uploads_reach_the_model() {
     let (_dir, server, provider, addr) = start(vec![vec![
         ModelEvent::Content("Got them.".into()),

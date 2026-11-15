@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Composer — review in the stage · Noema study</title>
+  <link rel="stylesheet" href="../tokens.css">
+  <link rel="stylesheet" href="../base.css">
+  <script src="../prototype.js" defer></script>
+</head>
+<body class="screen-review">
+<main class="workbench" aria-label="Composer desktop mockup: reviewing ticket 0014">
+  <header class="titlebar">
+    <span class="window-controls" aria-hidden="true"><i></i><i></i><i></i></span>
+    <span class="violet">•</span><a class="crumb" href="11-desktop-home.html" title="Workspace home: sessions and projects"><strong>demo</strong></a><span class="faint">/</span><span>review-0014</span><span class="session-id faint">#9c02</span>
+    <span class="connection"><i class="dot green"></i> connected <span class="following">· following agent</span></span>
+    <span class="grow"></span>
+    <a class="button" href="02-sessions.html">Sessions <kbd>Ctrl ⇧ S</kbd></a>
+    <a class="button" href="03-commands.html">Commands <kbd>Ctrl ⇧ P</kbd></a>
+  </header>
+  <div class="workspace">
+    <section class="chat" aria-label="Conversation">
+      <header class="session-head">
+        <div class="session-title"><strong>review-0014</strong><span class="faint">#9c02</span><span class="grow"></span><span class="faint">ticket 0014</span><span class="dim">···</span></div>
+        <div class="context"><span>site <b>coding ⌄</b></span><span>project <b>composer ⌄</b></span><span>tool <b>hunk</b></span></div>
+      </header>
+      <div class="transcript">
+        <div class="event"><span>✦ 0014 · agent review passed · hunk diff main in composer</span></div>
+        <article class="message">
+          <header class="speaker reviewer">review-0014 <time>15:10</time></header>
+          <p>0014 passed the agent review. It's open in Hunk against main: four files, the reconnect fix and its test.</p>
+          <div class="tools" aria-label="Two completed tool calls">
+            <div class="tool"><span class="green">✓</span><span class="tool-name">open</span><span class="grow truncate faint">site://coding/works/0014/review.md</span><span class="faint">0.3s ›</span></div>
+            <div class="tool"><span class="green">✓</span><span class="grow truncate"><span class="tool-name">hunk</span> <span class="faint">session review · 4 files</span></span><span class="faint">0.4s ›</span></div>
+          </div>
+        </article>
+        <article class="message you"><header class="speaker">you <time>15:18</time></header><p>Left two notes, on the retry loop and the backoff cap.</p></article>
+        <article class="message">
+          <header class="speaker reviewer">review-0014 <time>15:18</time></header>
+          <p>Read both. You're right about the closed socket; I've answered the cap note in Hunk.</p>
+          <div class="thread"><div class="thread-title"><span class="yellow">◆ 2 notes</span><span class="dim">link/reconnect.rs · link/backoff.rs</span></div><div class="dim"><span class="green">you:</span> is_transient() misses a socket closed mid-handshake</div></div>
+        </article>
+        <article class="message continuation">
+          <p>Reply on the cap in the Hunk tab, or tell me pass and I'll ask to merge.</p>
+          <div class="approval"><span class="violet">⚑ your verdict</span><span class="grow truncate faint">user review · 0014 · composer → main</span><button disabled title="Visual preview only">Changes</button><button class="allow" disabled title="Visual preview only">Pass</button></div>
+        </article>
+      </div>
+      <section class="composer" aria-label="Message composer preview">
+        <div class="mode-line"><strong>NORMAL</strong><span><kbd>i</kbd> insert</span><span>·</span><span><kbd>o</kbd> new line</span><span>·</span><span><kbd>Enter</kbd> send</span></div>
+        <div class="placeholder">Press i to write the review reply</div>
+        <div class="composer-actions"><button disabled title="Visual preview only">＋ Attach</button><button disabled title="Visual preview only">♧ Context</button><span class="context-tag">site://coding</span><span class="grow"></span><button disabled title="Visual preview only">Send ↑</button></div>
+      </section>
+    </section>
+    <section class="stage" aria-label="Session stage">
+      <nav class="tabs" aria-label="Stage tabs"><span class="tab active"><span class="yellow">◆</span><span><span class="yellow">review</span> · hunk</span></span><span class="tab">▥ review.md</span><span class="tab">›_ terminal</span><span class="tab">+</span><span class="cef">pty</span></nav>
+      <div class="viewer-bar"><span class="faint">terminal</span><span class="faint">/</span><span>hunk diff main</span><span class="faint">·</span><span class="truncate">composer · 0014</span><span class="grow"></span><span class="yellow">1 note needs a reply</span><span class="drive-label faint">you type here</span></div>
+      <div class="hunk" role="img" aria-label="Schematic Hunk review: four changed files, a diff of reconnect.rs with two notes">
+        <div class="hunk-files">
+          <div class="list-label">FILES <span>4</span></div>
+          <div class="hunk-file current"><span class="path">crates/server/src/link/reconnect.rs</span><span class="green">+9</span><span class="red">−2</span></div>
+          <div class="hunk-file"><span class="path">crates/server/src/link/backoff.rs</span><span class="green">+41</span></div>
+          <div class="hunk-file"><span class="path">crates/server/tests/reconnect.rs</span><span class="green">+38</span></div>
+          <div class="hunk-file"><span class="path">docs/desktop.md</span><span class="green">+3</span><span class="red">−1</span></div>
+        </div>
+        <div class="hunk-diff">
+          <div class="dl head"><span></span><span></span><span></span><span>@@ -82,7 +82,14 @@ impl Reconnect</span></div>
+          <div class="dl"><span>82</span><span>82</span><span> </span><span>    pub async fn run(&amp;mut self) -&gt; Result&lt;()&gt; {</span></div>
+          <div class="dl add"><span></span><span>83</span><span>+</span><span>        let mut backoff = Backoff::new(self.min, self.max);</span></div>
+          <div class="dl"><span>83</span><span>84</span><span> </span><span>        loop {</span></div>
+          <div class="dl del"><span>84</span><span></span><span>-</span><span>            self.connect().await?;</span></div>
+          <div class="dl del"><span>85</span><span></span><span>-</span><span>            self.serve().await?;</span></div>
+          <div class="dl add"><span></span><span>85</span><span>+</span><span>            match self.connect().await {</span></div>
+          <div class="dl add"><span></span><span>86</span><span>+</span><span>                Ok(()) =&gt; backoff.reset(),</span></div>
+          <div class="dl add"><span></span><span>87</span><span>+</span><span>                Err(e) if e.is_transient() =&gt; backoff.wait().await,</span></div>
+          <div class="note"><span class="yellow">◆ you</span> <span class="dim">is_transient() misses a socket closed mid-handshake</span><br><span class="reviewer">◆ review-0014</span> <span class="dim">agreed: ConnectionReset now counts, test added</span> <span class="green">✓ resolved</span></div>
+          <div class="dl add"><span></span><span>88</span><span>+</span><span>                Err(e) =&gt; return Err(e),</span></div>
+          <div class="dl add"><span></span><span>89</span><span>+</span><span>            }</span></div>
+          <div class="dl add"><span></span><span>90</span><span>+</span><span>            self.serve().await?;</span></div>
+          <div class="dl"><span>86</span><span>91</span><span> </span><span>        }</span></div>
+          <div class="dl"><span>87</span><span>92</span><span> </span><span>    }</span></div>
+          <div class="dl head"><span></span><span></span><span></span><span>@@ -0,0 +1,41 @@ backoff.rs</span></div>
+          <div class="dl add"><span></span><span>12</span><span>+</span><span>    pub fn wait(&amp;mut self) -&gt; Sleep {</span></div>
+          <div class="dl add"><span></span><span>13</span><span>+</span><span>        self.next = (self.next * 2).min(self.max);</span></div>
+          <div class="note open"><span class="yellow">◆ you</span> <span class="dim">cap at 30s? a laptop waking up shouldn't wait minutes</span><br><span class="reviewer">◆ review-0014</span> <span class="dim">max is 30s from config; jitter is ±20%. Keep it?</span> <span class="yellow">needs your reply</span></div>
+          <div class="dl add"><span></span><span>14</span><span>+</span><span>        sleep(jitter(self.next, 0.2))</span></div>
+          <div class="dl add"><span></span><span>15</span><span>+</span><span>    }</span></div>
+        </div>
+        <div class="hunk-keys"><span>j/k hunk</span><span>n next note</span><span>c comment</span><span>r reply</span><span>]f next file</span><span class="grow"></span><span>hunk · schematic</span></div>
+      </div>
+    </section>
+  </div>
+  <footer class="statusbar"><span class="yellow">◆ review · hunk</span><span class="yellow">! 1 waiting</span><span class="grow"></span><span class="secondary"><kbd>i</kbd> write</span><a href="03-commands.html"><kbd>Ctrl ⇧ P</kbd> palette</a><a href="02-sessions.html"><kbd>Ctrl ⇧ S</kbd> sessions</a><span class="secondary">composer · gpui mockup</span></footer>
+</main>
+</body>
+</html>

@@ -78,7 +78,7 @@ pub enum ClientCommand {
         path: Option<String>,
     },
 
-    /// Enters the site `site` (a workflow: its page, tools and application) for a session, or
+    /// Enters the site `site` (its page, tools and application) for a session, or
     /// leaves the current one with `None`. A running turn goes on as it was; the change applies
     /// from the session's next turn. The session's new state arrives as `session.updated`; the
     /// reply is `note`: what happened, the site's application included (started, already

@@ -26,7 +26,7 @@ pub mod snapshot;
 pub mod store;
 mod terminal;
 mod theme;
-mod tool_text;
+use composer_client::tool_text;
 mod ws_link;
 
 pub use action::Action;

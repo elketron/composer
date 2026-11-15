@@ -1,6 +1,6 @@
 # composer
 
-Design and decisions: [docs/plan.md](docs/plan.md) (phase 1; phase 3: harnesses and attachments; phase 4: merging, approvals, following Claude Code; phase 5: workflows/JSON (the pipeline engine was removed 2026-11-12); phase 6: MCP servers; phase 7: entering sites, apps in the chat), [docs/plan-app.md](docs/plan-app.md) (phase 2: the Flutter app), [docs/lean-orchestration.md](docs/lean-orchestration.md) (proposal: a small harness, capabilities injected by sites, workflows as files), [docs/workflows.md](docs/workflows.md) (design: one agent, workflow folders, the shared view), [docs/workflow-state.md](docs/workflow-state.md) (design: a workflow is site + app + JSON, no generic pipeline), [docs/icm.md](docs/icm.md) (correction: ICM is a folder method with five forms; Pipeline is one), [docs/project-hub.md](docs/project-hub.md) (design: the project as the hub with sites operating on it), [docs/tui-mode.md](docs/tui-mode.md) (TUI capabilities: a terminal program with a control adapter, first Hunk). UI mockups: [docs/mockups/](docs/mockups/); the current direction: [docs/mockups/next/](docs/mockups/next/) (platform studies: gpui desktop, Flutter phone; the single-chrome pass is kept beside them). Site packs: [docs/site-packs.md](docs/site-packs.md) (proposal: pack a site for GitHub and install it elsewhere).
+Design and decisions: [docs/plan.md](docs/plan.md), [docs/plan-app.md](docs/plan-app.md), [docs/icm.md](docs/icm.md), [docs/project-hub.md](docs/project-hub.md), and [docs/tui-mode.md](docs/tui-mode.md). Every site is a site: an app or MCP server is optional, not a separate workflow category. Older workflow documents are historical proposals. UI mockups: [docs/mockups/](docs/mockups/); the current direction: [docs/mockups/next/](docs/mockups/next/). Site packs: [docs/site-packs.md](docs/site-packs.md) (proposal: pack a site for GitHub and install it elsewhere).
 
 ## Code conventions (Rust)
 
@@ -60,10 +60,10 @@ workspace; the Flutter app has no Linux, Windows or macOS target.
   scripted model and `tools` site the tests need. Tests: `pairing_test.dart` pairs two workspaces
   of one host and switches between them, `desk_test.dart` opens the agent's page from the desk and
   sends from the bar, `chat_test.dart` runs a whole turn with a recipe approval, `reader_test.dart`
-  covers pages, an app and follow-agent, `review_test.dart` merges a ticket from the chat menu,
-  `measure_open_test.dart` measures opening a chat, `workflow_test.dart` switches a session into the
-  `demo` workflow from the chip, resizes the live view with the handle, leaves it, and starts a chat from
-  the Workflows tab (it needs a `demo` site with `app: demoapp`, `[applications.demoapp]`, and a `[viewer]`
+   covers pages, an app and follow-agent, `review_test.dart` merges a ticket from the chat menu,
+   `measure_open_test.dart` measures opening a chat, `site_test.dart` switches a session into the
+   `demo` site from the chip, resizes the live view with the handle, leaves it, and starts a chat from
+   the Sites tab (it needs a `demo` site with `app: demoapp`, `[applications.demoapp]`, and a `[viewer]`
   pointing at a running wayai; `SHOT_PAUSE=4` makes tests stop at their `shot`s for screenshots). A headless emulator:
   `emulator -avd <name> -read-only -no-window -no-audio`.
 - `COMPOSER_APP_DATA=<dir>` keeps the server list in that directory (tests, a second instance).

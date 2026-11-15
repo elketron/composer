@@ -54,8 +54,7 @@ pub struct SiteSummary {
     /// Pages in the site.
     #[serde(default)]
     pub pages: u32,
-    /// `app:` of its `index.md`: the application (`[applications.<name>]`) it starts. A site with
-    /// `app` or `mcp` set is a workflow.
+    /// `app:` of its `index.md`: the application (`[applications.<name>]`) it starts.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub app: Option<String>,
     /// `mcp:` of its `index.md`: the MCP servers whose tools the agent has while in the site.

@@ -99,7 +99,14 @@ pub fn resolve(
 ) -> Result<(Attachment, PathBuf), String> {
     let file = &reference.file;
     let refused = || format!("no attachment `{file}` in session {session}");
-    if file.is_empty() || sanitize_name(file) != *file {
+    // Stored names include a hash prefix, so they can exceed sanitize_name's upload-name
+    // limit. Validate a safe file component without truncating or rewriting it.
+    if file.is_empty()
+        || file.starts_with('.')
+        || !file
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'.' | b'_' | b'-'))
+    {
         return Err(refused());
     }
     let dir = AttachmentFolder::of(home, session)
@@ -171,12 +178,37 @@ mod tests {
 
         // Not another session's, not outside the folder.
         assert!(resolve(&home, "s2", &saved).is_err());
-        for file in ["../meta.json", "/etc/passwd", "", "x/../../y"] {
+        for file in [
+            "../meta.json",
+            "/etc/passwd",
+            "",
+            "x/../../y",
+            "..",
+            ".hidden",
+            "x\\y",
+            "x%2Fy",
+            "x\ny",
+        ] {
             let bad = Attachment {
                 file: file.into(),
                 ..saved.clone()
             };
             assert!(resolve(&home, "s1", &bad).is_err(), "{file}");
+        }
+    }
+
+    #[test]
+    fn long_upload_names_can_be_resolved() {
+        let tmp = tempfile::tempdir().unwrap();
+        let home = WorkspaceHome::new(tmp.path());
+        // The stored name adds a 12-character hash and a dash to the upload's name.
+        for len in [67, 68, 80, 120] {
+            let name = format!("{}.txt", "a".repeat(len - 4));
+            let saved = save(&home, &config(), "s1", &name, b"notes").unwrap();
+            let (resolved, path) = resolve(&home, "s1", &saved).unwrap();
+            assert_eq!(resolved, saved);
+            assert_eq!(std::fs::read(path).unwrap(), b"notes");
+            assert!(resolve(&home, "s2", &saved).is_err());
         }
     }
 

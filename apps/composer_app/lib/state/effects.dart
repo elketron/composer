@@ -84,7 +84,7 @@ final class CreateSession extends AppEffect {
   final String agent;
   final String? project;
 
-  /// A workflow to enter (`site.set`) once the session exists.
+  /// A site to enter (`site.set`) once the session exists.
   final String? site;
 }
 

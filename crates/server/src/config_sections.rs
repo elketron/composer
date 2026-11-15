@@ -346,7 +346,7 @@ pub struct LauncherEntry {
     pub args: Vec<String>,
 }
 
-/// An application a workflow site's `app:` can start, `[applications.<name>]`. Site pages are
+/// An application a site's `app:` can start, `[applications.<name>]`. Site pages are
 /// writable by agents, so the command lives here and not in the page: declaring the entry is
 /// the user's approval, as with `[[launcher]]`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

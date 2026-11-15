@@ -178,7 +178,7 @@ inline_max_kb = 100
 # MCP servers whose tools your agents may use. An agent gets a server's tools by listing them in
 # its `tools:` (`github__*`, or one: `github__get_issue`); calls outside `allow` ask you first
 # ("always" remembers the tool). `${VAR}` comes from composer's environment.
-# A site (a workflow) whose index.md says `mcp: [github]` gives the server's tools to a session
+# A site whose index.md says `mcp: [github]` gives the server's tools to a session
 # in it only when the server lists that site here: `sites = ["coding"]`. Without `sites` no site
 # may grant it, whatever its page says (agents can write pages, not this file).
 # [mcp.github]

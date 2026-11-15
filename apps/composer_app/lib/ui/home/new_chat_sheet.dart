@@ -8,7 +8,7 @@ import '../store_scope.dart';
 
 /// Opens New chat for a server, as a sheet.
 ///
-/// With [site], the new chat enters that workflow once it exists.
+/// With [site], the new chat enters that site once it exists.
 void showNewChat(BuildContext context, String url, {String? site}) => showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -22,7 +22,7 @@ class NewChatSheet extends StatefulWidget {
 
   final String url;
 
-  /// The workflow the chat starts in.
+  /// The site the chat starts in.
   final String? site;
 
   /// Where the chat opens (the sheet's own context goes away with it).

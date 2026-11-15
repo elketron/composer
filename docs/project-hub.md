@@ -1,7 +1,7 @@
 # The project hub
 
 Status: phases A–D built. The pipeline engine (`pipeline.list`, `work.run`, stages, gates,
-board) was removed on 2026-11-12; a workflow is site + app + JSON
+board) was removed on 2026-11-12; a site may have an app and its own state
 ([workflow-state.md](workflow-state.md)). The project page, sites and `project/` mounts remain.
 The pipeline/stage examples below are historical.
 

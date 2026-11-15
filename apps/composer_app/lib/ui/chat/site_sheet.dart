@@ -5,22 +5,22 @@ import '../../theme/composer_theme.dart';
 import '../../theme/tokens.dart' as t;
 import '../store_scope.dart';
 
-/// Opens the workflow picker for the open chat.
-void showWorkflowSheet(BuildContext context, String url) {
+/// Opens the site picker for the open chat.
+void showSiteSheet(BuildContext context, String url) {
   // The workspace's sites may have changed since the catalog was fetched.
   StoreScope.read(context).dispatch(CatalogRequested(url));
   showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
     showDragHandle: true,
-    builder: (_) => WorkflowSheet(url: url),
+    builder: (_) => SiteSheet(url: url),
   );
 }
 
-/// The workspace's workflows, the current one marked, and a way to leave it. Choosing one sends
+/// The workspace's sites, the current one marked, and a way to leave it. Choosing one sends
 /// `site.set` for the open chat; the reply's sentence comes back as a notice.
-class WorkflowSheet extends StatelessWidget {
-  const WorkflowSheet({super.key, required this.url});
+class SiteSheet extends StatelessWidget {
+  const SiteSheet({super.key, required this.url});
 
   final String url;
 
@@ -30,7 +30,7 @@ class WorkflowSheet extends StatelessWidget {
     final status = store.state.statusOf(url);
     final chat = status.chat;
     final current = chat == null ? null : status.session(chat.session)?.site;
-    final workflows = status.workflows;
+    final sites = status.sites;
 
     void choose(String? site) {
       Navigator.pop(context);
@@ -65,20 +65,20 @@ class WorkflowSheet extends StatelessWidget {
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
-            child: Text('Workflow', style: mono(size: 13, color: t.faint, weight: FontWeight.w600)),
+            child: Text('Site', style: mono(size: 13, color: t.faint, weight: FontWeight.w600)),
           ),
           Flexible(
             child: ListView(shrinkWrap: true, padding: EdgeInsets.zero, children: [
-              if (workflows.isEmpty)
+              if (sites.isEmpty)
                 Padding(
-                  key: const Key('workflow-sheet-empty'),
+                  key: const Key('site-sheet-empty'),
                   padding: const EdgeInsets.fromLTRB(14, 8, 14, 16),
                   child: Text(
-                    'No workflows in this workspace. A site is a workflow when its index.md sets app: or mcp:.',
+                    'No sites in this workspace.',
                     style: const TextStyle(fontSize: 13, color: t.faint),
                   ),
                 ),
-              for (final site in workflows)
+              for (final site in sites)
                 row(
                   site.name,
                   title: site.title,
@@ -87,10 +87,10 @@ class WorkflowSheet extends StatelessWidget {
                     if (site.mcp.isNotEmpty) 'mcp ${site.mcp.join(', ')}',
                   ].join(' · '),
                   on: site.name == current,
-                  key: Key('workflow-pick-${site.name}'),
+                  key: Key('site-pick-${site.name}'),
                 ),
               if (current != null)
-                row('', title: 'Leave ${status.workflows.any((w) => w.name == current) ? 'the workflow' : current}', on: false, key: const Key('workflow-leave'), color: t.err),
+                row('', title: 'Leave ${status.sites.any((w) => w.name == current) ? 'the site' : current}', on: false, key: const Key('site-leave'), color: t.err),
             ]),
           ),
         ]),

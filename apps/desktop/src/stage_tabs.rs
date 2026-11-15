@@ -4,7 +4,7 @@ use composer_protocol::http::SiteSummary;
 use composer_protocol::{Desk, DeskTab};
 
 /// The application the live view shows, as far as the client can know: the `app:` of the site the
-/// session is in, from the sites listing. `None` outside a workflow, or when the site names none.
+/// session is in, from the sites listing. `None` outside a site, or when the site names none.
 pub fn live_app<'a>(site: Option<&str>, sites: &'a [SiteSummary]) -> Option<&'a str> {
     let site = site?;
     sites
@@ -117,6 +117,6 @@ mod tests {
         assert_eq!(live_app(Some("3d"), &sites), Some("blender"));
         assert_eq!(live_app(Some("notes"), &sites), None, "no application");
         assert_eq!(live_app(Some("gone"), &sites), None, "not in the listing");
-        assert_eq!(live_app(None, &sites), None, "not in a workflow");
+        assert_eq!(live_app(None, &sites), None, "not in a site");
     }
 }

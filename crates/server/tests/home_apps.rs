@@ -496,12 +496,12 @@ async fn a_one_time_code_opens_a_session_of_whoever_asked_for_it() {
 }
 
 #[tokio::test]
-async fn the_workspaces_route_serves_no_workflow_and_no_broken_manifest() {
+async fn the_workspaces_route_serves_no_external_application_and_no_broken_manifest() {
     let mut config = composer_server::Config::defaults();
     config.apps.clients = vec!["talk".into(), "broken".into(), "listed".into()];
     let (dir, server, _provider, addr) = start_with(config, vec![]).await;
     let sites = dir.path().join("sites");
-    // A workflow (`app:` names its application) that also has a built ui.
+    // A site whose `app:` names an external application and that also has a built ui.
     write(
         &sites.join("flow/index.md"),
         "---\ntitle: Flow\napp: blender\nmcp: [blender]\n---\n# Flow\n",
@@ -526,7 +526,7 @@ async fn the_workspaces_route_serves_no_workflow_and_no_broken_manifest() {
         "---\ntitle: List\napp: [blender]\n---\n",
     );
     write(&sites.join("list/ui/dist/index.html"), "<p>list app</p>");
-    // A listed client whose manifest is a workflow string: a client app like any other.
+    // A listed client whose `app:` is a string: a client app like any other.
     write(
         &sites.join("listed/index.md"),
         "---\ntitle: Listed\napp: blender\n---\n",
@@ -559,7 +559,7 @@ async fn the_workspaces_route_serves_no_workflow_and_no_broken_manifest() {
         status_text(call(addr, Method::GET, "/listed/", Some(&workspace), None).await).await;
     assert_eq!((status, body.as_str()), (200, "<p>listed app</p>"));
 
-    // The workflow's ui is an app like one without `app:`: opened on Home with its own token.
+    // The site's ui is an app like one without `app:`: opened on Home with its own token.
     let (status, body) = status_text(
         call(
             addr,

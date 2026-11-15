@@ -725,7 +725,7 @@ async fn a_non_loopback_upstream_is_no_viewer() {
 }
 
 #[tokio::test]
-async fn the_sites_listing_says_which_sites_are_workflows() {
+async fn the_sites_listing_includes_optional_applications_and_mcp_servers() {
     let (dir, server, _p, addr) = start(vec![]).await;
     let sites = dir.path().join("sites");
     for (name, index) in [

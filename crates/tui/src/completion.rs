@@ -50,7 +50,7 @@ pub fn complete(line: &str, state: &AppState) -> Completions {
         "new" => agents(arg, state),
         "open" | "o" => pages(arg, state),
         "app" => app_sites(arg, state),
-        "workflow" | "site" => all_sites(arg, state),
+        "site" => all_sites(arg, state),
         "model" | "m" => models(arg, state),
         "project" | "p" => {
             let view = subcommands(arg, &[("view", "its works, sessions, branches and memory")]);
@@ -262,7 +262,7 @@ fn page_path(url: &str) -> Option<String> {
     Some(path.strip_suffix("/index").unwrap_or(path).to_string())
 }
 
-/// Every site of the workspace (a workflow is any site; its `index.md` says what it brings).
+/// Every site of the workspace; its `index.md` says what it brings.
 fn all_sites(arg: &str, state: &AppState) -> Vec<Candidate> {
     let arg = arg.strip_prefix("site://").unwrap_or(arg);
     state
@@ -464,7 +464,7 @@ mod tests {
         unique.dedup();
         assert_eq!(all.len(), unique.len(), "{all:?}");
         assert_eq!(texts("pro"), ["project"]);
-        assert_eq!(texts("wor"), ["workers", "workflow"]);
+        assert_eq!(texts("wor"), ["workers"]);
         let first = &complete("comp", &state()).items[0];
         assert_eq!(first.text, "compact");
         assert!(first.detail.contains("summarize"));
@@ -511,7 +511,7 @@ mod tests {
         assert_eq!(texts("open memory/u"), ["memory/user"]);
         assert_eq!(texts("o site://memory/t"), ["site://memory/topics/rust"]);
         assert_eq!(texts("app "), ["orchestration"]);
-        assert_eq!(texts("workflow "), ["memory", "orchestration", "agents"]);
+        assert_eq!(texts("site "), ["memory", "orchestration", "agents"]);
         assert_eq!(texts("site ag"), ["agents"]);
     }
 

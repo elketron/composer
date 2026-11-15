@@ -6,7 +6,7 @@ use composer_protocol::{
     ClientCommand, CommandResult, Desk, Selection, ServerMessage, SessionInfo,
 };
 
-use crate::{TerminalView, WindowBinding};
+use crate::{Approval, TerminalView, WindowBinding};
 
 /// What the server said, reduced to what a client shows (no UI): the sessions, the attached
 /// session's desk and selection, terminals, and the window this client is.
@@ -26,9 +26,18 @@ pub struct Store {
     pub opened_project: Option<String>,
     /// This client's desktop window, and its TUI's terminal.
     pub window: Option<WindowBinding>,
+    /// Approvals asked and not yet answered, by request id.
+    pub approvals: BTreeMap<String, Approval>,
 }
 
 impl Store {
+    /// A new socket starts a fresh snapshot of open approvals. Resolutions missed while
+    /// disconnected are not replayed; the server sends only the requests still waiting.
+    pub fn reconnected(&mut self) {
+        self.approvals.clear();
+        self.opened_project = None;
+    }
+
     /// Applies a server message; what the client should send because of it (when the window's
     /// TUI shows another session: attach to it and get its desk).
     pub fn apply(&mut self, message: &ServerMessage) -> Vec<ClientCommand> {
@@ -65,6 +74,36 @@ impl Store {
             }
             ServerMessage::TerminalExited { terminal, .. } => {
                 self.terminals.entry(terminal.clone()).or_default().exited = true;
+                vec![]
+            }
+            ServerMessage::ApprovalRequest {
+                request,
+                session,
+                kind,
+                title,
+                site,
+                recipe,
+                args,
+                body,
+                rule,
+                ..
+            } => {
+                let approval = Approval {
+                    request: request.clone(),
+                    session: session.clone(),
+                    kind: *kind,
+                    title: title.clone(),
+                    site: site.clone(),
+                    recipe: recipe.clone(),
+                    args: args.clone(),
+                    body: body.clone(),
+                    rule: rule.clone(),
+                };
+                self.approvals.insert(request.clone(), approval);
+                vec![]
+            }
+            ServerMessage::ApprovalResolved { request, .. } => {
+                self.approvals.remove(request);
                 vec![]
             }
             ServerMessage::WindowChanged { window, session }
@@ -173,6 +212,64 @@ mod tests {
 
     fn b64(text: &str) -> String {
         base64::engine::general_purpose::STANDARD.encode(text)
+    }
+
+    #[test]
+    fn reconnect_replaces_the_approval_snapshot() {
+        let mut store = Store::default();
+        let asked = |request: &str| {
+            serde_json::from_value::<ServerMessage>(serde_json::json!({
+                "type": "approval.request", "request": request, "session": "a",
+                "site": "tools", "recipe": "greet", "args": [], "body": "", "hash": "h"
+            }))
+            .unwrap()
+        };
+        store.apply(&asked("answered-while-offline"));
+        store.apply(&asked("still-open"));
+        store.reconnected();
+        assert!(store.approvals.is_empty());
+        // Only requests still waiting arrive on the new connection.
+        store.apply(&asked("still-open"));
+        assert_eq!(
+            store
+                .approvals
+                .keys()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            ["still-open"]
+        );
+    }
+
+    #[test]
+    fn approvals_wait_until_answered() {
+        let mut store = Store::default();
+        let asked = |request: &str, session: &str| {
+            serde_json::from_value::<ServerMessage>(serde_json::json!({
+                "type": "approval.request", "request": request, "session": session,
+                "site": "tools", "recipe": "greet", "args": [], "body": "", "hash": "h"
+            }))
+            .unwrap()
+        };
+        store.apply(&asked("r1", "a"));
+        store.apply(&asked("r2", "b"));
+        store.apply(&asked("r1", "a"));
+        assert_eq!(
+            store.approvals.len(),
+            2,
+            "asked again on reconnect: still one"
+        );
+        store.apply(&ServerMessage::ApprovalResolved {
+            request: "r1".into(),
+            session: "a".into(),
+            approved: true,
+        });
+        let waiting: Vec<_> = store
+            .approvals
+            .values()
+            .map(|a| a.session.as_str())
+            .collect();
+        assert_eq!(waiting, ["b"]);
+        assert_eq!(store.approvals["r2"].recipe, "greet");
     }
 
     #[test]

@@ -43,8 +43,8 @@ build is refused until you approve it again.
 
 - [docs/plan.md](docs/plan.md) — design of the server, TUI and micro apps
 - [docs/plan-app.md](docs/plan-app.md) — the app
-- [docs/lean-orchestration.md](docs/lean-orchestration.md) — proposal: a small harness, capabilities injected by sites, workflows as files
-- [docs/workflows.md](docs/workflows.md) — design: one agent, a workflow folder per kind of work, and a shared view (an application in wayai, or a view type)
+- [docs/lean-orchestration.md](docs/lean-orchestration.md) — historical proposal for a small harness and site capabilities
+- [docs/workflows.md](docs/workflows.md) — historical design exploration; sites are not a separate workflow category
 - [docs/project-hub.md](docs/project-hub.md) — design: the project as the hub, with sites operating on it
 - [docs/tui-mode.md](docs/tui-mode.md) — TUI capabilities: a terminal program with a control adapter (Hunk)
 - [docs/wsl.md](docs/wsl.md) — running the server in WSL on Windows

@@ -1,12 +1,6 @@
-// Workflows: sites with an application and/or MCP servers (docs/workflows.md).
+// Site-related presentation and live-view helpers.
 
 import 'package:composer_protocol/composer_protocol.dart';
-
-/// A site is a workflow when its `index.md` sets `app:` or `mcp:`.
-bool isWorkflow(SiteSummary site) => (site.app ?? '').isNotEmpty || site.mcp.isNotEmpty;
-
-/// The workflows among the workspace's sites, in the order the server lists them.
-List<SiteSummary> workflowsOf(List<SiteSummary> sites) => sites.where(isWorkflow).toList();
 
 /// Where the live view of the application is on this server, from `/api/info`: a path to append to the workspace
 /// URL, or null: no live view here.
@@ -23,7 +17,7 @@ String liveViewUrl(String workspaceUrl, String viewer) {
 }
 
 /// The application the live view shows for a session in [site]: the server has a viewer and the
-/// site is a workflow with an application. Null: no live view.
+/// site names an application. Null: no live view.
 String? liveViewApp({required ServerInfo? info, required SiteSummary? site}) {
   if (viewerPath(info) == null || site == null) return null;
   final app = site.app;

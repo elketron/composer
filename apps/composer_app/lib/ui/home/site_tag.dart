@@ -3,9 +3,9 @@ import 'package:flutter/material.dart';
 import '../../theme/composer_theme.dart';
 import '../../theme/tokens.dart' as t;
 
-/// A session's workflow as a small label (next to its project in lists).
-class WorkflowTag extends StatelessWidget {
-  const WorkflowTag(this.name, {super.key});
+/// A session's site as a small label (next to its project in lists).
+class SiteTag extends StatelessWidget {
+  const SiteTag(this.name, {super.key});
 
   final String name;
 

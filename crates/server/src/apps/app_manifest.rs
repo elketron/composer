@@ -11,7 +11,7 @@ const KEYS: [&str; 7] = [
 /// projects it attaches to (`when`, any one), its rail entry, whether it has a Home tile, the file
 /// types it opens, and the recipes of its own justfile run when a project opens.
 ///
-/// `app:` with a string (`app: blender`) is another thing: a workflow's application, an
+/// `app:` with a string (`app: blender`) is another thing: a site's application, an
 /// `[applications.<name>]` entry ([`crate::agent::Site`]). It is no manifest, broken or not.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppManifest {
@@ -46,7 +46,7 @@ impl AppManifest {
     /// The site's manifest from its index's frontmatter: `None` when it isn't an app (no `app:`
     /// block and no `ui/`). A block that doesn't parse says what is wrong and what to write.
     ///
-    /// A string (`app: blender`) is a workflow's application, not a manifest: such a site is an
+    /// A string (`app: blender`) is a site's application, not a manifest: such a site is an
     /// app only by its `ui/`, with the plain manifest, like a site with no `app:` at all.
     pub fn of_site(app: Option<&Value>, has_ui: bool) -> Result<Option<Self>, String> {
         match app {
@@ -54,7 +54,7 @@ impl AppManifest {
             Some(Value::Object(block)) => Self::parse(block).map(Some),
             Some(_) => Err(
                 "`app:` is a block of keys (scope, when, rail, tile, opens, on_open), or the \
-                 name of a workflow's application"
+                 name of a site's application"
                     .to_string(),
             ),
         }
@@ -198,7 +198,7 @@ mod tests {
     }
 
     #[test]
-    fn a_workflows_application_is_no_manifest() {
+    fn a_sites_application_is_no_manifest() {
         assert_eq!(parse("app: blender\n").unwrap(), None, "no ui: not an app");
         let frontmatter = composer_core::Frontmatter::parse("app: blender\n").unwrap();
         assert_eq!(

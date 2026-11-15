@@ -1,50 +1,34 @@
-/* composer next — the palette of templates/sdk/theme.css (the shipped, TUI-look chrome).
-   The mockups only add derived values; no new colours. */
+/* Noema theme — user-supplied portable design tokens. Palette authority. */
 :root {
-  /* surfaces: one step apart, never more than four */
-  --bg:        #0c0d0f;
-  --surface:   #121317;
-  --raised:    #191b20;
-  --overlay:   #1f2228;
-
-  /* lines */
-  --border:        #24272d;
-  --border-strong: #363a42;
-
-  /* text */
-  --text:   #d5d8de;
-  --muted:  #868c96;
-  --faint:  #50555e;
-
-  /* one accent; links, focus, selection */
-  --accent:      #8fb3e8;
-  --accent-dim:  #8fb3e81f;
-  --you:         #151a22;   /* your messages: bg tinted ~7% toward accent */
-
-  /* state */
-  --ok:    #8cc29a;
-  --warn:  #d6b06a;
-  --err:   #e07c7c;
-  --info:  #b39ce0;   /* agent / thinking / tool rows */
-
-  /* terminal feel: the UI is monospaced, squared off and dense */
-  --font-ui:   'JetBrainsMono Nerd Font Mono', 'JetBrains Mono', ui-monospace, monospace;
-  --font-mono: 'JetBrainsMono Nerd Font Mono', 'JetBrains Mono', ui-monospace, monospace;
-
-  --radius-sm: 0px;
-  --radius: 0px;
-  --gap: 10px;
-
-  /* derived, for mockup canvas surfaces only */
-  --grid:        color-mix(in srgb, var(--text) 5%, transparent);
-  --grid-strong: color-mix(in srgb, var(--text) 9%, transparent);
-  --hairline:    color-mix(in srgb, var(--text) 4%, transparent);
-  --accent-soft: color-mix(in srgb, var(--accent) 55%, transparent);
-  --warn-soft:   color-mix(in srgb, var(--warn) 55%, transparent);
-  --ok-soft:     color-mix(in srgb, var(--ok) 55%, transparent);
-  --err-soft:    color-mix(in srgb, var(--err) 55%, transparent);
-  --info-soft:   color-mix(in srgb, var(--info) 55%, transparent);
-  --stage:       #090a0c;
-  --shadow:      #000000;
-  --shadow-soft: #00000066;
+  --noema-bg: #0e0e0f;
+  --noema-bg-deep: #0a0a0b;
+  --noema-panel: #111112;
+  --noema-panel-2: #131315;
+  --noema-surface: #171718;
+  --noema-surface-2: #1a1a1c;
+  --noema-border: #222224;
+  --noema-border-2: #2a2a2c;
+  --noema-fg: #c2c0b6;
+  --noema-fg-bright: #d8d6cc;
+  --noema-fg-dim: #8a8880;
+  --noema-fg-faint: #6a6865;
+  --noema-accent: #4e46a0;
+  --noema-accent-hi: #5e56b0;
+  --noema-accent-soft: #8a82cc;
+  --noema-accent-deep: #12111a;
+  --noema-accent-border: #2a2740;
+  --noema-ok: #4CAF82;
+  --noema-ok-deep: #1e3a28;
+  --noema-ok-text: #3d8a65;
+  --noema-warn: #d4a843;
+  --noema-warn-deep: #8a6e30;
+  --noema-err: #e05a5a;
+  --noema-err-deep: #3a1818;
+  --noema-err-text: #c05050;
+  --noema-agent-planner: #7ab4e8;
+  --noema-agent-coder: #8a82cc;
+  --noema-agent-tester: #d4a843;
+  --noema-agent-reviewer: #c27ba0;
+  --noema-agent-human: #4CAF82;
+  --noema-font-mono: "JetBrains Mono", ui-monospace, monospace;
 }
