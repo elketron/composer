@@ -201,7 +201,7 @@ mod tests {
 
     fn session(id: &str, updated: &str, state: &str) -> SessionInfo {
         serde_json::from_value(serde_json::json!({
-            "id": id, "agent": "default", "project": "/home/u/Projects/game", "site": "3d",
+            "id": id, "agent": "orchestrator", "project": "/home/u/Projects/game", "site": "3d",
             "ticket": null, "parent": null, "state": state, "last_seq": 0,
             "preview": "hello", "updated": updated
         }))

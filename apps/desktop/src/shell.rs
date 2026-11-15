@@ -59,8 +59,6 @@ actions!(
 const FIRST_IDS: u64 = 1;
 /// Messages a chat opens with (older ones come as you ask).
 const HISTORY: u32 = 60;
-/// The agent a window's first session gets, when the workspace has none yet.
-const FIRST_AGENT: &str = "default";
 
 pub struct Shell {
     workspace: String,
@@ -314,16 +312,15 @@ impl Shell {
             .map(|s| s.id.clone());
         match latest {
             Some(session) => self.show_session(session, cx),
-            None => self.new_session(FIRST_AGENT.into(), None, cx),
+            None => self.new_session(None, cx),
         }
     }
 
-    fn new_session(&mut self, agent: String, project: Option<String>, cx: &mut Context<Self>) {
+    /// Start a session as the orchestrator, in `project` or none.
+    fn new_session(&mut self, project: Option<String>, cx: &mut Context<Self>) {
         let connection = self.connection.clone();
         cx.spawn(async move |this, cx| {
-            let created = connection
-                .request(ClientCommand::SessionCreate { agent, project })
-                .await;
+            let created = connection.request(pick_lists::new_session(project)).await;
             let _ = this.update(cx, |shell, cx| match created {
                 Ok(CommandResult::Session { session }) => {
                     let id = session.id.clone();
@@ -424,9 +421,13 @@ impl Shell {
                 self.show_session(session, cx);
             }
             HomeEvent::Back => self.close_home(window, cx),
-            HomeEvent::NewSession(project) => {
+            HomeEvent::NewSession(Some(project)) => {
                 self.close_home(window, cx);
-                self.new_session(FIRST_AGENT.into(), project, cx);
+                self.new_session(Some(project), cx);
+            }
+            HomeEvent::NewSession(None) => {
+                self.close_home(window, cx);
+                self.open_new_session_menu(window, cx);
             }
             HomeEvent::Answer { request, decision } => {
                 self.ask(ClientCommand::ApprovalRespond { request, decision }, cx)
@@ -868,7 +869,12 @@ impl Shell {
         self.subscriptions.push(cx.subscribe_in(
             &picker,
             window,
-            move |shell, _, event: &PickerEvent, window, cx| {
+            move |shell, from, event: &PickerEvent, window, cx| {
+                // A click on a row lands on the scrim under it too, and its late `Dismissed`
+                // must not close the picker the row just opened.
+                if shell.overlay.as_ref() != Some(from) {
+                    return;
+                }
                 shell.overlay = None;
                 window.focus(&back, cx);
                 match event {
@@ -915,7 +921,28 @@ impl Shell {
     /// The projects to put the shown session in (fetched as it opens).
     fn open_projects_menu(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let current = self.shown_info().and_then(|s| s.project.clone());
-        let picker = cx.new(|cx| Picker::new("project", vec![], cx));
+        self.open_project_list(
+            "project",
+            move |projects| pick_lists::projects(projects, current.as_deref()),
+            window,
+            cx,
+        );
+    }
+
+    /// New session: the projects it can start in (it always runs as the orchestrator).
+    fn open_new_session_menu(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.open_project_list("new-session", pick_lists::new_session_projects, window, cx);
+    }
+
+    /// A project picker over `GET /api/projects`, its rows built by `items` once they arrive.
+    fn open_project_list(
+        &mut self,
+        title: &'static str,
+        items: impl FnOnce(&[composer_protocol::http::ProjectSummary]) -> Vec<Item> + 'static,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let picker = cx.new(|cx| Picker::new(title, vec![], cx));
         let endpoint = self.endpoint.clone();
         let fetched = cx.global::<Desktop>().spawn(async move {
             endpoint
@@ -926,7 +953,7 @@ impl Shell {
         let weak = picker.downgrade();
         cx.spawn(async move |_, cx| {
             if let Ok(projects) = fetched.await {
-                let items = pick_lists::projects(&projects, current.as_deref());
+                let items = items(&projects);
                 let _ = weak.update(cx, |picker, cx| picker.extend(items, cx));
             }
         })
@@ -1034,16 +1061,8 @@ impl Shell {
         match pick {
             Pick::Workspace(name) => cx.defer(move |cx| desktop::open(&name, cx)),
             Pick::Session(session) => self.show_session(session, cx),
-            Pick::NewSession => {
-                let shown = self
-                    .store
-                    .attached
-                    .as_ref()
-                    .and_then(|id| self.store.sessions.iter().find(|s| &s.id == id));
-                let agent = shown.map_or(FIRST_AGENT.to_string(), |s| s.agent.clone());
-                let project = shown.and_then(|s| s.project.clone());
-                self.new_session(agent, project, cx);
-            }
+            Pick::NewSession => self.open_new_session_menu(window, cx),
+            Pick::NewSessionIn(project) => self.new_session(project, cx),
             Pick::Page(url) => self.open_page(url, cx),
             Pick::App(site) => {
                 if let Some(session) = self.store.attached.clone() {
