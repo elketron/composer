@@ -407,7 +407,14 @@ fn heading_size(level: u8) -> f32 {
 }
 
 /// A model style as a gpui highlight: the weight and the slant have faces bundled for them.
-fn highlight(style: &markdown::Style) -> HighlightStyle {
+/// How a run looks. Strong is SemiBold in Inter, but Bold in the mono face (a table, inline
+/// code): JetBrains Mono is registered without a SemiBold, and would fall back to Regular.
+fn highlight(style: &markdown::Style, mono_block: bool) -> HighlightStyle {
+    let strong = if mono_block || style.mono {
+        FontWeight::BOLD
+    } else {
+        FontWeight::SEMIBOLD
+    };
     HighlightStyle {
         color: Some(
             rgb(if style.link.is_some() {
@@ -417,7 +424,7 @@ fn highlight(style: &markdown::Style) -> HighlightStyle {
             })
             .into(),
         ),
-        font_weight: style.strong.then_some(FontWeight::SEMIBOLD),
+        font_weight: style.strong.then_some(strong),
         font_style: style.emphasis.then_some(FontStyle::Italic),
         strikethrough: style.strike.then_some(StrikethroughStyle {
             thickness: px(1.),
@@ -555,7 +562,11 @@ impl ChatPane {
                                 .text_color(rgb(dim))
                                 .child(marker.glyph()),
                         )
-                        .child(div().flex_1().child(self.block_text(block, key, cx)))
+                        .child(
+                            block_style(block)
+                                .flex_1()
+                                .child(self.block_text(block, key, cx)),
+                        )
                         .into_any_element(),
                 )
             }
@@ -573,11 +584,12 @@ impl ChatPane {
     /// hit-tests through the text layout (it shows the pointer cursor over them itself).
     fn block_text(&self, block: &markdown::Block, key: &str, cx: &mut Context<Self>) -> AnyElement {
         let plain = markdown::Style::default();
+        let mono_block = matches!(block.kind, markdown::Kind::TableRow { .. });
         let highlights: Vec<(Range<usize>, HighlightStyle)> = block
             .runs
             .iter()
             .filter(|run| run.style != plain)
-            .map(|run| (run.range.clone(), highlight(&run.style)))
+            .map(|run| (run.range.clone(), highlight(&run.style, mono_block)))
             .collect();
         let fonts: Vec<(Range<usize>, SharedString)> = block
             .runs
