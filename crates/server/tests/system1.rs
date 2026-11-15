@@ -111,7 +111,7 @@ async fn system1_decides_workers_approvals() {
     );
     // Not a worker: never system1's.
     let asked_before = asked.lock().unwrap().len();
-    let plain = server.sessions.create("default", None).unwrap();
+    let plain = server.sessions.create("orchestrator", None).unwrap();
     let not_a_worker = server.ask_approval(
         &plain,
         ApprovalKind::Tool,

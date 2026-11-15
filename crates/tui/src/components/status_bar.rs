@@ -143,7 +143,7 @@ mod tests {
         state.conn.state = ConnState::Connected;
         state.session.upsert(SessionInfo {
             id: "s1".into(),
-            agent: "default".into(),
+            agent: "orchestrator".into(),
             project: None,
             site: site.map(Into::into),
             ticket: None,

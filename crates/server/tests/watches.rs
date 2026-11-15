@@ -107,7 +107,7 @@ async fn a_watching_session_hears_when_files_land() {
         &mut socket,
         1,
         ClientCommand::SessionCreate {
-            agent: "default".into(),
+            agent: "orchestrator".into(),
             project: None,
         },
     )
@@ -214,7 +214,7 @@ async fn a_steady_trickle_of_changes_is_still_delivered() {
         &mut socket,
         1,
         ClientCommand::SessionCreate {
-            agent: "default".into(),
+            agent: "orchestrator".into(),
             project: None,
         },
     )

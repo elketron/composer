@@ -106,7 +106,7 @@ fn index_search_and_backlinks() {
         .collect();
     assert_eq!(
         agents,
-        ["site://agents/default.md", "site://agents/orchestrator.md"]
+        ["site://agents/orchestrator.md", "site://agents/worker.md"]
     );
 
     let hits = index.search(&Query::parse("site:memory feedback"));

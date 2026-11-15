@@ -2,7 +2,7 @@
   {
     "id": 1,
     "type": "session.create",
-    "agent": "default",
+    "agent": "orchestrator",
     "project": null
   },
   {

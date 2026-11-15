@@ -27,7 +27,7 @@ SiteSummary site(String name, {String? app, List<String> mcp = const [], bool ap
     SiteSummary(name: name, title: 'The $name', hasJustfile: false, hasUi: appBuilt, appBuilt: appBuilt, app: app, mcp: mcp);
 
 SessionInfo session(String id, {String? site, TurnState state = TurnState.idle}) =>
-    SessionInfo(id: id, agent: 'default', site: site, state: state, lastSeq: 0, updated: '2026-11-10T10:00:0$id');
+    SessionInfo(id: id, agent: 'orchestrator', site: site, state: state, lastSeq: 0, updated: '2026-11-10T10:00:0$id');
 
 ServerMessage said(int seq, String text) =>
     ServerMessageMessageDone(session: 'a', seq: seq, message: ChatMessage(role: Role.user, content: text));
@@ -613,7 +613,7 @@ void main() {
       await tester.tap(find.byKey(const Key('start-chat')));
       await tester.pump();
       final create = effects.whereType<CreateSession>().single;
-      expect((create.agent, create.site), ('default', '3d'));
+      expect((create.agent, create.site), ('orchestrator', '3d'));
     });
 
     testWidgets('a built site app can be opened without entering the site', (tester) async {

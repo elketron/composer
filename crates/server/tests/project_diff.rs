@@ -109,7 +109,7 @@ async fn endpoint_uses_the_session_project() {
         &mut socket,
         1,
         ClientCommand::SessionCreate {
-            agent: "default".into(),
+            agent: "orchestrator".into(),
             project: None,
         },
     )

@@ -62,7 +62,7 @@ pub fn due_reminders(
                     .get_str("agent")
                     .map(|a| a.trim().to_string())
                     .filter(|a| !a.is_empty())
-                    .unwrap_or_else(|| "default".into()),
+                    .unwrap_or_else(|| crate::agent::ORCHESTRATOR.into()),
                 recurs,
             })
         })
@@ -245,7 +245,7 @@ mod tests {
         assert_eq!(names("2026-10-19 20:00").len(), 4);
         let ask = due_reminders(&index, at("2026-10-19 09:00"), nine).remove(0);
         assert_eq!(ask.session.as_deref(), Some("ab12"));
-        assert_eq!(ask.agent, "default");
+        assert_eq!(ask.agent, "orchestrator");
     }
 
     #[test]

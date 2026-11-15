@@ -18,7 +18,7 @@ async fn create_session(socket: &mut Socket) -> String {
         socket,
         1,
         ClientCommand::SessionCreate {
-            agent: "default".into(),
+            agent: "orchestrator".into(),
             project: None,
         },
     )
@@ -147,8 +147,7 @@ async fn turn_with_tool_call() {
         panic!("no system prompt")
     };
     assert!(
-        content.contains("You are the user's assistant")
-            && content.contains("<page url=\"site://home\">")
+        content.contains("You coordinate work.") && content.contains("<page url=\"site://home\">")
     );
     assert!(
         requests[1]
@@ -616,7 +615,7 @@ async fn open_shows_an_image_to_the_model() {
         &mut socket,
         1,
         ClientCommand::SessionCreate {
-            agent: "default".into(),
+            agent: "orchestrator".into(),
             project: Some(project.path().display().to_string()),
         },
     )
@@ -688,7 +687,7 @@ async fn an_agents_reasoning_goes_with_its_requests() {
         .write_page(&url, page, composer_protocol::ChangedBy::App)
         .unwrap();
     let mut socket = connect(addr, &server.token).await;
-    for (id, agent) in [(1, "thinker"), (10, "default")] {
+    for (id, agent) in [(1, "thinker"), (10, "orchestrator")] {
         send(
             &mut socket,
             id,

@@ -73,8 +73,8 @@ impl AgentDefinition {
         })
     }
 
-    /// A page from before the two-agent model, with an explicit `role: worker`. The current
-    /// worker is the default agent in worker mode; it is not a different agent page.
+    /// A page with `role: worker`: the [`WORKER`](crate::agent::WORKER) agent `spawn_worker` runs
+    /// (in the server's worker mode), left out of the agents a person starts a session with.
     pub fn is_worker(&self) -> bool {
         self.role.as_deref() == Some("worker")
     }

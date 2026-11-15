@@ -1291,7 +1291,7 @@ mod tests {
     fn info(id: &str, parent: Option<&str>) -> SessionInfo {
         SessionInfo {
             id: id.into(),
-            agent: "default".into(),
+            agent: "orchestrator".into(),
             project: None,
             site: None,
             ticket: None,
@@ -1309,7 +1309,7 @@ mod tests {
     fn connected() -> (AppState, Vec<Effect>) {
         let mut state = AppState::new(
             Startup {
-                agent: "default".into(),
+                agent: "orchestrator".into(),
                 ..Startup::default()
             },
             160_000,
@@ -1531,7 +1531,7 @@ mod tests {
     fn a_window_tui_joins_its_window_and_shows_the_session_it_picks() {
         let mut state = AppState::new(
             Startup {
-                agent: "default".into(),
+                agent: "orchestrator".into(),
                 window: Some("w1".into()),
                 ..Startup::default()
             },
@@ -1677,7 +1677,7 @@ mod tests {
         };
         let mut state = AppState::new(
             Startup {
-                agent: "default".into(),
+                agent: "orchestrator".into(),
                 window: Some("w1".into()),
                 ..Startup::default()
             },
@@ -1818,9 +1818,9 @@ mod tests {
         assert_eq!(
             rows,
             [
-                ("default #o ◂", ""),
-                ("  default #w2", "● running"),
-                ("  default #w1", ""),
+                ("orchestrator #o ◂", ""),
+                ("  orchestrator #w2", "● running"),
+                ("  orchestrator #w1", ""),
             ]
         );
         assert_eq!(state.picker.selected, 1, "the busy worker");

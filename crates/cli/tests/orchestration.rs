@@ -135,7 +135,7 @@ async fn orchestrator_runs_a_worker_process_on_a_ticket() {
         events
             .iter()
             .any(|e| matches!(e, ServerMessage::SessionUpdated { session }
-        if session.id == worker && session.agent == "default"))
+        if session.id == worker && session.agent == "worker"))
     );
     let ticket_file = dir.path().join("sites/orchestration/tickets/0001.md");
     assert!(

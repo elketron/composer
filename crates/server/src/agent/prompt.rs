@@ -8,7 +8,7 @@ use crate::agent::AgentDefinition;
 /// Memory pages listed in the prompt, at most.
 const MEMORY_LIST_MAX: usize = 60;
 
-/// The default agent in worker mode: the ticket and its site say how this kind of work is done.
+/// The worker agent in worker mode: the ticket and its site say how this kind of work is done.
 const WORKER_PROMPT: &str = "# Worker\n\nYou are working exactly one ticket. Do not ask questions: decide, act, and record why in the ticket. Open the ticket and every page in its Context; the site's index says how this kind of work is done. Stay in the ticket's project/ view. Check every \"Done when\" item, write the Result section, then call `finish(done, summary)` or `finish(failed, reason)`.";
 
 /// The system prompt: agent body → `site://home` → environment → relevant memory.

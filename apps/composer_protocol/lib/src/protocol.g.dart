@@ -52,7 +52,7 @@ class AgentSummary {
   /// `description:`, else the title.
   final String description;
 
-  /// A legacy worker page (`role: worker`); current workers are the default agent.
+  /// A worker page (`role: worker`): the agent `spawn_worker` runs, not one to start a chat with.
   final bool worker;
 
   factory AgentSummary.fromJson(Map<String, Object?> json) => AgentSummary(

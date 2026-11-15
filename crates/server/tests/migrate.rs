@@ -55,7 +55,7 @@ async fn old_home(root: &Path, project: &Path) -> String {
     let server = Server::new(old.clone(), config, Arc::new(MockProvider::new(vec![]))).unwrap();
     let session = server
         .sessions
-        .create("default", None)
+        .create("orchestrator", None)
         .unwrap()
         .id()
         .to_string();

@@ -64,7 +64,7 @@ async fn a_workspace_from_a_template_has_its_sites_and_config() {
     .unwrap();
     assert!(workspace.sites().join("cad/stages/01_plan.md").is_file());
     // The stock sites too, agents included, all installed from the library.
-    assert!(workspace.sites().join("agents/default.md").is_file());
+    assert!(workspace.sites().join("agents/worker.md").is_file());
     let installed = WorkspaceLibrary::of(&workspace)
         .unwrap()
         .installed()

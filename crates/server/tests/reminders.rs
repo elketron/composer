@@ -42,7 +42,7 @@ async fn a_due_reminder_is_delivered_once() {
         matches!(e, ServerMessage::ReminderDue { .. })
     })
     .await;
-    // No session of its own: a new one for the default agent.
+    // No session of its own: a new one for the orchestrator.
     let ServerMessage::ReminderDue {
         url,
         title,
@@ -62,7 +62,7 @@ async fn a_due_reminder_is_delivered_once() {
         )
     );
     assert!(event.iter().any(
-        |e| matches!(e, ServerMessage::SessionUpdated { session: s } if &s.id == session && s.agent == "default")
+        |e| matches!(e, ServerMessage::SessionUpdated { session: s } if &s.id == session && s.agent == "orchestrator")
     ));
     let page = std::fs::read_to_string(dir.path().join("sites/plans/reminders/call.md")).unwrap();
     assert!(
@@ -86,13 +86,13 @@ async fn an_agent_reminder_starts_a_turn() {
     server
         .write_page(
             &url,
-            "---\ntitle: Review the tickets\ntype: reminder\ndue: 2099-10-19 08:00\nagent: default\n---\n",
+            "---\ntitle: Review the tickets\ntype: reminder\ndue: 2099-10-19 08:00\nagent: orchestrator\n---\n",
             ChangedBy::Agent,
         )
         .unwrap();
     let mut socket = connect(addr, &server.token).await;
 
-    // Delivered the next morning: late, in a new session for the default agent.
+    // Delivered the next morning: late, in a new session for the orchestrator.
     check_reminders(&server, at("2099-10-20 07:00"));
     let events = until(&mut socket, |e| {
         matches!(e, ServerMessage::ReminderDue { .. })
@@ -107,7 +107,7 @@ async fn an_agent_reminder_starts_a_turn() {
         panic!("{events:?}")
     };
     assert!(events.iter().any(
-        |e| matches!(e, ServerMessage::SessionUpdated { session: s } if &s.id == session && s.agent == "default")
+        |e| matches!(e, ServerMessage::SessionUpdated { session: s } if &s.id == session && s.agent == "orchestrator")
     ));
 
     send(
@@ -162,7 +162,7 @@ async fn a_reminder_comes_back_to_the_session_that_wrote_it() {
         &mut socket,
         1,
         ClientCommand::SessionCreate {
-            agent: "default".into(),
+            agent: "orchestrator".into(),
             project: None,
         },
     )
@@ -232,7 +232,7 @@ async fn a_reminder_can_name_the_agent_for_its_session() {
     server
         .write_page(
             &url,
-            "---\ntitle: Spawn the tickets\ntype: reminder\ndue: 2099-10-19 08:00\nagent: orchestrator\n---\n",
+            "---\ntitle: Spawn the tickets\ntype: reminder\ndue: 2099-10-19 08:00\nagent: worker\n---\n",
             ChangedBy::Agent,
         )
         .unwrap();
@@ -250,18 +250,15 @@ async fn a_reminder_can_name_the_agent_for_its_session() {
     else {
         panic!("{events:?}")
     };
-    // The new session runs as the named agent, not default.
+    // The new session runs as the named agent, not the orchestrator a blank one gets.
     assert!(events.iter().any(
-        |e| matches!(e, ServerMessage::SessionUpdated { session: s } if &s.id == session && s.agent == "orchestrator")
+        |e| matches!(e, ServerMessage::SessionUpdated { session: s } if &s.id == session && s.agent == "worker")
     ),"{events:?}");
-    assert_eq!(
-        server.sessions.get(session).unwrap().info().agent,
-        "orchestrator"
-    );
+    assert_eq!(server.sessions.get(session).unwrap().info().agent, "worker");
 }
 
 #[tokio::test]
-async fn an_unknown_agent_falls_back_to_default_with_a_note() {
+async fn an_unknown_agent_falls_back_to_the_orchestrator_with_a_note() {
     let (_dir, server, _p, addr) = start(vec![vec![
         ModelEvent::Content("I cannot spawn, but noted.".into()),
         finished(vec![]),
@@ -289,9 +286,9 @@ async fn an_unknown_agent_falls_back_to_default_with_a_note() {
     else {
         panic!("{events:?}")
     };
-    // Not found: delivered anyway, in a default session.
+    // Not found: delivered anyway, in an orchestrator session.
     assert!(events.iter().any(
-        |e| matches!(e, ServerMessage::SessionUpdated { session: s } if &s.id == session && s.agent == "default")
+        |e| matches!(e, ServerMessage::SessionUpdated { session: s } if &s.id == session && s.agent == "orchestrator")
     ),"{events:?}");
     assert!(
         server
@@ -300,7 +297,7 @@ async fn an_unknown_agent_falls_back_to_default_with_a_note() {
             .unwrap()
             .info()
             .agent
-            .starts_with("default"),
+            .starts_with("orchestrator"),
         "delivered, but to the wrong seat"
     );
 
@@ -363,7 +360,7 @@ async fn replacing_an_existing_reminder_does_not_claim_it() {
         &mut socket,
         1,
         ClientCommand::SessionCreate {
-            agent: "default".into(),
+            agent: "orchestrator".into(),
             project: None,
         },
     )
@@ -439,7 +436,7 @@ async fn editing_a_reminders_body_does_not_claim_it() {
         &mut socket,
         1,
         ClientCommand::SessionCreate {
-            agent: "default".into(),
+            agent: "orchestrator".into(),
             project: None,
         },
     )

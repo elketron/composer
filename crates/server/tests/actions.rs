@@ -40,7 +40,7 @@ async fn session(socket: &mut Socket) -> String {
         socket,
         1,
         ClientCommand::SessionCreate {
-            agent: "default".into(),
+            agent: "orchestrator".into(),
             project: None,
         },
     )
@@ -992,7 +992,7 @@ async fn stock_recipes_stay_preapproved_for_apps_also_on_a_home_from_before_call
 fn worker_info(parent: &str, state: TurnState) -> SessionInfo {
     SessionInfo {
         id: "w1".into(),
-        agent: "default".into(),
+        agent: "orchestrator".into(),
         project: None,
         site: None,
         ticket: Some("0001".into()),
@@ -1377,7 +1377,7 @@ async fn recipes_on_the_route_get_their_composer_variables() {
     let project = project.canonicalize().unwrap().display().to_string();
     let session = server
         .sessions
-        .create("default", Some(project.clone()))
+        .create("orchestrator", Some(project.clone()))
         .unwrap();
     let (status, body) = http(
         &server,
@@ -1592,12 +1592,12 @@ async fn the_sh_escape_hatch_takes_one_command_with_quotes_and_newlines() {
     std::fs::write(project.path().join("README"), "hi\n").unwrap();
     let session = server
         .sessions
-        .create("default", Some(project.path().display().to_string()))
+        .create("orchestrator", Some(project.path().display().to_string()))
         .unwrap();
     let context = ToolContext {
         server: server.clone(),
         session,
-        agent: Arc::new(AgentDefinition::load(&server.web, "default").unwrap()),
+        agent: Arc::new(AgentDefinition::load(&server.web, "orchestrator").unwrap()),
         site: None,
         cancel: CancellationToken::new(),
     };

@@ -105,8 +105,8 @@ fn record(
 }
 
 /// Posts the reminder into its session; without one (or if it's gone), into a new session
-/// for its agent (`agent:`, default `default`). An agent name that doesn't resolve falls
-/// back to `default`, and the message says so. Returns the session id.
+/// for its agent (`agent:`, default `orchestrator`). An agent name that doesn't resolve falls
+/// back to the orchestrator, and the message says so. Returns the session id.
 fn post_to_session(
     server: &Arc<Server>,
     reminder: &DueReminder,
@@ -125,10 +125,10 @@ fn post_to_session(
                 Some(name) => name,
                 None => {
                     note = Some(format!(
-                        " (note: agent {} was not found, so this ran as default)",
+                        " (note: agent {} was not found, so this ran as the orchestrator)",
                         reminder.agent
                     ));
-                    "default".into()
+                    crate::agent::ORCHESTRATOR.into()
                 }
             };
             match server.sessions.create(&agent, None) {
@@ -174,11 +174,8 @@ fn post_to_session(
 }
 
 /// The agent a new delivery session runs as: `wanted` if it names a real agent page, else
-/// `None` (the caller falls back to `default`). `default` itself is taken on faith, as always.
+/// `None` (the caller falls back to the orchestrator).
 fn resolve_agent(server: &Arc<Server>, wanted: &str) -> Option<String> {
-    if wanted == "default" {
-        return Some(wanted.to_string());
-    }
     AgentDefinition::load(&server.web, wanted)
         .ok()
         .map(|def| def.name)

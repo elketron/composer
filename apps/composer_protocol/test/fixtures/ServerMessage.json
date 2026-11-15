@@ -13,7 +13,7 @@
       "kind": "session",
       "session": {
         "id": "a3f1",
-        "agent": "default",
+        "agent": "orchestrator",
         "project": "/home/me/project",
         "site": "orchestration",
         "ticket": null,
@@ -36,7 +36,7 @@
       "sessions": [
         {
           "id": "a3f1",
-          "agent": "default",
+          "agent": "orchestrator",
           "project": "/home/me/project",
           "site": "orchestration",
           "ticket": null,
@@ -315,7 +315,7 @@
     "type": "session.updated",
     "session": {
       "id": "a3f1",
-      "agent": "default",
+      "agent": "orchestrator",
       "project": "/home/me/project",
       "site": "orchestration",
       "ticket": null,

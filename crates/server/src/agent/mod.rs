@@ -9,6 +9,11 @@ mod site_access;
 mod site_switch;
 
 pub use agent_definition::AgentDefinition;
+
+/// The agent the user talks to: a session started without naming an agent runs it.
+pub const ORCHESTRATOR: &str = "orchestrator";
+/// The agent a ticket is run on (`spawn_worker`); its page says `role: worker`.
+pub const WORKER: &str = "worker";
 pub use app_launch::AppLaunch;
 pub use entered::Entered;
 pub use prompt::system_prompt;

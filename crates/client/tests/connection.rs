@@ -72,7 +72,7 @@ async fn a_connection_reconnects_and_pairs_replies() {
     let created = ask(
         &connection,
         ClientCommand::SessionCreate {
-            agent: "default".into(),
+            agent: "orchestrator".into(),
             project: None,
         },
     )

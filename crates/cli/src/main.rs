@@ -27,7 +27,7 @@ struct Cli {
     #[arg(long, short = 'n')]
     new: bool,
     /// Agent for new sessions.
-    #[arg(long, default_value = "default", global = true)]
+    #[arg(long, default_value = "orchestrator", global = true)]
     agent: String,
     /// Active project for a new session: a name in the projects directory (`[projects] dir`,
     /// default ~/Projects), `.` for this directory, or a path.

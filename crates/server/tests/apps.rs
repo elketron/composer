@@ -45,7 +45,7 @@ async fn new_app_scaffolds_the_ui_and_a_build_action() {
         &mut socket,
         1,
         ClientCommand::SessionCreate {
-            agent: "default".into(),
+            agent: "orchestrator".into(),
             project: None,
         },
     )
@@ -364,7 +364,7 @@ async fn an_app_message_reaches_the_agent_marked_with_its_site() {
         &mut socket,
         1,
         ClientCommand::SessionCreate {
-            agent: "default".into(),
+            agent: "orchestrator".into(),
             project: None,
         },
     )

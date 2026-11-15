@@ -82,11 +82,11 @@ async fn a_worker_process_calls_an_mcp_tool_through_the_parent() {
     std::fs::write(&script, FAKE_SERVER).unwrap();
     let home = WorkspaceHome::new(dir.path());
     init_workspace(&home).await.unwrap();
-    // The worker is the default agent; give it the fake server's tools and the worker finish.
-    let default = std::fs::read_to_string(dir.path().join("sites/agents/default.md")).unwrap();
+    // The worker is the worker agent; give it the fake server's tools and the worker finish.
+    let worker = std::fs::read_to_string(dir.path().join("sites/agents/worker.md")).unwrap();
     std::fs::write(
-        dir.path().join("sites/agents/default.md"),
-        default.replace("finish, watch]", "finish, watch, fake__*]"),
+        dir.path().join("sites/agents/worker.md"),
+        worker.replace("finish, watch]", "finish, watch, fake__*]"),
     )
     .unwrap();
     std::fs::create_dir_all(dir.path().join("sites/notes")).unwrap();

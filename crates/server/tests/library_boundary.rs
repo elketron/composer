@@ -195,7 +195,7 @@ async fn publishing_a_site_never_removes_library_files_outside_its_definition() 
     .unwrap();
     publish(&f.a, "agents").unwrap();
     // The stock agents stay in the library, and in b after its update.
-    for agent in ["default.md", "orchestrator.md"] {
+    for agent in ["worker.md", "orchestrator.md"] {
         assert!(
             f.home.library().join("agents").join(agent).is_file(),
             "library lost {agent}"
@@ -206,8 +206,8 @@ async fn publishing_a_site_never_removes_library_files_outside_its_definition() 
     let b = WorkspaceLibrary::of(&f.b).unwrap();
     b.update(false, &b.approvals().unwrap()).await.unwrap();
     assert!(
-        f.b.sites().join("agents/default.md").is_file(),
-        "b lost its default agent"
+        f.b.sites().join("agents/worker.md").is_file(),
+        "b lost its worker agent"
     );
     assert!(f.b.sites().join("agents/printer.md").is_file());
 }
@@ -271,7 +271,7 @@ async fn a_worker_can_not_publish() {
         .sessions
         .create_with_info(SessionInfo {
             id: "wk1".into(),
-            agent: "default".into(),
+            agent: "orchestrator".into(),
             project: None,
             site: None,
             ticket: Some("0001".into()),
@@ -294,7 +294,7 @@ async fn a_worker_can_not_publish() {
     let context = ToolContext {
         server: server.clone(),
         session: worker,
-        agent: Arc::new(AgentDefinition::load(&server.web, "default").unwrap()),
+        agent: Arc::new(AgentDefinition::load(&server.web, "orchestrator").unwrap()),
         site: Some(site),
         cancel: CancellationToken::new(),
     };

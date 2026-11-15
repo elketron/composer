@@ -66,7 +66,7 @@ async fn an_app_points_the_agent_at_things() {
         &sites.join("board/ui/dist/assets/a.js"),
         "d=\"composer-sdk:3\"",
     );
-    let session = server.sessions.create("default", None).unwrap();
+    let session = server.sessions.create("orchestrator", None).unwrap();
     let id = session.id().to_string();
     let mut client = connect(addr, &server.token).await;
     send(
@@ -108,7 +108,7 @@ async fn an_app_points_the_agent_at_things() {
         server: server.clone(),
         session: session.clone(),
         agent: std::sync::Arc::new(
-            composer_server::agent::AgentDefinition::load(&server.web, "default").unwrap(),
+            composer_server::agent::AgentDefinition::load(&server.web, "orchestrator").unwrap(),
         ),
         site: None,
         cancel: tokio_util::sync::CancellationToken::new(),
