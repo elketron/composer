@@ -1,5 +1,6 @@
 import 'package:composer_protocol/composer_protocol.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/rendering.dart';
 
 import '../../state/actions.dart';
@@ -84,11 +85,12 @@ class _ChatViewState extends State<ChatView> {
   }
 
   bool _onScroll(ScrollNotification n) {
+    // Only the list's own scrolling: a message's code block or text field scrolls too, and its
+    // notifications bubble up here — with its own metrics, sometimes from inside a layout pass.
+    if (n.depth != 0) return false;
     final pixels = _controller.hasClients ? _controller.position.pixels : 0.0;
     final atBottom = _atBottom(n.metrics);
-    if (atBottom != widget.chat.atBottom) {
-      StoreScope.read(context).dispatch(ViewScrolled(widget.url, widget.chat.session, atBottom: atBottom));
-    }
+    if (atBottom != widget.chat.atBottom) _scrolled(atBottom);
     if (!widget.chat.atBottom) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
@@ -96,6 +98,20 @@ class _ChatViewState extends State<ChatView> {
       });
     }
     return false;
+  }
+
+  /// Tells the store; never in the middle of a frame (a notification raised by layout), where
+  /// rebuilding the list's parent would rebuild it under the rows it is laying out.
+  void _scrolled(bool atBottom) {
+    void tell() {
+      if (mounted) StoreScope.read(context).dispatch(ViewScrolled(widget.url, widget.chat.session, atBottom: atBottom));
+    }
+
+    if (SchedulerBinding.instance.schedulerPhase == SchedulerPhase.idle) {
+      tell();
+    } else {
+      SchedulerBinding.instance.addPostFrameCallback((_) => tell());
+    }
   }
 
   void _backToLatest() {
