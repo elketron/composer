@@ -37,7 +37,9 @@ pub enum Kind {
     /// A list item with its marker.
     Item(Marker),
     /// One row of a table, its columns padded so they line up; the header row is the first.
-    TableRow { header: bool },
+    TableRow {
+        header: bool,
+    },
     Rule,
     Code,
 }
@@ -246,7 +248,7 @@ impl Doc<'_> {
             Tag::Link { dest_url, .. } => {
                 let target = composer_core::resolve_link(&dest_url, self.base);
                 let id = self.link(&target);
-                self.push_style(|s| s.link = Some(id));
+                self.push_style(|s| s.link = id);
             }
             // Images stay text for now: the alt and where it points (the phone draws them).
             Tag::Image { dest_url, .. } => {
@@ -297,7 +299,7 @@ impl Doc<'_> {
                         format!("{alt} ({shown})")
                     };
                     let id = self.link(&target);
-                    self.push_style(|s| s.link = Some(id));
+                    self.push_style(|s| s.link = id);
                     self.push(&shown);
                     self.styles.pop();
                 }
@@ -309,7 +311,9 @@ impl Doc<'_> {
 
     /// The table is finished: every row on one line, its cells padded to their column's width.
     fn end_table(&mut self) {
-        let Some(rows) = self.table.take() else { return };
+        let Some(rows) = self.table.take() else {
+            return;
+        };
         if rows.is_empty() {
             return;
         }
@@ -366,15 +370,26 @@ impl Doc<'_> {
         });
     }
 
-    /// Register a link for the block being built and return its id.
-    fn link(&mut self, target: &LinkTarget) -> usize {
-        let cur = self.cur.as_mut().expect("a block to write into");
+    /// Register a link for the block being built and return its id. None inside a table: a
+    /// table is drawn as aligned mono text, so a link in a cell shows as its words, not clickable.
+    fn link(&mut self, target: &LinkTarget) -> Option<usize> {
+        if self.table.is_some() {
+            return None;
+        }
+        let cur = self.cur.get_or_insert_with(|| Block {
+            kind: Kind::Paragraph,
+            depth: self.lists.len().saturating_sub(1),
+            quote: self.quote,
+            text: String::new(),
+            runs: Vec::new(),
+            links: Vec::new(),
+        });
         cur.links.push(Link {
             text: String::new(),
             ranges: Vec::new(),
             target: target.clone(),
         });
-        cur.links.len() - 1
+        Some(cur.links.len() - 1)
     }
 
     /// Add text where it belongs: into a table cell, or into the block being built (where it
@@ -405,9 +420,12 @@ impl Doc<'_> {
                 style,
             });
         }
-    }    /// Finish the block being built: its links hold the ranges that pointed at them.
+    }
+    /// Finish the block being built: its links hold the ranges that pointed at them.
     fn flush(&mut self) {
-        let Some(mut block) = self.cur.take() else { return };
+        let Some(mut block) = self.cur.take() else {
+            return;
+        };
         if block.text.is_empty() && block.links.is_empty() {
             return;
         }
@@ -423,6 +441,21 @@ impl Doc<'_> {
         }
         self.out.push(block);
     }
+}
+
+/// What a click on a block's text opens: one entry per link range, in the order gpui's
+/// `InteractiveText::on_click` numbers them (it hands back the index into the ranges, and a link
+/// can have several ranges: one per styled part).
+pub fn click_targets(block: &Block) -> Vec<(Range<usize>, LinkTarget)> {
+    block
+        .links
+        .iter()
+        .flat_map(|link| {
+            link.ranges
+                .iter()
+                .map(|range| (range.clone(), link.target.clone()))
+        })
+        .collect()
 }
 
 /// The text of a link, from its ranges (they may not be next to each other).
@@ -520,7 +553,9 @@ mod tests {
     #[test]
     fn headings_lose_their_markers() {
         assert_eq!(
-            shown_all("# One\n\n## Two\n\n### Three *em*\n\n#### Four\n\n##### Five\n\n###### Six\n"),
+            shown_all(
+                "# One\n\n## Two\n\n### Three *em*\n\n#### Four\n\n##### Five\n\n###### Six\n"
+            ),
             [
                 "h1 One",
                 "h2 Two",
@@ -643,6 +678,39 @@ mod tests {
     }
 
     #[test]
+    fn a_click_on_any_range_opens_its_own_link() {
+        // gpui's on_click hands back the index into the ranges it was given; a link with two
+        // styled parts has two ranges, so the targets must be listed per range, not per link.
+        let block = &blocks("[**bold** bit](x.md) then [other](y.md)", Some(&base()))[0];
+        let clicks = click_targets(block);
+        let x = LinkTarget::Site(SiteUrl::parse("site://memory/x.md").unwrap());
+        let y = LinkTarget::Site(SiteUrl::parse("site://memory/y.md").unwrap());
+        let words: Vec<(&str, &LinkTarget)> = clicks
+            .iter()
+            .map(|(range, target)| (&block.text[range.clone()], target))
+            .collect();
+        assert_eq!(words, [("bold", &x), (" bit", &x), ("other", &y)]);
+    }
+
+    #[test]
+    fn a_link_or_image_in_a_table_cell_is_its_words() {
+        let text = "| [a](x.md) | ![pic](p.png) |\n|---|---|\n| c | **d** |\n";
+        assert_eq!(
+            shown_all(text),
+            ["thead [b a  pic (site://memory/p.png)]", "trow c  d"]
+        );
+        assert!(
+            blocks(text, Some(&base()))
+                .iter()
+                .all(|b| b.links.is_empty()),
+            "a table is aligned text: nothing in it is clickable"
+        );
+        // The paragraph after the table still links.
+        let after = blocks("| a |\n|---|\n| b |\n\n[x](x.md)", Some(&base()));
+        assert_eq!(after.last().unwrap().links.len(), 1);
+    }
+
+    #[test]
     fn runs_are_sorted_and_do_not_overlap() {
         // What the renderer feeds gpui directly: `with_highlights` and
         // `with_font_family_overrides` both want ranges in order, not overlapping, on character
@@ -668,7 +736,10 @@ mod tests {
     #[test]
     fn an_unclosed_marker_while_streaming_stays_text() {
         assert_eq!(shown_all("plain, then **bold"), ["p plain, then **bold"]);
-        assert_eq!(shown_all("plain, then **bold**"), ["p plain, then [b bold]"]);
+        assert_eq!(
+            shown_all("plain, then **bold**"),
+            ["p plain, then [b bold]"]
+        );
     }
 
     #[test]

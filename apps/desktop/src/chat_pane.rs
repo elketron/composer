@@ -379,16 +379,6 @@ fn message(you: bool, label: Option<String>, body: Vec<AnyElement>) -> AnyElemen
         .into_any_element()
 }
 
-fn prose(text: &str) -> AnyElement {
-    div()
-        .font_family(PROSE)
-        .text_size(px(TEXT_SIZE))
-        .line_height(px(23.))
-        .text_color(rgb(FG))
-        .child(text.to_string())
-        .into_any_element()
-}
-
 fn code(text: &str) -> AnyElement {
     div()
         .font_family(FONT)
@@ -605,8 +595,8 @@ impl ChatPane {
         if block.links.is_empty() {
             return styled.into_any_element();
         }
-        let targets: Vec<LinkTarget> = block.links.iter().map(|l| l.target.clone()).collect();
-        let ranges: Vec<Range<usize>> = block.links.iter().flat_map(|l| l.ranges.clone()).collect();
+        let (ranges, targets): (Vec<Range<usize>>, Vec<LinkTarget>) =
+            markdown::click_targets(block).into_iter().unzip();
         let entity = cx.entity();
         InteractiveText::new(gpui::ElementId::Name(key.into()), styled)
             .on_click(ranges, move |ix, _window, cx| {
@@ -1050,7 +1040,9 @@ impl ChatPane {
                     flush_tools(&mut tools, &mut body, self, cx);
                     flush(&mut body, &mut body_label, &mut rows);
                     let label = source.clone().unwrap_or_else(|| "you".into());
-                    let mut parts = vec![prose(text)];
+                    // Your messages are markdown too, like the agent's (a desktop choice: the
+                    // phone shows them plain).
+                    let mut parts = self.markdown(text, &format!("you-{n}"), cx);
                     if !files.is_empty() {
                         parts.push(
                             div()

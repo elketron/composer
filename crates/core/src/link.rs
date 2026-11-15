@@ -48,9 +48,8 @@ pub fn extract_links(markdown: &str, base: &SiteUrl) -> Vec<Link> {
     links
 }
 
-/// Where one link on a page goes; no base means a text with no page of its own (a chat
-/// message),
-/// where only an absolute address means anything.
+/// Where one link on a page goes. No base means a text with no page of its own (a chat
+/// message), where only an absolute address means anything.
 pub fn resolve_link(href: &str, base: Option<&SiteUrl>) -> LinkTarget {
     if has_foreign_scheme(href) {
         return LinkTarget::External(href.to_string());

@@ -55,7 +55,9 @@ session (`window.session`).
 
 Markdown in the chat (2026-11-15): agent messages and your own render — headings, paragraphs,
 lists (bullet, ordered from their own number, tasks), block quotes, tables, thematic breaks,
-fenced code, emphasis, strong, strikethrough, inline code and links. A pure parser
+fenced code, emphasis, strong, strikethrough, inline code and links. Your own messages rendering
+it is a desktop choice: the phone shows them plain (only its agent text is markdown). A table is
+aligned mono text, so a link or image in a cell shows as its words and isn't clickable. A pure parser
 (`apps/desktop/src/markdown.rs`, pulldown-cmark with tables, strikethrough and task lists) hands
 the renderer blocks with styled runs as byte ranges on character boundaries; GPUI does the
 wrapping, so the model never wraps text itself. An unclosed marker (mid-stream) stays literal
