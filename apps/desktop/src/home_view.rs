@@ -1258,7 +1258,7 @@ mod tests {
 
     fn session(id: &str, updated: &str) -> SessionInfo {
         serde_json::from_value(serde_json::json!({
-            "id": id, "agent": "default", "project": null, "ticket": null, "parent": null,
+            "id": id, "agent": "orchestrator", "project": null, "ticket": null, "parent": null,
             "state": "idle", "last_seq": 1, "preview": "old", "updated": updated
         }))
         .unwrap()

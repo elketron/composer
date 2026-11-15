@@ -5,9 +5,21 @@ use std::collections::BTreeMap;
 use composer_client::Approval;
 use composer_protocol::http::ProjectSummary;
 use composer_protocol::http::SiteSummary;
-use composer_protocol::{ModelInfo, SessionInfo};
+use composer_protocol::{ClientCommand, ModelInfo, SessionInfo};
 
 use crate::picker::{Item, Pick};
+
+/// The agent every session the desktop starts runs as: the user talks to the orchestrator, which
+/// spawns the workers. The desktop never asks for an agent.
+pub const ORCHESTRATOR: &str = "orchestrator";
+
+/// The command that starts a session in `project` (a folder) or none.
+pub fn new_session(project: Option<String>) -> ClientCommand {
+    ClientCommand::SessionCreate {
+        agent: ORCHESTRATOR.into(),
+        project,
+    }
+}
 
 pub fn workspaces(names: Vec<String>, this: &str) -> Vec<Item> {
     names
@@ -85,7 +97,7 @@ pub fn commands(following: bool) -> Vec<Item> {
         },
         Item {
             label: "New session".into(),
-            detail: "same agent and project".into(),
+            detail: "as the orchestrator, pick a project".into(),
             note: String::new(),
             group: "session",
             pick: Pick::NewSession,
@@ -196,9 +208,27 @@ pub fn sites(sites: &[SiteSummary], current: Option<&str>) -> Vec<Item> {
         .collect()
 }
 
-/// At most `max` characters, an ellipsis when cut.
 /// The projects to put the shown session in (most recently used first), and none.
 pub fn projects(projects: &[ProjectSummary], current: Option<&str>) -> Vec<Item> {
+    project_items(projects, current, "the sites only", Pick::SetProject)
+}
+
+/// The projects a new session can start in (most recently used first), and none.
+pub fn new_session_projects(projects: &[ProjectSummary]) -> Vec<Item> {
+    project_items(
+        projects,
+        None,
+        "a session on the sites only",
+        Pick::NewSessionIn,
+    )
+}
+
+fn project_items(
+    projects: &[ProjectSummary],
+    current: Option<&str>,
+    none: &str,
+    pick: fn(Option<String>) -> Pick,
+) -> Vec<Item> {
     let mut sorted: Vec<&ProjectSummary> = projects.iter().collect();
     sorted.sort_by_key(|p| std::cmp::Reverse(p.last_used.clone().unwrap_or_default()));
     let mut items: Vec<Item> = sorted
@@ -212,15 +242,15 @@ pub fn projects(projects: &[ProjectSummary], current: Option<&str>) -> Vec<Item>
             detail: p.path.clone(),
             note: String::new(),
             group: "projects",
-            pick: Pick::SetProject(Some(p.folder.clone())),
+            pick: pick(Some(p.folder.clone())),
         })
         .collect();
     items.push(Item {
         label: "No project".into(),
-        detail: "the sites only".into(),
+        detail: none.into(),
         note: String::new(),
         group: "projects",
-        pick: Pick::SetProject(None),
+        pick: pick(None),
     });
     items
 }
@@ -250,6 +280,7 @@ pub fn models(models: &[ModelInfo], default: &str, current: Option<&str>) -> Vec
     items
 }
 
+/// At most `max` characters, an ellipsis when cut.
 pub fn short(text: &str, max: usize) -> String {
     match text.char_indices().nth(max) {
         Some((at, _)) => format!("{}…", &text[..at]),
@@ -272,7 +303,7 @@ mod tests {
 
     fn session(id: &str, updated: &str, preview: Option<&str>, worker: bool) -> SessionInfo {
         let mut json = serde_json::json!({
-            "id": id, "agent": "default", "project": "/home/u/Projects/game/", "ticket": null,
+            "id": id, "agent": "orchestrator", "project": "/home/u/Projects/game/", "ticket": null,
             "parent": null, "state": "idle", "last_seq": 0, "preview": preview, "updated": updated
         });
         if worker {
@@ -306,9 +337,9 @@ mod tests {
             picks,
             [&Pick::Session("b".into()), &Pick::Session("a".into())]
         );
-        assert_eq!(items[0].label, "default #b ! waiting");
+        assert_eq!(items[0].label, "orchestrator #b ! waiting");
         assert_eq!(items[0].note, "", "no preview: nothing under it");
-        assert_eq!(items[1].label, "default #a · shown");
+        assert_eq!(items[1].label, "orchestrator #a · shown");
         assert_eq!(items[1].note, "old one");
         assert_eq!(items[1].detail, "game");
         assert!(items.iter().all(|i| i.group == "sessions"));
@@ -349,6 +380,7 @@ mod tests {
         assert_eq!(items[0].detail, "ctrl+alt+1");
         assert_eq!(commands(true)[3].label, "Follow agent: turn off");
         assert_eq!(commands(true)[1].pick, Pick::NewSession);
+        assert_eq!(commands(true)[1].label, "New session");
         assert_eq!(commands(true)[2].pick, Pick::AttachFile);
         let groups: Vec<&str> = commands(false).iter().map(|i| i.group).collect();
         assert_eq!(
@@ -404,5 +436,49 @@ mod tests {
         assert_eq!(items[0].detail, "m0");
         assert_eq!(items[1].label, "m1 · shown");
         assert_eq!(items[1].detail, "128k context");
+    }
+
+    #[test]
+    fn a_new_session_starts_the_orchestrator_in_the_picked_project() {
+        let project = |name: &str, used: &str| ProjectSummary {
+            name: name.into(),
+            path: format!("~/Projects/{name}"),
+            modified: String::new(),
+            folder: format!("/home/u/Projects/{name}"),
+            sessions: 0,
+            running: 0,
+            waiting: 0,
+            last_used: Some(used.into()),
+            page: None,
+        };
+        let items =
+            new_session_projects(&[project("old", "2026-01-01"), project("game", "2026-11-01")]);
+        let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
+        assert_eq!(
+            labels,
+            ["game", "old", "No project"],
+            "recent first, then none"
+        );
+        assert_eq!(
+            items[0].pick,
+            Pick::NewSessionIn(Some("/home/u/Projects/game".into()))
+        );
+        assert_eq!(items[2].pick, Pick::NewSessionIn(None));
+        assert_eq!(items[2].detail, "a session on the sites only");
+        assert!(items.iter().all(|i| i.group == "projects"));
+        match new_session(Some("/home/u/Projects/game".into())) {
+            ClientCommand::SessionCreate { agent, project } => {
+                assert_eq!(agent, "orchestrator");
+                assert_eq!(project.as_deref(), Some("/home/u/Projects/game"));
+            }
+            other => panic!("not a session create: {other:?}"),
+        }
+        match new_session(None) {
+            ClientCommand::SessionCreate { agent, project } => {
+                assert_eq!(agent, "orchestrator");
+                assert_eq!(project, None);
+            }
+            other => panic!("not a session create: {other:?}"),
+        }
     }
 }

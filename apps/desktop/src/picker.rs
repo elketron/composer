@@ -15,8 +15,10 @@ use crate::theme::*;
 pub enum Pick {
     Workspace(String),
     Session(String),
-    /// A new session with the shown one's agent and project.
+    /// A new session: asks for its project (it always runs as the orchestrator).
     NewSession,
+    /// Start the new session in this project (a folder) or none.
+    NewSessionIn(Option<String>),
     Page(String),
     App(String),
     /// A `[[launcher]]` entry (it runs on this machine: the server's, on Linux).
