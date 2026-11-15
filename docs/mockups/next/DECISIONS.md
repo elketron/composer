@@ -26,6 +26,7 @@
 | 2026-11-14 | Implemented: phone colours (Noema roles in `tokens.dart`, filled controls deep indigo), landscape side by side with the rail, Hide chat, the 44px-wide site chip; desktop shell colours and corners, title and status bars, floating grouped palette and switcher, approvals counted in the client store. The native desktop chat, home and projects screens are not yet built. | Shipped in code, pending review |
 | 2026-11-15 | Implemented: the native desktop chat (01: transcript, streaming, folded thinking, grouped tool rows, approval cards, modal composer with IME, attachments by picker, drop and paste), the workspace home (11: sessions, 12: projects) and the palette's project, model and compact commands. The window no longer embeds the TUI. The review verdict card (10) stays a proposal. | Shipped in code, pending review |
 | 2026-11-15 | The review verdict card (10) ships client-side: while the agent has opened a Hunk review page (frontmatter `type: tui`, `control: hunk`) and no `pass`/`fail` has been said, the chat offers Pass (sends `pass`) and Changes… (`fail: ` in the composer). The coding site's user-review stage takes the message as the verdict; no server change. | Shipped in code, pending review |
+| 2026-11-15 | Floating panes (palette, switcher, pickers) sit dead centre of the window between the bars, over both panes, with an even shadow; the scrim dims both panes. Supersedes "dim the conversation only beneath overlays" (2026-11-14) for their position and scrim. | User decision, ticket 0198 |
 
 ## Verification · 2026-11-14
 

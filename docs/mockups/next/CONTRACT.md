@@ -64,10 +64,15 @@ implement editing, sending or approvals.
 
 ## Session switcher
 
-Float above the left transcript, 54px from the left window edge and 116px from
-the top at the reference size, with width equal to the chat pane minus 108px.
-Dim only the chat underneath, not the active stage or the floating pane. A 5px-cornered
-panel, search field, four rows, keyboard footer. No persistent chat list.
+Float dead centre of the window, both ways, in the area between the title bar and
+the status bar, over both panes — the same place on the session page and on Home.
+532px wide at most, leaving at least 54px each side (24px at 1200px and below, 16px at
+900px and below), and 24px clear of either bar; on a short window the list gives way
+and the head and footer stay. Dim both panes underneath (the bars stay as they are).
+An even shadow on all four sides (`0 0 28px 2px` black at .55), not a drop shadow.
+A 5px-cornered panel, search field, four rows, keyboard footer. No persistent chat list.
+(Until 2026-11-15, ticket 0198: anchored 54px from the left and 116px from the top,
+over the chat only.)
 
 | Agent/session | Status | Site/project | Preview |
 |---|---|---|---|
