@@ -13,6 +13,7 @@
 | 2026-11-14 | Add landscape phone conversation: compact top rows, 34/66 live/chat split, inline approval actions and a one-row composer. Collapsing live returns chat to the entire width. Keep type and touch targets, rather than scaling the portrait layout down. | Proposal awaiting visual review |
 | 2026-11-14 | Add Hide chat / Show chat to the phone live viewer in portrait and landscape. Focus mode expands the view without leaving the session; restoring chat retains scroll position and must retain drafts in production. Collapsing live always restores chat. | User-requested capability; visual treatment pending review |
 | 2026-11-14 | User correction: landscape chat belongs on the left, live on the right. Preserve the current Flutter phone's Inter prose, message/card separation, tinted user bubbles, small radii and newest-first order. Apply Noema colors without transplanting the desktop's mono/rule transcript. Supersedes the earlier phone mono/square and reversed-pane proposals. | Requested by user; revised mockups pending review |
+| 2026-11-15 | User correction: the phone chat has the newest message at the bottom, beside the message bar, as every chat client does. Supersedes newest-first (board E and the 2026-11-14 row above). The newest-first list also let a message's own text field swallow flings, freezing the chat (fixed separately). | Requested by user; shipped in the app |
 | 2026-11-14 | Remove the redundant Inbox heading from the phone inbox; the selected bottom tab already names the screen. Keep session counts and content unchanged. | Requested by user |
 | 2026-11-14 | Desktop prose (message text, composer placeholder, session previews) uses Inter, as the references do; speakers, tools, threads, approvals, paths and chrome stay JetBrains Mono. Same split as the phone. | Fidelity correction; pending review |
 | 2026-11-14 | The desktop chat is native and desktop-first, as in the studies; it no longer embeds the TUI. The two-pane session screen (chat left, stage right) does not change. | Requested by user |
@@ -83,7 +84,7 @@
 - Bundled Inter with its license. Phone prose/UI uses Inter, technical fields
   use JetBrains Mono, and the shared Noema color values are unchanged.
 - Phone cards/user messages regain 4–5px radii; approval retains its warning
-  border and separated approve/deny footer. Phone history is newest-first.
+  border and separated approve/deny footer. Phone history was newest-first (newest at the bottom since 2026-11-15).
 - Landscape renders and assertions now explicitly require chat/composer to the
   left of the live view. Existing collapse, focus and exact scroll-restoration
   tests still pass in both orientations.

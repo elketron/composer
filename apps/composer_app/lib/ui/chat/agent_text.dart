@@ -49,7 +49,9 @@ class AgentText extends StatelessWidget {
   @override
   Widget build(BuildContext context) => MarkdownBody(
         data: streaming ? '$text ▍' : text,
-        selectable: true,
+        // Not `selectable`: that makes each paragraph a text field with its own vertical
+        // scrollable, which can win a drag and freeze the chat list. The list's SelectionArea
+        // selects the text instead.
         styleSheet: styleSheet(context),
         onTapLink: (_, href, _) => _open(context, href),
       );

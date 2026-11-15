@@ -61,7 +61,7 @@ class ApprovalCard extends StatelessWidget {
                 padding: const EdgeInsets.all(8),
                 constraints: const BoxConstraints(maxHeight: 200),
                 decoration: BoxDecoration(color: t.bg, border: Border.all(color: t.border), borderRadius: BorderRadius.circular(t.radiusControl)),
-                child: SingleChildScrollView(child: SelectableText(approval.body, style: mono(size: 12, color: t.text))),
+                child: SingleChildScrollView(child: SelectionArea(child: Text(approval.body, style: mono(size: 12, color: t.text)))),
               ),
             const SizedBox(height: 6),
             Text(approvalNote(approval), style: const TextStyle(color: t.faint, fontSize: 12)),

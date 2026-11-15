@@ -16,7 +16,7 @@ It is design history, not another current direction.
 | [02 — Sessions](screens/02-sessions.html) | Temporary session switcher above the left transcript | [CONTRACT.md](CONTRACT.md#session-switcher) |
 | [03 — Commands](screens/03-commands.html) | Grouped command palette in the same position | [CONTRACT.md](CONTRACT.md#command-palette) |
 | [04 — Phone inbox](screens/04-phone-inbox.html) | The app's inbox: approval tile and unread session under Needs you, recent cards, New chat | [PHONE-CONTRACT.md](PHONE-CONTRACT.md#04--inbox) |
-| [05 — Phone conversation](screens/05-phone-chat.html) | The app's chat page: site row, small live view and handle, recipe approval, newest first | [PHONE-CONTRACT.md](PHONE-CONTRACT.md#05--conversation) |
+| [05 — Phone conversation](screens/05-phone-chat.html) | The app's chat page: site row, small live view and handle, recipe approval, newest first (the app now has the newest at the bottom) | [PHONE-CONTRACT.md](PHONE-CONTRACT.md#05--conversation) |
 | [06 — Phone live view](screens/06-phone-live.html) | The live view at its large size; Hide chat (proposal) | [PHONE-CONTRACT.md](PHONE-CONTRACT.md#06--larger-live-view) |
 | [07 — Phone site sheet](screens/07-phone-site.html) | The app's site sheet over the chat | [PHONE-CONTRACT.md](PHONE-CONTRACT.md#07--site-sheet) |
 | [08 — Phone landscape](screens/08-phone-landscape.html) | Proposal: chat left with a one-row header, live view right at full height, fold to a rail | [PHONE-CONTRACT.md](PHONE-CONTRACT.md#08--landscape-proposal) |
@@ -56,7 +56,7 @@ the index carries the design commentary instead of adding chrome to the app.
 On desktop, keep the phone's small corners (5/4/3/2px; bars and the stage square), hairlines, restrained indigo and low-contrast
 surfaces: no message bubbles or permanent session sidebar. The phone is drawn
 from the Flutter app as it ships, with only its colours changed to Noema: Inter prose, mono names, its
-cards, tinted user bubbles, 2–5px corners and newest-first chat. Change it only where a
+cards, tinted user bubbles, 2–5px corners and the newest message at the bottom of the chat. Change it only where a
 screen is marked as a proposal (landscape, Hide chat). No gradients or extra decorative navigation. On desktop the stage is the largest region. On
 phone the view-only live section sits above its handle and steps between sizes.
 In landscape keep chat left and live view right, as on desktop.

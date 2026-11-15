@@ -51,7 +51,7 @@ class _CollapsibleRowState extends State<CollapsibleRow> {
             border: Border.all(color: t.border),
             borderRadius: BorderRadius.circular(t.radius),
           ),
-          child: SingleChildScrollView(child: SelectableText(body, style: mono(size: 12, color: t.muted))),
+          child: SingleChildScrollView(child: Text(body, style: mono(size: 12, color: t.muted))),
         ),
     ]);
   }

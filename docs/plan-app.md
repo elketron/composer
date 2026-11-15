@@ -23,7 +23,7 @@ the chat, the pages, and the micro apps in an embedded browser. No terminal is a
 The fresh [phone mockups](mockups/next/index.html#phone) extend the user's desktop
 reference and exact Noema palette to the Flutter phone. User correction: retain
 the existing phone's Inter prose, technical monospace, separated user bubbles,
-tool/approval cards, small corner radii and newest-first chat instead of adopting
+tool/approval cards, small corner radii and chat order (newest at the bottom since 2026-11-15) instead of adopting
 the desktop transcript. Apply near-black surfaces, warm gray and restrained
 indigo. Keep 44px touch targets, 56px app bars/navigation, a bottom composer and
 site bottom sheets. A paired phone's live view remains view-only. The landscape

@@ -9,7 +9,7 @@ joins (`enter_site`, the launcher, the MCP client), the server half of the switc
 (`site.set`, `:workflow` / `:site` in the TUI). Phase 3's server half (2026-11-10): composer proxies the viewer at `<workspace>/view` (view only for a paired device; the machine's own user, with the workspace's local token, can drive: see "Driving through the proxy" below) and
 `/api/sites` and `/api/info` tell clients about workflows and the viewer. The phone's half (built
 2026-11-10, board E): the session screen with the workflow chip, the resizable live view and the
-newest-first chat, and the inbox / workflows / pages / server bar. Not built: `view:`, `model:`. Everything else here is a proposal.
+chat (newest at the bottom since 2026-11-15; the board had it first), and the inbox / workflows / pages / server bar. Not built: `view:`, `model:`. Everything else here is a proposal.
 
 Read [lean-orchestration.md](lean-orchestration.md) first for the base (a small harness, capabilities
 as sites). This page is the layer above it: what a workflow is, what the user and the agent look at
@@ -317,7 +317,7 @@ answered in place, and a bottom bar (inbox, workflows, pages, server). Dark, mon
 the phone only; the TUI stays square.
 
 In that board, the live view needs the viewer reachable from the phone, and the workflow chip needs
-the switch. The rounding, the stop icon, the bottom bar and the newest-first chat need neither.
+the switch. The rounding, the stop icon, the bottom bar and the chat order need neither.
 
 The test for any client work: does the feeling survive with a terminal and a plain browser tab? If it
 does, the shell is a better seat for the same thing, not the only place it works.

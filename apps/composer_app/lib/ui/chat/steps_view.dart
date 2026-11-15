@@ -124,7 +124,7 @@ class _StepsViewState extends State<StepsView> {
       padding: const EdgeInsets.all(8),
       constraints: const BoxConstraints(maxHeight: 280),
       decoration: BoxDecoration(color: t.bg, border: Border.all(color: t.border), borderRadius: BorderRadius.circular(t.radius)),
-      child: SingleChildScrollView(child: SelectableText(text.trim(), style: mono(size: 12, color: t.muted))),
+      child: SingleChildScrollView(child: Text(text.trim(), style: mono(size: 12, color: t.muted))),
     );
   }
 }

@@ -42,7 +42,7 @@ class UserBubble extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (item.source != null) ...[Text(item.source!, style: mono(size: 11, color: t.faint)), const SizedBox(height: 2)],
-                if (item.text.trim().isNotEmpty) SelectableText(item.text, style: const TextStyle(fontSize: 15, height: 1.4)),
+                if (item.text.trim().isNotEmpty) Text(item.text, style: const TextStyle(fontSize: 15, height: 1.4)),
                 if (item.attachments.isNotEmpty && session != null) ...[
                   if (item.text.trim().isNotEmpty) const SizedBox(height: 8),
                   Wrap(

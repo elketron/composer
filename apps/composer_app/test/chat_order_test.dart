@@ -68,6 +68,9 @@ void suite({required bool newestFirst}) {
   final away = newestFirst ? -1.0 : 1.0;
   final all = transcript(60);
 
+  /// Bumped to rebuild the chat, as the app does all the time (status, live view, workers).
+  final tick = ValueNotifier(0);
+
   Future<AppStore> openChat(WidgetTester tester) async {
     await tester.binding.setSurfaceSize(const Size(400, 800));
     late AppStore store;
@@ -84,8 +87,9 @@ void suite({required bool newestFirst}) {
         store: store,
         child: MaterialApp(
           home: Scaffold(
-            body: Builder(
-              builder: (context) {
+            body: ValueListenableBuilder(
+              valueListenable: tick,
+              builder: (context, _, _) {
                 final status = StoreScope.of(context).state.statusOf(home.url);
                 return ChatView(url: home.url, status: status, chat: status.chat!, newestFirst: newestFirst);
               },
@@ -134,9 +138,10 @@ void suite({required bool newestFirst}) {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
     expect(store.state.statusOf(home.url).chat!.atBottom, isFalse, reason: 'scrolled up');
-    // A selectable message's own scrollable reports itself at its start (which, for the chat,
+    // A wide code block's own scrollable reports itself at its start (which, for the chat,
     // would read as "back at the newest line").
-    final inner = tester.element(find.byType(EditableText).first);
+    final list = find.byType(Scrollable).first;
+    final inner = tester.element(find.descendant(of: list, matching: find.byType(Scrollable)).first);
     ScrollStartNotification(
       metrics: FixedScrollMetrics(minScrollExtent: 0, maxScrollExtent: 0, pixels: 0, viewportDimension: 20, axisDirection: AxisDirection.down, devicePixelRatio: 1),
       context: inner,
@@ -144,6 +149,24 @@ void suite({required bool newestFirst}) {
     await tester.pump();
     await tester.pump();
     expect(store.state.statusOf(home.url).chat!.atBottom, isFalse, reason: 'still scrolled up');
+  });
+
+  testWidgets('a drag that starts on a message scrolls the chat', (tester) async {
+    await openChat(tester);
+    // A selectable text is a text field with its own vertical scrollable: it can take the drag
+    // and, having nothing to scroll, freeze the chat. Messages are plain text the list selects.
+    final list = find.byType(Scrollable).first;
+    expect(find.descendant(of: list, matching: find.byType(EditableText)), findsNothing);
+    final vertical = find.descendant(of: list, matching: find.byWidgetPredicate((w) => w is Scrollable && axisDirectionToAxis(w.axisDirection) == Axis.vertical));
+    expect(vertical, findsNothing, reason: 'no message scrolls up and down on its own');
+    final pos = tester.state<ScrollableState>(list).position;
+    for (var step = 0; step < 6; step++) {
+      final before = pos.pixels;
+      await tester.dragFrom(const Offset(200, 400), Offset(0, 300 * away));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(pos.pixels, isNot(before), reason: 'drag $step moved the chat');
+    }
   });
 
   testWidgets('scrolling up through older pages and back keeps the order', (tester) async {
@@ -164,5 +187,27 @@ void suite({required bool newestFirst}) {
       await tester.pumpAndSettle();
       expectInOrder(tester, 'down $step settled');
     }
+    expect(onScreen(tester), contains(120), reason: 'back at the newest message: ${onScreen(tester)}');
+  });
+
+  testWidgets('from the first message, scrolling back step by step reaches the newest', (tester) async {
+    await openChat(tester);
+    for (var step = 0; step < 400 && !onScreen(tester).contains(1); step++) {
+      await tester.dragFrom(const Offset(4, 400), Offset(0, 260 * away));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    final trail = <List<int>>[];
+    for (var step = 0; step < 400 && !onScreen(tester).contains(120); step++) {
+      await tester.dragFrom(const Offset(4, 400), Offset(0, -260 * away));
+      await tester.pump();
+      tick.value++;
+      await tester.pump(const Duration(milliseconds: 50));
+      tick.value++;
+      await tester.pump(const Duration(milliseconds: 50));
+      trail.add(onScreen(tester));
+      expectInOrder(tester, 'back $step');
+    }
+    expect(onScreen(tester), contains(120), reason: 'never got back: ${trail.take(12).toList()} ... ${trail.reversed.take(6).toList()}');
   });
 }
