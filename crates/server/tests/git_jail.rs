@@ -62,6 +62,9 @@ fn repo() -> Repo {
     std::fs::create_dir_all(&project).unwrap();
     std::fs::write(project.join("a.txt"), "a\n").unwrap();
     git(&project, &["init", "-q", "-b", "main"]);
+    // The repo's own identity: the merge commits as the user, and a CI runner has none.
+    git(&project, &["config", "user.name", "t"]);
+    git(&project, &["config", "user.email", "t@t"]);
     git(&project, &["add", "."]);
     git(&project, &["commit", "-qm", "init"]);
     let worktree = worktrees.join("0001");

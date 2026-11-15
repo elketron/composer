@@ -92,6 +92,9 @@ fn git(dir: &Path, args: &[&str]) {
 fn project_and_ticket(server: &Server, project: &Path, ticket: &str) {
     std::fs::create_dir_all(project).unwrap();
     git(project, &["init", "-q", "-b", "main"]);
+    // The repo's own identity: the merge commits as the user, and a CI runner has none.
+    git(project, &["config", "user.name", "t"]);
+    git(project, &["config", "user.email", "t@t"]);
     std::fs::write(project.join("README.md"), "# project\n").unwrap();
     // A 1x1 PNG.
     let png = base64_png();
