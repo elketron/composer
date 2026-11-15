@@ -7,6 +7,7 @@ use std::sync::atomic::AtomicU64;
 
 use base64::Engine;
 use composer_client::{Connection, Endpoint, Event, Store};
+use composer_core::LinkTarget;
 use composer_protocol::http::SiteSummary;
 use composer_protocol::{ClientCommand, CommandResult, DeskEntry, DeskTab, ServerMessage};
 use gpui::{
@@ -435,6 +436,24 @@ impl Shell {
 
     /// What the chat asks.
     fn on_chat(&mut self, event: ChatEvent, cx: &mut Context<Self>) {
+        // A link clicked in the chat: what the window already does with links a pane reports -
+        // a page of the web opens as a tab, an outside address goes to the OS.
+        if let ChatEvent::Open { target } = event {
+            match target {
+                LinkTarget::Site(url) => self.open_page(url.to_string(), cx),
+                LinkTarget::External(url) => {
+                    if let Err(e) = open::that_detached(&url) {
+                        self.link = self.link.refused(format!("couldn't open {url}: {e}"));
+                        cx.notify();
+                    }
+                }
+                LinkTarget::Invalid(href) => {
+                    self.link = self.link.refused(format!("can't open {href}"));
+                    cx.notify();
+                }
+            }
+            return;
+        }
         let Some(session) = self.store.attached.clone() else {
             self.link = self.link.refused("no session yet".into());
             cx.notify();
@@ -460,6 +479,8 @@ impl Shell {
             ChatEvent::PasteImage { name, bytes } => {
                 self.upload_one(name, async move { Ok(bytes) }, cx)
             }
+            // handled above, before the session is needed
+            ChatEvent::Open { .. } => {}
             ChatEvent::LoadOlder => {
                 let before = Some(self.chat.read(cx).first_seq());
                 let connection = self.connection.clone();

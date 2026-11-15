@@ -18,6 +18,8 @@ path = "src/main.rs"
 
 [dependencies]
 composer-client = { path = "../../crates/client" }
+composer-core = { path = "../../crates/core" }
+pulldown-cmark = { version = "0.13.4", default-features = false }
 composer-protocol = { path = "../../crates/protocol" }
 gpui = { package = "gpui-pre", version = "0.3.11" }
 gpui_platform = { package = "gpui-pre-platform", version = "0.3.11", features = ["font-kit", "x11", "wayland"] }

@@ -18,6 +18,7 @@ mod home_lists;
 mod home_view;
 mod key_map;
 mod link_state;
+mod markdown;
 mod matcher;
 mod notice;
 mod pick_lists;
@@ -48,14 +49,17 @@ use shell::{
     Workspace2, Workspace3, Workspace4, Workspace5, Workspace6, Workspace7, Workspace8, Workspace9,
 };
 
-const FONTS: [&[u8]; 6] = [
+const FONTS: [&[u8]; 8] = [
     include_bytes!("../assets/fonts/JetBrainsMonoNerdFontMono-Regular.ttf"),
     include_bytes!("../assets/fonts/JetBrainsMonoNerdFontMono-Bold.ttf"),
     include_bytes!("../assets/fonts/JetBrainsMonoNerdFontMono-Italic.ttf"),
     include_bytes!("../assets/fonts/JetBrainsMonoNerdFontMono-BoldItalic.ttf"),
-    // The chat's prose.
+    // The chat's prose. Strong and italic need their own faces: gpui would otherwise match a
+    // system font, and the transcript would go mixed-typeface. Same OFL family (Inter-LICENSE).
     include_bytes!("../assets/fonts/Inter-Regular.ttf"),
+    include_bytes!("../assets/fonts/Inter-Italic.ttf"),
     include_bytes!("../assets/fonts/Inter-SemiBold.ttf"),
+    include_bytes!("../assets/fonts/Inter-SemiBoldItalic.ttf"),
 ];
 
 fn home() -> PathBuf {

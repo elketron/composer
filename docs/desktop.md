@@ -53,6 +53,24 @@ new one when there is none); the switcher and "New session" (same agent and proj
 it. The window no longer asks for a TUI (`window.hello`): another client can't move it to a
 session (`window.session`).
 
+Markdown in the chat (2026-11-15): agent messages and your own render — headings, paragraphs,
+lists (bullet, ordered from their own number, tasks), block quotes, tables, thematic breaks,
+fenced code, emphasis, strong, strikethrough, inline code and links. A pure parser
+(`apps/desktop/src/markdown.rs`, pulldown-cmark with tables, strikethrough and task lists) hands
+the renderer blocks with styled runs as byte ranges on character boundaries; GPUI does the
+wrapping, so the model never wraps text itself. An unclosed marker (mid-stream) stays literal
+text, and an open fence is code so far. Type follows the mockups scale: the body stays Inter at
+the size it had, headings step up (h1 +4px, h2 +3, h3 +2, h4–h6 +1), all of them SemiBold; strong
+is SemiBold and emphasis the italic face (Inter's italic faces are bundled now, so the transcript
+never falls back to a system font); line height is unchanged. A quote is a 2px left rule in
+`--noema-border-2` with a 12px indent; lists hang-indent per level with the TUI's markers
+(`• `, `N. `, `[x] `, `[ ] `; the marker dim, a checked box green); a table is mono with padded
+columns and a SemiBold header; a rule is a full-width dim line; code keeps the block look it
+had. Images stay text: the alt and where it points. Links are live: a `site://` address opens as
+a stage tab, an outside address goes to the OS, and what cannot resolve says so in the link rail
+— a message has no page of its own, so a relative link only resolves when the session belongs to
+a site.
+
 ### The workspace home
 
 `ctrl+shift+h`, the workspace's name in the title bar, the palette's Sessions overview and

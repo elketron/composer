@@ -38,7 +38,7 @@ pub fn extract_links(markdown: &str, base: &SiteUrl) -> Vec<Link> {
             }
             Event::End(TagEnd::Link) => {
                 if let Some((href, text)) = open.take() {
-                    let target = resolve(&href, base);
+                    let target = resolve_link(&href, Some(base));
                     links.push(Link { text, href, target });
                 }
             }
@@ -48,11 +48,18 @@ pub fn extract_links(markdown: &str, base: &SiteUrl) -> Vec<Link> {
     links
 }
 
-fn resolve(href: &str, base: &SiteUrl) -> LinkTarget {
+/// Where one link on a page goes; no base means a text with no page of its own (a chat
+/// message),
+/// where only an absolute address means anything.
+pub fn resolve_link(href: &str, base: Option<&SiteUrl>) -> LinkTarget {
     if has_foreign_scheme(href) {
         return LinkTarget::External(href.to_string());
     }
-    match base.join(href) {
+    let url = match base {
+        Some(base) => base.join(href),
+        None => SiteUrl::parse(href),
+    };
+    match url {
         Ok(url) => LinkTarget::Site(url),
         Err(e) => LinkTarget::Invalid(e.to_string()),
     }
@@ -96,6 +103,22 @@ mod tests {
                 "pages=site://memory/index.md#pages",
             ]
         );
+    }
+
+    #[test]
+    fn with_no_page_only_an_absolute_address_means_anything() {
+        assert_eq!(
+            resolve_link("https://x/y", None),
+            LinkTarget::External("https://x/y".to_string())
+        );
+        assert_eq!(
+            resolve_link("site://plans/x", None),
+            LinkTarget::Site(SiteUrl::parse("site://plans/x").unwrap())
+        );
+        assert!(matches!(
+            resolve_link("other.md", None),
+            LinkTarget::Invalid(_)
+        ));
     }
 
     #[test]
