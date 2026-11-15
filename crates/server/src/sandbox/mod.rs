@@ -9,9 +9,13 @@
 //! # Every spawn
 //!
 //! In the sandbox (anything an agent or a site controls):
-//! - recipes (`actions/run.rs`): a site's `just` recipe, with the project it runs on;
+//! - recipes (`actions/run.rs`): a site's `just` recipe, with the project it runs on — and when
+//!   that project is a ticket worktree, the main repository's `.git` read-write (`git` works on
+//!   its branch: status, log, diff, commit; it can move any ref of that one repository, never
+//!   another's). Only a repository that names the worktree back; a forged `.git` file refuses
+//!   the recipe with the `git worktree repair` hint (`SandboxSpec::with_project`, ticket 0203);
 //! - Claude Code runs (`harness/claude_code_world.rs`): the ticket's worktree and the main repo's
-//!   `.git`, the workspace's own `~/.claude`, the login token in its env;
+//!   `.git` (the same `with_project`), the workspace's own `~/.claude`, the login token in its env;
 //! - stdio MCP servers (`mcp_clients/mcp_client.rs`): the workspace's sites plus the entry's
 //!   `binds_ro`/`binds_rw`. (MCP over HTTP is a connection, not a spawn: untouched.)
 //! - composer's own `git` on a repository (ticket branches and merges, worktrees, diffs, the

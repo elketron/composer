@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use crate::harness::ClaudeToken;
 use crate::home::Home;
-use crate::sandbox::{GitRepo, Mount, SandboxSpec};
+use crate::sandbox::{Mount, SandboxSpec};
 use crate::server::Server;
 
 /// What the user's own `~/.claude` lends every workspace's runs, read-only: their instructions,
@@ -32,12 +32,8 @@ pub fn claude_code_world(
     let token =
         ClaudeToken::load(&Home::new(server.home.home_root())).ok_or_else(ClaudeToken::missing)?;
     let user_home = spec.user_home().to_path_buf();
-    let mut spec = spec.with_rw(folder).in_dir(folder);
-    // For a worktree, the main repository's `.git` (commits need it), only when that repository
-    // names the worktree back: a run that rewrote its `.git` file gets no other repository.
-    if let Some(GitRepo::Worktree { common, .. }) = GitRepo::discover(folder)? {
-        spec = spec.with_rw(common);
-    }
+    // For a worktree, also the main repository's `.git` (commits need it), as for a recipe.
+    let mut spec = spec.with_project(folder)?.in_dir(folder);
     for dir in read_dirs {
         spec = spec.with_ro(dir);
     }

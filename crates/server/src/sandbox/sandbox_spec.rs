@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use tokio::process::Command;
 
 use crate::config_sections::SandboxConfig;
-use crate::sandbox::{Mount, check_bwrap};
+use crate::sandbox::{GitRepo, Mount, check_bwrap};
 use crate::tools::expand_home;
 use crate::workspace_home::WorkspaceHome;
 
@@ -72,6 +72,27 @@ impl SandboxSpec {
     pub fn with_rw(mut self, path: impl Into<PathBuf>) -> Self {
         self.rw.push(path.into());
         self
+    }
+
+    /// A session's project (or ticket worktree) read-write, and for a linked worktree its main
+    /// repository's `.git` too (commits, refs and the worktree's own `worktrees/<name>/` live
+    /// there) — only when that repository names the worktree back ([`GitRepo::discover`]): a run
+    /// can rewrite its `.git` file, so a forged one is refused with the repair hint rather than
+    /// mounting nothing or another repository. A checkout or a plain folder gains nothing.
+    pub fn with_project(self, folder: impl Into<PathBuf>) -> Result<Self, String> {
+        let folder = folder.into();
+        if !self.enabled() {
+            return Ok(self.with_rw(folder));
+        }
+        let common = match GitRepo::discover(&folder)? {
+            Some(GitRepo::Worktree { common, .. }) => Some(common),
+            _ => None,
+        };
+        let spec = self.with_rw(folder);
+        Ok(match common {
+            Some(common) => spec.with_rw(common),
+            None => spec,
+        })
     }
 
     /// A folder or file read-only.

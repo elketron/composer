@@ -274,3 +274,161 @@ async fn cargo_builds_inside() {
     assert_eq!(code, Some(0), "{out}");
     assert!(out.contains("hi"), "{out}");
 }
+
+/// `git` on the host, for setting repos up.
+fn git(dir: &Path, args: &[&str]) {
+    let status = std::process::Command::new("git")
+        .args([
+            "-c",
+            "user.name=t",
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "init.defaultBranch=main",
+        ])
+        .args(args)
+        .current_dir(dir)
+        .status()
+        .unwrap();
+    assert!(status.success(), "git {args:?}");
+}
+
+/// `mine` as a repository with one commit, and a ticket worktree of it in a's `state/worktrees`.
+fn repo_and_worktree(f: &Fixture) -> PathBuf {
+    git(&f.mine, &["init", "-q"]);
+    git(&f.mine, &["add", "-A"]);
+    git(&f.mine, &["commit", "-qm", "base"]);
+    let worktree = f.a.worktrees().join("0001");
+    std::fs::create_dir_all(f.a.worktrees()).unwrap();
+    git(
+        &f.mine,
+        &[
+            "worktree",
+            "add",
+            "-q",
+            "-b",
+            "ticket/0001",
+            worktree.to_str().unwrap(),
+        ],
+    );
+    worktree
+}
+
+/// The paths a spec mounts read-write, resolved.
+fn writable(spec: &SandboxSpec) -> Vec<PathBuf> {
+    spec.mounts()
+        .unwrap()
+        .iter()
+        .filter(|m| matches!(m, composer_server::sandbox::Mount::Rw(_)))
+        .filter_map(|m| {
+            m.inside()
+                .map(|p| std::fs::canonicalize(p).unwrap_or(p.clone()))
+        })
+        .collect()
+}
+
+#[tokio::test]
+async fn a_worktree_project_brings_its_main_git_and_nothing_else() {
+    let f = fixture().await;
+    let worktree = repo_and_worktree(&f);
+    let main_git = std::fs::canonicalize(f.mine.join(".git")).unwrap();
+    let spec = spec(&f, config()).with_project(&worktree).unwrap();
+    let rw = writable(&spec);
+    assert!(rw.contains(&main_git), "{rw:?}");
+    assert!(
+        !rw.contains(&std::fs::canonicalize(&f.mine).unwrap()),
+        "the main checkout stays out: {rw:?}"
+    );
+}
+
+#[tokio::test]
+async fn a_forged_git_file_still_fails_closed() {
+    let f = fixture().await;
+    let worktree = repo_and_worktree(&f);
+    // A run rewrote its `.git` file to name another repository, which doesn't name it back.
+    let other = f.dir.path().join("projects/other");
+    std::fs::create_dir_all(&other).unwrap();
+    git(&other, &["init", "-q"]);
+    std::fs::create_dir_all(other.join(".git/worktrees/0001")).unwrap();
+    std::fs::write(
+        worktree.join(".git"),
+        format!("gitdir: {}\n", other.join(".git/worktrees/0001").display()),
+    )
+    .unwrap();
+    let error = spec(&f, config()).with_project(&worktree).unwrap_err();
+    assert!(error.contains("git worktree repair"), "{error}");
+}
+
+#[tokio::test]
+async fn a_plain_checkout_gains_nothing() {
+    let f = fixture().await;
+    git(&f.mine, &["init", "-q"]);
+    let plain = writable(&spec(&f, config()).with_rw(&f.mine));
+    let project = writable(&spec(&f, config()).with_project(&f.mine).unwrap());
+    assert_eq!(project, plain);
+    // Not a repository at all: the same.
+    let notes = f.dir.path().join("projects/notes");
+    std::fs::create_dir_all(&notes).unwrap();
+    let folder = writable(&spec(&f, config()).with_project(&notes).unwrap());
+    assert_eq!(folder, writable(&spec(&f, config()).with_rw(&notes)));
+}
+
+#[tokio::test]
+async fn a_recipe_on_a_ticket_worktree_can_commit_its_branch() {
+    let f = fixture().await;
+    let worktree = repo_and_worktree(&f);
+    // A second repository next to it: not the run's.
+    let other = f.dir.path().join("projects/other");
+    std::fs::create_dir_all(&other).unwrap();
+    git(&other, &["init", "-q"]);
+    let site = f.a.sites().join("probe");
+    std::fs::create_dir_all(&site).unwrap();
+    let commit = "git -c user.name=t -c user.email=t@t commit -qm 'from the sandbox'";
+    std::fs::write(
+        site.join("justfile"),
+        format!(
+            "probe:\n    cd \"$COMPOSER_PROJECT\" && git status --short && git log --oneline main..HEAD \
+             && echo change > change.txt && git add change.txt && git diff --cached --stat \
+             && {commit}\n    test ! -e '{}'\n    test ! -e '{}'\n    test ! -e '{}'\n",
+            other.join(".git").display(),
+            f.b.root().display(),
+            f.mine.join("README").display()
+        ),
+    )
+    .unwrap();
+    let mut config = f.a.load_config().unwrap();
+    config.projects.dir = f.dir.path().join("projects").display().to_string();
+    let server = Server::new(
+        f.a.clone(),
+        config,
+        Arc::new(support::MockProvider::new(vec![])),
+    )
+    .unwrap();
+    let session = server
+        .sessions
+        .create("orchestrator", Some(worktree.display().to_string()))
+        .unwrap();
+    let justfile = Justfile::load(&site).await.unwrap();
+    let env = RecipeEnv::new(&server, "probe", Some(&session));
+    let output = run_recipe(
+        &justfile,
+        "probe",
+        &[],
+        &env,
+        Duration::from_secs(30),
+        &CancellationToken::new(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(output.exit_code, Some(0), "{}", output.output);
+    assert!(output.output.contains("change.txt"), "{}", output.output);
+    let log = std::process::Command::new("git")
+        .args(["log", "-1", "--format=%s", "ticket/0001"])
+        .current_dir(&f.mine)
+        .output()
+        .unwrap();
+    assert_eq!(
+        String::from_utf8_lossy(&log.stdout).trim(),
+        "from the sandbox"
+    );
+}

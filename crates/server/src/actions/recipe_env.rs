@@ -13,7 +13,9 @@ use crate::session::Session;
 #[derive(Debug, Clone)]
 pub struct RecipeEnv {
     vars: Vec<(&'static str, String)>,
-    sandbox: SandboxSpec,
+    /// Refused when the project's git can't be trusted (a worktree whose repository doesn't
+    /// name it back): the recipe then doesn't run.
+    sandbox: Result<SandboxSpec, String>,
 }
 
 impl RecipeEnv {
@@ -68,7 +70,9 @@ impl RecipeEnv {
             ("APP_DATA", data.display().to_string()),
         ]);
         // Composer's own choice of a folder in the workspace's state: mounted, not a bind.
-        env.sandbox = env.sandbox.with_mount(crate::sandbox::Mount::Rw(data));
+        env.sandbox = env
+            .sandbox
+            .map(|sandbox| sandbox.with_mount(crate::sandbox::Mount::Rw(data)));
         env
     }
 
@@ -95,16 +99,17 @@ impl RecipeEnv {
             vars.push(("PROJECT_ROOT", root));
         }
         vars.extend(server.home.env());
-        let mut sandbox = server.sandbox();
-        if !project.is_empty() {
-            sandbox = sandbox.with_rw(project);
-        }
+        let sandbox = if project.is_empty() {
+            Ok(server.sandbox())
+        } else {
+            server.sandbox().with_project(project)
+        };
         Self { vars, sandbox }
     }
 
-    /// The sandbox the recipe runs in.
-    pub fn sandbox(&self) -> &SandboxSpec {
-        &self.sandbox
+    /// The sandbox the recipe runs in, or why it can't run.
+    pub fn sandbox(&self) -> Result<&SandboxSpec, String> {
+        self.sandbox.as_ref().map_err(Clone::clone)
     }
 
     /// The variables to set, by name.

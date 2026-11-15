@@ -22,7 +22,7 @@ pub async fn run_recipe(
     // One pipe for stdout and stderr, so the output keeps its real order (as in a terminal).
     let (mut reader, writer) = std::io::pipe().map_err(|e| e.to_string())?;
     let mut command = env
-        .sandbox()
+        .sandbox()?
         .clone()
         .in_dir(justfile.dir())
         .command("just")?;
