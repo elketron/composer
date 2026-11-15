@@ -37,7 +37,14 @@ async fn every_kind_of_spawn_stays_in_its_workspace() {
             .report(kind)
             .unwrap_or_else(|| panic!("{kind} didn't report"));
         assert_eq!(failed(&report), Vec::<String>::new(), "{kind}: {report:#}");
-        let login = if kind == "claude" {
+        let host_login = std::env::var("HOME")
+            .map(|h| {
+                std::path::Path::new(&h)
+                    .join(".claude/.credentials.json")
+                    .exists()
+            })
+            .unwrap_or(false);
+        let login = if kind == "claude" && host_login {
             "login mounted rw"
         } else {
             "login hidden"

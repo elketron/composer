@@ -76,7 +76,8 @@ for name in paths["home_entries"] + (paths["home_entries_no_claude"] if kind != 
     check("hidden: ~/" + name, not os.path.exists(os.path.join(os.environ["HOME"], name)))
 # The Claude Code login (0202): a claude run gets the user login file read-write, mounted over
 # the workspace own .claude - the one shared file it may write; every other spawn does not see it.
-if kind == "claude":
+# A host with no login (a CI runner) has nothing to mount: the run then has none either.
+if kind == "claude" and paths["host_login"]:
     check("login mounted rw", os.path.exists(paths["login"]) and os.access(paths["login"], os.W_OK))
 else:
     check("login hidden", not os.path.exists(paths["login"]))
@@ -317,6 +318,7 @@ pub async fn world() -> World {
             "ns": { "pid": ns("pid"), "ipc": ns("ipc"), "uts": ns("uts"), "cgroup": ns("cgroup") },
             "token": TOKEN,
             "login": user_home.join(".claude/.credentials.json"),
+            "host_login": user_home.join(".claude/.credentials.json").exists(),
             "worktree": a.worktrees().join("0001"),
             "project": project,
             "out": out,
