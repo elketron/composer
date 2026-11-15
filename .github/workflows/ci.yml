@@ -92,7 +92,10 @@ jobs:
     container: archlinux:latest
     steps:
       - name: System packages
-        run: pacman -Syu --noconfirm --needed git base-devel clang cmake rust pkgconf libxkbcommon libxkbcommon-x11 wayland vulkan-icd-loader fontconfig freetype2 libxcb
+        # the second line is what libcef.so loads when the tests run
+        run: |
+          pacman -Syu --noconfirm --needed git base-devel clang cmake rust pkgconf libxkbcommon libxkbcommon-x11 wayland vulkan-icd-loader fontconfig freetype2 libxcb \
+            nss nspr alsa-lib at-spi2-core cairo pango dbus expat glib2 libcups mesa systemd-libs libx11 libxcomposite libxdamage libxext libxfixes libxrandr
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
         with:

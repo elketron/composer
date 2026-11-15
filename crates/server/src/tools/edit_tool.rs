@@ -115,7 +115,7 @@ fn nearest_hint(raw: &str, old_text: &str) -> String {
                     best = (i, score);
                 }
             }
-            Some(best.0).filter(|_| best.1 > 0)
+            (best.1 > 0).then_some(best.0)
         })
         .unwrap_or(0);
     let count = old_text.lines().count().clamp(1, 20);
