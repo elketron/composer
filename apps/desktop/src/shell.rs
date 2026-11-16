@@ -157,6 +157,7 @@ impl Shell {
                 self.link = LinkState::Up;
                 self.project.reset();
                 self.store.reconnected();
+                self.chat.update(cx, |chat, _| chat.reconnected());
                 self.sync_approvals(cx);
                 self.sync_home(cx);
                 // All the sessions, for the switcher (updates follow as events); the first
@@ -460,17 +461,26 @@ impl Shell {
             return;
         }
         let Some(session) = self.store.attached.clone() else {
-            if let ChatEvent::Send { text, .. } = &event {
-                self.send_failed(text, cx);
+            // Nowhere to send it: a verdict the chat put in its outbox (under the chat's own
+            // session) didn't go.
+            if let ChatEvent::Send {
+                review: Some(review),
+                ..
+            } = &event
+                && let Some(session) = self.chat.read(cx).session().map(str::to_string)
+            {
+                self.send_failed(session, review.clone(), cx);
             }
             self.link = self.link.refused("no session yet".into());
             cx.notify();
             return;
         };
         match event {
-            ChatEvent::Send { text, attachments } => {
-                self.send_message(session, text, attachments, cx)
-            }
+            ChatEvent::Send {
+                text,
+                attachments,
+                review,
+            } => self.send_message(session, text, attachments, review, cx),
             ChatEvent::Answer { request, decision } => {
                 self.ask(ClientCommand::ApprovalRespond { request, decision }, cx)
             }
@@ -508,48 +518,58 @@ impl Shell {
         }
     }
 
-    /// Sends `command`; its reply goes into the store and the panes.
-    /// A message from the chat. If it doesn't go, the chat hears so: a verdict it shows as sent
-    /// (its outbox) is offered again rather than left saying it went.
+    /// A message from the chat. If it doesn't go and it was a verdict in the chat's outbox
+    /// (`review`), the chat hears so: the card is offered again rather than left saying it went.
     fn send_message(
         &mut self,
         session: String,
         text: String,
         attachments: Vec<composer_protocol::Attachment>,
+        review: Option<String>,
         cx: &mut Context<Self>,
     ) {
         let connection = self.connection.clone();
         let command = ClientCommand::MessageSend {
-            session,
-            text: text.clone(),
+            session: session.clone(),
+            text,
             pages: vec![],
             images: vec![],
             attachments,
         };
         cx.spawn(async move |this, cx| {
             let answer = connection.request(command).await;
-            let _ = this.update(cx, |shell, cx| {
-                match answer {
-                    Ok(result) => shell.on_result(result, cx),
-                    Err(e) => {
-                        shell.send_failed(&text, cx);
-                        shell.link = shell.link.refused(e);
-                    }
-                }
-                cx.notify();
-            });
+            let _ = this.update(cx, |shell, cx| shell.sent(answer, session, review, cx));
         })
         .detach();
     }
 
-    fn send_failed(&mut self, text: &str, cx: &mut Context<Self>) {
-        self.chat.update(cx, |chat, cx| {
-            if let Some(session) = chat.session().map(str::to_string) {
-                chat.send_failed(&session, text, cx);
+    /// The server's answer to a message from the chat.
+    fn sent(
+        &mut self,
+        answer: Result<CommandResult, String>,
+        session: String,
+        review: Option<String>,
+        cx: &mut Context<Self>,
+    ) {
+        match answer {
+            Ok(result) => self.on_result(result, cx),
+            Err(e) => {
+                if let Some(review) = review {
+                    self.send_failed(session, review, cx);
+                }
+                self.link = self.link.refused(e);
             }
-        });
+        }
+        cx.notify();
     }
 
+    /// The verdict answering `review`, sent to `session`, didn't go.
+    fn send_failed(&mut self, session: String, review: String, cx: &mut Context<Self>) {
+        self.chat
+            .update(cx, |chat, cx| chat.send_failed(&session, &review, cx));
+    }
+
+    /// Sends `command`; its reply goes into the store and the panes.
     fn ask(&mut self, command: ClientCommand, cx: &mut Context<Self>) {
         let connection = self.connection.clone();
         cx.spawn(async move |this, cx| {

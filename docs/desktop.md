@@ -95,8 +95,10 @@ like any approval. While such a review is open (the agent opened a page whose fr
 **Changes…** starts `fail: ` in the composer for the why. Nothing on the server: it is only
 the message. A verdict you send goes into the chat's outbox (`outbox.rs`) at once: the card
 shows it given (`✓ pass`, no buttons) until the message comes back in the transcript, which
-during a running turn is when that turn ends, so a second click sends nothing. If the send
-fails, the entry goes and the card offers its buttons again.
+during a running turn is when that turn ends, so a second click sends nothing. The entry
+answers one review (the call id of the `open` that started it), so a later review starts
+clean. If the send fails, the entry goes and the card offers its buttons again; after a
+reconnect it also goes once the session is idle without it (the server's inbox is in memory).
 
 The 2026-11-14 reset preserves the previous studies, including the phone and TUI
 explorations, in [mockups/next-archive-2026-11-14/](mockups/next-archive-2026-11-14/).

@@ -26,7 +26,7 @@ use crate::prose::{head, thinking_preview};
 use crate::term_pane::FONT;
 use crate::theme::*;
 use crate::uploads::{Upload, Uploads};
-use crate::user_review::{VerdictCard, is_verdict, pending_review, verdict_card};
+use crate::user_review::{VerdictCard, on_pass, on_send, sync_outbox, verdict_card};
 
 /// The chat's prose font (bundled).
 pub const PROSE: &str = "Inter";
@@ -39,6 +39,9 @@ pub enum ChatEvent {
     Send {
         text: String,
         attachments: Vec<Attachment>,
+        /// The review whose verdict this is, when it went into the outbox: a failed send takes
+        /// it out again.
+        review: Option<String>,
     },
     Answer {
         request: String,
@@ -142,6 +145,12 @@ impl ChatPane {
         site: Option<String>,
         cx: &mut Context<Self>,
     ) {
+        if state == TurnState::Idle
+            && let Some(chat) = &self.chat
+            && self.outbox.idle(&chat.session)
+        {
+            cx.notify();
+        }
         if self.agent != agent || self.state != state || self.site != site {
             self.agent = agent.to_string();
             self.state = state;
@@ -172,9 +181,7 @@ impl ChatPane {
     ) {
         if let Some(chat) = self.chat.as_mut().filter(|c| c.session == session) {
             chat.history_loaded(events, more);
-            if pending_review(&chat.items).is_none() {
-                self.outbox.settled(session);
-            }
+            sync_outbox(&chat.items, session, &mut self.outbox);
             self.scroll.scroll_to_bottom();
             cx.notify();
         }
@@ -206,7 +213,7 @@ impl ChatPane {
         if let Some(chat) = self.chat.as_mut()
             && chat.apply(message)
         {
-            self.outbox.arrived(&chat.session, chat.items.last());
+            sync_outbox(&chat.items, &chat.session, &mut self.outbox);
             if at_end {
                 self.scroll.scroll_to_bottom();
             }
@@ -283,37 +290,54 @@ impl ChatPane {
         self.state != TurnState::Idle
     }
 
-    /// A message the window couldn't send: if it was the verdict, the card offers it again.
-    pub fn send_failed(&mut self, session: &str, text: &str, cx: &mut Context<Self>) {
-        if self.outbox.failed(session, text) {
+    /// The verdict sent for `review` in `session` didn't go: the card offers its buttons again.
+    pub fn send_failed(&mut self, session: &str, review: &str, cx: &mut Context<Self>) {
+        if self.outbox.failed(session, review) {
             cx.notify();
         }
     }
 
+    /// The connection is back: what was sent before may have been lost with the server's inbox.
+    pub fn reconnected(&mut self) {
+        self.outbox.reconnected();
+    }
+
     /// Pass on the verdict card: into the outbox and sent, once. A second click finds it there.
     fn pass(&mut self, cx: &mut Context<Self>) {
-        let Some(session) = self.session().map(str::to_string) else {
+        if !self.files.ready() {
+            return;
+        }
+        let Some(chat) = &self.chat else {
             return;
         };
-        if self.files.ready() && self.outbox.queue(&session, "pass") {
-            self.send("pass".into(), cx);
+        if let Some(verdict) = on_pass(&chat.items, &chat.session, &mut self.outbox) {
+            self.emit_send(verdict.text, Some(verdict.review), cx);
             cx.notify();
         }
     }
 
     fn send(&mut self, text: String, cx: &mut Context<Self>) {
+        if !self.files.ready() {
+            return;
+        }
+        // A verdict written in the composer (Changes… starts `fail: `) shows on the card too.
+        let review = self
+            .chat
+            .as_ref()
+            .and_then(|chat| on_send(&chat.items, &chat.session, &text, &mut self.outbox));
+        self.emit_send(text, review, cx);
+    }
+
+    fn emit_send(&mut self, text: String, review: Option<String>, cx: &mut Context<Self>) {
         let Some(attachments) = self.files.take() else {
             return;
         };
-        // A verdict written in the composer (Changes… starts `fail: `) shows on the card too.
-        if let Some(chat) = &self.chat
-            && is_verdict(&text)
-            && pending_review(&chat.items).is_some()
-        {
-            self.outbox.queue(&chat.session, &text);
-        }
         self.scroll.scroll_to_bottom();
-        cx.emit(ChatEvent::Send { text, attachments });
+        cx.emit(ChatEvent::Send {
+            text,
+            attachments,
+            review,
+        });
     }
 
     fn send_draft(&mut self, cx: &mut Context<Self>) {
@@ -1185,7 +1209,7 @@ impl ChatPane {
             body.push(self.approval(approval, cx));
         }
         // A Hunk review open on the stage: your verdict goes back as a message.
-        if let Some(card) = verdict_card(&chat.items, self.outbox.queued(&chat.session)) {
+        if let Some(card) = verdict_card(&chat.items, &chat.session, &self.outbox) {
             if body.is_empty() && body_label.is_none() {
                 body_label = Some(agent.to_string());
             }
