@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use composer_client::Approval;
 use composer_protocol::http::ProjectSummary;
 use composer_protocol::http::SiteSummary;
-use composer_protocol::{ClientCommand, ModelInfo, SessionInfo};
+use composer_protocol::{ClientCommand, ModelInfo, SessionInfo, WorkerState};
 
 use crate::picker::{Item, Pick};
 
@@ -44,13 +44,14 @@ pub fn workspaces(names: Vec<String>, this: &str) -> Vec<Item> {
 }
 
 /// The user's sessions (not workers'), most recent first: the agent and id, whether it is shown
-/// or waits for an approval, its site and project, and what it last said underneath.
+/// or waits for an approval, its site and project, and what it last said underneath. Then the
+/// shown orchestration's workers.
 pub fn sessions(
-    sessions: &[SessionInfo],
+    all: &[SessionInfo],
     shown: Option<&str>,
     waiting: &BTreeMap<String, Approval>,
 ) -> Vec<Item> {
-    let mut sessions: Vec<&SessionInfo> = sessions.iter().filter(|s| s.worker.is_none()).collect();
+    let mut sessions: Vec<&SessionInfo> = all.iter().filter(|s| s.worker.is_none()).collect();
     sessions.sort_by(|a, b| b.updated.cmp(&a.updated));
     sessions
         .into_iter()
@@ -79,6 +80,64 @@ pub fn sessions(
                     None => project.to_string(),
                 },
                 group: "sessions",
+                pick: Pick::Session(s.id.clone()),
+            }
+        })
+        .chain(workers(all, shown, waiting))
+        .collect()
+}
+
+/// The workers of the shown session's orchestration (its own, or its orchestrator's when a
+/// worker is shown), most recent first: the way into a worker's conversation.
+fn workers(
+    sessions: &[SessionInfo],
+    shown: Option<&str>,
+    waiting: &BTreeMap<String, Approval>,
+) -> Vec<Item> {
+    let Some(shown) = shown else {
+        return Vec::new();
+    };
+    let root = sessions
+        .iter()
+        .find(|s| s.id == shown)
+        .and_then(|s| s.parent.as_deref())
+        .unwrap_or(shown);
+    let mut workers: Vec<&SessionInfo> = sessions
+        .iter()
+        .filter(|s| s.worker.is_some() && s.parent.as_deref() == Some(root))
+        .collect();
+    workers.sort_by(|a, b| b.updated.cmp(&a.updated));
+    workers
+        .into_iter()
+        .map(|s| {
+            let mark = if shown == s.id {
+                " · shown"
+            } else if waiting.values().any(|w| w.session == s.id) {
+                " ! waiting"
+            } else {
+                ""
+            };
+            let state = match s.worker {
+                Some(WorkerState::Starting) => "starting",
+                Some(WorkerState::Running) => "running",
+                Some(WorkerState::Done) => "done",
+                Some(WorkerState::Failed) => "failed",
+                Some(WorkerState::Paused) => "paused",
+                Some(WorkerState::Stuck) => "stuck",
+                None => "",
+            };
+            Item {
+                label: format!("worker #{}{mark}", s.id),
+                note: s
+                    .preview
+                    .as_deref()
+                    .map(|p| short(p, 80))
+                    .unwrap_or_default(),
+                detail: match &s.ticket {
+                    Some(ticket) => format!("ticket {ticket} · {state}"),
+                    None => state.to_string(),
+                },
+                group: "workers",
                 pick: Pick::Session(s.id.clone()),
             }
         })
@@ -310,6 +369,49 @@ mod tests {
             json["worker"] = serde_json::json!("running");
         }
         serde_json::from_value(json).unwrap()
+    }
+
+    fn worker(id: &str, parent: &str, ticket: &str, updated: &str) -> SessionInfo {
+        let mut s = session(id, updated, Some("on it"), true);
+        s.agent = "coder".into();
+        s.parent = Some(parent.into());
+        s.ticket = Some(ticket.into());
+        s
+    }
+
+    #[test]
+    fn the_shown_orchestrations_workers_come_after_the_sessions() {
+        let all = [
+            session("o", "2026-11-01T00:00:00Z", None, false),
+            session("p", "2026-11-02T00:00:00Z", None, false),
+            worker("w1", "o", "0201", "2026-11-03T00:00:00Z"),
+            worker("w2", "o", "0202", "2026-11-04T00:00:00Z"),
+            worker("x", "p", "0300", "2026-11-05T00:00:00Z"),
+        ];
+        let none = BTreeMap::new();
+        let picks = |shown| -> Vec<Pick> {
+            sessions(&all, Some(shown), &none)
+                .into_iter()
+                .map(|i| i.pick)
+                .collect()
+        };
+        let s = |id: &str| Pick::Session(id.into());
+        assert_eq!(picks("o"), [s("p"), s("o"), s("w2"), s("w1")]);
+        assert_eq!(
+            picks("w1"),
+            [s("p"), s("o"), s("w2"), s("w1")],
+            "a shown worker: its orchestrator's workers"
+        );
+        let items = sessions(&all, Some("w1"), &none);
+        assert_eq!(items[3].label, "worker #w1 · shown");
+        assert_eq!(items[2].detail, "ticket 0202 · running");
+        assert_eq!(items[2].note, "on it");
+        assert_eq!(items[2].group, "workers");
+        assert_eq!(
+            sessions(&all, None, &none).len(),
+            2,
+            "nothing shown: no workers"
+        );
     }
 
     #[test]
