@@ -5,11 +5,13 @@ mod approval_store;
 mod attachment_store;
 mod connection_store;
 mod desk_store;
+mod page_slot;
 mod page_store;
 mod picker_store;
 mod project_store;
 mod project_view_store;
 mod session_store;
+mod stage_tab;
 pub mod types;
 mod ui_store;
 

@@ -10,6 +10,8 @@
 use composer_core::SiteUrl;
 use composer_protocol::{Desk, DeskTab};
 
+pub use crate::store::stage_tab::StageTab;
+
 /// The id of the project view's tab. It is not on the desk (no `DeskTab` names an overview),
 /// and `local:` is a prefix the server's ids never produce (`app:`, `page:`, `terminal:`,
 /// `changes:`, `live`), so it cannot collide with one.
@@ -24,73 +26,6 @@ pub fn page_key(url: &str) -> Option<String> {
     let (site, rest) = path.split_once('/').unwrap_or((path, ""));
     let page = SiteUrl::new(site, rest).ok()?;
     Some(format!("page:{page}"))
-}
-
-/// A tab the stage can draw.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum StageTab {
-    /// A page (`site://…`).
-    Page {
-        id: String,
-        url: String,
-        unseen: bool,
-    },
-    /// A project's changes.
-    Changes {
-        id: String,
-        project: String,
-        unseen: bool,
-    },
-    /// A project's overview: this terminal's own tab, never on the desk.
-    Project { project: Option<String> },
-}
-
-impl StageTab {
-    /// What the tab is called, on the desk and in this list alike.
-    pub fn id(&self) -> &str {
-        match self {
-            Self::Page { id, .. } | Self::Changes { id, .. } => id,
-            Self::Project { .. } => PROJECT_TAB,
-        }
-    }
-
-    /// What the tab bar says about it.
-    pub fn title(&self) -> String {
-        match self {
-            Self::Page { url, .. } => url.strip_prefix("site://").unwrap_or(url).to_string(),
-            Self::Changes { project, .. } => format!("changes · {project}"),
-            Self::Project {
-                project: Some(project),
-            } => format!(
-                "project · {}",
-                project
-                    .trim_end_matches('/')
-                    .rsplit('/')
-                    .next()
-                    .unwrap_or(project)
-            ),
-            Self::Project { project: None } => "project".to_string(),
-        }
-    }
-
-    /// Opened by the agent and not looked at yet: a badge.
-    pub fn unseen(&self) -> bool {
-        match self {
-            Self::Page { unseen, .. } | Self::Changes { unseen, .. } => *unseen,
-            Self::Project { .. } => false,
-        }
-    }
-
-    /// What to write back to the desk for it; `None` for a tab that lives only here.
-    pub fn desk_tab(&self) -> Option<DeskTab> {
-        match self {
-            Self::Page { url, .. } => Some(DeskTab::Page { url: url.clone() }),
-            Self::Changes { project, .. } => Some(DeskTab::Changes {
-                project: project.clone(),
-            }),
-            Self::Project { .. } => None,
-        }
-    }
 }
 
 /// The desk as the session's owner sent it, plus which of its tabs this terminal shows.

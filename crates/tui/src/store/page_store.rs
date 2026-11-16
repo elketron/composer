@@ -9,15 +9,8 @@ use std::collections::HashMap;
 
 use crate::effect::Effect;
 use crate::store::desk_store::page_key;
+use crate::store::page_slot::Slot;
 use crate::store::types::PageView;
-
-/// What a page tab is made of: what it was asked to show, and what arrived.
-#[derive(Debug, Default)]
-struct Slot {
-    /// The URL as it was asked for, fragment and all: where `H` / `L` go back to.
-    url: Option<String>,
-    page: Option<PageView>,
-}
 
 /// The page viewer: the shown page, a cache by tab, back and forward, follow-agent.
 #[derive(Debug)]
