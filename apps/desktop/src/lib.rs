@@ -21,6 +21,7 @@ mod link_state;
 mod markdown;
 mod matcher;
 mod notice;
+mod outbox;
 mod overlay_frame;
 mod pick_lists;
 mod picker;

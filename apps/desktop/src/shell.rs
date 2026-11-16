@@ -460,21 +460,17 @@ impl Shell {
             return;
         }
         let Some(session) = self.store.attached.clone() else {
+            if let ChatEvent::Send { text, .. } = &event {
+                self.send_failed(text, cx);
+            }
             self.link = self.link.refused("no session yet".into());
             cx.notify();
             return;
         };
         match event {
-            ChatEvent::Send { text, attachments } => self.ask(
-                ClientCommand::MessageSend {
-                    session,
-                    text,
-                    pages: vec![],
-                    images: vec![],
-                    attachments,
-                },
-                cx,
-            ),
+            ChatEvent::Send { text, attachments } => {
+                self.send_message(session, text, attachments, cx)
+            }
             ChatEvent::Answer { request, decision } => {
                 self.ask(ClientCommand::ApprovalRespond { request, decision }, cx)
             }
@@ -513,6 +509,47 @@ impl Shell {
     }
 
     /// Sends `command`; its reply goes into the store and the panes.
+    /// A message from the chat. If it doesn't go, the chat hears so: a verdict it shows as sent
+    /// (its outbox) is offered again rather than left saying it went.
+    fn send_message(
+        &mut self,
+        session: String,
+        text: String,
+        attachments: Vec<composer_protocol::Attachment>,
+        cx: &mut Context<Self>,
+    ) {
+        let connection = self.connection.clone();
+        let command = ClientCommand::MessageSend {
+            session,
+            text: text.clone(),
+            pages: vec![],
+            images: vec![],
+            attachments,
+        };
+        cx.spawn(async move |this, cx| {
+            let answer = connection.request(command).await;
+            let _ = this.update(cx, |shell, cx| {
+                match answer {
+                    Ok(result) => shell.on_result(result, cx),
+                    Err(e) => {
+                        shell.send_failed(&text, cx);
+                        shell.link = shell.link.refused(e);
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    fn send_failed(&mut self, text: &str, cx: &mut Context<Self>) {
+        self.chat.update(cx, |chat, cx| {
+            if let Some(session) = chat.session().map(str::to_string) {
+                chat.send_failed(&session, text, cx);
+            }
+        });
+    }
+
     fn ask(&mut self, command: ClientCommand, cx: &mut Context<Self>) {
         let connection = self.connection.clone();
         cx.spawn(async move |this, cx| {

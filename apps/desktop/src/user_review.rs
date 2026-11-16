@@ -6,6 +6,24 @@
 
 use composer_client::ChatItem;
 
+/// The verdict card the chat shows.
+#[derive(Debug, Clone, PartialEq)]
+pub struct VerdictCard {
+    /// The review's ticket (`""` when its run can't be told).
+    pub ticket: String,
+    /// The verdict you gave, sent and not back in the transcript yet (the chat's outbox): the
+    /// card shows it as given and offers nothing more to click.
+    pub sent: Option<String>,
+}
+
+/// The card while a review is open, with the verdict waiting in the outbox if there is one.
+pub fn verdict_card(items: &[ChatItem], queued: Option<&str>) -> Option<VerdictCard> {
+    pending_review(items).map(|ticket| VerdictCard {
+        ticket,
+        sent: queued.filter(|t| is_verdict(t)).map(str::to_string),
+    })
+}
+
 /// The ticket whose Hunk review the agent opened in this chat and you haven't given a verdict
 /// on since (`""` when its run can't be told), or `None`.
 pub fn pending_review(items: &[ChatItem]) -> Option<String> {
@@ -52,7 +70,7 @@ fn opens_hunk(result: &str) -> bool {
 }
 
 /// `pass`, or `fail…`: what the review stage takes as your word.
-fn is_verdict(text: &str) -> bool {
+pub fn is_verdict(text: &str) -> bool {
     let first = text.trim_start().to_lowercase();
     first.starts_with("pass") || first.starts_with("fail")
 }
@@ -114,6 +132,75 @@ mod tests {
         assert_eq!(pending_review(&items).as_deref(), Some("0014"));
         items.push(said("pass"));
         assert_eq!(pending_review(&items), None);
+    }
+
+    /// What a click on Pass does to the model: the outbox takes `pass` once (that is the one
+    /// message sent), and the card shows it given until it comes back.
+    #[test]
+    fn pass_clicked_shows_at_once_and_sends_once() {
+        use crate::outbox::Outbox;
+        let review =
+            "url: site://coding/works/0014/review.md\n\n---\ntype: tui\ncontrol: hunk\n---";
+        let mut items = vec![open("site://coding/works/0014/review.md", review)];
+        let mut outbox = Outbox::default();
+        let card = |items: &[ChatItem], outbox: &Outbox| verdict_card(items, outbox.queued("s"));
+        assert_eq!(
+            card(&items, &outbox),
+            Some(VerdictCard {
+                ticket: "0014".into(),
+                sent: None
+            })
+        );
+        let sends = (0..2).filter(|_| outbox.queue("s", "pass")).count();
+        assert_eq!(sends, 1, "two clicks, one message");
+        assert_eq!(
+            card(&items, &outbox).and_then(|c| c.sent).as_deref(),
+            Some("pass"),
+            "decided before the message comes back"
+        );
+        // It comes back: the card goes, as before.
+        items.push(said("pass"));
+        outbox.arrived("s", items.last());
+        assert_eq!(card(&items, &outbox), None);
+        assert_eq!(outbox.queued("s"), None);
+    }
+
+    #[test]
+    fn a_failed_send_reopens_the_card() {
+        use crate::outbox::Outbox;
+        let review =
+            "url: site://coding/works/0014/review.md\n\n---\ntype: tui\ncontrol: hunk\n---";
+        let items = vec![open("site://coding/works/0014/review.md", review)];
+        let mut outbox = Outbox::default();
+        outbox.queue("s", "pass");
+        outbox.failed("s", "pass");
+        assert_eq!(
+            verdict_card(&items, outbox.queued("s")).and_then(|c| c.sent),
+            None
+        );
+    }
+
+    #[test]
+    fn a_fail_verdict_behaves_as_before() {
+        use crate::outbox::Outbox;
+        let review =
+            "url: site://coding/works/0014/review.md\n\n---\ntype: tui\ncontrol: hunk\n---";
+        let mut items = vec![open("site://coding/works/0014/review.md", review)];
+        let mut outbox = Outbox::default();
+        // Changes… writes `fail: ` in the composer; sending it is a verdict like Pass.
+        assert!(outbox.queue("s", "fail: rename the flag"));
+        assert!(
+            !outbox.queue("s", "pass"),
+            "no Pass after a fail is on its way"
+        );
+        assert_eq!(
+            verdict_card(&items, outbox.queued("s")).and_then(|c| c.sent),
+            Some("fail: rename the flag".into())
+        );
+        items.push(said("fail: rename the flag"));
+        outbox.arrived("s", items.last());
+        assert_eq!(pending_review(&items), None);
+        assert_eq!(verdict_card(&items, outbox.queued("s")), None);
     }
 
     #[test]
