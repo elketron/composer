@@ -213,7 +213,11 @@ impl App {
                     for effect in self.process(action) {
                         match effect {
                             Effect::Quit => return Ok(()),
-                            Effect::OpenBrowser(url) => self.dispatcher.dispatch(editor::open_browser(&url)),
+                            Effect::OpenBrowser(url) => {
+                                for action in editor::open_browser(&url) {
+                                    self.dispatcher.dispatch(action);
+                                }
+                            }
                             Effect::CopyText(text) => crate::terminal::copy(&text, &mut self.clipboard),
                             Effect::OpenFile { path, line } => {
                                 drop(events);

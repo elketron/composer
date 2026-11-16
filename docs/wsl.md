@@ -46,7 +46,11 @@ WantedBy=default.target
 keeps it up; `loginctl enable-linger $USER` keeps user services running.
 
 For the TUI's "open app in browser", let WSL reach the Windows browser: `sudo apt install wslu`
-and `export BROWSER=wslview`.
+and `export BROWSER=wslview`. That is the convenience route only: with no browser the TUI can
+reach it says so, shows the app's URL and puts it on your clipboard (OSC 52, which Windows Terminal
+hands to the Windows clipboard; over ssh it reaches the machine you sit at), so nothing has to be
+installed to paste that URL into a Windows browser — §3's forwarded `localhost` makes it
+load.
 
 ## 3. Reaching it: the app on this PC
 
