@@ -4,6 +4,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
+use std::time::Instant;
 
 use base64::Engine;
 use composer_client::{Connection, Endpoint, Event, Store};
@@ -24,6 +25,7 @@ use crate::home_view::{HomeEvent, HomeTab, HomeView};
 use crate::link_state::LinkState;
 use crate::notice::Notice;
 use crate::overlay_frame::OverlayFrame;
+use crate::page_refresh::{self, Refresher};
 use crate::pick_lists;
 use crate::picker::{Item, Pick, Picker, PickerEvent};
 use crate::project_binding::ProjectBinding;
@@ -83,6 +85,13 @@ pub struct Shell {
     panes: HashMap<String, Entity<TermPane>>,
     /// Browser panes of the other tabs; made when a tab is first shown.
     webs: BrowserTabs<Entity<WebPane>>,
+    /// Which tabs must show a page or a diff again after a change on the server, and when (its
+    /// notes on the choices: [crate::page_refresh]).
+    refresh: Refresher,
+    /// A timer for the next of those reloads is running (there is never a second one).
+    refresh_armed: bool,
+    /// The page URLs this socket asked to be told about (`subscribe`), as last sent.
+    watching: Vec<String>,
     subscriptions: Vec<Subscription>,
     /// The workspace's sites, as last fetched (the palette and the live view's name).
     sites: Vec<SiteSummary>,
@@ -137,6 +146,9 @@ impl Shell {
             home: None,
             panes: HashMap::new(),
             webs: BrowserTabs::default(),
+            refresh: Refresher::default(),
+            refresh_armed: false,
+            watching: Vec::new(),
             subscriptions,
             sites: Vec::new(),
             chat_width: ChatWidth::DEFAULT,
@@ -178,6 +190,11 @@ impl Shell {
                     );
                     self.ask(ClientCommand::DeskGet { session }, cx);
                 }
+                // Nothing on screen is known to be current any more, and the new socket has been
+                // told about no page yet.
+                self.refresh.clear();
+                self.refresh_armed = false;
+                self.watching.clear();
             }
             Event::Disconnected(reason) => {
                 self.link = LinkState::Down(reason);
@@ -219,6 +236,14 @@ impl Shell {
             }
             ServerMessage::SessionUpdated { session } if self.is_shown(&session.id) => {
                 self.sync_info(cx)
+            }
+            // Something a stage tab shows changed on the server: those tabs follow, on their own
+            // schedule (which one and when is `page_refresh`'s decision, tested without a browser).
+            ServerMessage::PageChanged { url, .. } => {
+                self.changed(page_refresh::page_tabs(&self.store.desk, url), cx)
+            }
+            ServerMessage::ProjectChanged { project, .. } => {
+                self.changed(page_refresh::changes_tabs(&self.store.desk, project), cx)
             }
             _ => {}
         }
@@ -600,6 +625,7 @@ impl Shell {
         self.panes.retain(|id, _| on_desk.contains(id));
         let tabs: HashSet<&str> = self.store.desk.tabs.iter().map(|t| t.id.as_str()).collect();
         self.webs.keep(&tabs);
+        self.refresh.keep(&tabs);
         for id in on_desk {
             if self.panes.contains_key(&id) {
                 continue;
@@ -608,6 +634,87 @@ impl Shell {
             self.panes.insert(id.clone(), pane.clone());
             self.read_terminal(id, pane, cx);
         }
+        // A tab that is shown now but changed on the server while it was hidden catches up; one
+        // with no pane yet needs nothing, it loads its page as it is made.
+        let shown = stage_tabs::shown(&self.store.desk).map(str::to_string);
+        if let Some(shown) = shown
+            && self.refresh.focus(&shown)
+        {
+            self.load_again(&shown, cx);
+        }
+        self.watch_pages(cx);
+    }
+
+    /// Tabs whose content just changed on the server. The one on screen waits a moment first, so a
+    /// burst of events for one page is one reload; the others are only marked, and the reload
+    /// happens when one of them is shown. Nothing on screen changes for a page no tab shows.
+    fn changed(&mut self, tabs: Vec<String>, cx: &mut Context<Self>) {
+        if tabs.is_empty() {
+            return;
+        }
+        let shown = stage_tabs::shown(&self.store.desk).map(str::to_string);
+        for tab in tabs {
+            self.refresh.changed(&tab, shown.as_deref(), Instant::now());
+        }
+        self.arm_refresh(cx);
+        cx.notify(); // a hidden tab's mark is drawn on its tab
+    }
+
+    /// One timer at a time, for as long as a tab is waiting.
+    fn arm_refresh(&mut self, cx: &mut Context<Self>) {
+        if self.refresh_armed || !self.refresh.waiting() {
+            return;
+        }
+        self.refresh_armed = true;
+        cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(page_refresh::SETTLE).await;
+            let _ = this.update(cx, |shell, cx| {
+                shell.refresh_armed = false;
+                shell.refresh_due(cx);
+            });
+        })
+        .detach();
+    }
+
+    /// Every tab whose wait has passed: load it again. A reader mid-drag or mid-selection in the
+    /// page is waited for, a bounded number of times (`page_refresh`), and a tab with no pane is
+    /// simply current, because its page loads when it is first shown.
+    fn refresh_due(&mut self, cx: &mut Context<Self>) {
+        for tab in self.refresh.due(Instant::now()) {
+            if self
+                .webs
+                .get(&tab)
+                .is_none_or(|pane| !pane.read(cx).interacting())
+                || !self.refresh.may_hold(&tab)
+            {
+                self.refresh.reloaded(&tab);
+                self.load_again(&tab, cx);
+                continue;
+            }
+            self.refresh.held(&tab, Instant::now());
+        }
+        self.arm_refresh(cx);
+        cx.notify(); // the mark on a tab is gone now that its page is current
+    }
+
+    /// A tab's browser pane, if it has one, showing its page as it is on the server now.
+    fn load_again(&mut self, tab: &str, cx: &mut Context<Self>) {
+        if let Some(pane) = self.webs.get(tab).cloned() {
+            pane.update(cx, |pane, _| pane.refresh());
+        }
+    }
+
+    /// Ask to be told about exactly the pages on the stage: a `page.changed` reaches only a socket
+    /// that asked for its URL, and a `subscribe` replaces the whole list — so `"*"`, what every
+    /// client asks for otherwise, stays in it.
+    fn watch_pages(&mut self, cx: &mut Context<Self>) {
+        let mut urls = vec!["*".to_string()];
+        urls.extend(page_refresh::page_patterns(&self.store.desk));
+        if urls == self.watching {
+            return;
+        }
+        self.watching = urls.clone();
+        self.ask(ClientCommand::Subscribe { urls }, cx);
     }
 
     /// Its scrollback; a terminal that ended (idle) says so and offers a fresh one.
@@ -1354,6 +1461,17 @@ impl Render for Shell {
                 .on_click(cx.listener(move |shell, _, _, cx| shell.show_tab(id.clone(), cx)))
                 .when(entry.unseen, |d| {
                     d.child(div().size(px(6.)).rounded(px(R_DOT)).bg(rgb(ACCENT_SOFT)))
+                })
+                // Its page or diff changed on the server while this tab was hidden; it loads the
+                // new text the moment it is shown (an outlined dot, next to the filled one).
+                .when(self.refresh.is_stale(&entry.id), |d| {
+                    d.child(
+                        div()
+                            .size(px(6.))
+                            .rounded(px(R_DOT))
+                            .border_1()
+                            .border_color(rgb(ACCENT_SOFT)),
+                    )
                 })
                 .child(stage_tabs::label(&entry.tab, live_app.as_deref()))
                 .child(

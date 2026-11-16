@@ -22,6 +22,7 @@ mod markdown;
 mod matcher;
 mod notice;
 mod overlay_frame;
+mod page_refresh;
 mod pick_lists;
 mod picker;
 mod project_binding;
