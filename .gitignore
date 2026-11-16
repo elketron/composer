@@ -1,3 +1,5 @@
 /target
 /crates/protocol/bindings
 /dist/
+# Scratch worktrees for checking a ticket's branch: `git worktree add .wt-<ticket-id> ticket/<ticket-id>`
+/.wt-[0-9]*/

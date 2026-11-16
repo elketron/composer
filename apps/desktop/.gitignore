@@ -1,2 +1,4 @@
 target/
 .cef
+# CEF_PATH scratch for test/build runs (a writable CEF copy when .cef can't be used, e.g. in a sandbox)
+.tmp-cef/
