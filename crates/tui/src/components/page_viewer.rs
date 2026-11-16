@@ -120,7 +120,7 @@ impl Component for PageViewer {
     }
 
     fn render(&self, frame: &mut Frame, area: Rect, state: &AppState) {
-        let focused = state.ui.focus == Pane::Page;
+        let focused = state.ui.focus == Pane::Stage;
         let title = match (&state.page.current, &state.page.loading) {
             (_, Some(url)) => Line::from(vec![
                 Span::raw(" "),

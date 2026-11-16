@@ -14,10 +14,12 @@ pub enum Mode {
     Comment,
 }
 
+/// One of the two panes. The stage holds tabs (pages, changes, the project view): a tab is
+/// content inside it, not a pane of its own, so focus and layout keep their shape.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Pane {
     Chat,
-    Page,
+    Stage,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -155,6 +157,8 @@ pub enum Pending {
     Discarded(String),
     /// `ticket.comment` on this ticket: say how many went in, show the lines.
     Comments(String),
+    /// `desk.get` for the session this TUI shows: its tabs, so the stage has something to list.
+    Desk,
     /// `app.open` of `site` for `session`: on `project` (then on Home, if it isn't one of its
     /// apps), then check it is built and open it.
     OpenApp {

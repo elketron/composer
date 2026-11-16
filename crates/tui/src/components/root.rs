@@ -2,15 +2,17 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent,
 use ratatui::backend::TestBackend;
 use ratatui::layout::{Constraint, Layout, Margin, Position, Rect};
 use ratatui::style::Style;
-use ratatui::widgets::Block;
+use ratatui::text::{Line, Span};
+use ratatui::widgets::{Block, Paragraph};
 use ratatui::{Frame, Terminal};
 
 use crate::action::Action;
 use crate::components::{
     ApprovalPopup, ChangesView, ChatPane, CommandLine, Component, Help, PageViewer, Picker,
-    ProjectView, Selection, StatusBar,
+    ProjectView, Selection, StatusBar, TabBar,
 };
 use crate::store::AppState;
+use crate::store::StageTab;
 use crate::store::types::{FlashLevel, Mode, Pane};
 use crate::theme;
 
@@ -20,12 +22,13 @@ const TWO_PANE_MIN_WIDTH: u16 = 100;
 /// Lines a notch of the mouse wheel scrolls.
 const WHEEL_LINES: usize = 3;
 
-/// Layout: two panes over a status bar; the picker floats on top.
+/// Layout: the chat and the stage over a status bar; the picker floats on top.
 pub struct Root {
     pub chat: ChatPane,
     pub page: PageViewer,
     changes: ChangesView,
     project: ProjectView,
+    tabs: TabBar,
     status: StatusBar,
     command: CommandLine,
     picker: Picker,
@@ -33,6 +36,8 @@ pub struct Root {
     help: Help,
     /// Text selected with the mouse (shown until the next click or key).
     pub selection: Option<Selection>,
+    /// A click that landed on a tab, to be turned into an action on release.
+    tab_click: Option<usize>,
 }
 
 impl Root {
@@ -43,17 +48,20 @@ impl Root {
             page: PageViewer::new(),
             changes: ChangesView::new(),
             project: ProjectView::new(),
+            tabs: TabBar,
             status: StatusBar,
             command: CommandLine::new(),
             picker: Picker,
             approval: ApprovalPopup,
             help: Help::new(bindings),
             selection: None,
+            tab_click: None,
         }
     }
 
     /// The mouse: a drag selects text in the pane it starts in and copies it on release, a click
-    /// focuses the pane, the wheel scrolls the pane under it. `screen`: the whole terminal.
+    /// focuses the pane or picks a tab, the wheel scrolls the pane under it. `screen`: the whole
+    /// terminal.
     pub fn handle_mouse(
         &mut self,
         event: MouseEvent,
@@ -70,6 +78,12 @@ impl Root {
             .find(|(_, area)| area.contains(at));
         match event.kind {
             MouseEventKind::Down(MouseButton::Left) => {
+                self.tab_click = under
+                    .filter(|(pane, _)| *pane == Pane::Stage)
+                    .and_then(|(_, area)| self.tabs.hit(state, area, at));
+                if self.tab_click.is_some() {
+                    return vec![];
+                }
                 // Inside the pane's border.
                 self.selection =
                     under.map(|(_, area)| Selection::start(area.inner(Margin::new(1, 1)), at));
@@ -81,23 +95,32 @@ impl Root {
                 }
                 vec![]
             }
-            MouseEventKind::Up(MouseButton::Left) => match self.selection {
-                Some(selection) if !selection.is_empty() => {
-                    let text = self.selected_text(selection, screen, state);
-                    if text.is_empty() {
-                        vec![]
-                    } else {
-                        vec![Action::CopyText(text)]
+            MouseEventKind::Up(MouseButton::Left) => {
+                match self.selection {
+                    Some(selection) if !selection.is_empty() => {
+                        let text = self.selected_text(selection, screen, state);
+                        if text.is_empty() {
+                            vec![]
+                        } else {
+                            vec![Action::CopyText(text)]
+                        }
+                    }
+                    _ => {
+                        self.selection = None;
+                        // A click that started on a tab picks that tab, and takes the focus
+                        // with it: clicking a tab means wanting to read it.
+                        match self.tab_click.take() {
+                            Some(index) => {
+                                vec![Action::FocusPane(Pane::Stage), Action::ShowTab(index)]
+                            }
+                            None => under
+                                .map(|(pane, _)| Action::FocusPane(pane))
+                                .into_iter()
+                                .collect(),
+                        }
                     }
                 }
-                _ => {
-                    self.selection = None;
-                    under
-                        .map(|(pane, _)| Action::FocusPane(pane))
-                        .into_iter()
-                        .collect()
-                }
-            },
+            }
             MouseEventKind::ScrollUp | MouseEventKind::ScrollDown => match under {
                 Some((pane, _)) => self.scroll(pane, event.kind == MouseEventKind::ScrollUp, state),
                 None => vec![],
@@ -114,22 +137,25 @@ impl Root {
     }
 
     fn scroll(&mut self, pane: Pane, up: bool, state: &AppState) -> Vec<Action> {
+        let key = KeyEvent::new(
+            if up { KeyCode::Up } else { KeyCode::Down },
+            KeyModifiers::NONE,
+        );
         match pane {
             Pane::Chat => return self.chat.scroll_by(up, WHEEL_LINES, state),
-            Pane::Page if state.project_view.open || state.project.open => {
-                let key = KeyEvent::new(
-                    if up { KeyCode::Up } else { KeyCode::Down },
-                    KeyModifiers::NONE,
-                );
-                for _ in 0..WHEEL_LINES {
-                    if state.project_view.open {
+            Pane::Stage => match state.shown_tab() {
+                Some(StageTab::Project { .. }) => {
+                    for _ in 0..WHEEL_LINES {
                         self.project.handle_key(key, state);
-                    } else {
+                    }
+                }
+                Some(StageTab::Changes { .. }) => {
+                    for _ in 0..WHEEL_LINES {
                         self.changes.handle_key(key, state);
                     }
                 }
-            }
-            Pane::Page => self.page.scroll_by(up, WHEEL_LINES),
+                _ => self.page.scroll_by(up, WHEEL_LINES),
+            },
         }
         vec![]
     }
@@ -139,14 +165,23 @@ impl Root {
         Layout::vertical([Constraint::Min(3), Constraint::Length(1)]).areas(area)
     }
 
-    /// The right pane: the project view or the changes view when open, else the page viewer.
-    fn render_right(&self, frame: &mut Frame, area: Rect, state: &AppState) {
-        if state.project_view.open {
-            self.project.render(frame, area, state);
-        } else if state.project.open {
-            self.changes.render(frame, area, state);
-        } else {
-            self.page.render(frame, area, state);
+    /// The stage: its tab bar, then the view of the tab that is shown.
+    fn render_stage(&self, frame: &mut Frame, area: Rect, state: &AppState) {
+        let content = match TabBar::row(area) {
+            Some(row) if !state.stage_tabs().is_empty() => {
+                self.tabs.render(frame, row, state);
+                let [_, content] =
+                    Layout::vertical([Constraint::Length(1), Constraint::Min(1)]).areas(area);
+                content
+            }
+            _ => area,
+        };
+        match state.shown_tab() {
+            Some(StageTab::Project { .. }) => self.project.render(frame, content, state),
+            Some(StageTab::Changes { .. }) => self.changes.render(frame, content, state),
+            Some(StageTab::Page { .. }) => self.page.render(frame, content, state),
+            // Nothing open: the stage says what would put something here.
+            None => empty_stage(frame, content, state),
         }
     }
 
@@ -155,6 +190,23 @@ impl Root {
     pub fn handle_paste(&mut self, text: &str, state: &AppState) -> Vec<Action> {
         self.chat.composer.paste(text, state.mode() == Mode::Insert)
     }
+}
+
+/// The empty stage: a pane with nothing in it, and the keys that fill it.
+fn empty_stage(frame: &mut Frame, area: Rect, state: &AppState) {
+    let block = crate::components::widgets::pane_block(
+        Line::from(Span::styled(" stage ", theme::muted())),
+        state.ui.focus == Pane::Stage,
+    );
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(
+            "nothing open \u{b7} \u{b7}p a page \u{b7} gd this project's changes \u{b7} the agent's\n  pages and anything it puts on the stage appear here",
+            theme::faint(),
+        ))),
+        inner,
+    );
 }
 
 impl Component for Root {
@@ -189,13 +241,17 @@ impl Component for Root {
         match state.mode() {
             Mode::Insert => self.chat.handle_key(key, state),
             Mode::Command => self.command.handle_key(key, state),
+            // These modes belong to a view, whatever else is open: you got to them from it.
             Mode::Hint => self.page.handle_key(key, state),
             Mode::Comment => self.changes.handle_key(key, state),
             Mode::Normal => match state.ui.focus {
                 Pane::Chat => self.chat.handle_key(key, state),
-                Pane::Page if state.project_view.open => self.project.handle_key(key, state),
-                Pane::Page if state.project.open => self.changes.handle_key(key, state),
-                Pane::Page => self.page.handle_key(key, state),
+                // The tab on the screen owns the stage's keys.
+                Pane::Stage => match state.shown_tab() {
+                    Some(StageTab::Project { .. }) => self.project.handle_key(key, state),
+                    Some(StageTab::Changes { .. }) => self.changes.handle_key(key, state),
+                    Some(StageTab::Page { .. }) | None => self.page.handle_key(key, state),
+                },
             },
         }
     }
@@ -206,7 +262,7 @@ impl Component for Root {
         for (pane, pane_area) in pane_areas(panes, state) {
             match pane {
                 Pane::Chat => self.chat.render(frame, pane_area, state),
-                Pane::Page => self.render_right(frame, pane_area, state),
+                Pane::Stage => self.render_stage(frame, pane_area, state),
             }
         }
         if let Some(selection) = &self.selection {
@@ -239,13 +295,14 @@ fn pane_areas(panes: Rect, state: &AppState) -> Vec<(Pane, Rect)> {
     match single {
         Some(pane) => vec![(pane, panes)],
         None => {
-            let [chat, _, page] = Layout::horizontal([
-                Constraint::Percentage(54),
+            // The stage gets the wider half: it is where pages and diffs are read.
+            let [chat, _, stage] = Layout::horizontal([
+                Constraint::Percentage(45),
                 Constraint::Length(1),
-                Constraint::Min(30),
+                Constraint::Percentage(55),
             ])
             .areas(panes);
-            vec![(Pane::Chat, chat), (Pane::Page, page)]
+            vec![(Pane::Chat, chat), (Pane::Stage, stage)]
         }
     }
 }

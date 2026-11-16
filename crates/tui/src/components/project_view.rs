@@ -50,7 +50,7 @@ impl ProjectView {
             line: Line::raw(""),
             open: vec![],
         };
-        let close = Action::ToggleProjectView;
+        let close = Action::CloseTab;
 
         let mut head = vec![Span::styled(o.path.clone(), theme::muted())];
         if let Some(branch) = &o.branch {
@@ -203,12 +203,9 @@ fn session_row(s: &composer_protocol::SessionInfo, indent: &str, state: &AppStat
             Span::styled(format!("  {label}"), theme::faint()),
         ]),
         open: if state.session.current.as_deref() == Some(&s.id) {
-            vec![Action::ToggleProjectView, Action::FocusPane(Pane::Chat)]
+            vec![Action::CloseTab, Action::FocusPane(Pane::Chat)]
         } else {
-            vec![
-                Action::ToggleProjectView,
-                Action::AttachSession(s.id.clone()),
-            ]
+            vec![Action::CloseTab, Action::AttachSession(s.id.clone())]
         },
     }
 }
@@ -230,16 +227,13 @@ impl Component for ProjectView {
             }
             KeyCode::Char('n') => {
                 if let Some(o) = &state.project_view.overview {
-                    return vec![
-                        Action::ToggleProjectView,
-                        Action::NewSessionIn(o.folder.clone()),
-                    ];
+                    return vec![Action::CloseTab, Action::NewSessionIn(o.folder.clone())];
                 }
             }
             KeyCode::Char('r') => {
                 return vec![Action::ProjectView(state.project_view.project.clone())];
             }
-            KeyCode::Esc | KeyCode::Char('q') => return vec![Action::ToggleProjectView],
+            KeyCode::Esc | KeyCode::Char('q') => return vec![Action::CloseTab],
             _ => {}
         }
         vec![]
@@ -260,7 +254,7 @@ impl Component for ProjectView {
             Span::styled(name, Style::new().fg(theme::ACCENT)),
             Span::raw(" "),
         ]);
-        let block = pane_block(title, state.ui.focus == Pane::Page);
+        let block = pane_block(title, state.ui.focus == Pane::Stage);
         let inner = block.inner(area);
         frame.render_widget(block, area);
         let inner = Rect {

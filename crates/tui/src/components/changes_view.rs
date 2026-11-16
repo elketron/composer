@@ -396,7 +396,7 @@ impl Component for ChangesView {
                 }
             }
             (KeyCode::Esc, _) if self.mark.take().is_some() => {}
-            (KeyCode::Esc | KeyCode::Char('q'), _) => return vec![Action::ToggleChanges],
+            (KeyCode::Esc | KeyCode::Char('q'), _) => return vec![Action::CloseTab],
             _ => {}
         }
         self.cursor = self.cursor.min(count.saturating_sub(1));
@@ -433,7 +433,7 @@ impl Component for ChangesView {
             ));
         }
         title.push(Span::raw(" "));
-        let block = pane_block(Line::from(title), state.ui.focus == Pane::Page);
+        let block = pane_block(Line::from(title), state.ui.focus == Pane::Stage);
         let inner = block.inner(area);
         frame.render_widget(block, area);
         let inner = Rect {
@@ -442,6 +442,22 @@ impl Component for ChangesView {
             ..inner
         };
         let width = inner.width as usize;
+
+        // The diff shown is the session's project's diff. A changes tab that names another
+        // project (a desk carried over from another session) has nothing of its own to show.
+        if let Some(other) = state.changes_elsewhere() {
+            frame.render_widget(
+                Paragraph::new(Span::styled(
+                    format!(
+                        "nothing to show: this tab is the changes of `{other}`, and this 
+  session's project is another one"
+                    ),
+                    theme::faint(),
+                )),
+                inner,
+            );
+            return;
+        }
 
         let message = match (&project.diff, &project.error) {
             (_, Some(error)) => Some(Span::styled(error.clone(), Style::new().fg(theme::ERR))),

@@ -1,0 +1,213 @@
+//! The session's desk, as this terminal shows it (plan phase 12, ticket 0208).
+//!
+//! The desk is the server's: the same one the desktop and the phone render, and the one the
+//! agent's `show_page` / `show_app` land on. The TUI reads it and draws the tabs a terminal can
+//! draw — a page, a project's changes. `App`, `Terminal` and `LiveView` tabs are kept exactly as
+//! received: never shown, never written back (terminals are slice 3; apps keep opening in the
+//! browser as they do today). A project's overview has no desk kind, so its tab is local: see
+//! [`PROJECT_TAB`].
+
+use composer_core::SiteUrl;
+use composer_protocol::{Desk, DeskTab};
+
+/// The id of the project view's tab. It is not on the desk (no `DeskTab` names an overview),
+/// and `local:` is a prefix the server's ids never produce (`app:`, `page:`, `terminal:`,
+/// `changes:`, `live`), so it cannot collide with one.
+pub const PROJECT_TAB: &str = "local:project";
+
+/// The id a page tab has on the desk. The server derives an id from what the tab shows, so the
+/// same page is one tab however it was reached; this is the same derivation, so opening a page
+/// here and there counts as one. `None` for a URL that names no page.
+pub fn page_key(url: &str) -> Option<String> {
+    let url = url.trim();
+    let path = url.strip_prefix("site://").unwrap_or(url);
+    let (site, rest) = path.split_once('/').unwrap_or((path, ""));
+    let page = SiteUrl::new(site, rest).ok()?;
+    Some(format!("page:{page}"))
+}
+
+/// A tab the stage can draw.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StageTab {
+    /// A page (`site://…`).
+    Page {
+        id: String,
+        url: String,
+        unseen: bool,
+    },
+    /// A project's changes.
+    Changes {
+        id: String,
+        project: String,
+        unseen: bool,
+    },
+    /// A project's overview: this terminal's own tab, never on the desk.
+    Project { project: Option<String> },
+}
+
+impl StageTab {
+    /// What the tab is called, on the desk and in this list alike.
+    pub fn id(&self) -> &str {
+        match self {
+            Self::Page { id, .. } | Self::Changes { id, .. } => id,
+            Self::Project { .. } => PROJECT_TAB,
+        }
+    }
+
+    /// What the tab bar says about it.
+    pub fn title(&self) -> String {
+        match self {
+            Self::Page { url, .. } => url.strip_prefix("site://").unwrap_or(url).to_string(),
+            Self::Changes { project, .. } => format!("changes · {project}"),
+            Self::Project {
+                project: Some(project),
+            } => format!(
+                "project · {}",
+                project
+                    .trim_end_matches('/')
+                    .rsplit('/')
+                    .next()
+                    .unwrap_or(project)
+            ),
+            Self::Project { project: None } => "project".to_string(),
+        }
+    }
+
+    /// Opened by the agent and not looked at yet: a badge.
+    pub fn unseen(&self) -> bool {
+        match self {
+            Self::Page { unseen, .. } | Self::Changes { unseen, .. } => *unseen,
+            Self::Project { .. } => false,
+        }
+    }
+
+    /// What to write back to the desk for it; `None` for a tab that lives only here.
+    pub fn desk_tab(&self) -> Option<DeskTab> {
+        match self {
+            Self::Page { url, .. } => Some(DeskTab::Page { url: url.clone() }),
+            Self::Changes { project, .. } => Some(DeskTab::Changes {
+                project: project.clone(),
+            }),
+            Self::Project { .. } => None,
+        }
+    }
+}
+
+/// The desk as the session's owner sent it, plus which of its tabs this terminal shows.
+#[derive(Debug, Default)]
+pub struct DeskStore {
+    /// Received as-is: the tabs this terminal cannot draw stay in it untouched.
+    pub desk: Desk,
+    /// The tab on the screen. A tab id, or `None` for the empty stage.
+    shown: Option<String>,
+}
+
+impl DeskStore {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// The tabs a terminal can draw, in the desk's order.
+    pub fn visible(&self) -> Vec<StageTab> {
+        self.desk
+            .tabs
+            .iter()
+            .filter_map(|entry| match &entry.tab {
+                DeskTab::Page { url } => Some(StageTab::Page {
+                    id: entry.id.clone(),
+                    url: url.clone(),
+                    unseen: entry.unseen,
+                }),
+                DeskTab::Changes { project } => Some(StageTab::Changes {
+                    id: entry.id.clone(),
+                    project: project.clone(),
+                    unseen: entry.unseen,
+                }),
+                // An app, a terminal, the live view: not this terminal's to show or change.
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// The tab on the screen, as this terminal decided (`None`: the empty stage). Not whether
+    /// the desk says so: see [`AppState`](crate::store::AppState), which keeps the two together.
+    pub fn shown(&self) -> Option<&str> {
+        self.shown.as_deref()
+    }
+
+    /// The desk as its owner sent it, and nothing else: which of its tabs to show is the
+    /// client's decision (see `show` and `show_desk`), because it is the client that decides
+    /// whether it follows the agent.
+    pub fn set_desk(&mut self, desk: Desk) {
+        self.desk = desk;
+    }
+
+    /// Whether `id` names a tab in this desk that a terminal can draw.
+    pub fn can_draw(&self, id: &str) -> bool {
+        drawable(&self.desk, id)
+    }
+
+    /// Forget this session's desk (attaching another one: its tabs are not ours).
+    pub fn clear(&mut self) {
+        self.desk = Desk::default();
+        self.shown = None;
+    }
+
+    /// Shows `id`. An empty id means nothing is on the screen, which is what an empty desk
+    /// leaves the stage with; it is not a tab called "".
+    pub fn show(&mut self, id: &str) {
+        self.shown = (!id.is_empty()).then(|| id.to_string());
+    }
+
+    /// Show what the desk shows, when that is one of `ids` (the tabs that exist); the last
+    /// of `ids` otherwise, and nothing if there are none.
+    pub fn show_desk(&mut self, ids: &[String]) {
+        self.shown = self
+            .desk
+            .active
+            .clone()
+            .filter(|id| ids.iter().any(|tab| tab == id))
+            .or_else(|| ids.last().cloned());
+    }
+
+    /// The shown tab has to be one that exists. Keep it when it is; otherwise show what the
+    /// desk shows, and failing that the last tab there is (nothing, if none).
+    pub fn reconcile(&mut self, ids: &[String]) {
+        if let Some(shown) = &self.shown
+            && ids.iter().any(|id| id == shown)
+        {
+            return;
+        }
+        self.show_desk(ids);
+    }
+
+    /// Point at the tab next to the one closing (the next, else the previous), as the desk
+    /// does. Only when it was the one shown; an id that no longer exists is nothing to do.
+    pub fn closing(&mut self, id: &str) {
+        if self.shown.as_deref() != Some(id) {
+            return;
+        }
+        let all: Vec<String> = self
+            .visible()
+            .iter()
+            .map(|tab| tab.id().to_string())
+            .collect();
+        let Some(at) = all.iter().position(|tab| tab == id) else {
+            return;
+        };
+        let rest: Vec<String> = all
+            .iter()
+            .enumerate()
+            .filter(|(_, tab)| tab.as_str() != id)
+            .map(|(_, tab)| tab.clone())
+            .collect();
+        self.shown = rest.get(at).or_else(|| rest.last()).cloned();
+    }
+}
+
+/// Whether `id` names a tab of this desk that a terminal can draw.
+fn drawable(desk: &Desk, id: &str) -> bool {
+    desk.tabs.iter().any(|entry| {
+        entry.id == id && matches!(entry.tab, DeskTab::Page { .. } | DeskTab::Changes { .. })
+    })
+}

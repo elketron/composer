@@ -34,7 +34,30 @@ const MODES: [(&str, &str); 4] = [
 ];
 
 /// Keys that only mean something in one place, handled by that component.
-const PLACES: [(&str, &[(&str, &str)]); 7] = [
+const PLACES: [(&str, &[(&str, &str)]); 8] = [
+    (
+        "Stage tabs (what is open on the right)",
+        &[
+            (
+                "ctrl-tab / ctrl-shift-tab",
+                "next / previous tab (the desktop's keys; needs a terminal that reports them)",
+            ),
+            (
+                "ctrl-w c",
+                "close the tab shown; the one beside it is shown",
+            ),
+            (
+                "space p, a link, :open",
+                "a page opens as a tab; the same page again is the same tab",
+            ),
+            ("gd", "this project's changes, as a tab"),
+            ("click", "pick a tab in the bar"),
+            (
+                "",
+                "tabs are the session's desk: a page opened in the desktop shows up here and here",
+            ),
+        ],
+    ),
     (
         "Writing (Insert mode)",
         &[

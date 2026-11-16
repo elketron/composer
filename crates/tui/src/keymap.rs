@@ -83,6 +83,24 @@ impl Keymap {
                 "previous session of this orchestration",
             ),
             (vec![tab], Action::FocusNext, "switch pane"),
+            // The desktop's keys for the same thing, on purpose: this is its tab list. A
+            // terminal that speaks the kitty keyboard protocol reports these as themselves;
+            // one that doesn't cannot tell ctrl-tab from tab, and there it stays "switch pane".
+            (
+                vec![(KeyCode::Tab, KeyModifiers::CONTROL)],
+                Action::CycleTab(1),
+                "the stage's next tab",
+            ),
+            (
+                vec![(KeyCode::BackTab, KeyModifiers::CONTROL)],
+                Action::CycleTab(-1),
+                "the stage's previous tab",
+            ),
+            (
+                vec![ctrl('w'), key('c')],
+                Action::CloseTab,
+                "close the stage's tab shown: a page, the changes, the project",
+            ),
             (
                 vec![ctrl('w'), key('h')],
                 Action::FocusPane(Pane::Chat),
@@ -90,8 +108,8 @@ impl Keymap {
             ),
             (
                 vec![ctrl('w'), key('l')],
-                Action::FocusPane(Pane::Page),
-                "focus the page",
+                Action::FocusPane(Pane::Stage),
+                "focus the stage (its tabs are what you switch with ctrl-tab)",
             ),
             (vec![ctrl('w'), key('w')], Action::FocusNext, "switch pane"),
             (
@@ -203,6 +221,8 @@ fn chord_name(chord: &Chord) -> String {
     let key = match chord.0 {
         KeyCode::Char(' ') => "space".to_string(),
         KeyCode::Char(c) => c.to_string(),
+        // shift-tab is reported as BackTab, which is what `ctrl-shift-tab` arrives as.
+        KeyCode::BackTab => "shift-tab".to_string(),
         KeyCode::Tab => "tab".to_string(),
         KeyCode::Enter => "enter".to_string(),
         KeyCode::Esc => "esc".to_string(),
@@ -266,7 +286,18 @@ mod tests {
                 .all(|(keys, description)| !keys.is_empty() && !description.is_empty())
         );
         let keys: Vec<&str> = help.iter().map(|(k, _)| k.as_str()).collect();
-        for expected in ["?", "space p", "ctrl-w o", "gd", "H", "ctrl-c", "tab"] {
+        for expected in [
+            "?",
+            "space p",
+            "ctrl-w o",
+            "ctrl-w c",
+            "ctrl-tab",
+            "ctrl-shift-tab",
+            "gd",
+            "H",
+            "ctrl-c",
+            "tab",
+        ] {
             assert!(keys.contains(&expected), "{expected} missing from {keys:?}");
         }
     }
