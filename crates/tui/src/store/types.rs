@@ -157,8 +157,11 @@ pub enum Pending {
     Discarded(String),
     /// `ticket.comment` on this ticket: say how many went in, show the lines.
     Comments(String),
-    /// `desk.get` for the session this TUI shows: its tabs, so the stage has something to list.
-    Desk,
+    /// `desk.get` for one session: its tabs, so the stage has something to list. The session is
+    /// named because an answer that arrives after you moved on must not be applied.
+    Desk {
+        session: String,
+    },
     /// `app.open` of `site` for `session`: on `project` (then on Home, if it isn't one of its
     /// apps), then check it is built and open it.
     OpenApp {

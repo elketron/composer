@@ -142,9 +142,10 @@ impl DeskStore {
         self.desk = desk;
     }
 
-    /// Whether `id` names a tab in this desk that a terminal can draw.
+    /// Whether `id` names a tab in this desk that a terminal can draw: asked of
+    /// [`visible`], so the two can never disagree about what is drawable.
     pub fn can_draw(&self, id: &str) -> bool {
-        drawable(&self.desk, id)
+        self.visible().iter().any(|tab| tab.id() == id)
     }
 
     /// Forget this session's desk (attaching another one: its tabs are not ours).
@@ -203,11 +204,4 @@ impl DeskStore {
             .collect();
         self.shown = rest.get(at).or_else(|| rest.last()).cloned();
     }
-}
-
-/// Whether `id` names a tab of this desk that a terminal can draw.
-fn drawable(desk: &Desk, id: &str) -> bool {
-    desk.tabs.iter().any(|entry| {
-        entry.id == id && matches!(entry.tab, DeskTab::Page { .. } | DeskTab::Changes { .. })
-    })
 }

@@ -15,8 +15,9 @@ use crate::store::AppState;
 use crate::store::types::Pane;
 use crate::theme;
 
-/// One project's overview in the right pane (`gp`): branches waiting to merge, its sessions, its
-/// memory and switches. Rows open what they show.
+/// One project's overview, as a tab of the stage (`gp`): branches waiting to merge, its
+/// sessions, its memory and switches. Rows open what they show. This tab is the terminal's own
+/// (the desk has no kind for an overview), so what you open here is not on another client.
 pub struct ProjectView {
     /// The cursor, as an index into the rows that open something.
     cursor: usize,
@@ -263,10 +264,10 @@ impl Component for ProjectView {
             ..inner
         };
         if view.overview.is_none() {
-            let text = if view.loading {
-                "loading…"
-            } else {
-                "no project"
+            let text = match (&view.error, view.loading) {
+                (Some(error), _) => format!("{error} — r asks again"),
+                (None, true) => "loading…".to_string(),
+                (None, false) => "no project".to_string(),
             };
             frame.render_widget(Paragraph::new(Span::styled(text, theme::faint())), inner);
             return;

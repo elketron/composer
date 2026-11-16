@@ -768,7 +768,9 @@ impl AppState {
         let shown = self.shown_tab();
         match shown {
             Some(StageTab::Page { id, url, .. }) => {
-                if self.page.loading_tab() == Some(id.as_str()) {
+                // Its page is either on its way or already failed and said so on the screen:
+                // neither is asked for again on every keypress. `r` and re-showing the tab are.
+                if self.page.waiting_on_shown() == Some(id.as_str()) {
                     return vec![];
                 }
                 match self.page.show(&id, &url) {
@@ -1026,26 +1028,33 @@ impl AppState {
             );
         }
         self.session.begin_attach(id, remember);
-        // What was open belongs to the session you were on; this one's tabs come from it.
+        // What was open belongs to the session you were on. This one's tabs come from it, and
+        // the `desk.get` answer below is what fills the stage: the server does not send a desk
+        // unasked and does not broadcast one on attach.
         self.desk.clear();
         self.page.forget(&[]);
+        // This terminal's own tab names a project too, and it is not the next session's.
+        self.project_view = ProjectViewStore::default();
         let mut effects = self.fetch_history(id.to_string(), None);
         effects.extend(self.send(
             ClientCommand::DeskGet {
                 session: id.to_string(),
             },
-            Pending::Ignore,
+            Pending::Desk {
+                session: id.to_string(),
+            },
         ));
         effects
     }
 
     /// The session's desk, asked for after a reconnect (the first one comes with `attach`).
     fn fetch_desk(&mut self) -> Vec<Effect> {
+        let session = self.session.current.clone().unwrap_or_default();
         self.send(
             ClientCommand::DeskGet {
-                session: self.session.current.clone().unwrap_or_default(),
+                session: session.clone(),
             },
-            Pending::Ignore,
+            Pending::Desk { session },
         )
     }
 
@@ -1189,6 +1198,12 @@ impl AppState {
                         self.session.more = false;
                         vec![]
                     }
+                    // The project tab says what failed and asks again on `r`; a flash there
+                    // would be gone before you looked at the tab that is empty.
+                    Some(Pending::Overview) => {
+                        self.project_view.failed(message);
+                        vec![]
+                    }
                     _ => {
                         self.ui.flash(message, FlashLevel::Error);
                         vec![]
@@ -1270,16 +1285,17 @@ impl AppState {
                 match by {
                     // You moved the stage where you are: that is what it shows. A tab this
                     // terminal can't draw leaves it on what it had.
-                    DeskBy::User if drawable => self.desk.show_desk(&self.visible_ids()),
-                    // The agent opened or pointed at a tab: following it means showing it, not
-                    // following leaves it waiting in the bar with its badge.
-                    DeskBy::Agent if followed => {
-                        let id = opened.unwrap_or_default();
-                        self.desk.show(&id);
+                    DeskBy::User if drawable => {
+                        self.desk.show_desk(&self.visible_ids());
+                        vec![]
                     }
-                    _ => {}
+                    // The agent opened or pointed at a tab: following it means showing it, and
+                    // *showing* it is what marks it read — `desk.focus` is the only thing that
+                    // clears `unseen`, and every client reads that badge. Not following leaves
+                    // the tab waiting in the bar with its badge, unread by anyone.
+                    DeskBy::Agent if followed => self.show_tab_id(&opened.unwrap_or_default()),
+                    _ => vec![],
                 }
-                vec![]
             }
             ServerMessage::ReminderDue {
                 url,
@@ -1530,11 +1546,21 @@ impl AppState {
                 self.project_view.loaded(overview);
                 vec![]
             }
-            // The desk of the session we attach to: the server does not send it unasked, and
-            // the stage has nothing to list until it arrives.
-            (Pending::Desk, CommandResult::Desk { desk }) => {
+            // The stage of the session this TUI shows, from the horse's mouth: this answer is
+            // what the tab list is built from after `:attach`, after a resume, after a
+            // reconnect. A late answer for a session you have left is dropped.
+            (Pending::Desk { session }, CommandResult::Desk { desk })
+                if self.session.current.as_deref() == Some(session.as_str()) =>
+            {
                 self.desk.set_desk(desk);
-                vec![]
+                // Whatever is still shown here stays; otherwise the desk's own tab, and if
+                // this terminal cannot draw that, the last one it can — the same fallback a
+                // `by: User` change follows. Nothing, if there is nothing to draw.
+                let ids = self.showable_ids();
+                self.desk.reconcile(&ids);
+                self.page.forget(&self.visible_ids());
+                let shown = self.desk.shown().unwrap_or("").to_string();
+                self.show_local(&shown, vec![])
             }
             (Pending::Merged(ticket), CommandResult::Merged { commit }) => {
                 self.ui.flash(
@@ -3049,9 +3075,11 @@ mod tests {
             [false, true],
             "it waits in the bar with its badge"
         );
-        // Following it means showing it.
+        // Following it means showing it, and asking the desk to focus it: `desk.focus` is the
+        // only thing that clears `unseen`, so without it the badge outlives the reading — on
+        // the desktop and the phone too, which read the same flag.
         let mut state = showing_a_session();
-        settle(
+        let effects = settle(
             &mut state,
             Action::Server(ServerMessage::DeskChanged {
                 session: "s".into(),
@@ -3064,6 +3092,37 @@ mod tests {
             }),
         );
         assert_eq!(shown_title(&state), Some("agent/page".into()));
+        assert!(
+            sent(&effects).iter().any(|(_, c)| c
+                == &ClientCommand::DeskFocus {
+                    session: "s".into(),
+                    tab: "page:site://agent/page".into(),
+                }),
+            "reading it marks it read: {effects:?}"
+        );
+        // The desk agrees; the badge is gone for every client, including this one.
+        let read = entry(
+            "page:site://agent/page",
+            DeskTab::Page {
+                url: "site://agent/page".into(),
+            },
+            false,
+        );
+        say_desk(
+            &mut state,
+            vec![read],
+            Some("page:site://agent/page"),
+            DeskBy::User,
+        );
+        assert_eq!(
+            state
+                .stage_tabs()
+                .iter()
+                .map(|t| t.unseen())
+                .collect::<Vec<_>>(),
+            [false],
+            "nothing badged once it has been read"
+        );
     }
 
     #[test]
@@ -3266,6 +3325,34 @@ mod tests {
     }
 
     #[test]
+    fn a_page_that_failed_is_not_asked_for_on_every_key_but_r_asks_again() {
+        let mut state = showing_a_session();
+        let _ = say_desk(
+            &mut state,
+            vec![page("site://gone")],
+            Some("page:site://gone"),
+            DeskBy::User,
+        );
+        state.reduce(Action::PageFailed {
+            url: "site://gone".into(),
+            error: "no such page".into(),
+        });
+        for _ in 0..3 {
+            let effects = settle(&mut state, Action::ToggleThinking);
+            assert!(
+                fetches(&effects).is_empty(),
+                "a key that goes nowhere must not fetch: {effects:?}"
+            );
+        }
+        let effects = settle(&mut state, Action::ReloadPage);
+        assert_eq!(
+            fetches(&effects),
+            ["site://gone"],
+            "`r` is still how you ask again"
+        );
+    }
+
+    #[test]
     fn a_page_that_changed_is_read_again_when_it_is_the_one_being_read() {
         let mut state = showing_a_session();
         let _ = say_desk(
@@ -3304,6 +3391,222 @@ mod tests {
             fetches(&effects),
             ["site://another/tab"],
             "and it is the new text when you get there"
+        );
+    }
+
+    #[test]
+    fn pointing_at_a_tab_a_terminal_cannot_draw_leaves_the_stage_reading() {
+        // The phone put an app on the stage. Two pages are open here; jumping to either of
+        // them because the desk's own tab is undrawable would be this terminal deciding for
+        // someone else.
+        let mut state = showing_a_session();
+        say_desk(
+            &mut state,
+            vec![page("site://reading")],
+            Some("page:site://reading"),
+            DeskBy::User,
+        );
+        let app = entry(
+            "app:cad@game",
+            DeskTab::App {
+                site: "cad".into(),
+                project: Some("game".into()),
+            },
+            true,
+        );
+        settle(
+            &mut state,
+            Action::Server(ServerMessage::DeskChanged {
+                session: "s".into(),
+                desk: Desk {
+                    tabs: vec![page("site://reading"), page("site://other"), app],
+                    active: Some("app:cad@game".into()),
+                },
+                by: DeskBy::User,
+                opened: Some("app:cad@game".into()),
+            }),
+        );
+        assert_eq!(
+            shown_title(&state),
+            Some("reading".into()),
+            "an undrawable tab is nobody to move us"
+        );
+        assert_eq!(titles(&state), ["reading", "other"]);
+    }
+
+    #[test]
+    fn the_desk_answer_after_attach_is_what_the_stage_lists() {
+        // `desk.get` is the only way a desk reaches this terminal unasked-for: the server does
+        // not send one on `session.attach` and does not broadcast on it either. So this answer
+        // is the whole of "the tabs you had are back".
+        let (mut state, _) = connected();
+        state.session.upsert(info("s", None));
+        let effects = settle(&mut state, Action::AttachSession("s".into()));
+        let asked = sent(&effects);
+        let (id, _) = asked
+            .iter()
+            .find(|(_, c)| matches!(c, ClientCommand::DeskGet { .. }))
+            .expect("attaching asks for the session's desk");
+        assert!(
+            titles(&state).is_empty(),
+            "nothing is listed before the answer"
+        );
+        let unread = entry(
+            "app:cad@game",
+            DeskTab::App {
+                site: "cad".into(),
+                project: Some("game".into()),
+            },
+            true,
+        );
+        let effects = settle(
+            &mut state,
+            Action::Server(ServerMessage::Ok {
+                id: *id,
+                result: CommandResult::Desk {
+                    desk: Desk {
+                        tabs: vec![unread, page("site://was/open/there")],
+                        active: Some("page:site://was/open/there".into()),
+                    },
+                },
+            }),
+        );
+        assert_eq!(
+            titles(&state),
+            ["was/open/there"],
+            "the tabs it had are back, and the app among them is not ours"
+        );
+        assert_eq!(shown_title(&state), Some("was/open/there".into()));
+        assert_eq!(
+            fetches(&effects),
+            ["site://was/open/there"],
+            "and it is read, not merely listed"
+        );
+    }
+
+    #[test]
+    fn a_desk_answer_for_a_session_you_have_left_is_dropped() {
+        let (mut state, _) = connected();
+        state.session.upsert(info("old", None));
+        state.session.upsert(info("new", None));
+        let effects = settle(&mut state, Action::AttachSession("old".into()));
+        let asked = sent(&effects);
+        let (stale, _) = asked
+            .iter()
+            .find(|(_, c)| matches!(c, ClientCommand::DeskGet { .. }))
+            .expect("its desk was asked for");
+        settle(&mut state, Action::AttachSession("new".into()));
+        settle(
+            &mut state,
+            Action::Server(ServerMessage::Ok {
+                id: *stale,
+                result: CommandResult::Desk {
+                    desk: Desk {
+                        tabs: vec![page("site://from/the/old/session")],
+                        active: Some("page:site://from/the/old/session".into()),
+                    },
+                },
+            }),
+        );
+        assert!(
+            titles(&state).is_empty(),
+            "the stage shows the session you are on, not the one you asked about"
+        );
+    }
+
+    #[test]
+    fn a_desk_answer_shows_what_it_can_when_the_desks_own_tab_is_not_ours() {
+        // The desk's active tab is an app the phone opened: this terminal has no way to draw
+        // it, and an empty stage while a page sits on the desk is worse than showing that.
+        let mut state = showing_a_session();
+        let effects = settle(&mut state, Action::AttachSession("s".into()));
+        let asked = sent(&effects);
+        let (id, _) = asked
+            .iter()
+            .find(|(_, c)| matches!(c, ClientCommand::DeskGet { session } if session == "s"))
+            .expect("its desk was asked for");
+        let app = entry(
+            "app:cad@game",
+            DeskTab::App {
+                site: "cad".into(),
+                project: Some("game".into()),
+            },
+            false,
+        );
+        settle(
+            &mut state,
+            Action::Server(ServerMessage::Ok {
+                id: *id,
+                result: CommandResult::Desk {
+                    desk: Desk {
+                        tabs: vec![app, page("site://first"), page("site://the/app/is/instead")],
+                        active: Some("app:cad@game".into()),
+                    },
+                },
+            }),
+        );
+        assert_eq!(titles(&state), ["first", "the/app/is/instead"]);
+        assert_eq!(
+            shown_title(&state),
+            Some("the/app/is/instead".into()),
+            "the last tab a terminal can draw, the same fallback a change follows"
+        );
+    }
+
+    #[test]
+    fn attaching_another_session_leaves_no_tab_naming_its_project() {
+        let mut state = showing_a_session();
+        state.session.upsert(SessionInfo {
+            project: Some("/home/u/Projects/game".into()),
+            ..info("s", None)
+        });
+        settle(&mut state, Action::ProjectView(None));
+        assert_eq!(titles(&state), ["project · game"]);
+        state.session.upsert(info("t", None));
+        settle(&mut state, Action::AttachSession("t".into()));
+        assert!(
+            titles(&state).is_empty(),
+            "the overview was the other session's project: {:?}",
+            titles(&state)
+        );
+    }
+
+    #[test]
+    fn an_overview_that_failed_is_said_on_the_tab_and_asked_again_on_r() {
+        let mut state = showing_a_session();
+        state.session.upsert(SessionInfo {
+            project: Some("/home/u/Projects/game".into()),
+            ..info("s", None)
+        });
+        let effects = settle(&mut state, Action::ProjectView(None));
+        let asked = sent(&effects);
+        let (id, _) = asked
+            .iter()
+            .find(|(_, c)| matches!(c, ClientCommand::ProjectOverview { .. }))
+            .expect("the overview is asked for");
+        settle(
+            &mut state,
+            Action::Server(ServerMessage::Error {
+                id: Some(*id),
+                message: "no project here".into(),
+            }),
+        );
+        assert_eq!(
+            state.project_view.error.as_deref(),
+            Some("no project here"),
+            "the tab says what failed"
+        );
+        assert!(
+            !state.project_view.loading,
+            "and does not say `loading…` for ever"
+        );
+        let effects = settle(&mut state, Action::ReloadPage);
+        assert!(
+            sent(&effects).iter().any(|(_, c)| c
+                == &ClientCommand::ProjectOverview {
+                    project: "/home/u/Projects/game".into()
+                }),
+            "`r` asks again: {effects:?}"
         );
     }
 

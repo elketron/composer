@@ -105,9 +105,13 @@ impl PageStore {
         self.goto(&target, &url, false)
     }
 
-    /// Fetch what's on screen again (`r`).
+    /// Fetch this tab's page again (`r`). A page that failed has nothing on screen, which is
+    /// exactly when you reach for `r`, so it asks for what the tab was opened with.
     pub fn reload(&mut self) -> Option<Effect> {
-        let url = self.current.as_ref()?.url.clone();
+        let url = match &self.current {
+            Some(page) => page.url.clone(),
+            None => self.slots.get(self.showing.as_deref()?)?.url.clone()?,
+        };
         Some(self.load(url))
     }
 
@@ -176,8 +180,11 @@ impl PageStore {
         self.error = None;
     }
 
-    /// The tab whose page is loading, for the tab bar.
-    pub fn loading_tab(&self) -> Option<&str> {
+    /// Whether the tab on the screen is still waiting for its page: being fetched, or failed
+    /// with the failure on show. Either way the next keypress must not ask for it again — a
+    /// page that cannot be loaded would otherwise be fetched once per key, forever — while `r`
+    /// and re-showing the tab both do.
+    pub fn waiting_on_shown(&self) -> Option<&str> {
         self.showing
             .as_deref()
             .filter(|_| self.loading.is_some() || self.error.is_some())

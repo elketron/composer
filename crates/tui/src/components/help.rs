@@ -53,8 +53,12 @@ const PLACES: [(&str, &[(&str, &str)]); 8] = [
             ("gd", "this project's changes, as a tab"),
             ("click", "pick a tab in the bar"),
             (
+                "shift-tab",
+                "the previous tab, where a terminal cannot report ctrl-shift-tab",
+            ),
+            (
                 "",
-                "tabs are the session's desk: a page opened in the desktop shows up here and here",
+                "tabs are the session's desk: a page opened in another client shows up here too",
             ),
         ],
     ),
@@ -72,7 +76,7 @@ const PLACES: [(&str, &[(&str, &str)]); 8] = [
         ],
     ),
     (
-        "Chat and page panes",
+        "Chat and stage panes",
         &[
             ("j / k", "scroll"),
             ("ctrl-d / ctrl-u", "half a page down / up"),
