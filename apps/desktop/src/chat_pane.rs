@@ -563,8 +563,11 @@ impl ChatPane {
                                 .child(marker.glyph()),
                         )
                         .child(
+                            // min width 0: a flex item is otherwise as wide as its unwrapped
+                            // text, and the item runs under the stage instead of wrapping
                             block_style(block)
                                 .flex_1()
+                                .min_w(px(0.))
                                 .child(self.block_text(block, key, cx)),
                         )
                         .into_any_element(),
