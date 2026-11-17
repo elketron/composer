@@ -117,7 +117,12 @@ impl App {
     /// Reduces one action. Runs effects that don't need the terminal and returns the rest.
     pub fn process(&mut self, action: Action) -> Vec<Effect> {
         let before = self.state.page.current.as_ref().map(|p| p.url.clone());
-        let effects = self.state.reduce(action);
+        let mut effects = self.state.reduce(action);
+        // Whatever the action was, the stage ends up showing its shown tab: a tab that was
+        // just opened, the desk catching up with another client, a page that has to be
+        // fetched before it can be read. One place decides that, so no action has to
+        // remember to do it.
+        effects.extend(self.state.sync_stage());
         if self.state.page.current.as_ref().map(|p| &p.url) != before.as_ref() {
             self.root.page.page_changed();
         }
@@ -256,7 +261,7 @@ impl App {
                     ticks += 1;
                     dirty |= self.state.ui.flash.is_some();
                     // The project changes outside our view too (you, in nvim): keep the changes view live.
-                    if self.state.project.open && ticks.is_multiple_of(2) {
+                    if self.state.changes_open() && ticks.is_multiple_of(2) {
                         self.dispatcher.dispatch(Action::RefreshChanges);
                     }
                 }

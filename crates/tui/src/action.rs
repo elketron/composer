@@ -79,6 +79,14 @@ pub enum Action {
         entry: String,
     },
 
+    // ---- stage tabs (the session's desk) ----
+    /// Show the next (1) or previous (-1) tab the stage can draw.
+    CycleTab(i32),
+    /// Show the tab at `index` of the stage's tab list (a click on the tab bar).
+    ShowTab(usize),
+    /// Close the tab on the screen; its neighbour is shown, as on the desk.
+    CloseTab,
+
     // ---- pages ----
     OpenUrl(String),
     PageBack,

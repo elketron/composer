@@ -33,7 +33,7 @@ impl UiStore {
         self.mode = mode;
         match mode {
             Mode::Insert => self.focus = Pane::Chat,
-            Mode::Hint => self.focus = Pane::Page,
+            Mode::Hint => self.focus = Pane::Stage,
             Mode::Normal | Mode::Command | Mode::Comment => {}
         }
         if self.maximized.is_some_and(|p| p != self.focus) {
@@ -51,8 +51,8 @@ impl UiStore {
 
     pub fn focus_next(&mut self) {
         self.focus = match self.focus {
-            Pane::Chat => Pane::Page,
-            Pane::Page => Pane::Chat,
+            Pane::Chat => Pane::Stage,
+            Pane::Stage => Pane::Chat,
         };
         if self.maximized.is_some() {
             self.maximized = Some(self.focus);

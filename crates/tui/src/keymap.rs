@@ -83,6 +83,31 @@ impl Keymap {
                 "previous session of this orchestration",
             ),
             (vec![tab], Action::FocusNext, "switch pane"),
+            // The desktop's keys for the same thing, on purpose: this is its tab list. A
+            // terminal that speaks the kitty keyboard protocol reports these as themselves;
+            // one that doesn't cannot tell ctrl-tab from tab, and there it stays "switch pane".
+            (
+                vec![(KeyCode::Tab, KeyModifiers::CONTROL)],
+                Action::CycleTab(1),
+                "the stage's next tab",
+            ),
+            (
+                vec![(KeyCode::BackTab, KeyModifiers::CONTROL)],
+                Action::CycleTab(-1),
+                "the stage's previous tab",
+            ),
+            // A terminal that cannot report ctrl-shift-tab still sends shift-tab (`CSI Z`),
+            // and that is the same intent: the previous tab.
+            (
+                vec![(KeyCode::BackTab, KeyModifiers::NONE)],
+                Action::CycleTab(-1),
+                "the stage's previous tab, where ctrl-shift-tab cannot be reported",
+            ),
+            (
+                vec![ctrl('w'), key('c')],
+                Action::CloseTab,
+                "close the stage's tab shown: a page, the changes, the project",
+            ),
             (
                 vec![ctrl('w'), key('h')],
                 Action::FocusPane(Pane::Chat),
@@ -90,8 +115,8 @@ impl Keymap {
             ),
             (
                 vec![ctrl('w'), key('l')],
-                Action::FocusPane(Pane::Page),
-                "focus the page",
+                Action::FocusPane(Pane::Stage),
+                "focus the stage (its tabs are what you switch with ctrl-tab)",
             ),
             (vec![ctrl('w'), key('w')], Action::FocusNext, "switch pane"),
             (
@@ -203,6 +228,8 @@ fn chord_name(chord: &Chord) -> String {
     let key = match chord.0 {
         KeyCode::Char(' ') => "space".to_string(),
         KeyCode::Char(c) => c.to_string(),
+        // shift-tab is reported as BackTab, which is what `ctrl-shift-tab` arrives as.
+        KeyCode::BackTab => "shift-tab".to_string(),
         KeyCode::Tab => "tab".to_string(),
         KeyCode::Enter => "enter".to_string(),
         KeyCode::Esc => "esc".to_string(),
@@ -216,9 +243,13 @@ fn chord_name(chord: &Chord) -> String {
 }
 
 /// Shifted letters arrive as `Char('H') + SHIFT`; bindings are written without SHIFT.
+/// `BackTab` is shift-tab itself, so SHIFT carries no extra meaning there either: what a
+/// terminal sends for `ctrl-shift-tab` is `BackTab` with CONTROL *and* SHIFT still set, and a
+/// binding written `ctrl-shift-tab` has to match that.
 fn normalize(key: KeyEvent) -> Chord {
     match key.code {
         KeyCode::Char(c) => (KeyCode::Char(c), key.modifiers - KeyModifiers::SHIFT),
+        KeyCode::BackTab => (KeyCode::BackTab, key.modifiers - KeyModifiers::SHIFT),
         code => (code, key.modifiers),
     }
 }
@@ -229,6 +260,41 @@ mod tests {
 
     fn k(c: char) -> KeyEvent {
         KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE)
+    }
+
+    /// What a terminal actually puts on the wire, not the chord we wish it had sent:
+    /// `ctrl-shift-tab` arrives as `BackTab` with SHIFT *still set*, and a terminal without
+    /// the kitty keyboard protocol cannot report it at all — there, plain `shift-tab`
+    /// (`CSI Z`) is the only thing that can arrive. A key nothing can reach is not a key.
+    #[test]
+    fn the_stage_tab_chords_match_what_terminals_send() {
+        let ctrl_shift = KeyModifiers::CONTROL | KeyModifiers::SHIFT;
+        for (key, expected) in [
+            (
+                KeyEvent::new(KeyCode::Tab, KeyModifiers::CONTROL),
+                Action::CycleTab(1),
+            ),
+            (
+                KeyEvent::new(KeyCode::BackTab, ctrl_shift),
+                Action::CycleTab(-1),
+            ),
+            (
+                KeyEvent::new(KeyCode::BackTab, KeyModifiers::SHIFT),
+                Action::CycleTab(-1),
+            ),
+            // And the key that was here first keeps its meaning: no protocol, no switching.
+            (
+                KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE),
+                Action::FocusNext,
+            ),
+        ] {
+            let mut km = Keymap::defaults();
+            assert_eq!(
+                km.feed(key),
+                KeyOutcome::Action(expected),
+                "{key:?} must reach its action"
+            );
+        }
     }
 
     #[test]
@@ -266,7 +332,18 @@ mod tests {
                 .all(|(keys, description)| !keys.is_empty() && !description.is_empty())
         );
         let keys: Vec<&str> = help.iter().map(|(k, _)| k.as_str()).collect();
-        for expected in ["?", "space p", "ctrl-w o", "gd", "H", "ctrl-c", "tab"] {
+        for expected in [
+            "?",
+            "space p",
+            "ctrl-w o",
+            "ctrl-w c",
+            "ctrl-tab",
+            "ctrl-shift-tab",
+            "gd",
+            "H",
+            "ctrl-c",
+            "tab",
+        ] {
             assert!(keys.contains(&expected), "{expected} missing from {keys:?}");
         }
     }

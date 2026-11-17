@@ -1,14 +1,17 @@
-use composer_protocol::{ApprovalKind, ClientCommand, CommandResult, DeskTab, Seq, ServerMessage};
+use composer_protocol::{
+    ApprovalKind, ClientCommand, CommandResult, DeskBy, DeskTab, Seq, ServerMessage,
+};
 
 use crate::action::Action;
 use crate::effect::Effect;
+use crate::store::desk_store::{PROJECT_TAB, StageTab, page_key};
 use crate::store::types::{
     Catalog, ConnState, FileSource, FlashLevel, Mode, Outgoing, Pane, Pending, PendingApproval,
     PickerKind, PickerTarget, Startup,
 };
 use crate::store::{
-    ApprovalStore, AttachmentStore, ConnectionStore, PageStore, PickerStore, ProjectStore,
-    ProjectViewStore, SessionStore, UiStore,
+    ApprovalStore, AttachmentStore, ConnectionStore, DeskStore, PageStore, PickerStore,
+    ProjectStore, ProjectViewStore, SessionStore, UiStore,
 };
 
 /// Messages a session opens with, and fetches each time you scroll up to the oldest.
@@ -20,6 +23,9 @@ pub struct AppState {
     pub conn: ConnectionStore,
     pub session: SessionStore,
     pub page: PageStore,
+    /// The session's desk, as its owner sent it: the stage is its tabs a terminal can draw
+    /// (plan phase 12, ticket 0208).
+    pub desk: DeskStore,
     pub ui: UiStore,
     pub picker: PickerStore,
     pub approvals: ApprovalStore,
@@ -49,6 +55,7 @@ impl AppState {
             conn: ConnectionStore::new(context_limit),
             session: SessionStore::default(),
             page: PageStore::new(),
+            desk: DeskStore::new(),
             ui: UiStore::new(),
             picker: PickerStore::new(),
             approvals: ApprovalStore::default(),
@@ -330,28 +337,31 @@ impl AppState {
                 }
                 // You navigated yourself: stop following the agent and look at the page.
                 self.page.follow = false;
-                self.reduce(Action::FocusPane(Pane::Page));
-                vec![self.page.navigate(url)]
+                self.reduce(Action::FocusPane(Pane::Stage));
+                self.open_page(&url, true)
             }
-            Action::PageBack => self.page.back().into_iter().collect(),
-            Action::PageForward => self.page.forward().into_iter().collect(),
-            Action::ReloadPage if self.project.open => self.refresh_changes(),
-            Action::ReloadPage => self.page.reload().into_iter().collect(),
-            Action::ToggleChanges => {
-                self.project.open = !self.project.open;
-                if !self.project.open {
-                    return vec![];
+            Action::PageBack => self.step_page(true),
+            Action::PageForward => self.step_page(false),
+            Action::ReloadPage => match self.shown_tab() {
+                Some(StageTab::Changes { .. }) => self.refresh_changes(),
+                Some(StageTab::Project { .. }) => self.refetch_overview(),
+                _ => self.page.reload().into_iter().collect(),
+            },
+            Action::ToggleChanges => match self.changes_tab() {
+                Some(id) if self.matches_shown(|tab| tab.id() == id) => self.close_shown(),
+                Some(id) => self.show_tab_id(&id),
+                None => self.open_changes(),
+            },
+            Action::ToggleProjectView => {
+                if !self.project_view.open {
+                    return self.reduce(Action::ProjectView(None));
                 }
-                // One view in the right pane at a time.
-                self.project_view.open = false;
-                self.reduce(Action::FocusPane(Pane::Page));
-                self.refresh_changes()
+                if self.matches_shown(|tab| matches!(tab, StageTab::Project { .. })) {
+                    self.close_shown()
+                } else {
+                    self.show_tab_id(PROJECT_TAB)
+                }
             }
-            Action::ToggleProjectView if self.project_view.open => {
-                self.project_view.open = false;
-                vec![]
-            }
-            Action::ToggleProjectView => self.reduce(Action::ProjectView(None)),
             Action::ProjectView(project) => {
                 let Some(project) = project.or_else(|| {
                     self.session
@@ -362,19 +372,26 @@ impl AppState {
                         .flash("no project here: :project view <name>", FlashLevel::Warn);
                     return vec![];
                 };
-                self.project.open = false;
+                // The project view is a tab of this terminal only: no `DeskTab` names an
+                // overview, so it is never written to the desk.
                 self.project_view.open = true;
                 self.project_view.loading = true;
                 if self.project_view.project.as_deref() != Some(project.as_str()) {
                     self.project_view.overview = None;
                 }
                 self.project_view.project = Some(project.clone());
-                self.reduce(Action::FocusPane(Pane::Page));
+                self.desk.show(PROJECT_TAB);
+                self.page.hide();
+                self.reduce(Action::FocusPane(Pane::Stage));
                 self.send(
                     ClientCommand::ProjectOverview { project },
                     Pending::Overview,
                 )
             }
+
+            Action::CycleTab(delta) => self.cycle_tab(delta),
+            Action::ShowTab(index) => self.show_tab(index),
+            Action::CloseTab => self.close_shown(),
             Action::McpServers => {
                 self.ui
                     .flash("connecting the MCP servers…", FlashLevel::Info);
@@ -613,11 +630,13 @@ impl AppState {
                 }
             },
             Action::PageLoaded(page) => {
-                self.page.loaded(page);
+                let id = page_key(&page.url).unwrap_or_default();
+                self.page.loaded(&id, page);
                 vec![]
             }
             Action::PageFailed { url, error } => {
-                self.page.failed(&url, error.clone());
+                let id = page_key(&url).unwrap_or_default();
+                self.page.failed(&id, &url, error.clone());
                 self.ui.flash(error, FlashLevel::Error);
                 vec![]
             }
@@ -663,12 +682,331 @@ impl AppState {
 
     fn refresh_changes(&mut self) -> Vec<Effect> {
         match self.session.current.clone() {
-            Some(session) if self.project.open && !self.project.loading => {
+            Some(session) if self.changes_open() && !self.project.loading => {
                 self.project.loading = true;
                 vec![Effect::FetchDiff(session)]
             }
             _ => vec![],
         }
+    }
+
+    // ---- the stage: the session's desk, drawn in this terminal ----
+
+    /// The tabs the stage can draw: the desk's pages and changes, in the desk's order, with the
+    /// project view's own tab last (no `DeskTab` names a project overview, so that one is local
+    /// and never written back).
+    pub fn stage_tabs(&self) -> Vec<StageTab> {
+        let mut tabs = self.desk.visible();
+        if self.project_view.open {
+            tabs.push(StageTab::Project {
+                project: self.project_view.project.clone(),
+            });
+        }
+        tabs
+    }
+
+    /// The ids of the desk's tabs a terminal can draw, in order.
+    pub fn visible_ids(&self) -> Vec<String> {
+        self.desk
+            .visible()
+            .iter()
+            .map(|tab| tab.id().to_string())
+            .collect()
+    }
+
+    /// Every tab id the stage could be showing, desk's and its own.
+    fn showable_ids(&self) -> Vec<String> {
+        self.stage_tabs()
+            .iter()
+            .map(|tab| tab.id().to_string())
+            .collect()
+    }
+
+    /// Which tab is on the screen, as an index into [`Self::stage_tabs`].
+    pub fn shown_tab_index(&self) -> Option<usize> {
+        let id = self.desk.shown()?;
+        self.stage_tabs().iter().position(|tab| tab.id() == id)
+    }
+
+    /// The tab on the screen.
+    pub fn shown_tab(&self) -> Option<StageTab> {
+        let at = self.shown_tab_index()?;
+        self.stage_tabs().into_iter().nth(at)
+    }
+
+    /// The changes tab that is open, if any.
+    fn changes_tab(&self) -> Option<String> {
+        self.desk
+            .visible()
+            .iter()
+            .find(|tab| matches!(tab, StageTab::Changes { .. }))
+            .map(|tab| tab.id().to_string())
+    }
+
+    /// Whether the tab on the screen is one `check` describes.
+    fn matches_shown(&self, check: impl Fn(&StageTab) -> bool) -> bool {
+        self.shown_tab().is_some_and(|tab| check(&tab))
+    }
+
+    /// Whether a changes tab is open: its diff is kept live while it is.
+    pub fn changes_open(&self) -> bool {
+        self.desk
+            .visible()
+            .iter()
+            .any(|tab| matches!(tab, StageTab::Changes { .. }))
+    }
+
+    /// Keep the page on the screen the shown tab's page, and the shown tab the desk's. Called
+    /// after every action: the desk may have changed, or a tab was opened locally.
+    pub fn sync_stage(&mut self) -> Vec<Effect> {
+        // The tab shown has to be one that can be drawn: the desk's pages and changes, plus
+        // this terminal's own project tab. A page belongs to a desk tab, so only those are
+        // kept when dropping what is gone.
+        let ids = self.showable_ids();
+        self.desk.reconcile(&ids);
+        self.page.forget(&self.visible_ids());
+        let shown = self.shown_tab();
+        match shown {
+            Some(StageTab::Page { id, url, .. }) => {
+                // Its page is either on its way or already failed and said so on the screen:
+                // neither is asked for again on every keypress. `r` and re-showing the tab are.
+                if self.page.waiting_on_shown() == Some(id.as_str()) {
+                    return vec![];
+                }
+                match self.page.show(&id, &url) {
+                    Some(Effect::FetchPage(url)) if self.conn.is_connected() => {
+                        vec![Effect::FetchPage(url)]
+                    }
+                    _ => vec![],
+                }
+            }
+            Some(StageTab::Changes { .. }) => {
+                self.page.hide();
+                if self.project.diff.is_none()
+                    && self.project.error.is_none()
+                    && !self.project.loading
+                {
+                    self.refresh_changes()
+                } else {
+                    vec![]
+                }
+            }
+            Some(StageTab::Project { .. }) => {
+                self.page.hide();
+                vec![]
+            }
+            None => {
+                self.page.hide();
+                vec![]
+            }
+        }
+    }
+
+    /// A page becomes a tab on the desk (the desk derives the id from the page, so the same page
+    /// is one tab) and, with `focus`, the one on the screen. Then shown here and now; the desk
+    /// confirms with `desk.changed`, which is what tells the desktop and the phone.
+    fn open_page(&mut self, url: &str, focus: bool) -> Vec<Effect> {
+        let mut effects = match self.session.current.clone() {
+            Some(session) => self.send(
+                ClientCommand::DeskOpen {
+                    session,
+                    tab: DeskTab::Page {
+                        url: url.to_string(),
+                    },
+                    focus,
+                },
+                Pending::Ignore,
+            ),
+            None => vec![],
+        };
+        effects.extend(self.page.navigate(url));
+        effects
+    }
+
+    /// The project's changes as a tab (`gd`): opened on the desk and shown, or, when there is no
+    /// session to put it on, only here.
+    fn open_changes(&mut self) -> Vec<Effect> {
+        let Some(project) = self.changes_project() else {
+            self.ui.flash(
+                "this session has no project (:project sets one)",
+                FlashLevel::Warn,
+            );
+            return vec![];
+        };
+        let effects = self.send(
+            ClientCommand::DeskOpen {
+                session: self.session.current.clone().unwrap_or_default(),
+                tab: DeskTab::Changes { project },
+                focus: true,
+            },
+            Pending::Ignore,
+        );
+        self.reduce(Action::FocusPane(Pane::Stage));
+        effects
+    }
+
+    /// The project a changes tab shows: this session's, by the one-word name the desk uses for
+    /// it (its folder's last component).
+    fn changes_project(&self) -> Option<String> {
+        let folder = self
+            .session
+            .current_info()
+            .and_then(|s| self.session.project_of(s))?;
+        let name = std::path::Path::new(&folder)
+            .file_name()?
+            .to_string_lossy()
+            .to_string();
+        Some(name)
+    }
+
+    /// The project overview this tab is about, when it needs asking for again.
+    fn refetch_overview(&mut self) -> Vec<Effect> {
+        match self.project_view.reload() {
+            Some(project) => self.send(
+                ClientCommand::ProjectOverview { project },
+                Pending::Overview,
+            ),
+            None => vec![],
+        }
+    }
+
+    /// A changes tab naming a project other than this session's: the diff there is the
+    /// session's project's diff, so that tab has nothing of its own to show. Says which.
+    pub fn changes_elsewhere(&self) -> Option<String> {
+        let here = self.changes_project();
+        match self.shown_tab() {
+            Some(StageTab::Changes { project, .. })
+                if here.as_deref() != Some(project.as_str()) =>
+            {
+                Some(project)
+            }
+            _ => None,
+        }
+    }
+
+    /// Step through the pages you looked at (`H` / `L`), showing their tab too.
+    fn step_page(&mut self, back: bool) -> Vec<Effect> {
+        let step = if back {
+            self.page.back()
+        } else {
+            self.page.forward()
+        };
+        let Some((id, _url, effect)) = step else {
+            self.ui.flash(
+                if back {
+                    "no page before this one"
+                } else {
+                    "no page after this one"
+                },
+                FlashLevel::Info,
+            );
+            return vec![];
+        };
+        let mut effects = self.show_tab_id(&id);
+        effects.extend(effect);
+        effects
+    }
+
+    fn cycle_tab(&mut self, delta: i32) -> Vec<Effect> {
+        let tabs = self.stage_tabs();
+        if tabs.is_empty() {
+            return vec![];
+        }
+        let at = self
+            .shown_tab_index()
+            .map(|at| (at as i32 + delta).rem_euclid(tabs.len() as i32) as usize)
+            .unwrap_or(tabs.len() - 1);
+        let id = tabs[at].id().to_string();
+        self.reduce(Action::FocusPane(Pane::Stage));
+        self.show_tab_id(&id)
+    }
+
+    fn show_tab(&mut self, index: usize) -> Vec<Effect> {
+        let Some(tab) = self.stage_tabs().into_iter().nth(index) else {
+            return vec![];
+        };
+        let id = tab.id().to_string();
+        self.show_tab_id(&id)
+    }
+
+    /// Put a tab on the screen: on the desk when it is one of the desk's, and here either way
+    /// (waiting for the desk to agree, so it does not feel like a key that did nothing).
+    fn show_tab_id(&mut self, id: &str) -> Vec<Effect> {
+        if id == PROJECT_TAB {
+            self.project_view.open = true;
+            self.desk.show(id);
+            self.page.hide();
+            return self.refetch_overview();
+        }
+        if !self.desk.can_draw(id) {
+            return vec![];
+        }
+        self.desk.show(id);
+        // The desk agrees with a `desk.changed`, which is also what tells the other clients.
+        let effects = match self.session.current.clone() {
+            Some(session) => self.send(
+                ClientCommand::DeskFocus {
+                    session,
+                    tab: id.to_string(),
+                },
+                Pending::Ignore,
+            ),
+            None => vec![],
+        };
+        let mut effects = self.show_local(id, effects);
+        effects.extend(self.refresh_changes());
+        effects
+    }
+
+    /// Show tab `id`'s content here (the desk's `shown` is what it agrees to).
+    fn show_local(&mut self, id: &str, mut effects: Vec<Effect>) -> Vec<Effect> {
+        self.desk.show(id);
+        match self.desk.visible().into_iter().find(|tab| tab.id() == id) {
+            Some(StageTab::Page { url, .. }) => {
+                if let Some(effect) = self.page.show(id, &url) {
+                    effects.push(effect);
+                }
+            }
+            Some(StageTab::Changes { .. }) => {
+                self.page.hide();
+            }
+            Some(StageTab::Project { .. }) | None => self.page.hide(),
+        }
+        effects
+    }
+
+    /// Close the tab on the screen. Its neighbour is shown, the same rule the desk follows, and
+    /// the stage falls back to it here so the screen never waits for the reply.
+    fn close_shown(&mut self) -> Vec<Effect> {
+        let Some(tab) = self.shown_tab() else {
+            self.ui.flash("nothing to close", FlashLevel::Info);
+            return vec![];
+        };
+        let id = tab.id().to_string();
+        // A tab the desk has no form for is this terminal's own: nothing to ask anyone about.
+        let effects = match tab.desk_tab() {
+            None => {
+                self.project_view.open = false;
+                self.project_view.project = None;
+                self.project_view.overview = None;
+                vec![]
+            }
+            Some(_) => match self.session.current.clone() {
+                Some(session) => {
+                    let tab = id.clone();
+                    self.send(ClientCommand::DeskClose { session, tab }, Pending::Ignore)
+                }
+                None => vec![],
+            },
+        };
+        // The tab is gone from the screen already, its neighbour shown; the desk catching up
+        // with the close changes nothing here.
+        self.desk.closing(&id);
+        let ids = self.showable_ids();
+        self.desk.reconcile(&ids);
+        self.page.forget(&self.visible_ids());
+        let next = self.desk.shown().unwrap_or("").to_string();
+        self.show_local(&next, effects)
     }
 
     fn send(&mut self, command: ClientCommand, pending: Pending) -> Vec<Effect> {
@@ -690,7 +1028,34 @@ impl AppState {
             );
         }
         self.session.begin_attach(id, remember);
-        self.fetch_history(id.to_string(), None)
+        // What was open belongs to the session you were on. This one's tabs come from it, and
+        // the `desk.get` answer below is what fills the stage: the server does not send a desk
+        // unasked and does not broadcast one on attach.
+        self.desk.clear();
+        self.page.forget(&[]);
+        // This terminal's own tab names a project too, and it is not the next session's.
+        self.project_view = ProjectViewStore::default();
+        let mut effects = self.fetch_history(id.to_string(), None);
+        effects.extend(self.send(
+            ClientCommand::DeskGet {
+                session: id.to_string(),
+            },
+            Pending::Desk {
+                session: id.to_string(),
+            },
+        ));
+        effects
+    }
+
+    /// The session's desk, asked for after a reconnect (the first one comes with `attach`).
+    fn fetch_desk(&mut self) -> Vec<Effect> {
+        let session = self.session.current.clone().unwrap_or_default();
+        self.send(
+            ClientCommand::DeskGet {
+                session: session.clone(),
+            },
+            Pending::Desk { session },
+        )
     }
 
     /// `session.history`: the session's last messages (`before` none), or those before it.
@@ -745,6 +1110,7 @@ impl AppState {
             } else {
                 self.fetch_history(current, None)
             });
+            effects.extend(self.fetch_desk());
         }
         effects
     }
@@ -832,6 +1198,12 @@ impl AppState {
                         self.session.more = false;
                         vec![]
                     }
+                    // The project tab says what failed and asks again on `r`; a flash there
+                    // would be gone before you looked at the tab that is empty.
+                    Some(Pending::Overview) => {
+                        self.project_view.failed(message);
+                        vec![]
+                    }
                     _ => {
                         self.ui.flash(message, FlashLevel::Error);
                         vec![]
@@ -885,10 +1257,46 @@ impl AppState {
                 self.ui.flash(text, level);
                 vec![]
             }
-            ServerMessage::PageChanged { url, .. } if self.page.shows(&url) => {
-                self.page.reload().into_iter().collect()
+            // A page on the stage changed: drop the cached copy and fetch it again. One you
+            // have open in another client keeps its cached copy, and gets it on the way back.
+            // The cached copy is stale. Whether it is asked for again is what the stage
+            // does next: the page you are reading refetches now, one open on another tab
+            // keeps what it has and gets the new text as you return to it.
+            ServerMessage::PageChanged { url, .. } => {
+                self.page.invalidate(&url);
+                vec![]
             }
-            ServerMessage::PageChanged { .. } => vec![],
+            // Our stage, or another client's: the same list either way. What this terminal
+            // cannot draw stays in `desk` unread and unwritten.
+            ServerMessage::DeskChanged {
+                session,
+                desk,
+                by,
+                opened,
+            } if self.session.current.as_deref() == Some(session.as_str()) => {
+                self.desk.set_desk(desk);
+                // A tab a terminal can't draw is never shown here, whoever moved the stage.
+                let drawable = opened
+                    .as_deref()
+                    .map(|id| self.desk.can_draw(id))
+                    .unwrap_or(true);
+                let followed =
+                    self.page.follow && opened.as_deref().is_some_and(|id| self.desk.can_draw(id));
+                match by {
+                    // You moved the stage where you are: that is what it shows. A tab this
+                    // terminal can't draw leaves it on what it had.
+                    DeskBy::User if drawable => {
+                        self.desk.show_desk(&self.visible_ids());
+                        vec![]
+                    }
+                    // The agent opened or pointed at a tab: following it means showing it, and
+                    // *showing* it is what marks it read — `desk.focus` is the only thing that
+                    // clears `unseen`, and every client reads that badge. Not following leaves
+                    // the tab waiting in the bar with its badge, unread by anyone.
+                    DeskBy::Agent if followed => self.show_tab_id(&opened.unwrap_or_default()),
+                    _ => vec![],
+                }
+            }
             ServerMessage::ReminderDue {
                 url,
                 title,
@@ -998,7 +1406,7 @@ impl AppState {
                 let url = url.clone();
                 let current = self.session.apply(&message);
                 if current && self.page.follow {
-                    vec![self.page.navigate(url)]
+                    self.page.navigate(&url).into_iter().collect()
                 } else {
                     vec![]
                 }
@@ -1010,7 +1418,7 @@ impl AppState {
                     other,
                     ServerMessage::ToolResult { .. } | ServerMessage::TurnDone { .. }
                 );
-                if current && changed && self.project.open {
+                if current && changed && self.changes_open() {
                     self.refresh_changes()
                 } else {
                     vec![]
@@ -1137,6 +1545,22 @@ impl AppState {
             (Pending::Overview, CommandResult::Project { overview }) => {
                 self.project_view.loaded(overview);
                 vec![]
+            }
+            // The stage of the session this TUI shows, from the horse's mouth: this answer is
+            // what the tab list is built from after `:attach`, after a resume, after a
+            // reconnect. A late answer for a session you have left is dropped.
+            (Pending::Desk { session }, CommandResult::Desk { desk })
+                if self.session.current.as_deref() == Some(session.as_str()) =>
+            {
+                self.desk.set_desk(desk);
+                // Whatever is still shown here stays; otherwise the desk's own tab, and if
+                // this terminal cannot draw that, the last one it can — the same fallback a
+                // `by: User` change follows. Nothing, if there is nothing to draw.
+                let ids = self.showable_ids();
+                self.desk.reconcile(&ids);
+                self.page.forget(&self.visible_ids());
+                let shown = self.desk.shown().unwrap_or("").to_string();
+                self.show_local(&shown, vec![])
             }
             (Pending::Merged(ticket), CommandResult::Merged { commit }) => {
                 self.ui.flash(
@@ -1283,7 +1707,9 @@ fn origin(server_url: &str) -> &str {
 #[cfg(test)]
 mod tests {
     use composer_protocol::http::McpServerInfo;
-    use composer_protocol::{ChatMessage, Role, SessionInfo, TurnState};
+    use composer_protocol::{ChatMessage, Desk, DeskBy, DeskEntry, Role, SessionInfo, TurnState};
+
+    use crate::store::types::PageView;
 
     use super::*;
     use crate::store::types::ChatItem;
@@ -1493,7 +1919,7 @@ mod tests {
             [Effect::FetchPage("site://memory/index.md".into())]
         );
         state.reduce(Action::OpenUrl("site://plans".into()));
-        assert_eq!(state.ui.focus, Pane::Page);
+        assert_eq!(state.ui.focus, Pane::Stage);
         assert!(!state.page.follow);
         assert!(state.reduce(nav(2, "site://home/index.md")).is_empty());
     }
@@ -1590,9 +2016,19 @@ mod tests {
             message: assistant(text),
         };
         let effects = state.reduce(Action::AttachSession("s".into()));
-        let [(id, ClientCommand::SessionHistory { before: None, .. })] = &sent(&effects)[..] else {
-            panic!("{effects:?}")
-        };
+        // What was open on its desk comes with it: the stage has nothing to list until it does.
+        let commands = sent(&effects);
+        let (id, _) = commands
+            .iter()
+            .find(|(_, c)| matches!(c, ClientCommand::SessionHistory { before: None, .. }))
+            .expect("its last messages");
+        assert!(
+            commands.iter().any(|(_, c)| c
+                == &ClientCommand::DeskGet {
+                    session: "s".into()
+                }),
+            "and its desk too: {commands:?}"
+        );
         let effects = state.reduce(Action::Server(ServerMessage::Ok {
             id: *id,
             result: CommandResult::History {
@@ -2262,5 +2698,947 @@ mod tests {
         }));
         assert!(state.project.drafts.is_empty());
         assert_eq!(state.project.comments, ["- a.rs:2:2 — why?"]);
+    }
+
+    // ---- the stage: the session's desk, as tabs (ticket 0208) ----
+
+    /// What `App::process` does after reducing: whatever the action was, the stage ends up
+    /// showing its shown tab. Tests go through this because that is where the app does it.
+    fn settle(state: &mut AppState, action: Action) -> Vec<Effect> {
+        let mut effects = state.reduce(action);
+        effects.extend(state.sync_stage());
+        effects
+    }
+
+    /// A connected TUI showing a session (a desk belongs to one).
+    fn showing_a_session() -> AppState {
+        let (mut state, _) = connected();
+        state.session.upsert(info("s", None));
+        settle(&mut state, Action::AttachSession("s".into()));
+        state
+    }
+
+    fn entry(id: &str, tab: DeskTab, unseen: bool) -> DeskEntry {
+        DeskEntry {
+            id: id.into(),
+            tab,
+            unseen,
+        }
+    }
+
+    fn page(url: &str) -> DeskEntry {
+        let id = page_key(url).expect("a page url");
+        entry(&id, DeskTab::Page { url: url.into() }, false)
+    }
+
+    /// The desk as the server (or another client) just said it is.
+    fn say_desk(
+        state: &mut AppState,
+        tabs: Vec<DeskEntry>,
+        active: Option<&str>,
+        by: DeskBy,
+    ) -> Vec<Effect> {
+        settle(
+            state,
+            Action::Server(ServerMessage::DeskChanged {
+                session: "s".into(),
+                desk: Desk {
+                    tabs,
+                    active: active.map(Into::into),
+                },
+                by,
+                opened: None,
+            }),
+        )
+    }
+
+    fn titles(state: &AppState) -> Vec<String> {
+        state.stage_tabs().iter().map(|tab| tab.title()).collect()
+    }
+
+    fn shown_title(state: &AppState) -> Option<String> {
+        state.shown_tab().map(|tab| tab.title())
+    }
+
+    fn fetches(effects: &[Effect]) -> Vec<String> {
+        effects
+            .iter()
+            .filter_map(|e| match e {
+                Effect::FetchPage(url) => Some(url.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// The page a tab asked for arrives, as `PageLoaded` delivers it.
+    fn arrive(state: &mut AppState, url: &str) {
+        state.reduce(Action::PageLoaded(PageView {
+            url: url.into(),
+            title: "t".into(),
+            frontmatter: serde_json::Value::Null,
+            frontmatter_error: None,
+            raw: format!("the body of {url}"),
+            backlinks: vec![],
+            hash: "h".into(),
+        }));
+    }
+
+    #[test]
+    fn opening_a_page_puts_it_on_the_desk_and_shows_it() {
+        let mut state = showing_a_session();
+        let effects = settle(&mut state, Action::OpenUrl("site://memory/user".into()));
+        assert!(
+            sent(&effects).iter().any(|(_, c)| c
+                == &ClientCommand::DeskOpen {
+                    session: "s".into(),
+                    tab: DeskTab::Page {
+                        url: "site://memory/user".into()
+                    },
+                    focus: true,
+                }),
+            "a desktop window on this session sees the tab: {effects:?}"
+        );
+        assert_eq!(
+            fetches(&effects),
+            ["site://memory/user"],
+            "and it is fetched to be read"
+        );
+        // The desk agrees: now it is a tab, with the page's own name as its title.
+        say_desk(
+            &mut state,
+            vec![page("site://memory/user")],
+            Some("page:site://memory/user"),
+            DeskBy::User,
+        );
+        assert_eq!(titles(&state), ["memory/user"]);
+        assert_eq!(shown_title(&state), Some("memory/user".into()));
+    }
+
+    #[test]
+    fn two_pages_are_two_tabs_and_the_same_page_twice_is_one() {
+        let mut state = showing_a_session();
+        // The desk is what says what is open; it derives the id from the page, so a page
+        // opened twice is one tab that is focused again — and this is all the TUI lists.
+        say_desk(
+            &mut state,
+            vec![page("site://memory/user"), page("site://plans/x")],
+            Some("page:site://plans/x"),
+            DeskBy::User,
+        );
+        assert_eq!(titles(&state), ["memory/user", "plans/x"]);
+        assert_eq!(
+            shown_title(&state),
+            Some("plans/x".into()),
+            "the desk's shown tab is the one here"
+        );
+        // Opening one of them again: the same tab, never a second one — and once its page
+        // is here, opening it again asks the server for nothing.
+        settle(&mut state, Action::OpenUrl("site://plans/x".into()));
+        arrive(&mut state, "site://plans/x");
+        let effects = settle(&mut state, Action::OpenUrl("site://plans/x".into()));
+        assert_eq!(
+            fetches(&effects),
+            Vec::<String>::new(),
+            "its page is already here: {effects:?}"
+        );
+        say_desk(
+            &mut state,
+            vec![page("site://memory/user"), page("site://plans/x")],
+            Some("page:site://memory/user"),
+            DeskBy::User,
+        );
+        assert_eq!(state.stage_tabs().len(), 2);
+    }
+
+    #[test]
+    fn a_tab_shows_its_own_page_and_an_open_one_needs_nothing() {
+        let mut state = showing_a_session();
+        let effects = say_desk(
+            &mut state,
+            vec![page("site://a"), page("site://b")],
+            Some("page:site://a"),
+            DeskBy::User,
+        );
+        assert_eq!(
+            fetches(&effects),
+            ["site://a"],
+            "showing a tab asks for its page, once"
+        );
+        arrive(&mut state, "site://a");
+        assert_eq!(state.page.current.as_ref().unwrap().url, "site://a");
+        // To the other tab: its page, not the one that was on screen.
+        let effects = settle(&mut state, Action::CycleTab(1));
+        assert_eq!(
+            state.page.current, None,
+            "not fetched yet, so nothing shown"
+        );
+        assert_eq!(fetches(&effects), ["site://b"]);
+        arrive(&mut state, "site://b");
+        // Back to the first: read again from the page it fetched before, no new request.
+        let effects = settle(&mut state, Action::CycleTab(-1));
+        assert_eq!(state.page.current.as_ref().unwrap().url, "site://a");
+        assert_eq!(fetches(&effects), Vec::<String>::new());
+        assert_eq!(shown_title(&state), Some("a".into()));
+    }
+
+    #[test]
+    fn tab_keys_walk_the_tabs_and_wrap_at_the_ends() {
+        let mut state = showing_a_session();
+        say_desk(
+            &mut state,
+            vec![page("site://a"), page("site://b")],
+            Some("page:site://a"),
+            DeskBy::User,
+        );
+        settle(&mut state, Action::FocusPane(Pane::Chat));
+        settle(&mut state, Action::CycleTab(1));
+        assert_eq!(shown_title(&state), Some("b".into()));
+        assert_eq!(state.ui.focus, Pane::Stage, "you see what you switched to");
+        // The command goes to the desk, so the other clients move too.
+        let effects = settle(&mut state, Action::CycleTab(1));
+        assert!(
+            sent(&effects).iter().any(|(_, c)| c
+                == &ClientCommand::DeskFocus {
+                    session: "s".into(),
+                    tab: "page:site://a".into(),
+                }),
+            "wraps to the first: {effects:?}"
+        );
+        assert_eq!(shown_title(&state), Some("a".into()));
+        settle(&mut state, Action::CycleTab(-1));
+        assert_eq!(shown_title(&state), Some("b".into()));
+        // A tab by number, as a click on the bar says it.
+        settle(&mut state, Action::ShowTab(0));
+        assert_eq!(shown_title(&state), Some("a".into()));
+    }
+
+    #[test]
+    fn closing_a_tab_shows_its_neighbour_and_the_last_one_is_an_empty_stage() {
+        let mut state = showing_a_session();
+        say_desk(
+            &mut state,
+            vec![page("site://a"), page("site://b")],
+            Some("page:site://a"),
+            DeskBy::User,
+        );
+        let effects = settle(&mut state, Action::CloseTab);
+        assert!(
+            sent(&effects).iter().any(|(_, c)| c
+                == &ClientCommand::DeskClose {
+                    session: "s".into(),
+                    tab: "page:site://a".into(),
+                }),
+            "{effects:?}"
+        );
+        assert_eq!(
+            shown_title(&state),
+            Some("b".into()),
+            "the next one, without waiting for the reply"
+        );
+        // The desk catching up: one tab left.
+        say_desk(
+            &mut state,
+            vec![page("site://b")],
+            Some("page:site://b"),
+            DeskBy::User,
+        );
+        assert_eq!(titles(&state), ["b"]);
+        settle(&mut state, Action::CloseTab);
+        say_desk(&mut state, vec![], None, DeskBy::User);
+        assert_eq!(state.stage_tabs(), vec![]);
+        assert_eq!(shown_title(&state), None, "the empty stage, not a panic");
+        assert_eq!(state.page.current, None);
+        // Keys on an empty stage do nothing at all.
+        assert!(settle(&mut state, Action::CycleTab(1)).is_empty());
+        let effects = settle(&mut state, Action::CloseTab);
+        assert!(
+            sent(&effects).is_empty(),
+            "nothing to close, nothing to say"
+        );
+        assert_eq!(
+            state.ui.flash.map(|f| f.text).unwrap_or_default(),
+            "nothing to close",
+            "the key says so rather than doing nothing at all"
+        );
+    }
+
+    #[test]
+    fn kinds_a_terminal_cannot_draw_are_kept_but_neither_shown_nor_written() {
+        let mut state = showing_a_session();
+        let app = entry(
+            "app:cad@game",
+            DeskTab::App {
+                site: "cad".into(),
+                project: Some("game".into()),
+            },
+            false,
+        );
+        let terminal = entry("terminal:t1", DeskTab::Terminal { id: "t1".into() }, false);
+        say_desk(
+            &mut state,
+            vec![app.clone(), terminal.clone()],
+            Some("app:cad@game"),
+            DeskBy::User,
+        );
+        assert_eq!(
+            state.stage_tabs(),
+            vec![],
+            "an app and a terminal aren't ours to draw"
+        );
+        assert_eq!(shown_title(&state), None);
+        assert_eq!(
+            state.desk.desk.tabs,
+            vec![app, terminal],
+            "kept exactly as received: the TUI is not their owner"
+        );
+        // Nothing to walk, nothing to close, and no command back to the desk.
+        for action in [Action::CycleTab(1), Action::CycleTab(-1), Action::CloseTab] {
+            let effects = settle(&mut state, action.clone());
+            assert!(
+                sent(&effects).is_empty(),
+                "{action:?} must not touch the desk: {effects:?}"
+            );
+        }
+        // And a page next to them is still listed on its own, with the others left alone.
+        say_desk(
+            &mut state,
+            vec![
+                entry(
+                    "app:cad@game",
+                    DeskTab::App {
+                        site: "cad".into(),
+                        project: Some("game".into()),
+                    },
+                    false,
+                ),
+                page("site://a"),
+            ],
+            Some("page:site://a"),
+            DeskBy::User,
+        );
+        assert_eq!(titles(&state), ["a"]);
+        assert_eq!(state.desk.desk.tabs.len(), 2);
+    }
+
+    #[test]
+    fn a_page_opened_elsewhere_appears_as_a_tab() {
+        let mut state = showing_a_session();
+        say_desk(
+            &mut state,
+            vec![page("site://from/the/desktop")],
+            Some("page:site://from/the/desktop"),
+            DeskBy::User,
+        );
+        assert_eq!(titles(&state), ["from/the/desktop"]);
+        assert_eq!(
+            shown_title(&state),
+            Some("from/the/desktop".into()),
+            "you moved the stage there, so it shows here too"
+        );
+        assert_eq!(
+            state.page.loading.as_deref(),
+            Some("site://from/the/desktop"),
+            "and its page is on its way, so there is nothing to read yet"
+        );
+        arrive(&mut state, "site://from/the/desktop");
+        assert_eq!(
+            state.page.current.as_ref().unwrap().url,
+            "site://from/the/desktop"
+        );
+    }
+
+    #[test]
+    fn the_agent_opens_a_tab_badged_when_you_are_not_following_it() {
+        let mut state = showing_a_session();
+        say_desk(
+            &mut state,
+            vec![page("site://a")],
+            Some("page:site://a"),
+            DeskBy::User,
+        );
+        settle(&mut state, Action::ToggleFollow);
+        assert!(!state.page.follow);
+        let mut opened = page("site://agent/page");
+        opened.unseen = true;
+        let effects = settle(
+            &mut state,
+            Action::Server(ServerMessage::DeskChanged {
+                session: "s".into(),
+                desk: Desk {
+                    tabs: vec![page("site://a"), opened.clone()],
+                    active: Some("page:site://agent/page".into()),
+                },
+                by: DeskBy::Agent,
+                opened: Some("page:site://agent/page".into()),
+            }),
+        );
+        assert_eq!(
+            shown_title(&state),
+            Some("a".into()),
+            "not following: what is on screen stays"
+        );
+        assert!(sent(&effects).is_empty(), "and nothing is sent back");
+        assert_eq!(
+            state
+                .stage_tabs()
+                .iter()
+                .map(|tab| tab.unseen())
+                .collect::<Vec<_>>(),
+            [false, true],
+            "it waits in the bar with its badge"
+        );
+        // Following it means showing it, and asking the desk to focus it: `desk.focus` is the
+        // only thing that clears `unseen`, so without it the badge outlives the reading — on
+        // the desktop and the phone too, which read the same flag.
+        let mut state = showing_a_session();
+        let effects = settle(
+            &mut state,
+            Action::Server(ServerMessage::DeskChanged {
+                session: "s".into(),
+                desk: Desk {
+                    tabs: vec![opened],
+                    active: Some("page:site://agent/page".into()),
+                },
+                by: DeskBy::Agent,
+                opened: Some("page:site://agent/page".into()),
+            }),
+        );
+        assert_eq!(shown_title(&state), Some("agent/page".into()));
+        assert!(
+            sent(&effects).iter().any(|(_, c)| c
+                == &ClientCommand::DeskFocus {
+                    session: "s".into(),
+                    tab: "page:site://agent/page".into(),
+                }),
+            "reading it marks it read: {effects:?}"
+        );
+        // The desk agrees; the badge is gone for every client, including this one.
+        let read = entry(
+            "page:site://agent/page",
+            DeskTab::Page {
+                url: "site://agent/page".into(),
+            },
+            false,
+        );
+        say_desk(
+            &mut state,
+            vec![read],
+            Some("page:site://agent/page"),
+            DeskBy::User,
+        );
+        assert_eq!(
+            state
+                .stage_tabs()
+                .iter()
+                .map(|t| t.unseen())
+                .collect::<Vec<_>>(),
+            [false],
+            "nothing badged once it has been read"
+        );
+    }
+
+    #[test]
+    fn the_changes_tab_is_the_projects_changes_and_closes_like_any_other() {
+        let mut state = showing_a_session();
+        state.session.upsert(SessionInfo {
+            project: Some("/home/u/Projects/game".into()),
+            ..info("s", None)
+        });
+        let effects = settle(&mut state, Action::ToggleChanges);
+        assert!(
+            sent(&effects).iter().any(|(_, c)| c
+                == &ClientCommand::DeskOpen {
+                    session: "s".into(),
+                    tab: DeskTab::Changes {
+                        project: "game".into()
+                    },
+                    focus: true,
+                }),
+            "the desk gets a changes tab named for the project: {effects:?}"
+        );
+        say_desk(
+            &mut state,
+            vec![entry(
+                "changes:game",
+                DeskTab::Changes {
+                    project: "game".into(),
+                },
+                false,
+            )],
+            Some("changes:game"),
+            DeskBy::User,
+        );
+        assert_eq!(titles(&state), ["changes · game"]);
+        assert!(
+            matches!(state.shown_tab(), Some(StageTab::Changes { .. })),
+            "so the changes view is the one that gets the keys"
+        );
+        assert_eq!(state.changes_elsewhere(), None);
+        // `gd` again closes it, like any tab.
+        let effects = settle(&mut state, Action::ToggleChanges);
+        assert!(
+            sent(&effects).iter().any(|(_, c)| {
+                c == &ClientCommand::DeskClose {
+                    session: "s".into(),
+                    tab: "changes:game".into(),
+                }
+            }),
+            "{effects:?}"
+        );
+    }
+
+    #[test]
+    fn the_project_view_stays_a_tab_of_this_terminal_only() {
+        let mut state = showing_a_session();
+        state.session.upsert(SessionInfo {
+            project: Some("/home/u/Projects/game".into()),
+            ..info("s", None)
+        });
+        let effects = settle(&mut state, Action::ProjectView(None));
+        assert!(
+            sent(&effects).iter().any(|(_, c)| c
+                == &ClientCommand::ProjectOverview {
+                    project: "/home/u/Projects/game".into()
+                }),
+            "{effects:?}"
+        );
+        assert_eq!(titles(&state), ["project · game"]);
+        assert!(
+            !sent(&effects)
+                .iter()
+                .any(|(_, c)| matches!(c, ClientCommand::DeskOpen { .. })),
+            "no `DeskTab` names a project overview, so it never reaches the desk"
+        );
+        assert_eq!(shown_title(&state), Some("project · game".into()));
+        // It walks with the desk's tabs and closes like one, and nothing is written back.
+        let effects = settle(&mut state, Action::CycleTab(1));
+        assert!(
+            sent(&effects).is_empty(),
+            "a local tab needs no desk command"
+        );
+        assert_eq!(shown_title(&state), Some("project · game".into()));
+        let effects = settle(&mut state, Action::CloseTab);
+        assert!(sent(&effects).is_empty());
+        assert_eq!(state.stage_tabs(), vec![]);
+        assert!(!state.project_view.open);
+    }
+
+    /// The stage drawn, not just its state: the bar lists the tabs and marks the one shown,
+    /// and a terminal too narrow for two panes shows neither the stage nor its bar.
+    #[test]
+    fn the_stage_draws_its_tabs_and_a_narrow_terminal_does_not() {
+        use crate::components::{Component, Root};
+        use ratatui::Terminal;
+        use ratatui::backend::TestBackend;
+        use ratatui::layout::Rect;
+
+        let mut state = showing_a_session();
+        let draw = |state: &AppState, width: u16| {
+            let root = Root::new(vec![]);
+            let mut terminal = Terminal::new(TestBackend::new(width, 24)).unwrap();
+            terminal
+                .draw(|frame| root.render(frame, frame.area(), state))
+                .unwrap();
+            terminal
+        };
+        let drawn = |state: &AppState, width: u16| -> String {
+            crate::snapshot::buffer_to_text(draw(state, width).backend().buffer())
+        };
+        // Whether a tab is drawn as the one shown: the bar paints it on the accent.
+        let marked = |state: &AppState, needle: &str| -> bool {
+            let terminal = draw(state, 140);
+            let buffer = terminal.backend().buffer();
+            let want: Vec<String> = needle.chars().map(|c| c.to_string()).collect();
+            (0..buffer.area.height).any(|y| {
+                let cells: Vec<(String, bool)> = (0..buffer.area.width)
+                    .map(|x| {
+                        (
+                            buffer[(x, y)].symbol().to_string(),
+                            buffer[(x, y)].bg == crate::theme::ACCENT,
+                        )
+                    })
+                    .collect();
+                cells.windows(want.len()).any(|window| {
+                    window
+                        .iter()
+                        .map(|cell| cell.0.as_str())
+                        .eq(want.iter().map(String::as_str))
+                        && window[0].1
+                })
+            })
+        };
+
+        let empty = drawn(&state, 140);
+        assert!(
+            empty.contains("nothing open"),
+            "an empty stage says what fills it:\n{empty}"
+        );
+
+        let _ = say_desk(
+            &mut state,
+            vec![page("site://memory/user"), page("site://plans/x")],
+            Some("page:site://plans/x"),
+            DeskBy::User,
+        );
+        let wide = drawn(&state, 140);
+        assert!(
+            wide.contains("memory/user") && wide.contains("plans/x"),
+            "both tabs are on the bar:\n{wide}"
+        );
+        assert!(
+            !wide.contains("nothing open"),
+            "the shown tab's page is what is drawn, not the empty stage:\n{wide}"
+        );
+        assert!(
+            marked(&state, "plans/x") && !marked(&state, "memory/user"),
+            "the bar marks which of them is shown"
+        );
+
+        // Below TWO_PANE_MIN_WIDTH only the focused pane is shown: the stage and its bar go.
+        state.ui.focus = Pane::Chat;
+        let narrow = drawn(&state, 80);
+        assert!(
+            !narrow.contains("memory/user"),
+            "no stage, no tab bar, at 80 columns:\n{narrow}"
+        );
+
+        // A click on a tab picks that tab: the bar answers with its index, so the click and
+        // the keys can never disagree about what is open.
+        let mut root = Root::new(vec![]);
+        let screen = Rect::new(0, 0, 140, 24);
+        let click = |root: &mut Root, x: u16| {
+            let at = |kind| crossterm::event::MouseEvent {
+                kind,
+                column: x,
+                row: 0,
+                modifiers: crossterm::event::KeyModifiers::NONE,
+            };
+            let left = crossterm::event::MouseButton::Left;
+            let down = crossterm::event::MouseEventKind::Down(left);
+            let up = crossterm::event::MouseEventKind::Up(left);
+            root.handle_mouse(at(down), screen, &state);
+            root.handle_mouse(at(up), screen, &state)
+        };
+        let picked: Vec<Vec<Action>> = (0..140).map(|x| click(&mut root, x)).collect();
+        let on_tab: Vec<&Action> = picked
+            .iter()
+            .filter_map(|actions| match actions[..] {
+                [Action::FocusPane(Pane::Stage), Action::ShowTab(_)] => Some(&actions[1]),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            on_tab.first().map(|a| format!("{a:?}")).as_deref(),
+            Some("ShowTab(0)"),
+            "the first tab on the bar is the first tab there is; elsewhere the click only \
+             focuses: {on_tab:?}"
+        );
+        assert!(on_tab.len() >= 2, "both tabs are clickable: {on_tab:?}");
+    }
+
+    #[test]
+    fn a_page_that_failed_is_not_asked_for_on_every_key_but_r_asks_again() {
+        let mut state = showing_a_session();
+        let _ = say_desk(
+            &mut state,
+            vec![page("site://gone")],
+            Some("page:site://gone"),
+            DeskBy::User,
+        );
+        state.reduce(Action::PageFailed {
+            url: "site://gone".into(),
+            error: "no such page".into(),
+        });
+        for _ in 0..3 {
+            let effects = settle(&mut state, Action::ToggleThinking);
+            assert!(
+                fetches(&effects).is_empty(),
+                "a key that goes nowhere must not fetch: {effects:?}"
+            );
+        }
+        let effects = settle(&mut state, Action::ReloadPage);
+        assert_eq!(
+            fetches(&effects),
+            ["site://gone"],
+            "`r` is still how you ask again"
+        );
+    }
+
+    #[test]
+    fn a_page_that_changed_is_read_again_when_it_is_the_one_being_read() {
+        let mut state = showing_a_session();
+        let _ = say_desk(
+            &mut state,
+            vec![page("site://being/read"), page("site://another/tab")],
+            Some("page:site://being/read"),
+            DeskBy::User,
+        );
+        arrive(&mut state, "site://being/read");
+        arrive(&mut state, "site://another/tab");
+        let changed = |url: &str| {
+            Action::Server(ServerMessage::PageChanged {
+                url: url.into(),
+                kind: composer_protocol::PageChangeKind::Modified,
+                by: composer_protocol::ChangedBy::Agent,
+            })
+        };
+        // The tab on the screen: the text is stale, so it is asked for again and the old
+        // body is not left up while the new one comes.
+        let effects = settle(&mut state, changed("site://being/read"));
+        assert_eq!(
+            fetches(&effects),
+            ["site://being/read"],
+            "the page you are reading is refetched"
+        );
+        assert_eq!(state.page.current, None, "not the text it had");
+        // A page open on another tab: dropped from the cache, and nothing asked for now.
+        let effects = settle(&mut state, changed("site://another/tab"));
+        assert_eq!(
+            fetches(&effects),
+            Vec::<String>::new(),
+            "you are not reading it: {effects:?}"
+        );
+        let effects = settle(&mut state, Action::CycleTab(1));
+        assert_eq!(
+            fetches(&effects),
+            ["site://another/tab"],
+            "and it is the new text when you get there"
+        );
+    }
+
+    #[test]
+    fn pointing_at_a_tab_a_terminal_cannot_draw_leaves_the_stage_reading() {
+        // The phone put an app on the stage. Two pages are open here; jumping to either of
+        // them because the desk's own tab is undrawable would be this terminal deciding for
+        // someone else.
+        let mut state = showing_a_session();
+        say_desk(
+            &mut state,
+            vec![page("site://reading")],
+            Some("page:site://reading"),
+            DeskBy::User,
+        );
+        let app = entry(
+            "app:cad@game",
+            DeskTab::App {
+                site: "cad".into(),
+                project: Some("game".into()),
+            },
+            true,
+        );
+        settle(
+            &mut state,
+            Action::Server(ServerMessage::DeskChanged {
+                session: "s".into(),
+                desk: Desk {
+                    tabs: vec![page("site://reading"), page("site://other"), app],
+                    active: Some("app:cad@game".into()),
+                },
+                by: DeskBy::User,
+                opened: Some("app:cad@game".into()),
+            }),
+        );
+        assert_eq!(
+            shown_title(&state),
+            Some("reading".into()),
+            "an undrawable tab is nobody to move us"
+        );
+        assert_eq!(titles(&state), ["reading", "other"]);
+    }
+
+    #[test]
+    fn the_desk_answer_after_attach_is_what_the_stage_lists() {
+        // `desk.get` is the only way a desk reaches this terminal unasked-for: the server does
+        // not send one on `session.attach` and does not broadcast on it either. So this answer
+        // is the whole of "the tabs you had are back".
+        let (mut state, _) = connected();
+        state.session.upsert(info("s", None));
+        let effects = settle(&mut state, Action::AttachSession("s".into()));
+        let asked = sent(&effects);
+        let (id, _) = asked
+            .iter()
+            .find(|(_, c)| matches!(c, ClientCommand::DeskGet { .. }))
+            .expect("attaching asks for the session's desk");
+        assert!(
+            titles(&state).is_empty(),
+            "nothing is listed before the answer"
+        );
+        let unread = entry(
+            "app:cad@game",
+            DeskTab::App {
+                site: "cad".into(),
+                project: Some("game".into()),
+            },
+            true,
+        );
+        let effects = settle(
+            &mut state,
+            Action::Server(ServerMessage::Ok {
+                id: *id,
+                result: CommandResult::Desk {
+                    desk: Desk {
+                        tabs: vec![unread, page("site://was/open/there")],
+                        active: Some("page:site://was/open/there".into()),
+                    },
+                },
+            }),
+        );
+        assert_eq!(
+            titles(&state),
+            ["was/open/there"],
+            "the tabs it had are back, and the app among them is not ours"
+        );
+        assert_eq!(shown_title(&state), Some("was/open/there".into()));
+        assert_eq!(
+            fetches(&effects),
+            ["site://was/open/there"],
+            "and it is read, not merely listed"
+        );
+    }
+
+    #[test]
+    fn a_desk_answer_for_a_session_you_have_left_is_dropped() {
+        let (mut state, _) = connected();
+        state.session.upsert(info("old", None));
+        state.session.upsert(info("new", None));
+        let effects = settle(&mut state, Action::AttachSession("old".into()));
+        let asked = sent(&effects);
+        let (stale, _) = asked
+            .iter()
+            .find(|(_, c)| matches!(c, ClientCommand::DeskGet { .. }))
+            .expect("its desk was asked for");
+        settle(&mut state, Action::AttachSession("new".into()));
+        settle(
+            &mut state,
+            Action::Server(ServerMessage::Ok {
+                id: *stale,
+                result: CommandResult::Desk {
+                    desk: Desk {
+                        tabs: vec![page("site://from/the/old/session")],
+                        active: Some("page:site://from/the/old/session".into()),
+                    },
+                },
+            }),
+        );
+        assert!(
+            titles(&state).is_empty(),
+            "the stage shows the session you are on, not the one you asked about"
+        );
+    }
+
+    #[test]
+    fn a_desk_answer_shows_what_it_can_when_the_desks_own_tab_is_not_ours() {
+        // The desk's active tab is an app the phone opened: this terminal has no way to draw
+        // it, and an empty stage while a page sits on the desk is worse than showing that.
+        let mut state = showing_a_session();
+        let effects = settle(&mut state, Action::AttachSession("s".into()));
+        let asked = sent(&effects);
+        let (id, _) = asked
+            .iter()
+            .find(|(_, c)| matches!(c, ClientCommand::DeskGet { session } if session == "s"))
+            .expect("its desk was asked for");
+        let app = entry(
+            "app:cad@game",
+            DeskTab::App {
+                site: "cad".into(),
+                project: Some("game".into()),
+            },
+            false,
+        );
+        settle(
+            &mut state,
+            Action::Server(ServerMessage::Ok {
+                id: *id,
+                result: CommandResult::Desk {
+                    desk: Desk {
+                        tabs: vec![app, page("site://first"), page("site://the/app/is/instead")],
+                        active: Some("app:cad@game".into()),
+                    },
+                },
+            }),
+        );
+        assert_eq!(titles(&state), ["first", "the/app/is/instead"]);
+        assert_eq!(
+            shown_title(&state),
+            Some("the/app/is/instead".into()),
+            "the last tab a terminal can draw, the same fallback a change follows"
+        );
+    }
+
+    #[test]
+    fn attaching_another_session_leaves_no_tab_naming_its_project() {
+        let mut state = showing_a_session();
+        state.session.upsert(SessionInfo {
+            project: Some("/home/u/Projects/game".into()),
+            ..info("s", None)
+        });
+        settle(&mut state, Action::ProjectView(None));
+        assert_eq!(titles(&state), ["project · game"]);
+        state.session.upsert(info("t", None));
+        settle(&mut state, Action::AttachSession("t".into()));
+        assert!(
+            titles(&state).is_empty(),
+            "the overview was the other session's project: {:?}",
+            titles(&state)
+        );
+    }
+
+    #[test]
+    fn an_overview_that_failed_is_said_on_the_tab_and_asked_again_on_r() {
+        let mut state = showing_a_session();
+        state.session.upsert(SessionInfo {
+            project: Some("/home/u/Projects/game".into()),
+            ..info("s", None)
+        });
+        let effects = settle(&mut state, Action::ProjectView(None));
+        let asked = sent(&effects);
+        let (id, _) = asked
+            .iter()
+            .find(|(_, c)| matches!(c, ClientCommand::ProjectOverview { .. }))
+            .expect("the overview is asked for");
+        settle(
+            &mut state,
+            Action::Server(ServerMessage::Error {
+                id: Some(*id),
+                message: "no project here".into(),
+            }),
+        );
+        assert_eq!(
+            state.project_view.error.as_deref(),
+            Some("no project here"),
+            "the tab says what failed"
+        );
+        assert!(
+            !state.project_view.loading,
+            "and does not say `loading…` for ever"
+        );
+        let effects = settle(&mut state, Action::ReloadPage);
+        assert!(
+            sent(&effects).iter().any(|(_, c)| c
+                == &ClientCommand::ProjectOverview {
+                    project: "/home/u/Projects/game".into()
+                }),
+            "`r` asks again: {effects:?}"
+        );
+    }
+
+    #[test]
+    fn another_session_comes_with_its_own_tabs() {
+        let mut state = showing_a_session();
+        state.session.upsert(info("t", None));
+        say_desk(
+            &mut state,
+            vec![page("site://here")],
+            Some("page:site://here"),
+            DeskBy::User,
+        );
+        assert_eq!(titles(&state), ["here"]);
+        settle(&mut state, Action::AttachSession("t".into()));
+        assert_eq!(
+            titles(&state),
+            Vec::<String>::new(),
+            "what was open belongs to the session you were on"
+        );
+        assert_eq!(state.page.current, None);
     }
 }

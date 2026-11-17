@@ -15,8 +15,9 @@ use crate::store::AppState;
 use crate::store::types::Pane;
 use crate::theme;
 
-/// One project's overview in the right pane (`gp`): branches waiting to merge, its sessions, its
-/// memory and switches. Rows open what they show.
+/// One project's overview, as a tab of the stage (`gp`): branches waiting to merge, its
+/// sessions, its memory and switches. Rows open what they show. This tab is the terminal's own
+/// (the desk has no kind for an overview), so what you open here is not on another client.
 pub struct ProjectView {
     /// The cursor, as an index into the rows that open something.
     cursor: usize,
@@ -50,7 +51,7 @@ impl ProjectView {
             line: Line::raw(""),
             open: vec![],
         };
-        let close = Action::ToggleProjectView;
+        let close = Action::CloseTab;
 
         let mut head = vec![Span::styled(o.path.clone(), theme::muted())];
         if let Some(branch) = &o.branch {
@@ -203,12 +204,9 @@ fn session_row(s: &composer_protocol::SessionInfo, indent: &str, state: &AppStat
             Span::styled(format!("  {label}"), theme::faint()),
         ]),
         open: if state.session.current.as_deref() == Some(&s.id) {
-            vec![Action::ToggleProjectView, Action::FocusPane(Pane::Chat)]
+            vec![Action::CloseTab, Action::FocusPane(Pane::Chat)]
         } else {
-            vec![
-                Action::ToggleProjectView,
-                Action::AttachSession(s.id.clone()),
-            ]
+            vec![Action::CloseTab, Action::AttachSession(s.id.clone())]
         },
     }
 }
@@ -230,16 +228,13 @@ impl Component for ProjectView {
             }
             KeyCode::Char('n') => {
                 if let Some(o) = &state.project_view.overview {
-                    return vec![
-                        Action::ToggleProjectView,
-                        Action::NewSessionIn(o.folder.clone()),
-                    ];
+                    return vec![Action::CloseTab, Action::NewSessionIn(o.folder.clone())];
                 }
             }
             KeyCode::Char('r') => {
                 return vec![Action::ProjectView(state.project_view.project.clone())];
             }
-            KeyCode::Esc | KeyCode::Char('q') => return vec![Action::ToggleProjectView],
+            KeyCode::Esc | KeyCode::Char('q') => return vec![Action::CloseTab],
             _ => {}
         }
         vec![]
@@ -260,7 +255,7 @@ impl Component for ProjectView {
             Span::styled(name, Style::new().fg(theme::ACCENT)),
             Span::raw(" "),
         ]);
-        let block = pane_block(title, state.ui.focus == Pane::Page);
+        let block = pane_block(title, state.ui.focus == Pane::Stage);
         let inner = block.inner(area);
         frame.render_widget(block, area);
         let inner = Rect {
@@ -269,10 +264,10 @@ impl Component for ProjectView {
             ..inner
         };
         if view.overview.is_none() {
-            let text = if view.loading {
-                "loading…"
-            } else {
-                "no project"
+            let text = match (&view.error, view.loading) {
+                (Some(error), _) => format!("{error} — r asks again"),
+                (None, true) => "loading…".to_string(),
+                (None, false) => "no project".to_string(),
             };
             frame.render_widget(Paragraph::new(Span::styled(text, theme::faint())), inner);
             return;
