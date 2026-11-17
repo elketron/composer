@@ -875,7 +875,10 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
             attachments: vec![],
         },
         ClientCommand::SessionCompact { session: s() },
-        ClientCommand::TurnCancel { session: s() },
+        ClientCommand::TurnCancel {
+            session: s(),
+            seen: Some(3),
+        },
         ClientCommand::ProjectSet {
             session: s(),
             path: Some("/p".into()),

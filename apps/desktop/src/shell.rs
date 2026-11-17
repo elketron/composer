@@ -510,7 +510,11 @@ impl Shell {
             ChatEvent::Answer { request, decision } => {
                 self.ask(ClientCommand::ApprovalRespond { request, decision }, cx)
             }
-            ChatEvent::Cancel => self.ask(ClientCommand::TurnCancel { session }, cx),
+            ChatEvent::Cancel => {
+                // What it had seen: a turn that started since (a queued message) keeps going.
+                let seen = self.chat.read(cx).seen(&session);
+                self.ask(ClientCommand::TurnCancel { session, seen }, cx)
+            }
             ChatEvent::Attach => self.attach_file(cx),
             ChatEvent::PasteFiles(paths) => self.upload(paths, cx),
             ChatEvent::PasteImage { name, bytes } => {

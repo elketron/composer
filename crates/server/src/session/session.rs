@@ -24,7 +24,7 @@ pub struct Session {
     /// User messages waiting for the next turn.
     inbox: Mutex<VecDeque<ChatMessage>>,
     running: AtomicBool,
-    cancel: Mutex<CancellationToken>,
+    turn: Mutex<RunningTurn>,
     open_approvals: Mutex<OpenApprovals>,
     /// Held while the desk (`desk.json`) is read, changed and written.
     desk_lock: Mutex<()>,
@@ -32,6 +32,19 @@ pub struct Session {
     selection: Mutex<Option<composer_protocol::Selection>>,
     /// What its apps reported since the last turn: the agent sees it at the next one.
     notes: Mutex<Vec<String>>,
+}
+
+/// The turn a Stop is for.
+#[derive(Debug)]
+struct RunningTurn {
+    started: Option<Seq>,
+    token: CancellationToken,
+}
+
+impl RunningTurn {
+    fn unseen_by(&self, seen: Option<Seq>) -> bool {
+        matches!((self.started, seen), (Some(started), Some(seen)) if started > seen)
+    }
 }
 
 impl Session {
@@ -61,7 +74,10 @@ impl Session {
             info: Mutex::new(info),
             inbox: Mutex::new(VecDeque::new()),
             running: AtomicBool::new(false),
-            cancel: Mutex::new(CancellationToken::new()),
+            turn: Mutex::new(RunningTurn {
+                started: None,
+                token: CancellationToken::new(),
+            }),
             open_approvals: Mutex::new(OpenApprovals {
                 count: 0,
                 after: TurnState::Idle,
@@ -228,15 +244,27 @@ impl Session {
         self.running.load(Ordering::SeqCst)
     }
 
-    /// A fresh cancellation token for a new turn.
-    pub fn new_turn_token(&self) -> CancellationToken {
+    /// A fresh cancellation token for a new turn, which `started` (its `turn.started` seq; none
+    /// for a compaction on its own).
+    pub fn new_turn_token(&self, started: Option<Seq>) -> CancellationToken {
         let token = CancellationToken::new();
-        *self.cancel.lock().expect("cancel lock") = token.clone();
+        *self.turn.lock().expect("turn lock") = RunningTurn {
+            started,
+            token: token.clone(),
+        };
         token
     }
 
-    pub fn cancel(&self) {
-        self.cancel.lock().expect("cancel lock").cancel();
+    /// Stops the running turn, unless it started after `seen` (the last event the client had
+    /// when the user asked): that Stop was meant for a turn that has ended since, and this one
+    /// came from their queue. Returns whether it stopped anything.
+    pub fn cancel(&self, seen: Option<Seq>) -> bool {
+        let turn = self.turn.lock().expect("turn lock");
+        if turn.unseen_by(seen) {
+            return false;
+        }
+        turn.token.cancel();
+        true
     }
 
     fn save_meta(&self) {

@@ -828,13 +828,13 @@ impl Connection {
                 compact_now(server, &s)?;
                 Ok(CommandResult::Done)
             }
-            ClientCommand::TurnCancel { session } => {
+            ClientCommand::TurnCancel { session, seen } => {
                 let s = server.sessions.get(&session).map_err(|e| e.to_string())?;
                 // A paused worker (a limit, a restart) is stopped for good.
                 if !server.workers.interrupt(&session)
                     && !server.workers.stop_paused(server, &session)
                 {
-                    s.cancel();
+                    s.cancel(seen);
                 }
                 Ok(CommandResult::Done)
             }

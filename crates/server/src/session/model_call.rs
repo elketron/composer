@@ -10,25 +10,64 @@ use tokio_util::sync::CancellationToken;
 
 use crate::agent::AgentDefinition;
 use crate::attachments::{ATTACHMENT_SCHEME, attachment_data_url};
-use crate::provider::{ModelEvent, ModelMessage, ModelRequest, ModelToolCall};
+use crate::provider::{CallError, ModelEvent, ModelMessage, ModelRequest, ModelToolCall};
 use crate::server::Server;
 use crate::session::{Session, StepOutput};
 use crate::tools::{CallResult, ToolContext, text_result};
 
+/// Why a model call gave no step to go on with.
+#[derive(Debug, Clone, PartialEq)]
+pub enum StepError {
+    /// The provider refused the call (bad request, server unreachable): the same call again
+    /// fails the same way.
+    Refused(String),
+    /// The reply broke off: the same call again may well work.
+    Interrupted(String),
+    /// The reply had no text, thinking or tool call, with the stop reason the provider gave.
+    Empty { stop_reason: Option<String> },
+}
+
+impl StepError {
+    /// Whether making the same call again is worth it.
+    pub fn may_pass_on_retry(&self) -> bool {
+        !matches!(self, Self::Refused(_))
+    }
+}
+
+impl std::fmt::Display for StepError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Refused(error) | Self::Interrupted(error) => f.write_str(error),
+            Self::Empty { stop_reason } => write!(
+                f,
+                "the model sent an empty reply (stop reason: {})",
+                stop_reason.as_deref().unwrap_or("none")
+            ),
+        }
+    }
+}
+
+impl From<StepError> for String {
+    fn from(error: StepError) -> Self {
+        error.to_string()
+    }
+}
+
 /// Streams one completion. Holds a model slot only for the call itself.
 /// With `live`, thinking and text are streamed to clients as deltas.
+/// A reply with no text, thinking or tool call is an error, not a quiet end of the turn.
 pub async fn model_step(
     server: &Arc<Server>,
     session: &Arc<Session>,
     mut request: ModelRequest,
     cancel: &CancellationToken,
     live: bool,
-) -> Result<StepOutput, String> {
+) -> Result<StepOutput, StepError> {
     if server.slots.is_full() {
         session.update_info(&server.hub, |info| info.state = TurnState::Waiting);
     }
     let slot = tokio::select! {
-        slot = server.slots.acquire() => slot?,
+        slot = server.slots.acquire() => slot.map_err(StepError::Refused)?,
         _ = cancel.cancelled() => return Ok(StepOutput { cancelled: true, ..StepOutput::default() }),
     };
     session.update_info(&server.hub, |info| info.state = TurnState::Running);
@@ -38,8 +77,18 @@ pub async fn model_step(
     request.reasoning_effort = request
         .reasoning_effort
         .or_else(|| reasoning_effort(server, session));
-    let mut stream = server.provider.stream(request).await?;
+    // Waiting for the provider to start answering (a long prompt read anew can take minutes)
+    // is stoppable too.
+    let started = tokio::select! {
+        started = server.provider.stream(request) => started,
+        _ = cancel.cancelled() => return Ok(StepOutput { cancelled: true, ..StepOutput::default() }),
+    };
+    let mut stream = started.map_err(|error| match error {
+        CallError::Unavailable(error) => StepError::Interrupted(error),
+        CallError::Refused(error) => StepError::Refused(error),
+    })?;
     let mut out = StepOutput::default();
+    let mut stop_reason = None;
     loop {
         let event = tokio::select! {
             event = stream.recv() => event,
@@ -70,19 +119,66 @@ pub async fn model_step(
                 }
             }
             Some(Ok(ModelEvent::Finished {
-                tool_calls, usage, ..
+                tool_calls,
+                usage,
+                finish_reason,
             })) => {
                 out.tool_calls = tool_calls;
                 out.usage = usage;
+                stop_reason = finish_reason;
                 break;
             }
-            Some(Err(e)) => return Err(e),
-            None => return Err("model stream ended unexpectedly".into()),
+            Some(Err(e)) => return Err(StepError::Interrupted(e)),
+            None => {
+                return Err(StepError::Interrupted(
+                    "model stream ended unexpectedly".into(),
+                ));
+            }
         }
     }
     drop(stream);
     drop(slot);
+    if !out.cancelled
+        && out.content.trim().is_empty()
+        && out.thinking.trim().is_empty()
+        && out.tool_calls.is_empty()
+    {
+        return Err(StepError::Empty { stop_reason });
+    }
     Ok(out)
+}
+
+/// How often a broken-off or empty model call is made again before its error stands.
+const AUTO_CONTINUES: u32 = 2;
+
+/// [`model_step`], made again by itself when the reply broke off or came back empty, with a
+/// notice in the chat each time. Nothing of a broken reply was kept, so the same call again
+/// just continues.
+pub async fn model_step_continuing(
+    server: &Arc<Server>,
+    session: &Arc<Session>,
+    request: ModelRequest,
+    cancel: &CancellationToken,
+    live: bool,
+) -> Result<StepOutput, StepError> {
+    let mut retries = 0;
+    loop {
+        match model_step(server, session, request.clone(), cancel, live).await {
+            Err(error) if error.may_pass_on_retry() && retries < AUTO_CONTINUES => {
+                retries += 1;
+                tracing::warn!("session {}: {error}; continuing", session.id());
+                let message = crate::session::turn::system_message(format!(
+                    "{error}; continuing by itself ({retries} of {AUTO_CONTINUES})"
+                ));
+                session.emit(&server.hub, |seq| ServerMessage::MessageDone {
+                    session: session.id().to_string(),
+                    seq,
+                    message,
+                });
+            }
+            outcome => return outcome,
+        }
+    }
 }
 
 /// Runs a tool call, showing it in the chat. Returns its result.

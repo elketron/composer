@@ -6,8 +6,8 @@ use tokio::sync::mpsc;
 
 use crate::config_sections::ProviderConfig;
 use crate::provider::{
-    ModelEvent, ModelMessage, ModelRequest, ModelStream, PartialToolCalls, Provider, SseDecoder,
-    ToolSpec, Usage,
+    CallError, ModelEvent, ModelMessage, ModelRequest, ModelStream, PartialToolCalls, Provider,
+    SseDecoder, ToolSpec, Usage,
 };
 
 /// An OpenAI-compatible `/chat/completions` endpoint (llama.cpp, vLLM, ...).
@@ -78,7 +78,7 @@ impl Provider for OpenAiProvider {
         self.list_models().await
     }
 
-    async fn stream(&self, request: ModelRequest) -> Result<ModelStream, String> {
+    async fn stream(&self, request: ModelRequest) -> Result<ModelStream, CallError> {
         let body = request_body(&self.model, &request);
         let response = self
             .authorized(
@@ -88,14 +88,15 @@ impl Provider for OpenAiProvider {
             .json(&body)
             .send()
             .await
-            .map_err(|e| format!("request failed: {e}"))?;
+            .map_err(|e| CallError::Unavailable(format!("request failed: {e}")))?;
         if !response.status().is_success() {
             let status = response.status();
             let text = response.text().await.unwrap_or_default();
-            return Err(format!(
-                "{status}: {}",
-                text.chars().take(500).collect::<String>()
-            ));
+            let error = format!("{status}: {}", text.chars().take(500).collect::<String>());
+            return Err(match status.as_u16() {
+                502..=504 => CallError::Unavailable(error),
+                _ => CallError::Refused(error),
+            });
         }
 
         let (tx, rx) = mpsc::channel(256);
@@ -120,6 +121,10 @@ impl Provider for OpenAiProvider {
                     let Ok(chunk) = serde_json::from_str::<Value>(&data) else {
                         continue;
                     };
+                    if let Some(error) = stream_error(&chunk) {
+                        let _ = tx.send(Err(error)).await;
+                        return;
+                    }
                     if let Some(u) = parse_usage(&chunk) {
                         usage = Some(u);
                     }
@@ -150,16 +155,36 @@ impl Provider for OpenAiProvider {
                     }
                 }
             }
-            let _ = tx
-                .send(Ok(ModelEvent::Finished {
+            let end = match finish_reason {
+                Some(reason) => Ok(ModelEvent::Finished {
                     tool_calls: calls.finish(),
                     usage,
-                    finish_reason,
-                }))
-                .await;
+                    finish_reason: Some(reason),
+                }),
+                None => Err(NO_STOP_REASON.to_string()),
+            };
+            let _ = tx.send(end).await;
         });
         Ok(rx)
     }
+}
+
+/// A stream that closed without saying why the model stopped: cut off (a proxy's timeout, the
+/// model server going away) rather than finished.
+const NO_STOP_REASON: &str =
+    "the model's reply ended without a stop reason (the stream was cut off)";
+
+/// An error sent inside the stream (`{"error": {"message": …}}`), as llama.cpp and OpenRouter do
+/// when a call fails after it started.
+fn stream_error(chunk: &Value) -> Option<String> {
+    let error = chunk.get("error")?;
+    let message = error["message"]
+        .as_str()
+        .map(str::to_string)
+        .unwrap_or_else(|| error.to_string());
+    Some(format!(
+        "the provider reported an error mid-reply: {message}"
+    ))
 }
 
 fn models_of(body: &Value) -> Vec<ModelInfo> {
@@ -267,6 +292,97 @@ fn parse_usage(chunk: &Value) -> Option<Usage> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A provider talking to a one-shot local server that answers `response` and closes.
+    async fn provider_answering(response: String) -> OpenAiProvider {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut request = vec![0; 64 * 1024];
+            let _ = socket.read(&mut request).await;
+            socket.write_all(response.as_bytes()).await.unwrap();
+        });
+        OpenAiProvider {
+            client: reqwest::Client::new(),
+            base_url: format!("http://{addr}/v1"),
+            api_key: String::new(),
+            model: "m".into(),
+        }
+    }
+
+    fn request() -> ModelRequest {
+        ModelRequest {
+            messages: vec![],
+            tools: vec![],
+            model: None,
+            reasoning_effort: None,
+        }
+    }
+
+    /// Streams `body` (SSE), then closes, and collects what the provider makes of it.
+    async fn events_of(body: &str) -> Vec<Result<ModelEvent, String>> {
+        let provider = provider_answering(format!(
+            "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\nconnection: close\r\n\r\n{body}"
+        ))
+        .await;
+        let mut stream = provider.stream(request()).await.unwrap();
+        let mut events = Vec::new();
+        while let Some(event) = stream.recv().await {
+            events.push(event);
+        }
+        events
+    }
+
+    #[tokio::test]
+    async fn a_gateway_timeout_is_worth_another_try_and_a_bad_request_is_not() {
+        let answer = |status: &str| {
+            format!("HTTP/1.1 {status}\r\ncontent-length: 4\r\nconnection: close\r\n\r\nnope")
+        };
+        let timeout = provider_answering(answer("504 Gateway Timeout")).await;
+        assert!(matches!(
+            timeout.stream(request()).await,
+            Err(CallError::Unavailable(e)) if e.starts_with("504 Gateway Timeout")
+        ));
+        let bad = provider_answering(answer("400 Bad Request")).await;
+        assert!(matches!(
+            bad.stream(request()).await,
+            Err(CallError::Refused(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn a_reply_with_a_stop_reason_finishes() {
+        let events = events_of(concat!(
+            "data: {\"choices\":[{\"delta\":{\"content\":\"hi\"}}]}\n\n",
+            "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n",
+            "data: [DONE]\n\n",
+        ))
+        .await;
+        assert_eq!(events.len(), 2, "{events:?}");
+        assert!(
+            matches!(&events[1], Ok(ModelEvent::Finished { finish_reason: Some(r), .. }) if r == "stop")
+        );
+    }
+
+    #[tokio::test]
+    async fn a_stream_cut_off_before_a_stop_reason_is_an_error() {
+        let events =
+            events_of("data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"hm\"}}]}\n\n").await;
+        assert_eq!(events.last(), Some(&Err(NO_STOP_REASON.to_string())));
+    }
+
+    #[tokio::test]
+    async fn an_error_inside_the_stream_is_reported() {
+        let events =
+            events_of("data: {\"error\":{\"message\":\"context size exceeded\",\"code\":500}}\n\n")
+                .await;
+        let Some(Err(error)) = events.last() else {
+            panic!("{events:?}")
+        };
+        assert!(error.contains("context size exceeded"), "{error}");
+    }
 
     #[test]
     fn models_from_llama_server_and_openrouter() {

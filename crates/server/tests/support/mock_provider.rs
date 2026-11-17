@@ -3,7 +3,7 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use async_trait::async_trait;
-use composer_server::provider::{ModelEvent, ModelRequest, ModelStream, Provider};
+use composer_server::provider::{CallError, ModelEvent, ModelRequest, ModelStream, Provider};
 use tokio::sync::mpsc;
 
 /// A provider that plays back scripted responses, one per model call, and records requests.
@@ -35,7 +35,7 @@ impl Provider for MockProvider {
         "mock"
     }
 
-    async fn stream(&self, request: ModelRequest) -> Result<ModelStream, String> {
+    async fn stream(&self, request: ModelRequest) -> Result<ModelStream, CallError> {
         self.requests.lock().unwrap().push(request);
         if self.stalled.load(Ordering::SeqCst) {
             std::future::pending::<()>().await;
@@ -45,7 +45,7 @@ impl Provider for MockProvider {
             .lock()
             .unwrap()
             .pop_front()
-            .ok_or("mock: no script left")?;
+            .ok_or(CallError::Refused("mock: no script left".into()))?;
         let (tx, rx) = mpsc::channel(64);
         tokio::spawn(async move {
             for event in events {

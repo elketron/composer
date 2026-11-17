@@ -11,7 +11,8 @@ const MEMORY_LIST_MAX: usize = 60;
 /// The worker agent in worker mode: the ticket and its site say how this kind of work is done.
 const WORKER_PROMPT: &str = "# Worker\n\nYou are working exactly one ticket. Do not ask questions: decide, act, and record why in the ticket. Open the ticket and every page in its Context; the site's index says how this kind of work is done. Stay in the ticket's project/ view. Check every \"Done when\" item, write the Result section, then call `finish(done, summary)` or `finish(failed, reason)`.";
 
-/// The system prompt: agent body → `site://home` → environment → relevant memory.
+/// The system prompt: agent body → `site://home` → environment → relevant memory → the active
+/// project, which changes most often, last.
 pub fn system_prompt(
     agent: &AgentDefinition,
     workspace: &Web,
@@ -61,42 +62,19 @@ pub fn system_prompt(
         sections.push(WORKER_PROMPT.to_string());
     }
 
-    let mut env = format!(
+    sections.push(format!(
         "# Environment\n- you are the `{name}` agent ({url}); pages about other agents describe their roles, not yours\n- date: {date}\n- session: {id}",
         name = agent.name,
         url = agent.url,
         date = chrono::Local::now().format("%Y-%m-%d %A"),
         id = session.id,
-    );
-    match &session.project {
-        Some(project) => env.push_str(&format!(
-            "\n- active project: {project}{}",
-            git_branch(Path::new(project))
-        )),
-        None => env.push_str("\n- active project: none (set one with `set_project`)"),
-    }
-    sections.push(env);
+    ));
 
     let mut memory = Vec::new();
     if let Some(user) = page_body(workspace, "site://memory/user") {
         memory.push(format!(
             "<page url=\"site://memory/user.md\">\n{user}\n</page>"
         ));
-    }
-    if let Some(name) = session
-        .project
-        .as_deref()
-        .and_then(|p| Path::new(p).file_name())
-        .and_then(|n| n.to_str())
-    {
-        let url = format!("site://projects/{name}");
-        let fallback = format!("site://memory/projects/{name}");
-        match page_body(workspace, &url).or_else(|| page_body(workspace, &fallback)) {
-            Some(project) => memory.push(format!("<page url=\"{url}.md\">\n{project}\n</page>")),
-            None => memory.push(format!(
-                "No project page for this project yet: create `{url}.md` when you learn something worth keeping."
-            )),
-        }
     }
     let pages = memory_pages(index);
     if !pages.is_empty() {
@@ -107,8 +85,33 @@ pub fn system_prompt(
     if !memory.is_empty() {
         sections.push(format!("# Memory\n\n{}", memory.join("\n\n")));
     }
+    // Last, as it changes most often (`set_project` mid-turn): the sections before it stay a
+    // stable prefix for the provider's prompt cache.
+    sections.push(active_project(workspace, session));
 
     sections.join("\n\n---\n\n")
+}
+
+/// The active project and its page (`site://projects/<name>`, else `site://memory/projects/<name>`).
+fn active_project(workspace: &Web, session: &SessionInfo) -> String {
+    let Some(project) = &session.project else {
+        return "# Active project\n\nNone (set one with `set_project`).".to_string();
+    };
+    let mut section = format!(
+        "# Active project\n\n{project}{}",
+        git_branch(Path::new(project))
+    );
+    if let Some(name) = Path::new(project).file_name().and_then(|n| n.to_str()) {
+        let url = format!("site://projects/{name}");
+        let fallback = format!("site://memory/projects/{name}");
+        match page_body(workspace, &url).or_else(|| page_body(workspace, &fallback)) {
+            Some(page) => section.push_str(&format!("\n\n<page url=\"{url}.md\">\n{page}\n</page>")),
+            None => section.push_str(&format!(
+                "\n\nNo project page for this project yet: create `{url}.md` when you learn something worth keeping."
+            )),
+        }
+    }
+    section
 }
 
 /// `- title — url (kind)` for each memory page except the index.

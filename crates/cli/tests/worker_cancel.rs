@@ -50,6 +50,7 @@ async fn cancelling_a_worker_stops_it_and_fails_the_ticket() {
         6,
         ClientCommand::TurnCancel {
             session: worker.clone(),
+            seen: None,
         },
     )
     .await;

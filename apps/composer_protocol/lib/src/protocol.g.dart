@@ -673,20 +673,29 @@ final class ClientCommandSessionCompact extends ClientCommand {
       };
 }
 
+/// Stops the session's running turn. `seen`: the last event of the session the client had
+/// when the user asked. A turn that started after it is one they hadn't seen (a second Stop
+/// landing on the message they had queued), and keeps running. Without it, whatever runs
+/// stops. The reply is `done` either way.
 final class ClientCommandTurnCancel extends ClientCommand {
   const ClientCommandTurnCancel({
     required this.session,
+    this.seen,
   });
 
   final String session;
 
+  final int? seen;
+
   factory ClientCommandTurnCancel.fromJson(Map<String, Object?> json) => ClientCommandTurnCancel(
         session: json['session'] as String,
+        seen: json['seen'] == null ? null : (json['seen'] as num).toInt(),
       );
 
   Map<String, Object?> toJson() => {
         'type': 'turn.cancel',
         'session': session,
+        if (seen != null) 'seen': seen,
       };
 }
 

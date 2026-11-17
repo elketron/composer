@@ -69,8 +69,15 @@ pub enum ClientCommand {
     #[serde(rename = "session.compact")]
     SessionCompact { session: SessionId },
 
+    /// Stops the session's running turn. `seen`: the last event of the session the client had
+    /// when the user asked. A turn that started after it is one they hadn't seen (a second Stop
+    /// landing on the message they had queued), and keeps running. Without it, whatever runs
+    /// stops. The reply is `done` either way.
     #[serde(rename = "turn.cancel")]
-    TurnCancel { session: SessionId },
+    TurnCancel {
+        session: SessionId,
+        seen: Option<Seq>,
+    },
 
     #[serde(rename = "project.set")]
     ProjectSet {

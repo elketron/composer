@@ -12,7 +12,7 @@ use crate::server::Server;
 use crate::session::Session;
 use crate::session::compaction::compact;
 use crate::session::model_call::{
-    model_step, parse_args, prepare_history, store_images, thinking_budget, tool_step,
+    model_step_continuing, parse_args, prepare_history, store_images, thinking_budget, tool_step,
 };
 use crate::session::turn_budget::TurnBudget;
 use crate::tools::ToolContext;
@@ -73,11 +73,11 @@ async fn drive(server: Arc<Server>, session: Arc<Session>) {
             }
         }
 
-        let cancel = session.new_turn_token();
-        session.emit(&server.hub, |seq| ServerMessage::TurnStarted {
+        let started = session.emit(&server.hub, |seq| ServerMessage::TurnStarted {
             session: id.clone(),
             seq,
         });
+        let cancel = session.new_turn_token(Some(started));
         let outcome = run_turn(&server, &session, &cancel).await;
         if let Err(error) = &outcome {
             tracing::warn!("session {id}: {error}");
@@ -253,19 +253,13 @@ async fn run_turn(
             session.history(),
             thinking_budget(server),
         ));
-        let step = model_step(
-            server,
-            session,
-            ModelRequest {
-                messages,
-                tools: tools.clone(),
-                model: None,
-                reasoning_effort: None,
-            },
-            cancel,
-            true,
-        )
-        .await?;
+        let request = ModelRequest {
+            messages,
+            tools: tools.clone(),
+            model: None,
+            reasoning_effort: None,
+        };
+        let step = model_step_continuing(server, session, request, cancel, true).await?;
         let written: String = step
             .tool_calls
             .iter()
@@ -324,7 +318,7 @@ pub async fn compact_and_wait(server: &Arc<Server>, session: &Arc<Session>) -> R
 }
 
 async fn compact_started(server: &Arc<Server>, session: &Arc<Session>) {
-    let cancel = session.new_turn_token();
+    let cancel = session.new_turn_token(None);
     let id = session.id().to_string();
     let text = match compact(server, session, &cancel, false).await {
         Ok(0) => Some("Nothing to compact yet.".to_string()),
@@ -389,7 +383,7 @@ fn record_assistant(
     Ok(())
 }
 
-fn system_message(content: String) -> ChatMessage {
+pub(crate) fn system_message(content: String) -> ChatMessage {
     ChatMessage {
         role: Role::System,
         content,

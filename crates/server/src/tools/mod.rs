@@ -2,6 +2,7 @@
 
 mod actions_tool;
 mod answer_approval_tool;
+mod arg_repair;
 mod args;
 mod continue_worker_tool;
 mod desk_tool;

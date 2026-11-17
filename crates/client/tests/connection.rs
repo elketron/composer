@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use composer_client::{Connection, Endpoint, Event};
 use composer_protocol::{ClientCommand, CommandResult, ServerMessage};
-use composer_server::provider::{ModelRequest, ModelStream, Provider};
+use composer_server::provider::{CallError, ModelRequest, ModelStream, Provider};
 use composer_server::{Config, Server, WorkspaceHome, init_workspace};
 
 /// A model that never answers: the connection is what's tested.
@@ -19,8 +19,8 @@ impl Provider for Silent {
         "silent"
     }
 
-    async fn stream(&self, _request: ModelRequest) -> Result<ModelStream, String> {
-        Err("no model here".into())
+    async fn stream(&self, _request: ModelRequest) -> Result<ModelStream, CallError> {
+        Err(CallError::Refused("no model here".into()))
     }
 }
 

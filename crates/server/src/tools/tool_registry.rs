@@ -9,6 +9,7 @@ use crate::provider::{ModelToolCall, ToolSpec};
 use crate::server::Server;
 use crate::tools::actions_tool::ActionsTool;
 use crate::tools::answer_approval_tool::AnswerApprovalTool;
+use crate::tools::arg_repair::RepairedArgs;
 use crate::tools::continue_worker_tool::ContinueWorkerTool;
 use crate::tools::desk_tool::DeskTool;
 use crate::tools::edit_tool::EditTool;
@@ -153,10 +154,29 @@ impl ToolRegistry {
 
     /// Runs a model's call. Returns the result text and whether it failed.
     pub async fn call(&self, context: &ToolContext, call: &ModelToolCall) -> CallResult {
-        match serde_json::from_str(&call.arguments) {
-            Ok(args) => self.call_value(context, &call.name, args).await,
-            Err(e) => text_result(format!("arguments are not valid JSON: {e}"), true),
+        let args = match serde_json::from_str(&call.arguments) {
+            Ok(args) => args,
+            Err(e) => return text_result(format!("arguments are not valid JSON: {e}"), true),
+        };
+        // Our own tools' schemas say what a garbled call meant; MCP tools get it as it came.
+        let Some(schema) = self
+            .tools
+            .iter()
+            .find(|t| t.name() == call.name)
+            .map(|t| t.parameters())
+        else {
+            return self.call_value(context, &call.name, args).await;
+        };
+        let repaired = RepairedArgs::new(args, &schema);
+        let mut result = self
+            .call_value(context, &call.name, repaired.args.clone())
+            .await;
+        if result.is_error
+            && let Some(note) = repaired.unknown_note(&call.name, &schema)
+        {
+            result.text.push_str(&format!("\n{note}"));
         }
+        result
     }
 
     /// Runs a call with parsed arguments (models, and harnesses through `tool.call`).
