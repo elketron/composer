@@ -27,6 +27,7 @@ mod pick_lists;
 mod picker;
 mod project_binding;
 mod prose;
+mod refresher;
 mod shell;
 mod stage_tabs;
 mod term_config;

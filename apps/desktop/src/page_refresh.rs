@@ -1,90 +1,50 @@
-//! Which stage tabs a page or project change is about, and when each of them reloads.
+//! Which stage tabs a page or project change is about.
 //!
 //! The server broadcasts `page.changed` (scoped per page URL,
 //! `crates/server/src/api/event_scope.rs`) and `project.changed` (scoped per open project). A tab
 //! showing one of those must show the new text without the user reloading it — that is the "watch
-//! the agent work in the page you asked it to change" half of the stage. Everything that decides
-//! *which* tab, *how soon*, and *whether now at all* is here, as functions over the desk, so it is
-//! tested without a browser (as `pick_lists` is for lists); `Shell` only drives what they say.
+//! the agent work in the page you asked it to change" half of the stage. This module answers one
+//! question and nothing else: *which tabs is this event about*. What a tab then does, and when, is
+//! [`crate::refresher`].
 //!
-//! Matching follows the server rather than strings. A page tab holds a URL as it was written
-//! (`site://plans/x`, `site://x.md`, `site://x/index.md`) while a change event names the file that
-//! changed (`site://x.md`), and the server resolves all of those spellings to one page
-//! (`SiteUrl::candidates`, `crates/core/src/site_url.rs`). So a URL is reduced to the page it means
-//! — the `.md` of a page, the `index` of a directory, and a site's own index all disappear — and two
-//! URLs are the same page when those agree. Nothing is matched by prefix, so `site://a` never
-//! reaches a tab showing `site://a/b` (as `api/glob.rs` matches a `/**` pattern per segment, a
-//! prefix is not a match).
+//! Page identity is the server's, not a second opinion on it: [`composer_core::SiteUrl`] parses a
+//! page URL and [`SiteUrl::candidates`] is the file list a URL resolves to. Two URLs are the same
+//! page when their candidates meet, which is exactly how the server decides what a page is — `x`,
+//! `x.md`, `x/`, `x#frag` and (for a directory) `x/index.md` are one page, while `x.md` and
+//! `x/index.md` are two files, and `justfile` is a file rather than a page. Nothing is matched by
+//! prefix, so a tab showing `site://a` is untouched by a change to `site://a/b`.
 
-use std::collections::{HashMap, HashSet};
-use std::time::{Duration, Instant};
+use composer_core::SiteUrl;
+use composer_protocol::{Desk, DeskEntry, DeskTab};
 
-use composer_protocol::{Desk, DeskTab};
+/// The prefix of a page tab's id, as the server derives it (`SessionDesk::key`:
+/// `page:<SiteUrl>` of the normalised URL).
+const PAGE_ID: &str = "page:";
 
-/// How long a tab waits after a change before it reloads. One agent edit can fire several events
-/// for one page, and a worker writing twenty pages must not reload twenty iframes in a burst: the
-/// changes for a tab gather here and become one reload. (The server's filewatchers settle and
-/// debounce the same way for the same reason, ticket 0119.)
-pub const SETTLE: Duration = Duration::from_millis(400);
-
-/// How many of those waits a reload may be held back for a reader who is mid-drag or mid-selection
-/// in the page, before it is applied anyway. A page swapping under a held mouse button is its own
-/// small bug; a change that arrived is never dropped, so the wait is bounded.
-const MAX_HELD: u8 = 4;
-
-/// A page URL as a tab or a change event names it, reduced to what it means: `site://<site>` plus a
-/// path with no fragment, no `.md`, no trailing `index`.
-struct PageRef<'a> {
-    site: &'a str,
-    /// Normalised: no surrounding slashes; a site's homepage is the empty path.
-    path: &'a str,
-}
-
-impl<'a> PageRef<'a> {
-    /// `None` for anything that is not a page URL, so it matches no tab.
-    fn parse(url: &'a str) -> Option<Self> {
-        let rest = url.strip_prefix("site://")?;
-        let (rest, _) = rest.split_once('#').unwrap_or((rest, ""));
-        let (site, path) = rest.split_once('/').unwrap_or((rest, ""));
-        if site.is_empty() {
-            return None;
-        }
-        let path = path.trim_matches('/');
-        // A page's extension and a directory's `index` are not part of the page's name; any other
-        // extension is, because it is a different file (`.json`, a `justfile`).
-        let path = path.strip_suffix(".md").unwrap_or(path);
-        let path = path.strip_suffix("/index").unwrap_or(path);
-        let path = if path == "index" { "" } else { path };
-        Some(Self { site, path })
-    }
-
-    /// The names this URL could have been written as, for asking the server about it: the file it
-    /// resolves to is what a change event names, and a path with no extension resolves to either of
-    /// two files (`SiteUrl::candidates`).
-    fn spellings(&self) -> Vec<String> {
-        let base = format!("site://{}", self.site);
-        if self.path.is_empty() {
-            return vec![format!("{base}/index.md")];
-        }
-        let full = format!("{base}/{}", self.path);
-        let last = self
-            .path
-            .rsplit_once('/')
-            .map_or(self.path, |(_, last)| last);
-        if last.contains('.') {
-            vec![full]
-        } else {
-            vec![format!("{full}.md"), format!("{full}/index.md")]
-        }
-    }
-}
-
-/// Whether two `site://` URLs are the same page. Anything that isn't one matches nothing.
+/// Whether two `site://` URLs are the same page. Anything that is not a page URL is no page, and
+/// matches nothing.
 pub fn same_page(a: &str, b: &str) -> bool {
-    match (PageRef::parse(a), PageRef::parse(b)) {
-        (Some(a), Some(b)) => a.site == b.site && a.path == b.path,
-        _ => false,
+    let (Ok(a), Ok(b)) = (SiteUrl::parse(a), SiteUrl::parse(b)) else {
+        return false;
+    };
+    if a.site() != b.site() {
+        return false;
     }
+    let (mine, theirs) = (a.candidates(), b.candidates());
+    mine.iter().any(|file| theirs.contains(file))
+}
+
+/// The page a tab shows, as the page URL it can be compared with.
+///
+/// The id, not the tab's own `url`: the id is the normalised page URL (`SessionDesk::key`), while
+/// `url` is whatever the client that opened the tab sent — `site://plans/./x` or ` site://plans/x`
+/// parse, `plans/x` does not, and none of them is what a change event names. A page tab whose id
+/// names no page (a desk from an older server, or a test fixture) falls back to its `url`.
+fn shown_page(entry: &DeskEntry) -> Option<&str> {
+    let DeskTab::Page { url } = &entry.tab else {
+        return None;
+    };
+    Some(entry.id.strip_prefix(PAGE_ID).unwrap_or(url))
 }
 
 /// The stage tabs showing page `url`, in desk order. A tab of any other kind never matches: an app,
@@ -92,10 +52,7 @@ pub fn same_page(a: &str, b: &str) -> bool {
 pub fn page_tabs(desk: &Desk, url: &str) -> Vec<String> {
     desk.tabs
         .iter()
-        .filter(|entry| match &entry.tab {
-            DeskTab::Page { url: shown } => same_page(shown, url),
-            _ => false,
-        })
+        .filter(|entry| shown_page(entry).is_some_and(|shown| same_page(shown, url)))
         .map(|entry| entry.id.clone())
         .collect()
 }
@@ -109,123 +66,13 @@ pub fn changes_tabs(desk: &Desk, project: &str) -> Vec<String> {
         .collect()
 }
 
-/// The URLs to ask the server to tell us about (`subscribe`): those events reach only a connection
-/// that asked for the URL, so a window that never asks never learns that a page changed. Exactly
-/// the pages on the stage and the names each could have been written as — never a site-wide
-/// `site://x/**`, because one open page shouldn't pull every change in its site over the wire.
-pub fn page_patterns(desk: &Desk) -> Vec<String> {
-    let mut out: Vec<String> = Vec::new();
-    for entry in &desk.tabs {
-        let DeskTab::Page { url } = &entry.tab else {
-            continue;
-        };
-        for name in PageRef::parse(url).into_iter().flat_map(|p| p.spellings()) {
-            if !out.contains(&name) {
-                out.push(name);
-            }
-        }
-    }
-    out.sort();
-    out
-}
-
-/// Which tabs need a reload and when: the coalescing window (`SETTLE`) for the tab on screen, and
-/// the mark a hidden tab carries until it is shown. It knows tab ids only — what a tab shows and
-/// whether it has a pane is the window's business — so none of it needs a browser.
-#[derive(Default)]
-pub struct Refresher {
-    /// Tab id → (the earliest it reloads, how often a reload was held back for the reader).
-    pending: HashMap<String, (Instant, u8)>,
-    /// Tabs whose content changed while they were hidden.
-    marked: HashSet<String>,
-}
-
-impl Refresher {
-    /// Tab `tab` shows something that just changed. The tab on screen waits `SETTLE` first, so a
-    /// burst of events for one page is one reload; any other is only marked, and reloads when it is
-    /// shown — no hidden pane reloads a browser for something nobody is looking at.
-    pub fn changed(&mut self, tab: &str, shown: Option<&str>, now: Instant) {
-        if Some(tab) == shown {
-            self.marked.remove(tab);
-            self.pending.insert(tab.to_string(), (now + SETTLE, 0));
-        } else {
-            self.marked.insert(tab.to_string());
-        }
-    }
-
-    /// Whether anything is waiting: the window arms its timer only while this holds.
-    pub fn waiting(&self) -> bool {
-        !self.pending.is_empty()
-    }
-
-    /// Tabs whose wait has passed, in a stable order. A tab stays pending until the window says it
-    /// reloaded it or held it back for the reader, so nothing is lost between two calls.
-    pub fn due(&self, now: Instant) -> Vec<String> {
-        let mut due: Vec<String> = self
-            .pending
-            .iter()
-            .filter(|(_, (at, _))| *at <= now)
-            .map(|(id, _)| id.clone())
-            .collect();
-        due.sort_unstable();
-        due
-    }
-
-    /// Whether to wait another round for `tab` because the reader is mid-interaction in it.
-    pub fn may_hold(&self, tab: &str) -> bool {
-        self.pending
-            .get(tab)
-            .is_some_and(|(_, held)| *held < MAX_HELD)
-    }
-
-    /// The reader is still mid-interaction: wait `SETTLE` from now again (bounded by `may_hold`).
-    pub fn held(&mut self, tab: &str, now: Instant) {
-        if let Some((at, held)) = self.pending.get_mut(tab) {
-            *at = now + SETTLE;
-            *held += 1;
-        }
-    }
-
-    /// The window loaded `tab` again: it is current.
-    pub fn reloaded(&mut self, tab: &str) {
-        self.pending.remove(tab);
-        self.marked.remove(tab);
-    }
-
-    /// `tab` is the shown one now: whether it must load, because its page changed while it was
-    /// hidden. The mark is consumed either way, so a tab is asked once. A tab already on its way
-    /// (`due`) is not touched: showing it must not double up.
-    pub fn focus(&mut self, tab: &str) -> bool {
-        self.marked.remove(tab)
-    }
-
-    /// Whether to hint on the tab that its text is older than the page. Only hidden tabs are ever
-    /// marked, so this never appears on the page someone is reading.
-    pub fn is_stale(&self, tab: &str) -> bool {
-        self.marked.contains(tab)
-    }
-
-    /// Only tabs still on the desk keep a reload or a mark.
-    pub fn keep(&mut self, tabs: &HashSet<&str>) {
-        self.pending.retain(|id, _| tabs.contains(id.as_str()));
-        self.marked.retain(|id| tabs.contains(id.as_str()));
-    }
-
-    /// A new connection: nothing on screen is known to be current or not.
-    pub fn clear(&mut self) {
-        self.pending.clear();
-        self.marked.clear();
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use composer_protocol::DeskEntry;
-
     use super::*;
 
-    fn page(url: &str) -> DeskTab {
-        DeskTab::Page { url: url.into() }
+    /// A page tab as the server would have named it: `page:` + the normalised URL.
+    fn opened(url: &str) -> (String, DeskTab) {
+        (format!("{PAGE_ID}{url}"), DeskTab::Page { url: url.into() })
     }
 
     fn desk(tabs: &[(&str, DeskTab)], active: Option<&str>) -> Desk {
@@ -244,10 +91,12 @@ mod tests {
 
     #[test]
     fn the_tab_showing_the_page_and_no_other() {
+        let (x_id, x_tab) = opened("site://plans/x.md");
+        let (other_id, other_tab) = opened("site://memory/projects/composer.md");
         let d = desk(
             &[
-                ("t1", page("site://plans/x.md")),
-                ("t2", page("site://memory/projects/composer.md")),
+                (x_id.as_str(), x_tab),
+                (other_id.as_str(), other_tab),
                 ("t3", DeskTab::Terminal { id: "t3".into() }),
                 (
                     "t4",
@@ -258,17 +107,17 @@ mod tests {
                 ),
                 ("t5", DeskTab::LiveView),
             ],
-            Some("t1"),
+            Some(x_id.as_str()),
         );
-        assert_eq!(page_tabs(&d, "site://plans/x.md"), ["t1"]);
+        assert_eq!(page_tabs(&d, "site://plans/x.md"), [x_id.as_str()]);
         assert_eq!(
             page_tabs(&d, "site://plans/x"),
-            ["t1"],
+            [x_id.as_str()],
             "the same page, written as the reader would"
         );
         assert_eq!(
             page_tabs(&d, "site://memory/projects/composer.md"),
-            ["t2"],
+            [other_id.as_str()],
             "the other open page"
         );
         assert!(
@@ -279,23 +128,66 @@ mod tests {
             page_tabs(&d, "site://plans/index.md").is_empty(),
             "a site's index is neither open page"
         );
-        // The one match is the page's tab: an app, a live view and a terminal are never reloaded
-        // by a page change.
+        // Exactly one tab matched: an app, a live view and a terminal are never reloaded by a
+        // page change.
         assert_eq!(page_tabs(&d, "site://plans/x.md").len(), 1);
     }
 
     #[test]
+    fn a_tab_matches_the_pages_id_not_the_raw_url_it_was_opened_with() {
+        // A tab's `url` is whatever its client sent (`open_page` passes it through) and the id is
+        // the server's normalised URL; the event names a file. So the id is what reaches the tab.
+        let (id, _) = opened("site://plans/x.md");
+        let raw = |url: &str| desk(&[(&id, DeskTab::Page { url: url.into() })], Some(&id));
+        for opened_as in [
+            "plans/x",
+            " site://plans/x ",
+            "site://plans/./x",
+            "site://plans//x",
+        ] {
+            assert_eq!(
+                page_tabs(&raw(opened_as), "site://plans/x.md"),
+                [id.as_str()],
+                "a tab opened as `{opened_as}` still shows that page"
+            );
+        }
+        // A site's index: its id is `page:site://<site>`, the event names `index.md`.
+        let (home_id, home_tab) = opened("site://memory");
+        let d = desk(&[(&home_id, home_tab)], Some(home_id.as_str()));
+        assert_eq!(page_tabs(&d, "site://memory/index.md"), [home_id.as_str()]);
+        // A page tab whose id names no page (an older server) falls back to its own url.
+        let legacy = desk(
+            &[(
+                "0",
+                DeskTab::Page {
+                    url: "site://plans/x.md".into(),
+                },
+            )],
+            Some("0"),
+        );
+        assert_eq!(page_tabs(&legacy, "site://plans/x.md"), ["0"]);
+    }
+
+    #[test]
     fn the_same_page_however_it_is_written() {
-        // A tab's URL and an event's URL come from different places and are written differently:
-        // the extension, the fragment, a directory's index.
+        // The server's own resolution (`SiteUrl::candidates`): every spelling of one page meets
+        // there, and two files never do.
         assert!(same_page("site://plans/x", "site://plans/x.md"));
         assert!(same_page("site://plans/x.md", "site://plans/x"));
         assert!(same_page("site://plans/x.md#result", "site://plans/x.md"));
         assert!(same_page("site://plans/x/", "site://plans/x.md"));
+        assert!(
+            same_page("site://plans/./x", "site://plans/x.md"),
+            "a . segment"
+        );
+        assert!(
+            same_page("site://plans//x", "site://plans/x.md"),
+            "an empty one"
+        );
         assert!(same_page("site://a/b", "site://a/b/index.md"));
+        assert!(same_page("site://x/y/index.md", "site://x/y"));
         assert!(same_page("site://memory", "site://memory/index.md"));
         assert!(same_page("site://memory/index", "site://memory/index.md"));
-        assert!(same_page("site://x/y/index.md", "site://x/y"));
         assert!(
             !same_page("site://plans/x.md", "site://plans/x.json"),
             "a file"
@@ -308,11 +200,18 @@ mod tests {
             !same_page("site://a", "site://a.md"),
             "a site's index is not a file at its root"
         );
-        assert!(!same_page("site://x/index.md", "site://x/other.md"));
-        // Not a page URL at all: a view's URL, a relative path, nothing.
+        assert!(
+            !same_page("site://a/b.md", "site://a/b/index.md"),
+            "two files, whatever they render"
+        );
+        // `justfile` has no extension but is no page either (`SiteUrl::candidates`).
+        assert!(same_page("site://x/justfile", "site://x/justfile"));
+        assert!(!same_page("site://x/justfile", "site://x/justfile.md"));
+        // Not page URLs at all: a view's URL, a relative path, whitespace, nothing.
         for other in [
             "http://127.0.0.1:7420/w/default/view/x.md",
             "/view/x.md",
+            "plans/x.md",
             "",
             "site://",
         ] {
@@ -323,20 +222,23 @@ mod tests {
 
     #[test]
     fn a_prefix_url_never_matches_the_wrong_tab() {
+        let (index, index_tab) = opened("site://a");
+        let (short, short_tab) = opened("site://a/b.md");
+        let (long, long_tab) = opened("site://a/b/c.md");
         let d = desk(
             &[
-                ("index", page("site://a")),
-                ("short", page("site://a/b.md")),
-                ("long", page("site://a/b/c.md")),
+                (index.as_str(), index_tab),
+                (short.as_str(), short_tab),
+                (long.as_str(), long_tab),
             ],
-            Some("index"),
+            Some(index.as_str()),
         );
-        assert_eq!(page_tabs(&d, "site://a/b.md"), ["short"]);
-        assert_eq!(page_tabs(&d, "site://a/b/c.md"), ["long"]);
-        assert_eq!(page_tabs(&d, "site://a/index.md"), ["index"]);
+        assert_eq!(page_tabs(&d, "site://a/b.md"), [short.as_str()]);
+        assert_eq!(page_tabs(&d, "site://a/b/c.md"), [long.as_str()]);
+        assert_eq!(page_tabs(&d, "site://a/index.md"), [index.as_str()]);
         assert_eq!(
             page_tabs(&d, "site://a/b"),
-            ["short"],
+            [short.as_str()],
             "written without the md"
         );
         // The prefixes, and a name that merely starts the same way.
@@ -347,6 +249,7 @@ mod tests {
 
     #[test]
     fn changes_tabs_only_of_that_project() {
+        let (page_id, page_tab) = opened("site://plans/x.md");
         let d = desk(
             &[
                 (
@@ -361,179 +264,11 @@ mod tests {
                         project: "other".into(),
                     },
                 ),
-                ("p", page("site://plans/x.md")),
+                (page_id.as_str(), page_tab),
             ],
             Some("c1"),
         );
         assert_eq!(changes_tabs(&d, "game"), ["c1"]);
         assert!(changes_tabs(&d, "gone").is_empty());
-    }
-
-    #[test]
-    fn subscribing_names_the_opened_pages_in_every_spelling() {
-        let d = desk(
-            &[
-                ("t1", page("site://plans/x.md")),
-                ("t2", page("site://plans/x")),
-                ("t3", page("site://memory/y")),
-                ("t4", DeskTab::Terminal { id: "t".into() }),
-                ("t5", page("site://ideas")),
-                ("t6", page("site://cad/parts.json")),
-            ],
-            None,
-        );
-        // Sorted and deduped: the extension-less page asked every way the server could name the
-        // file, a site as its `index.md`, another file by its own name, and nothing for a tab that
-        // is not a page.
-        assert_eq!(
-            page_patterns(&d),
-            [
-                "site://cad/parts.json",
-                "site://ideas/index.md",
-                "site://memory/y.md",
-                "site://memory/y/index.md",
-                "site://plans/x.md",
-                "site://plans/x/index.md",
-            ]
-        );
-        assert_eq!(
-            page_patterns(&Desk {
-                tabs: vec![],
-                active: None
-            }),
-            Vec::<String>::new()
-        );
-    }
-
-    #[test]
-    fn a_burst_for_one_tab_is_one_reload() {
-        let t0 = Instant::now();
-        let mut r = Refresher::default();
-        for i in 0..20 {
-            r.changed("t1", Some("t1"), t0 + Duration::from_millis(i * 10));
-            assert!(
-                r.due(t0 + Duration::from_millis(i * 10 + 100)).is_empty(),
-                "still gathering"
-            );
-            assert!(r.waiting());
-        }
-        // 310 ms after the last of them: not settled yet. Then one reload, and nothing after it.
-        assert!(r.due(t0 + Duration::from_millis(500)).is_empty());
-        assert_eq!(r.due(t0 + Duration::from_millis(900)), ["t1"]);
-        r.reloaded("t1");
-        assert!(r.due(t0 + Duration::from_secs(9)).is_empty());
-        assert!(!r.waiting());
-    }
-
-    #[test]
-    fn a_hidden_tab_is_marked_and_clears_when_it_is_shown() {
-        let t0 = Instant::now();
-        let mut r = Refresher::default();
-        r.changed("hidden", Some("shown"), t0);
-        // Nothing to load for a hidden tab, and no timer to arm for it.
-        assert!(r.due(t0 + SETTLE * 10).is_empty());
-        assert!(!r.waiting());
-        assert!(r.is_stale("hidden"), "say so on the tab");
-        assert!(!r.is_stale("shown"), "the page being read is never marked");
-        // Showing it is what refreshes it, and it is asked once.
-        assert!(r.focus("hidden"));
-        assert!(!r.focus("hidden"));
-        assert!(!r.is_stale("hidden"));
-        // Hidden again while it changed: marked again.
-        r.changed("hidden", Some("shown"), t0);
-        assert!(r.is_stale("hidden"));
-    }
-
-    #[test]
-    fn showing_a_tab_that_is_about_to_reload_anyway_does_not_double_up() {
-        let t0 = Instant::now();
-        let mut r = Refresher::default();
-        r.changed("t1", Some("t1"), t0);
-        assert!(
-            !r.focus("t1"),
-            "it was never hidden, so nothing to catch up"
-        );
-        assert_eq!(r.due(t0 + SETTLE), ["t1"], "and it still reloads once");
-        r.reloaded("t1");
-        assert!(r.due(t0 + SETTLE * 4).is_empty());
-    }
-
-    #[test]
-    fn a_reload_is_held_for_a_reader_mid_drag_but_not_for_ever() {
-        let t0 = Instant::now();
-        let mut r = Refresher::default();
-        r.changed("t1", Some("t1"), t0);
-        assert_eq!(r.due(t0 + SETTLE), ["t1"], "due, and asked");
-        let mut held = 0;
-        while r.may_hold("t1") {
-            let now = t0 + SETTLE * (held as u32 + 1);
-            r.held("t1", now);
-            held += 1;
-            assert!(
-                r.due(now).is_empty(),
-                "waiting for the reader another round"
-            );
-            assert_eq!(r.due(now + SETTLE), ["t1"], "and asked again after it");
-        }
-        assert_eq!(held, MAX_HELD, "a bounded number of rounds");
-        assert!(!r.may_hold("t1"), "after that the page changes under them");
-        // Not reloaded and never dropped: it stays due until the window reloads it.
-        assert_eq!(r.due(t0 + SETTLE * 99), ["t1"]);
-        r.reloaded("t1");
-        assert!(r.due(t0 + SETTLE * 99).is_empty());
-    }
-
-    #[test]
-    fn a_new_change_resets_both_the_wait_and_the_patience() {
-        let t0 = Instant::now();
-        let mut r = Refresher::default();
-        r.changed("t1", Some("t1"), t0);
-        for _ in 0..MAX_HELD {
-            r.held("t1", t0);
-        }
-        assert!(!r.may_hold("t1"));
-        r.changed("t1", Some("t1"), t0 + SETTLE);
-        assert!(r.may_hold("t1"), "new news, fresh patience");
-        assert!(
-            r.due(t0 + SETTLE + SETTLE / 2).is_empty(),
-            "and a fresh wait from the new change"
-        );
-        assert_eq!(r.due(t0 + SETTLE * 2), ["t1"]);
-    }
-
-    #[test]
-    fn only_tabs_on_the_desk_keep_a_reload_or_a_mark() {
-        let t0 = Instant::now();
-        let mut r = Refresher::default();
-        r.changed("t1", Some("t1"), t0);
-        r.changed("t2", Some("t1"), t0);
-        r.keep(&HashSet::from(["t1"]));
-        assert!(!r.is_stale("t2"), "the hidden tab closed");
-        assert_eq!(r.due(t0 + SETTLE * 2), ["t1"]);
-        r.clear();
-        assert!(!r.waiting());
-        assert!(!r.is_stale("t1"));
-        r.changed("t1", Some("t1"), t0);
-        assert_eq!(r.due(t0 + SETTLE), ["t1"], "a new connection starts clean");
-    }
-
-    #[test]
-    fn two_tabs_showing_the_same_page_both_catch_up() {
-        let d = desk(
-            &[
-                ("t1", page("site://plans/x.md")),
-                ("t2", page("site://plans/x")),
-            ],
-            Some("t1"),
-        );
-        let t0 = Instant::now();
-        let mut r = Refresher::default();
-        for id in page_tabs(&d, "site://plans/x.md") {
-            r.changed(&id, Some("t1"), t0);
-        }
-        // The shown one is coalesced; its twin is marked and loads when shown.
-        assert_eq!(r.due(t0 + SETTLE), ["t1"]);
-        assert!(r.is_stale("t2"));
-        assert!(r.focus("t2"));
     }
 }
