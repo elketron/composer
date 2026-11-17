@@ -11,7 +11,7 @@ use crate::provider::{ModelMessage, ModelRequest};
 use crate::server::Server;
 use crate::session::Session;
 use crate::session::model_call::{
-    estimate_tokens, model_step, prepare_history, thinking_budget, tool_step,
+    StepError, estimate_tokens, model_step, prepare_history, thinking_budget, tool_step,
 };
 use crate::tools::ToolContext;
 
@@ -183,7 +183,7 @@ async fn save_memory(
         images: vec![],
     });
     for _ in 0..MEMORY_STEPS {
-        let step = model_step(
+        let step = match model_step(
             server,
             session,
             ModelRequest {
@@ -195,7 +195,12 @@ async fn save_memory(
             cancel,
             false,
         )
-        .await?;
+        .await
+        {
+            // Nothing (more) worth saving.
+            Err(StepError::Empty { .. }) => return Ok(()),
+            step => step?,
+        };
         if step.cancelled || step.tool_calls.is_empty() {
             return Ok(());
         }

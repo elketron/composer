@@ -120,6 +120,10 @@ impl Provider for OpenAiProvider {
                     let Ok(chunk) = serde_json::from_str::<Value>(&data) else {
                         continue;
                     };
+                    if let Some(error) = stream_error(&chunk) {
+                        let _ = tx.send(Err(error)).await;
+                        return;
+                    }
                     if let Some(u) = parse_usage(&chunk) {
                         usage = Some(u);
                     }
@@ -150,16 +154,36 @@ impl Provider for OpenAiProvider {
                     }
                 }
             }
-            let _ = tx
-                .send(Ok(ModelEvent::Finished {
+            let end = match finish_reason {
+                Some(reason) => Ok(ModelEvent::Finished {
                     tool_calls: calls.finish(),
                     usage,
-                    finish_reason,
-                }))
-                .await;
+                    finish_reason: Some(reason),
+                }),
+                None => Err(NO_STOP_REASON.to_string()),
+            };
+            let _ = tx.send(end).await;
         });
         Ok(rx)
     }
+}
+
+/// A stream that closed without saying why the model stopped: cut off (a proxy's timeout, the
+/// model server going away) rather than finished.
+const NO_STOP_REASON: &str =
+    "the model's reply ended without a stop reason (the stream was cut off)";
+
+/// An error sent inside the stream (`{"error": {"message": …}}`), as llama.cpp and OpenRouter do
+/// when a call fails after it started.
+fn stream_error(chunk: &Value) -> Option<String> {
+    let error = chunk.get("error")?;
+    let message = error["message"]
+        .as_str()
+        .map(str::to_string)
+        .unwrap_or_else(|| error.to_string());
+    Some(format!(
+        "the provider reported an error mid-reply: {message}"
+    ))
 }
 
 fn models_of(body: &Value) -> Vec<ModelInfo> {
@@ -267,6 +291,73 @@ fn parse_usage(chunk: &Value) -> Option<Usage> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Streams `body` (SSE) from a one-shot local server, then closes, and collects what the
+    /// provider makes of it.
+    async fn events_of(body: &'static str) -> Vec<Result<ModelEvent, String>> {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut request = vec![0; 64 * 1024];
+            let _ = socket.read(&mut request).await;
+            let head =
+                "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\nconnection: close\r\n\r\n";
+            socket.write_all(head.as_bytes()).await.unwrap();
+            socket.write_all(body.as_bytes()).await.unwrap();
+        });
+        let provider = OpenAiProvider {
+            client: reqwest::Client::new(),
+            base_url: format!("http://{addr}/v1"),
+            api_key: String::new(),
+            model: "m".into(),
+        };
+        let request = ModelRequest {
+            messages: vec![],
+            tools: vec![],
+            model: None,
+            reasoning_effort: None,
+        };
+        let mut stream = provider.stream(request).await.unwrap();
+        let mut events = Vec::new();
+        while let Some(event) = stream.recv().await {
+            events.push(event);
+        }
+        events
+    }
+
+    #[tokio::test]
+    async fn a_reply_with_a_stop_reason_finishes() {
+        let events = events_of(concat!(
+            "data: {\"choices\":[{\"delta\":{\"content\":\"hi\"}}]}\n\n",
+            "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n",
+            "data: [DONE]\n\n",
+        ))
+        .await;
+        assert_eq!(events.len(), 2, "{events:?}");
+        assert!(
+            matches!(&events[1], Ok(ModelEvent::Finished { finish_reason: Some(r), .. }) if r == "stop")
+        );
+    }
+
+    #[tokio::test]
+    async fn a_stream_cut_off_before_a_stop_reason_is_an_error() {
+        let events =
+            events_of("data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"hm\"}}]}\n\n").await;
+        assert_eq!(events.last(), Some(&Err(NO_STOP_REASON.to_string())));
+    }
+
+    #[tokio::test]
+    async fn an_error_inside_the_stream_is_reported() {
+        let events =
+            events_of("data: {\"error\":{\"message\":\"context size exceeded\",\"code\":500}}\n\n")
+                .await;
+        let Some(Err(error)) = events.last() else {
+            panic!("{events:?}")
+        };
+        assert!(error.contains("context size exceeded"), "{error}");
+    }
 
     #[test]
     fn models_from_llama_server_and_openrouter() {

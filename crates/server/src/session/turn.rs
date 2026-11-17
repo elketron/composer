@@ -189,6 +189,9 @@ fn accept_user_message(server: &Arc<Server>, session: &Arc<Session>, message: Ch
 /// How a turn that used up its tokens (or steps) ends: "Turn stopped: reached the turn limit (…)".
 pub const TURN_LIMIT: &str = "reached the turn limit";
 
+/// How often a turn makes a broken-off or empty model call again before it stops with the error.
+const AUTO_CONTINUES: u32 = 2;
+
 /// Model call → tools → model call ... until the model answers without tool calls.
 /// Before each call, a context over the threshold is compacted first.
 async fn run_turn(
@@ -253,19 +256,32 @@ async fn run_turn(
             session.history(),
             thinking_budget(server),
         ));
-        let step = model_step(
-            server,
-            session,
-            ModelRequest {
-                messages,
-                tools: tools.clone(),
-                model: None,
-                reasoning_effort: None,
-            },
-            cancel,
-            true,
-        )
-        .await?;
+        let request = ModelRequest {
+            messages,
+            tools: tools.clone(),
+            model: None,
+            reasoning_effort: None,
+        };
+        let mut retries = 0;
+        let step = loop {
+            match model_step(server, session, request.clone(), cancel, true).await {
+                Ok(step) => break step,
+                // Nothing of the broken reply was kept: the same call again just continues.
+                Err(error) if error.may_pass_on_retry() && retries < AUTO_CONTINUES => {
+                    retries += 1;
+                    tracing::warn!("session {}: {error}; continuing", session.id());
+                    let message = system_message(format!(
+                        "{error}; continuing by itself ({retries} of {AUTO_CONTINUES})"
+                    ));
+                    session.emit(&server.hub, |seq| ServerMessage::MessageDone {
+                        session: session.id().to_string(),
+                        seq,
+                        message,
+                    });
+                }
+                Err(error) => return Err(error.to_string()),
+            }
+        };
         let written: String = step
             .tool_calls
             .iter()
