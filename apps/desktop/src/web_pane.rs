@@ -729,8 +729,9 @@ impl WebPane {
     }
 
     /// Whether the reader is in the middle of something in this page: a mouse button is down, so a
-    /// drag or a text selection is in progress. A page swapping under a held button is its own
-    /// small bug, so a refresh waits for the release (bounded in `page_refresh`).
+    /// drag or a selection being dragged out. A page swapping under a held button is its own
+    /// small bug, so a refresh waits for the release (bounded in [`crate::refresher`]). A
+    /// selection that is already finished does not hold it: the button is up.
     pub fn interacting(&self) -> bool {
         self.buttons_down != 0
     }

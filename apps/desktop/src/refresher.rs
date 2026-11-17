@@ -9,12 +9,20 @@
 //! - **A tab nobody is looking at does nothing.** Its pane is left alone and marked; the load
 //!   happens when it is shown. Reloading a hidden pane costs a browser painting for something no one
 //!   sees, and hidden panes are what this app has had to be careful with.
-//! - **A reader is not interrupted, only for a while.** A reload waits for someone mid-drag or
-//!   mid-selection in the page, up to `MAX_HELD` rounds, then happens anyway.
+//! - **A reader is not interrupted, only for a while.** A reload waits while a mouse button is held
+//!   down in the page — a drag, or a selection being dragged out — up to `MAX_HELD` rounds, then
+//!   happens anyway. A selection that is already finished does not hold it: nothing is being taken
+//!   away from the reader then.
 //!
-//! Nothing is ever dropped: a pending tab stays pending until [`Refresher::take_due`] hands it back,
-//! a tab that left the desk is forgotten by [`Refresher::keep`] because there is nothing left to
-//! show, and a tab that is no longer shown when its wait passes becomes a mark instead.
+//! Both waits are counted from the *most recent* change, on purpose: a page written more often than
+//! [`SETTLE`] (or, while a button is held, more often than `MAX_HELD` rounds) keeps waiting until
+//! the writing stops rather than reloading every 400 ms of a long edit. Agent edits are seconds
+//! apart, so in practice a change is applied after one settle.
+//!
+//! Nothing is ever dropped: a pending tab stays pending until [`Refresher::take_due`] hands it back —
+//! and that is the *only* path to a reload, so nothing bypasses the settle or the hold — a tab that
+//! left the desk is forgotten by [`Refresher::keep`] because there is nothing left to show, and a tab
+//! that is no longer shown when its wait passes becomes a mark instead.
 //!
 //! It knows tab ids only — what a tab shows and whether it has a pane is the window's business — so
 //! none of this needs a browser.
@@ -81,7 +89,8 @@ impl Refresher {
     /// - **stop waiting** if it is not the shown tab any more: it is marked instead, and loads when
     ///   it is shown again, like any tab that was hidden when its page changed.
     ///
-    /// `interacting` says whether the reader holds a mouse button or a selection in that tab's pane.
+    /// `interacting` says whether a mouse button is held down in that tab's pane: a drag, or a
+    /// selection being dragged out. A finished selection does not hold a reload.
     /// A held-back tab stays pending, so the next timer round asks again.
     pub fn take_due(
         &mut self,
@@ -126,11 +135,15 @@ impl Refresher {
         reload
     }
 
-    /// `tab` is the shown one now: whether it must load, because its page changed while it was
-    /// hidden or a reload for it was still waiting. Either is consumed here, so a tab is never
-    /// asked twice for the same news.
+    /// `tab` is the shown one now: whether it was showing something that changed while it was
+    /// hidden. The mark is consumed here, so a tab is never asked twice for the same news.
+    ///
+    /// A reload that is still *pending* is left where it is, with [`Refresher::take_due`]. This is
+    /// called on every desk change (`sync_panes`), not only when the shown tab changes, so taking
+    /// the pending one here would reload the page the reader is on the instant any tab is opened:
+    /// before its settle, and without asking whether a drag is in progress in it.
     pub fn focus(&mut self, tab: &str) -> bool {
-        self.pending.remove(tab).is_some() || self.marked.remove(tab)
+        self.marked.remove(tab)
     }
 
     /// Whether to hint on the tab that its text is older than the page. Only tabs that are not
@@ -246,6 +259,32 @@ mod tests {
         assert!(!r.is_stale("t1"));
     }
 
+    /// A desk change is not a reason to reload early. `focus` runs on every `DeskChanged` (and on
+    /// every `Desk` reply), so a *pending* reload must stay with the timer: the agent opening some
+    /// other tab must not bring the reader's page forward out of its settle, nor reload it under a
+    /// held button. (Mutant H8: `focus` consuming the pending entry too.)
+    #[test]
+    fn a_desk_change_does_not_cut_short_the_page_being_read() {
+        let t0 = Instant::now();
+        let mut r = Refresher::default();
+        r.changed("t1", Some("t1"), t0);
+        assert!(!r.focus("t1"), "the tab already shown loads nothing early");
+        assert!(
+            r.waiting(),
+            "and its wait is not consumed by the desk change"
+        );
+        assert!(
+            r.take_due(t0 + SETTLE, Some("t1"), dragging).is_empty(),
+            "the hold still applies, because `take_due` is asked"
+        );
+        // The wait survived, so letting go is what brings the new text.
+        assert_eq!(r.take_due(t0 + SETTLE * 2, Some("t1"), idle), ["t1"]);
+        // What `focus` does own — a mark — still clears here.
+        r.changed("t1", Some("other"), t0);
+        assert!(r.is_stale("t1"));
+        assert!(r.focus("t1"), "a tab shown with news on it catches up");
+    }
+
     #[test]
     fn a_reload_is_held_for_a_reader_mid_drag_and_then_happens() {
         let t0 = Instant::now();
@@ -267,6 +306,45 @@ mod tests {
         );
         assert!(!r.waiting());
         assert!(!r.is_stale("t1"), "and it is not left marked");
+    }
+
+    /// Held for a round, not held for a call: the window may ask again inside a round — a second
+    /// timer, a desk change that re-arms it — and asking must neither shorten the round nor spend
+    /// the reader's patience. (Mutant H3r: a held tab's deadline left where it was, which makes
+    /// every call inside the round cost one more hold.)
+    #[test]
+    fn a_held_reload_waits_a_round_and_not_a_call() {
+        let t0 = Instant::now();
+        let mut r = Refresher::default();
+        r.changed("t1", Some("t1"), t0);
+        assert!(r.take_due(t0 + SETTLE, Some("t1"), dragging).is_empty());
+        // Asked again and again while it waits for the next round: never loaded, and nothing
+        // learned from it — the round it is waiting for keeps its length.
+        for ask in 1..=MAX_HELD as u64 + 1 {
+            assert!(
+                r.take_due(
+                    t0 + SETTLE + Duration::from_millis(ask),
+                    Some("t1"),
+                    dragging
+                )
+                .is_empty(),
+                "ask {ask} inside the round it is waiting for"
+            );
+        }
+        // The patience is exactly as if nobody had asked: `MAX_HELD` rounds from the first hold,
+        // then the page changes under the reader.
+        for round in 2..=MAX_HELD as u32 {
+            assert!(
+                r.take_due(t0 + SETTLE * round, Some("t1"), dragging)
+                    .is_empty(),
+                "round {round}: still waiting for the reader"
+            );
+        }
+        assert_eq!(
+            r.take_due(t0 + SETTLE * (MAX_HELD as u32 + 1), Some("t1"), dragging),
+            ["t1"],
+            "not several rounds early because the window asked a few times"
+        );
     }
 
     /// The bound as a duration, not just a count: the longest a reader mid-drag may wait for a page

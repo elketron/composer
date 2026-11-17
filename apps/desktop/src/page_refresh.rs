@@ -17,10 +17,6 @@
 use composer_core::SiteUrl;
 use composer_protocol::{Desk, DeskEntry, DeskTab};
 
-/// The prefix of a page tab's id, as the server derives it (`SessionDesk::key`:
-/// `page:<SiteUrl>` of the normalised URL).
-const PAGE_ID: &str = "page:";
-
 /// Whether two `site://` URLs are the same page. Anything that is not a page URL is no page, and
 /// matches nothing.
 pub fn same_page(a: &str, b: &str) -> bool {
@@ -44,7 +40,7 @@ fn shown_page(entry: &DeskEntry) -> Option<&str> {
     let DeskTab::Page { url } = &entry.tab else {
         return None;
     };
-    Some(entry.id.strip_prefix(PAGE_ID).unwrap_or(url))
+    Some(entry.page_url().unwrap_or(url))
 }
 
 /// The stage tabs showing page `url`, in desk order. A tab of any other kind never matches: an app,
@@ -72,7 +68,10 @@ mod tests {
 
     /// A page tab as the server would have named it: `page:` + the normalised URL.
     fn opened(url: &str) -> (String, DeskTab) {
-        (format!("{PAGE_ID}{url}"), DeskTab::Page { url: url.into() })
+        (
+            format!("{}{url}", DeskEntry::PAGE_ID),
+            DeskTab::Page { url: url.into() },
+        )
     }
 
     fn desk(tabs: &[(&str, DeskTab)], active: Option<&str>) -> Desk {

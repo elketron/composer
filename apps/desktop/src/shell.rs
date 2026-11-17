@@ -166,6 +166,16 @@ impl Shell {
             Event::Connected => {
                 crate::trace("connected");
                 self.link = LinkState::Up;
+                // First, ahead of anything that could make the server broadcast: `page.changed`
+                // reaches only a socket that asked for a URL, and this window shows whatever ends
+                // up on the stage, so it asks for everything (as the TUI does on connect) and
+                // routes what arrives to the tabs it is about.
+                self.ask(
+                    ClientCommand::Subscribe {
+                        urls: vec!["*".into()],
+                    },
+                    cx,
+                );
                 self.project.reset();
                 self.store.reconnected();
                 self.sync_approvals(cx);
@@ -189,15 +199,6 @@ impl Shell {
                     );
                     self.ask(ClientCommand::DeskGet { session }, cx);
                 }
-                // `page.changed` reaches only a socket that asked for a URL, and this window shows
-                // whatever ends up on the stage, so it asks for everything (as the TUI does on
-                // connect) and routes what arrives to the tabs it is about.
-                self.ask(
-                    ClientCommand::Subscribe {
-                        urls: vec!["*".into()],
-                    },
-                    cx,
-                );
                 // Nothing on screen is known to be current after this. Every pane is made again
                 // just above, so nothing is left showing what it loaded before the break.
                 self.refresh.clear();
@@ -643,7 +644,9 @@ impl Shell {
             self.read_terminal(id, pane, cx);
         }
         // A tab that is shown now but changed on the server while it was hidden catches up; one
-        // with no pane yet needs nothing, it loads its page as it is made.
+        // with no pane yet needs nothing, it loads its page as it is made. A reload that is still
+        // settling for the tab already on screen is not applied here: this runs on every desk
+        // change, and cutting its wait short would reload a page mid-read (see `Refresher::focus`).
         let shown = stage_tabs::shown(&self.store.desk).map(str::to_string);
         if let Some(shown) = shown
             && self.refresh.focus(&shown)
@@ -684,7 +687,7 @@ impl Shell {
     }
 
     /// Every tab whose wait has passed. `Refresher` decides what happens to each one — load it,
-    /// wait one more round for a reader mid-drag or mid-selection in the page, or leave it marked
+    /// wait one more round for a reader holding a mouse button down in the page, or leave it marked
     /// because nobody is looking at it any more — and only the first kind comes back here. A tab
     /// with no pane is simply current: its page loads when the pane is made.
     fn refresh_due(&mut self, cx: &mut Context<Self>) {
