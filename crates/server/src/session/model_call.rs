@@ -77,14 +77,16 @@ pub async fn model_step(
     request.reasoning_effort = request
         .reasoning_effort
         .or_else(|| reasoning_effort(server, session));
-    let mut stream = server
-        .provider
-        .stream(request)
-        .await
-        .map_err(|error| match error {
-            CallError::Unavailable(error) => StepError::Interrupted(error),
-            CallError::Refused(error) => StepError::Refused(error),
-        })?;
+    // Waiting for the provider to start answering (a long prompt read anew can take minutes)
+    // is stoppable too.
+    let started = tokio::select! {
+        started = server.provider.stream(request) => started,
+        _ = cancel.cancelled() => return Ok(StepOutput { cancelled: true, ..StepOutput::default() }),
+    };
+    let mut stream = started.map_err(|error| match error {
+        CallError::Unavailable(error) => StepError::Interrupted(error),
+        CallError::Refused(error) => StepError::Refused(error),
+    })?;
     let mut out = StepOutput::default();
     let mut stop_reason = None;
     loop {
