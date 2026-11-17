@@ -36,7 +36,7 @@ impl SessionDesk {
                 let path = url.strip_prefix("site://").unwrap_or(url);
                 let (site, rest) = path.split_once('/').unwrap_or((path, ""));
                 let page = SiteUrl::new(site, rest).map_err(|_| format!("`{url}` isn't a page"))?;
-                format!("page:{page}")
+                format!("{}{page}", DeskEntry::PAGE_ID)
             }
             DeskTab::Terminal { id } => {
                 let plain = !id.is_empty()
@@ -121,6 +121,36 @@ mod tests {
             site: site.into(),
             project: project.map(str::to_string),
         }
+    }
+
+    /// The desktop matches page changes to tabs through `page_url`, so the id `key` makes must read
+    /// back as the normalised page URL however the tab's URL was written.
+    #[test]
+    fn a_page_tab_id_reads_back_as_its_normalised_url() {
+        for written in [
+            "plans/x",
+            " site://plans/x ",
+            "site://plans/./x",
+            "site://plans//x",
+            "plans/x/",
+        ] {
+            let tab = DeskTab::Page {
+                url: written.into(),
+            };
+            let entry = DeskEntry {
+                id: SessionDesk::key(&tab).unwrap(),
+                tab,
+                unseen: false,
+            };
+            assert_eq!(entry.page_url(), Some("site://plans/x"), "{written:?}");
+        }
+        let app = app("cad", None);
+        let entry = DeskEntry {
+            id: SessionDesk::key(&app).unwrap(),
+            tab: app,
+            unseen: false,
+        };
+        assert_eq!(entry.page_url(), None, "not a page");
     }
 
     fn ids(desk: &SessionDesk) -> Vec<String> {

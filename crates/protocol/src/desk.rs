@@ -38,6 +38,22 @@ pub struct DeskEntry {
     pub unseen: bool,
 }
 
+impl DeskEntry {
+    /// The start of a page tab's id: `page:` and then its normalised page URL. The server names page
+    /// tabs with it (`SessionDesk::key`) and clients read the URL back with [`DeskEntry::page_url`],
+    /// so the grammar has one owner.
+    pub const PAGE_ID: &'static str = "page:";
+
+    /// The normalised URL a page tab shows, read from its id; None for any other tab, or a page tab
+    /// whose id does not have the page form (a desk from an older server).
+    pub fn page_url(&self) -> Option<&str> {
+        match self.tab {
+            DeskTab::Page { .. } => self.id.strip_prefix(Self::PAGE_ID),
+            _ => None,
+        }
+    }
+}
+
 /// A session's desk: its tabs in order, and the one shown. Empty: the project home.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]

@@ -166,6 +166,11 @@ a link the user clicked to http(s) or mail opens in their own browser instead. D
 microphone and other permission prompts, client certificates, HTTP auth, OS protocol handlers and
 JavaScript dialogs are refused or dismissed. The token is not in a pane's URL: before a view loads,
 the desktop stores the server's `composer_token` cookie in CEF for the workspace's path.
+When a page or a project's files change on the server, the desktop loads that pane's own URL again
+(ticket 0211). That is a refresh, not a widening of the rules above: the pane is asked for the
+address it already had, the view stays the server's script-free HTML, and the desktop runs no code
+the page contains — it is the server that renders the page, and it does so the same way as on any
+other load.
 
 ## The live view and Drive
 
@@ -196,6 +201,14 @@ menu, print screen, pause and `f13` and up, which the pane does not translate.
   the server (closing the desktop doesn't end them; idle ones end after a day and reopen where
   they were).
 - **Links** to the workspace's pages open as tabs; links elsewhere open in your browser.
+- **Pages and the changes view follow the file.** A page or a diff already open as a tab shows the
+  new text when the agent or anything else changes the file — no reload button, no new tab. The tab
+  on screen loads it again a moment after the last change lands (twenty pages written by a worker are
+  twenty tabs, not twenty reloads of one); a tab nobody is looking at waits until you open it and
+  says so with a small outlined dot next to its name. Your place in the page is kept: it is a
+  reload, not a fresh load. A page you are selecting text in or dragging waits for you to let go, a
+  second or two at most. Apps and terminals are never reloaded on their own — those are running
+  programs, not files.
 - **Files** dropped on the chat become attachments; dropped on a terminal, their paths.
 - **Notifications** when the agent finishes or an approval waits while the window is behind.
 - The workspace's colour (the dot before its name in the title bar) says which one you're in:

@@ -606,6 +606,9 @@ pub struct WebPane {
     renewable: bool,
     /// Its page, waiting for its cookie to be stored (see [`Self::load_when_ready`]).
     pending: Option<Arc<AtomicBool>>,
+    /// A reload was asked for (the page or the diff changed on the server, ticket 0211). Done on
+    /// the next pump, where the browser may be touched, not where the event lands.
+    reload: bool,
     focus: FocusHandle,
     origin: Point<Pixels>,
     image: BrowserFrame,
@@ -668,6 +671,7 @@ impl WebPane {
             url: url.to_string(),
             renewable,
             pending,
+            reload: false,
             focus: cx.focus_handle(),
             origin: point(px(0.), px(0.)),
             image: BrowserFrame::default(),
@@ -713,6 +717,25 @@ impl WebPane {
         self.pending = Some(store_cookie(&cookie));
     }
 
+    /// Show the page again as it is on the server now (ticket 0211: the file changed while it was
+    /// open). Only asked here; the browser is touched on the pump ([`Self::reload_now`]), which is
+    /// the one place a pane may call into CEF. The reader's place in the page is kept: this is a
+    /// reload, and Chromium restores the scroll offset for a reload — unlike `load_url`, a new
+    /// navigation of the same address, which starts at the top again.
+    pub fn refresh(&mut self) {
+        self.reload = true;
+        // The page should change now, not at the end of the pump's fallback wait.
+        browser_pump::schedule(0);
+    }
+
+    /// Whether the reader is in the middle of something in this page: a mouse button is down, so a
+    /// drag or a selection being dragged out. A page swapping under a held button is its own
+    /// small bug, so a refresh waits for the release (bounded in [`crate::refresher`]). A
+    /// selection that is already finished does not hold it: the button is up.
+    pub fn interacting(&self) -> bool {
+        self.buttons_down != 0
+    }
+
     /// Once the pane's cookie is stored: makes the browser on its page, or (after `renew`)
     /// loads the page again in the browser it has.
     fn load_when_ready(&mut self) {
@@ -733,6 +756,20 @@ impl WebPane {
                 crate::trace("pane: making its browser");
                 self.create_browser();
             }
+        }
+    }
+
+    /// A reload asked for earlier ([`Self::refresh`]). The browser is only touched here, on the
+    /// pump; a pane that has none yet is loading its page anyway, so there is nothing to redo.
+    fn reload_now(&mut self) {
+        if !std::mem::take(&mut self.reload) {
+            return;
+        }
+        if let Some(browser) = self.browser.as_ref() {
+            crate::trace("pane: loading its page again (it changed on the server)");
+            // The cache is skipped: the point of this is the new text, and a view's own answer is
+            // never worth revalidating.
+            browser.reload_ignore_cache();
         }
     }
 
@@ -790,6 +827,7 @@ impl WebPane {
     pub fn after_pump(&mut self, cx: &mut Context<Self>) {
         let started = std::time::Instant::now();
         self.load_when_ready();
+        self.reload_now();
         let (pages, outside, lost) = {
             let mut s = self.shared.borrow_mut();
             (
