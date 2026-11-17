@@ -23,6 +23,7 @@ use crate::desktop::{self, Desktop};
 use crate::home_view::{HomeEvent, HomeTab, HomeView};
 use crate::link_state::LinkState;
 use crate::notice::Notice;
+use crate::outgoing::Outgoing;
 use crate::overlay_frame::OverlayFrame;
 use crate::pick_lists;
 use crate::picker::{Item, Pick, Picker, PickerEvent};
@@ -157,6 +158,7 @@ impl Shell {
                 self.link = LinkState::Up;
                 self.project.reset();
                 self.store.reconnected();
+                self.chat.update(cx, |chat, _| chat.reconnected());
                 self.sync_approvals(cx);
                 self.sync_home(cx);
                 // All the sessions, for the switcher (updates follow as events); the first
@@ -460,21 +462,17 @@ impl Shell {
             return;
         }
         let Some(session) = self.store.attached.clone() else {
+            // Nowhere to send it: a verdict the chat put in its outbox didn't go.
+            if let ChatEvent::Send { send, .. } = &event {
+                self.send_failed(send.clone(), cx);
+            }
             self.link = self.link.refused("no session yet".into());
             cx.notify();
             return;
         };
         match event {
-            ChatEvent::Send { text, attachments } => self.ask(
-                ClientCommand::MessageSend {
-                    session,
-                    text,
-                    pages: vec![],
-                    images: vec![],
-                    attachments,
-                },
-                cx,
-            ),
+            // To the session it was written in (the chat's), which its outbox entry is under.
+            ChatEvent::Send { send, attachments } => self.send_message(send, attachments, cx),
             ChatEvent::Answer { request, decision } => {
                 self.ask(ClientCommand::ApprovalRespond { request, decision }, cx)
             }
@@ -510,6 +508,51 @@ impl Shell {
                 .detach();
             }
         }
+    }
+
+    /// A message from the chat. If it doesn't go, the chat gets `send` back: a verdict it shows
+    /// as sent (its outbox) is offered again rather than left saying it went.
+    fn send_message(
+        &mut self,
+        send: Outgoing,
+        attachments: Vec<composer_protocol::Attachment>,
+        cx: &mut Context<Self>,
+    ) {
+        let connection = self.connection.clone();
+        let command = ClientCommand::MessageSend {
+            session: send.session.clone(),
+            text: send.text.clone(),
+            pages: vec![],
+            images: vec![],
+            attachments,
+        };
+        cx.spawn(async move |this, cx| {
+            let answer = connection.request(command).await;
+            let _ = this.update(cx, |shell, cx| shell.sent(answer, send, cx));
+        })
+        .detach();
+    }
+
+    /// The server's answer to a message from the chat.
+    fn sent(
+        &mut self,
+        answer: Result<CommandResult, String>,
+        send: Outgoing,
+        cx: &mut Context<Self>,
+    ) {
+        match answer {
+            Ok(result) => self.on_result(result, cx),
+            Err(e) => {
+                self.send_failed(send, cx);
+                self.link = self.link.refused(e);
+            }
+        }
+        cx.notify();
+    }
+
+    /// `send` didn't go: back to the chat, which knows which session's outbox it was in.
+    fn send_failed(&mut self, send: Outgoing, cx: &mut Context<Self>) {
+        self.chat.update(cx, |chat, cx| chat.send_failed(&send, cx));
     }
 
     /// Sends `command`; its reply goes into the store and the panes.
