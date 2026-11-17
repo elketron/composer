@@ -12,7 +12,7 @@ use crate::server::Server;
 use crate::session::Session;
 use crate::session::compaction::compact;
 use crate::session::model_call::{
-    model_step, parse_args, prepare_history, store_images, thinking_budget, tool_step,
+    model_step_continuing, parse_args, prepare_history, store_images, thinking_budget, tool_step,
 };
 use crate::session::turn_budget::TurnBudget;
 use crate::tools::ToolContext;
@@ -189,9 +189,6 @@ fn accept_user_message(server: &Arc<Server>, session: &Arc<Session>, message: Ch
 /// How a turn that used up its tokens (or steps) ends: "Turn stopped: reached the turn limit (…)".
 pub const TURN_LIMIT: &str = "reached the turn limit";
 
-/// How often a turn makes a broken-off or empty model call again before it stops with the error.
-const AUTO_CONTINUES: u32 = 2;
-
 /// Model call → tools → model call ... until the model answers without tool calls.
 /// Before each call, a context over the threshold is compacted first.
 async fn run_turn(
@@ -262,26 +259,7 @@ async fn run_turn(
             model: None,
             reasoning_effort: None,
         };
-        let mut retries = 0;
-        let step = loop {
-            match model_step(server, session, request.clone(), cancel, true).await {
-                Ok(step) => break step,
-                // Nothing of the broken reply was kept: the same call again just continues.
-                Err(error) if error.may_pass_on_retry() && retries < AUTO_CONTINUES => {
-                    retries += 1;
-                    tracing::warn!("session {}: {error}; continuing", session.id());
-                    let message = system_message(format!(
-                        "{error}; continuing by itself ({retries} of {AUTO_CONTINUES})"
-                    ));
-                    session.emit(&server.hub, |seq| ServerMessage::MessageDone {
-                        session: session.id().to_string(),
-                        seq,
-                        message,
-                    });
-                }
-                Err(error) => return Err(error.to_string()),
-            }
-        };
+        let step = model_step_continuing(server, session, request, cancel, true).await?;
         let written: String = step
             .tool_calls
             .iter()
@@ -405,7 +383,7 @@ fn record_assistant(
     Ok(())
 }
 
-fn system_message(content: String) -> ChatMessage {
+pub(crate) fn system_message(content: String) -> ChatMessage {
     ChatMessage {
         role: Role::System,
         content,

@@ -10,7 +10,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::agent::AgentDefinition;
 use crate::attachments::{ATTACHMENT_SCHEME, attachment_data_url};
-use crate::provider::{ModelEvent, ModelMessage, ModelRequest, ModelToolCall};
+use crate::provider::{CallError, ModelEvent, ModelMessage, ModelRequest, ModelToolCall};
 use crate::server::Server;
 use crate::session::{Session, StepOutput};
 use crate::tools::{CallResult, ToolContext, text_result};
@@ -81,7 +81,10 @@ pub async fn model_step(
         .provider
         .stream(request)
         .await
-        .map_err(StepError::Refused)?;
+        .map_err(|error| match error {
+            CallError::Unavailable(error) => StepError::Interrupted(error),
+            CallError::Refused(error) => StepError::Refused(error),
+        })?;
     let mut out = StepOutput::default();
     let mut stop_reason = None;
     loop {
@@ -141,6 +144,39 @@ pub async fn model_step(
         return Err(StepError::Empty { stop_reason });
     }
     Ok(out)
+}
+
+/// How often a broken-off or empty model call is made again before its error stands.
+const AUTO_CONTINUES: u32 = 2;
+
+/// [`model_step`], made again by itself when the reply broke off or came back empty, with a
+/// notice in the chat each time. Nothing of a broken reply was kept, so the same call again
+/// just continues.
+pub async fn model_step_continuing(
+    server: &Arc<Server>,
+    session: &Arc<Session>,
+    request: ModelRequest,
+    cancel: &CancellationToken,
+    live: bool,
+) -> Result<StepOutput, StepError> {
+    let mut retries = 0;
+    loop {
+        match model_step(server, session, request.clone(), cancel, live).await {
+            Err(error) if error.may_pass_on_retry() && retries < AUTO_CONTINUES => {
+                retries += 1;
+                tracing::warn!("session {}: {error}; continuing", session.id());
+                let message = crate::session::turn::system_message(format!(
+                    "{error}; continuing by itself ({retries} of {AUTO_CONTINUES})"
+                ));
+                session.emit(&server.hub, |seq| ServerMessage::MessageDone {
+                    session: session.id().to_string(),
+                    seq,
+                    message,
+                });
+            }
+            outcome => return outcome,
+        }
+    }
 }
 
 /// Runs a tool call, showing it in the chat. Returns its result.

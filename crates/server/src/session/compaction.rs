@@ -11,7 +11,8 @@ use crate::provider::{ModelMessage, ModelRequest};
 use crate::server::Server;
 use crate::session::Session;
 use crate::session::model_call::{
-    StepError, estimate_tokens, model_step, prepare_history, thinking_budget, tool_step,
+    StepError, estimate_tokens, model_step, model_step_continuing, prepare_history,
+    thinking_budget, tool_step,
 };
 use crate::tools::ToolContext;
 
@@ -73,7 +74,7 @@ pub async fn compact(
         content: SUMMARY_PROMPT.into(),
         images: vec![],
     });
-    let summary = model_step(
+    let summary = model_step_continuing(
         server,
         session,
         ModelRequest {
