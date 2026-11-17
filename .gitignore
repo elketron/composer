@@ -3,3 +3,6 @@
 /dist/
 # Scratch worktrees for checking a ticket's branch: `git worktree add .wt-<ticket-id> ticket/<ticket-id>`
 /.wt-[0-9]*/
+# CEF_PATH scratch for test/build runs (a writable CEF copy when apps/desktop/.cef can't be used, e.g. in
+# a sandbox): CEF_PATH=$PWD/.tmp-cef at the root, or a relative .tmp-cef under apps/desktop
+.tmp-cef/
