@@ -23,6 +23,7 @@ use crate::desktop::{self, Desktop};
 use crate::home_view::{HomeEvent, HomeTab, HomeView};
 use crate::link_state::LinkState;
 use crate::notice::Notice;
+use crate::outgoing::Outgoing;
 use crate::overlay_frame::OverlayFrame;
 use crate::pick_lists;
 use crate::picker::{Item, Pick, Picker, PickerEvent};
@@ -461,26 +462,17 @@ impl Shell {
             return;
         }
         let Some(session) = self.store.attached.clone() else {
-            // Nowhere to send it: a verdict the chat put in its outbox (under the chat's own
-            // session) didn't go.
-            if let ChatEvent::Send {
-                review: Some(review),
-                ..
-            } = &event
-                && let Some(session) = self.chat.read(cx).session().map(str::to_string)
-            {
-                self.send_failed(session, review.clone(), cx);
+            // Nowhere to send it: a verdict the chat put in its outbox didn't go.
+            if let ChatEvent::Send { send, .. } = &event {
+                self.send_failed(send.clone(), cx);
             }
             self.link = self.link.refused("no session yet".into());
             cx.notify();
             return;
         };
         match event {
-            ChatEvent::Send {
-                text,
-                attachments,
-                review,
-            } => self.send_message(session, text, attachments, review, cx),
+            // To the session it was written in (the chat's), which its outbox entry is under.
+            ChatEvent::Send { send, attachments } => self.send_message(send, attachments, cx),
             ChatEvent::Answer { request, decision } => {
                 self.ask(ClientCommand::ApprovalRespond { request, decision }, cx)
             }
@@ -518,27 +510,25 @@ impl Shell {
         }
     }
 
-    /// A message from the chat. If it doesn't go and it was a verdict in the chat's outbox
-    /// (`review`), the chat hears so: the card is offered again rather than left saying it went.
+    /// A message from the chat. If it doesn't go, the chat gets `send` back: a verdict it shows
+    /// as sent (its outbox) is offered again rather than left saying it went.
     fn send_message(
         &mut self,
-        session: String,
-        text: String,
+        send: Outgoing,
         attachments: Vec<composer_protocol::Attachment>,
-        review: Option<String>,
         cx: &mut Context<Self>,
     ) {
         let connection = self.connection.clone();
         let command = ClientCommand::MessageSend {
-            session: session.clone(),
-            text,
+            session: send.session.clone(),
+            text: send.text.clone(),
             pages: vec![],
             images: vec![],
             attachments,
         };
         cx.spawn(async move |this, cx| {
             let answer = connection.request(command).await;
-            let _ = this.update(cx, |shell, cx| shell.sent(answer, session, review, cx));
+            let _ = this.update(cx, |shell, cx| shell.sent(answer, send, cx));
         })
         .detach();
     }
@@ -547,26 +537,22 @@ impl Shell {
     fn sent(
         &mut self,
         answer: Result<CommandResult, String>,
-        session: String,
-        review: Option<String>,
+        send: Outgoing,
         cx: &mut Context<Self>,
     ) {
         match answer {
             Ok(result) => self.on_result(result, cx),
             Err(e) => {
-                if let Some(review) = review {
-                    self.send_failed(session, review, cx);
-                }
+                self.send_failed(send, cx);
                 self.link = self.link.refused(e);
             }
         }
         cx.notify();
     }
 
-    /// The verdict answering `review`, sent to `session`, didn't go.
-    fn send_failed(&mut self, session: String, review: String, cx: &mut Context<Self>) {
-        self.chat
-            .update(cx, |chat, cx| chat.send_failed(&session, &review, cx));
+    /// `send` didn't go: back to the chat, which knows which session's outbox it was in.
+    fn send_failed(&mut self, send: Outgoing, cx: &mut Context<Self>) {
+        self.chat.update(cx, |chat, cx| chat.send_failed(&send, cx));
     }
 
     /// Sends `command`; its reply goes into the store and the panes.

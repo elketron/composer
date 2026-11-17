@@ -6,7 +6,7 @@
 
 use std::collections::HashSet;
 
-use composer_client::{Approval, Chat, ChatItem};
+use composer_client::{Approval, ChatItem};
 use composer_protocol::{ApprovalDecision, ApprovalKind, Attachment, ServerMessage, TurnState};
 use std::ops::Range;
 
@@ -19,14 +19,15 @@ use gpui::{
 
 use composer_core::{LinkTarget, SiteUrl};
 
+use crate::chat_model::ChatModel;
 use crate::draft::{Draft, DraftKey, Mode};
 use crate::markdown;
-use crate::outbox::Outbox;
+use crate::outgoing::Outgoing;
 use crate::prose::{head, thinking_preview};
 use crate::term_pane::FONT;
 use crate::theme::*;
 use crate::uploads::{Upload, Uploads};
-use crate::user_review::{VerdictCard, on_pass, on_send, sync_outbox, verdict_card};
+use crate::user_review::VerdictCard;
 
 /// The chat's prose font (bundled).
 pub const PROSE: &str = "Inter";
@@ -36,12 +37,11 @@ const SHOWN_LINES: usize = 24;
 /// What the chat asks of the window.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ChatEvent {
+    /// A message, and the files that go with it. A failed send hands `send` back
+    /// ([`ChatPane::send_failed`]).
     Send {
-        text: String,
+        send: Outgoing,
         attachments: Vec<Attachment>,
-        /// The review whose verdict this is, when it went into the outbox: a failed send takes
-        /// it out again.
-        review: Option<String>,
     },
     Answer {
         request: String,
@@ -65,16 +65,14 @@ pub enum ChatEvent {
 }
 
 pub struct ChatPane {
-    chat: Option<Chat>,
-    /// The session's agent, state and site (from its `session.updated`).
+    /// The transcript, the turn state and the outbox: what is sent is decided there.
+    model: ChatModel,
+    /// The session's agent and site (from its `session.updated`).
     agent: String,
-    state: TurnState,
     site: Option<String>,
     approvals: Vec<Approval>,
     draft: Draft,
     files: Uploads,
-    /// Sent and not back yet: the review's verdict, so its card shows it given at once.
-    outbox: Outbox,
     /// Tool calls and approvals opened to show their details.
     opened: HashSet<String>,
     loading_older: bool,
@@ -97,14 +95,12 @@ impl Focusable for ChatPane {
 impl ChatPane {
     pub fn new(cx: &mut Context<Self>) -> Self {
         Self {
-            chat: None,
+            model: ChatModel::default(),
             agent: String::new(),
-            state: TurnState::Idle,
             site: None,
             approvals: Vec::new(),
             draft: Draft::default(),
             files: Uploads::default(),
-            outbox: Outbox::default(),
             opened: HashSet::new(),
             loading_older: false,
             marked: None,
@@ -116,8 +112,7 @@ impl ChatPane {
 
     /// The session shown now; its chat starts empty until its history arrives. The draft stays.
     pub fn open(&mut self, session: &str, cx: &mut Context<Self>) {
-        if self.session() != Some(session) {
-            self.chat = Some(Chat::new(session));
+        if self.model.open(session) {
             self.opened.clear();
             self.loading_older = false;
             self.files.clear();
@@ -125,16 +120,12 @@ impl ChatPane {
         }
     }
 
-    pub fn session(&self) -> Option<&str> {
-        self.chat.as_ref().map(|c| c.session.as_str())
-    }
-
     pub fn last_seq(&self) -> u64 {
-        self.chat.as_ref().map_or(0, |c| c.last_seq)
+        self.model.chat().map_or(0, |c| c.last_seq)
     }
 
     pub fn first_seq(&self) -> u64 {
-        self.chat.as_ref().map_or(0, |c| c.first_seq)
+        self.model.chat().map_or(0, |c| c.first_seq)
     }
 
     /// What the session is: its agent, whether a turn runs, its site.
@@ -145,15 +136,9 @@ impl ChatPane {
         site: Option<String>,
         cx: &mut Context<Self>,
     ) {
-        if state == TurnState::Idle
-            && let Some(chat) = &self.chat
-            && self.outbox.idle(&chat.session)
-        {
-            cx.notify();
-        }
-        if self.agent != agent || self.state != state || self.site != site {
+        let changed = self.model.set_state(state);
+        if changed || self.agent != agent || self.site != site {
             self.agent = agent.to_string();
-            self.state = state;
             self.site = site;
             cx.notify();
         }
@@ -179,9 +164,7 @@ impl ChatPane {
         more: bool,
         cx: &mut Context<Self>,
     ) {
-        if let Some(chat) = self.chat.as_mut().filter(|c| c.session == session) {
-            chat.history_loaded(events, more);
-            sync_outbox(&chat.items, session, &mut self.outbox);
+        if self.model.history_loaded(session, events, more) {
             self.scroll.scroll_to_bottom();
             cx.notify();
         }
@@ -195,11 +178,8 @@ impl ChatPane {
         more: bool,
         cx: &mut Context<Self>,
     ) {
-        if let Some(chat) = self.chat.as_mut().filter(|c| c.session == session) {
-            let before = chat.items.len();
-            chat.older_loaded(events, more);
+        if let Some(added) = self.model.older_loaded(session, events, more) {
             self.loading_older = false;
-            let added = chat.items.len() - before;
             if added > 0 {
                 self.scroll.scroll_to_top_of_item(added);
             }
@@ -210,10 +190,7 @@ impl ChatPane {
     /// A transcript event; the view follows the end when it was there.
     pub fn apply(&mut self, message: &ServerMessage, cx: &mut Context<Self>) {
         let at_end = self.at_end();
-        if let Some(chat) = self.chat.as_mut()
-            && chat.apply(message)
-        {
-            sync_outbox(&chat.items, &chat.session, &mut self.outbox);
+        if self.model.apply(message) {
             if at_end {
                 self.scroll.scroll_to_bottom();
             }
@@ -287,57 +264,46 @@ impl ChatPane {
     }
 
     fn busy(&self) -> bool {
-        self.state != TurnState::Idle
+        self.model.state() != TurnState::Idle
     }
 
-    /// The verdict sent for `review` in `session` didn't go: the card offers its buttons again.
-    pub fn send_failed(&mut self, session: &str, review: &str, cx: &mut Context<Self>) {
-        if self.outbox.failed(session, review) {
+    /// `send` didn't go: if it was a verdict, its card (in the session it was sent in) offers
+    /// its buttons again.
+    pub fn send_failed(&mut self, send: &Outgoing, cx: &mut Context<Self>) {
+        if self.model.send_failed(send) {
             cx.notify();
         }
     }
 
     /// The connection is back: what was sent before may have been lost with the server's inbox.
     pub fn reconnected(&mut self) {
-        self.outbox.reconnected();
+        self.model.reconnected();
     }
 
-    /// Pass on the verdict card: into the outbox and sent, once. A second click finds it there.
+    /// Pass on the verdict card: the model sends it once; a second click gets nothing.
     fn pass(&mut self, cx: &mut Context<Self>) {
-        if !self.files.ready() {
-            return;
-        }
-        let Some(chat) = &self.chat else {
-            return;
-        };
-        if let Some(verdict) = on_pass(&chat.items, &chat.session, &mut self.outbox) {
-            self.emit_send(verdict.text, Some(verdict.review), cx);
+        if self.files.ready()
+            && let Some(send) = self.model.pass()
+        {
+            self.emit_send(send, cx);
             cx.notify();
         }
     }
 
     fn send(&mut self, text: String, cx: &mut Context<Self>) {
-        if !self.files.ready() {
-            return;
+        if self.files.ready()
+            && let Some(send) = self.model.send(text)
+        {
+            self.emit_send(send, cx);
         }
-        // A verdict written in the composer (Changes… starts `fail: `) shows on the card too.
-        let review = self
-            .chat
-            .as_ref()
-            .and_then(|chat| on_send(&chat.items, &chat.session, &text, &mut self.outbox));
-        self.emit_send(text, review, cx);
     }
 
-    fn emit_send(&mut self, text: String, review: Option<String>, cx: &mut Context<Self>) {
+    fn emit_send(&mut self, send: Outgoing, cx: &mut Context<Self>) {
         let Some(attachments) = self.files.take() else {
             return;
         };
         self.scroll.scroll_to_bottom();
-        cx.emit(ChatEvent::Send {
-            text,
-            attachments,
-            review,
-        });
+        cx.emit(ChatEvent::Send { send, attachments });
     }
 
     fn send_draft(&mut self, cx: &mut Context<Self>) {
@@ -1054,7 +1020,7 @@ impl ChatPane {
     /// The transcript's rows: messages with their tool boxes, events, the streaming reply, the
     /// approvals waiting.
     fn transcript(&self, cx: &mut Context<Self>) -> Vec<AnyElement> {
-        let Some(chat) = &self.chat else {
+        let Some(chat) = self.model.chat() else {
             return vec![];
         };
         let agent = if self.agent.is_empty() {
@@ -1194,7 +1160,7 @@ impl ChatPane {
                 div()
                     .text_size(px(TEXT_SMALL))
                     .text_color(rgb(FG_FAINT))
-                    .child(if self.state == TurnState::AwaitingApproval {
+                    .child(if self.model.state() == TurnState::AwaitingApproval {
                         "waiting for your answer"
                     } else {
                         "◌ working…"
@@ -1209,7 +1175,7 @@ impl ChatPane {
             body.push(self.approval(approval, cx));
         }
         // A Hunk review open on the stage: your verdict goes back as a message.
-        if let Some(card) = verdict_card(&chat.items, &chat.session, &self.outbox) {
+        if let Some(card) = self.model.verdict_card() {
             if body.is_empty() && body_label.is_none() {
                 body_label = Some(agent.to_string());
             }
@@ -1519,7 +1485,7 @@ impl ChatPane {
 impl Render for ChatPane {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let rows = self.transcript(cx);
-        let opening = self.chat.as_ref().is_some_and(|c| !c.loaded);
+        let opening = self.model.chat().is_some_and(|c| !c.loaded);
         let composer = self.composer(window, cx);
         div()
             .track_focus(&self.focus)
@@ -1553,7 +1519,7 @@ impl Render for ChatPane {
                     .when(opening, |d| {
                         d.child(event("opening the conversation…".into()))
                     })
-                    .when(self.chat.is_none(), |d| {
+                    .when(self.model.chat().is_none(), |d| {
                         d.child(event("no session yet".into()))
                     })
                     .children(rows),
