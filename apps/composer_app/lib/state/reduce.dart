@@ -148,7 +148,15 @@ import 'types.dart';
         ),
       AgentsLoaded(:final url, :final agents) => (_updateStatus(s, url, (x) => x.copyWith(agents: agents)), const []),
       ProjectsLoaded(:final url, :final projects) => (_updateStatus(s, url, (x) => x.copyWith(projects: projects)), const []),
-      CancelRequested(:final url) => _toChat(s, url, (session) => ClientCommandTurnCancel(session: session)),
+      // What it had seen: a turn that started since (a queued message) keeps going.
+      CancelRequested(:final url) => _toChat(
+          s,
+          url,
+          (session) => ClientCommandTurnCancel(
+                session: session,
+                seen: switch (s.status[url]?.chat?.lastSeq) { final seq? when seq > 0 => seq, _ => null },
+              ),
+        ),
       ApprovalAnswered(:final url, :final request, :final decision) => (
           _updateStatus(s, url, (x) => x.copyWith(approvals: [for (final a in x.approvals) if (a.request != request) a])),
           [

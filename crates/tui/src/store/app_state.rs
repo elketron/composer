@@ -221,7 +221,9 @@ impl AppState {
             // Also stops a paused worker for good (a usage limit, a restart cut it off).
             Action::CancelTurn => match self.session.current.clone() {
                 Some(session) if self.session.is_busy() || self.session.is_paused_worker() => {
-                    self.send(ClientCommand::TurnCancel { session }, Pending::Ignore)
+                    // What it had seen: a turn that started since (a queued message) keeps going.
+                    let seen = Some(self.session.last_seq).filter(|s| *s > 0);
+                    self.send(ClientCommand::TurnCancel { session, seen }, Pending::Ignore)
                 }
                 _ => vec![],
             },

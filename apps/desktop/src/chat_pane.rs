@@ -124,6 +124,15 @@ impl ChatPane {
         self.model.chat().map_or(0, |c| c.last_seq)
     }
 
+    /// The last event of `session` this chat has shown, when it shows that session.
+    pub fn seen(&self, session: &str) -> Option<u64> {
+        self.model
+            .chat()
+            .filter(|c| c.session == session)
+            .map(|c| c.last_seq)
+            .filter(|seq| *seq > 0)
+    }
+
     pub fn first_seq(&self) -> u64 {
         self.model.chat().map_or(0, |c| c.first_seq)
     }

@@ -73,11 +73,11 @@ async fn drive(server: Arc<Server>, session: Arc<Session>) {
             }
         }
 
-        let cancel = session.new_turn_token();
-        session.emit(&server.hub, |seq| ServerMessage::TurnStarted {
+        let started = session.emit(&server.hub, |seq| ServerMessage::TurnStarted {
             session: id.clone(),
             seq,
         });
+        let cancel = session.new_turn_token(Some(started));
         let outcome = run_turn(&server, &session, &cancel).await;
         if let Err(error) = &outcome {
             tracing::warn!("session {id}: {error}");
@@ -318,7 +318,7 @@ pub async fn compact_and_wait(server: &Arc<Server>, session: &Arc<Session>) -> R
 }
 
 async fn compact_started(server: &Arc<Server>, session: &Arc<Session>) {
-    let cancel = session.new_turn_token();
+    let cancel = session.new_turn_token(None);
     let id = session.id().to_string();
     let text = match compact(server, session, &cancel, false).await {
         Ok(0) => Some("Nothing to compact yet.".to_string()),
