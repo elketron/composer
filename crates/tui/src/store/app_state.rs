@@ -1945,6 +1945,18 @@ mod tests {
         assert!(state.approvals.current().is_none());
     }
 
+    /// The leg the browser's failure leans on: a copy request is the one the mouse drag uses,
+    /// and the app loop answers it with `terminal::copy` (OSC 52 + this machine's clipboard).
+    #[test]
+    fn a_copy_request_goes_to_the_terminal_clipboard() {
+        let (mut state, _) = connected();
+        let url = "http://127.0.0.1:7420/w/default/a/app_x9tr/?session=s7";
+        assert_eq!(
+            state.reduce(Action::CopyText(url.into())),
+            [Effect::CopyText(url.into())]
+        );
+    }
+
     #[test]
     fn an_app_opens_by_its_own_token_on_the_project_else_home() {
         let (mut state, _) = connected();

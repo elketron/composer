@@ -82,7 +82,7 @@ Apps open as `https://<server>/<site>/?token=<device token>&session=<id>`: the e
 The work PC runs `composer serve` inside WSL2, so the server stays Linux-only; only the app runs natively on Windows.
 
 - **Tailscale:** either on the Windows host (WSL2 forwards `localhost`, so `tailscale serve --bg http://127.0.0.1:7420` on Windows reaches the server in WSL), or inside WSL as its own tailnet node. Both work; the host install is simpler if Tailscale is already there.
-- **Opening apps from the TUI in WSL:** `xdg-open` has no Windows browser; set `BROWSER=wslview` (from `wslu`), which `composer` already honours.
+- **Opening apps from the TUI in WSL:** `xdg-open` has no Windows browser; set `BROWSER=wslview` (from `wslu`), which `composer` already honours. Nothing to install otherwise: when nothing can be opened the TUI says so, shows the app's URL and copies it (OSC 52, so it lands in the Windows clipboard, or the one you sit at over ssh), and since WSL2 forwards `localhost`, pasting it into a Windows browser just works.
 - **Projects:** keep checkouts inside the WSL filesystem (not `/mnt/c`), or git (changes view) and file watching get slow.
 - Nothing else changes: `just`, `bun`, `git`, `nvim` are the Linux ones.
 

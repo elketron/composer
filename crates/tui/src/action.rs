@@ -24,7 +24,7 @@ pub enum Action {
     AttachPath(String),
     /// Attach the image on the clipboard (`space a`).
     AttachClipboard,
-    /// Text selected with the mouse, to the clipboard.
+    /// Text to the clipboard: a mouse selection, or an app's URL no browser could open.
     CopyText(String),
     /// The clipboard image, read off the UI thread: (name, PNG bytes).
     ClipboardRead(Result<(String, Vec<u8>), String>),
