@@ -21,11 +21,11 @@ Please don't open a public issue. Use **Report a vulnerability** on the reposito
   "always" rules live in `state/approvals.json`.
 - **Claude Code workers are off by default** and allowed per project in `config.toml` (not in the repository, so
   a cloned repo can't switch itself on). They run with a cleared environment and a tool allowlist.
-- **A sandboxed Claude Code run can use your live Claude login** (decided 2026-11-15): your
-  `~/.claude/.credentials.json` is the one file of yours it mounts read-write, so the run authenticates as you
-  and an OAuth refresh writes through. Every workspace's runs then read and can replace one credential: a
-  revoke or a usage limit hits them all at once. A stored token (`composer claude-token`) wins when there is
-  one; with neither, the run is refused rather than started.
+- **Nothing composer starts is sandboxed** (decided 2026-11-19; the bwrap sandbox is gone). Recipes, Claude
+  Code runs, stdio MCP servers and terminals run as your user, with your `$HOME`, your login (`claude auth
+  login`) and the network. What separates workspaces is their tokens: an agent's own tools reach only its
+  workspace's sites, and an app's token reaches only its own site, project and data. A run you approve can do
+  whatever your user can.
 - **MCP servers** are started from `config.toml` only; their calls need approval unless `allow` matches.
 - **Prompt injection is not solved.** A page, a web result or an attachment can steer an agent. Approvals are
   the boundary: read what you approve.

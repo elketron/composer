@@ -143,7 +143,7 @@ pub enum ClientCommand {
     #[serde(rename = "window.join")]
     WindowJoin { window: String },
 
-    /// Opens a terminal for a session (ticket 0176): a shell in the workspace's sandbox, in the
+    /// Opens a terminal for a session (ticket 0176): a shell, in the
     /// session's project (or the sites); a tab on its desk. With the `id` of one that ended (idle),
     /// a fresh shell where it was. The reply is `terminal`.
     #[serde(rename = "terminal.open")]
@@ -249,7 +249,7 @@ pub enum ClientCommand {
     },
 
     /// Rebuilds the workspace's apps built with an older sdk (or not built; `all`: every one) with
-    /// their `ui-build`, in the sandbox. Without `yes` the reply shows what would run; with it,
+    /// their `ui-build`. Without `yes` the reply shows what would run; with it,
     /// it runs (the user's command is the approval). The reply is `note`.
     #[serde(rename = "apps.rebuild")]
     AppsRebuild {

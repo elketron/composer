@@ -1,10 +1,6 @@
 //! A Stop is for the turn the client had seen. Pressed twice while a queued message was waiting,
 //! the second one used to stop that message's turn the moment it started (four times in the
 //! transcripts up to 2026-11-17).
-#![allow(
-    clippy::disallowed_methods,
-    reason = "tests set up repos and fakes outside the sandbox"
-)]
 
 mod support;
 

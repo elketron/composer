@@ -197,7 +197,7 @@ menu, print screen, pause and `f13` and up, which the pane does not translate.
 
 - **Follow agent** (top right): what the agent opens comes to the front; off, it arrives as a
   tab with a dot.
-- **Terminals** (`+`): a shell in the session's project, sandboxed like the agents; they live on
+- **Terminals** (`+`): a shell in the session's project; they live on
   the server (closing the desktop doesn't end them; idle ones end after a day and reopen where
   they were).
 - **Links** to the workspace's pages open as tabs; links elsewhere open in your browser.

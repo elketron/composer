@@ -31,8 +31,7 @@ cwd: project
 - `cols` / `rows` size the PTY (default 120×40).
 - The body is the manual: what the human does, and which agent actions exist.
 
-The TUI terminal runs outside the agent sandbox, like a desktop window: it is the user's client,
-not an agent shell. The trusted `control` adapter decides the program.
+The TUI terminal is the user's client, like a desktop window, not an agent shell. The trusted `control` adapter decides the program.
 
 ## Hunk
 

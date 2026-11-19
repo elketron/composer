@@ -13,17 +13,15 @@ use tokio_util::sync::CancellationToken;
 
 use crate::actions::{ApprovalAnswer, ApprovalWait, Approvals, Caller, PendingApprovals};
 use crate::config::Config;
-use crate::config_sections::SandboxConfig;
 use crate::devices::Devices;
 use crate::error::{Result, ServerError};
 use crate::harness::{HarnessSwitches, ToolRules};
 use crate::hash::content_hash;
 use crate::hub::EventHub;
 use crate::init::local_token;
-use crate::mcp_clients::{McpServers, SandboxWorld};
+use crate::mcp_clients::McpServers;
 use crate::project::{ProjectOwnership, ProjectPath};
 use crate::provider::{OpenAiProvider, Provider};
-use crate::sandbox::SandboxSpec;
 use crate::session::{Session, SessionManager};
 use crate::slot_pool::SlotPool;
 use crate::tools::{ToolRegistry, expand_home};
@@ -164,7 +162,6 @@ impl Server {
                 Approvals::load_read_only(&home.approvals_file())?,
             ),
         };
-        crate::sandbox::configure_git_jail(&config.sandbox);
         let worker_exe = std::env::var_os("COMPOSER_WORKER_EXE")
             .map(PathBuf::from)
             .or_else(|| std::env::current_exe().ok())
@@ -180,7 +177,7 @@ impl Server {
                     .into_iter()
                     .map(|(k, v)| (k.to_string(), v))
                     .collect(),
-                sandbox_world(&home, &ownership, &config.sandbox),
+                home.sites(),
             ))),
             approvals,
             pending_approvals: PendingApprovals::default(),
@@ -250,20 +247,7 @@ impl Server {
         .filter(|(_, changed)| *changed)
         .map(|(name, _)| name.to_string())
         .collect();
-        if current.sandbox != next.sandbox {
-            crate::sandbox::configure_git_jail(&next.sandbox);
-            // Every stdio server starts again in the new world.
-            let mut mcp = self.mcp.write().expect("mcp lock");
-            *mcp = Arc::new(McpServers::new(
-                &next.mcp,
-                self.home
-                    .env()
-                    .into_iter()
-                    .map(|(k, v)| (k.to_string(), v))
-                    .collect(),
-                sandbox_world(&self.home, &self.ownership, &next.sandbox),
-            ));
-        } else if current.mcp != next.mcp {
+        if current.mcp != next.mcp {
             let mut mcp = self.mcp.write().expect("mcp lock");
             *mcp = Arc::new(mcp.reconfigured(&next.mcp));
         }
@@ -414,24 +398,6 @@ impl Server {
 
     /// Whether `path` (a folder or file) is another workspace's: in or holding its folder, or a
     /// project it owns. What this workspace's agents may not read, link to or be pointed at.
-    /// The base sandbox of a spawn in this workspace (add its project, folder, ...).
-    pub fn sandbox(&self) -> SandboxSpec {
-        sandbox_world(&self.home, &self.ownership, &self.config().sandbox)()
-    }
-
-    /// Says at start whether spawns will run sandboxed: off (the user's choice), or on and
-    /// `bwrap` works, or on and they will be refused.
-    pub fn report_sandbox(&self) {
-        let name = self.home.name();
-        if !self.config().sandbox.enabled {
-            tracing::warn!("workspace {name}: the sandbox is off ([sandbox] enabled = false)");
-            return;
-        }
-        if let Err(e) = crate::sandbox::check_bwrap(Path::new("bwrap")) {
-            tracing::error!("workspace {name}: {e}");
-        }
-    }
-
     pub fn foreign_path(&self, path: &Path) -> bool {
         foreign(&self.home, &self.ownership(), path)
     }
@@ -840,24 +806,4 @@ pub(crate) async fn shutdown_signal() {
     }
     #[cfg(not(unix))]
     let _ = tokio::signal::ctrl_c().await;
-}
-
-/// The world of `home`'s spawns under `config`, made when asked: the projects other workspaces
-/// own (hidden) are the ones they own then.
-fn sandbox_world(
-    home: &WorkspaceHome,
-    ownership: &Arc<RwLock<Arc<ProjectOwnership>>>,
-    config: &SandboxConfig,
-) -> SandboxWorld {
-    let (home, ownership, config) = (home.clone(), ownership.clone(), config.clone());
-    Arc::new(move || {
-        let foreign = ownership
-            .read()
-            .expect("ownership lock")
-            .others(home.name())
-            .iter()
-            .map(|p| p.as_path().to_path_buf())
-            .collect();
-        SandboxSpec::new(&home, config.clone(), foreign)
-    })
 }

@@ -5,11 +5,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use serde_json::json;
 
-use crate::harness::claude_code_world::claude_code_world;
-use crate::harness::{
-    ChildProcess, ClaudeCodeRun, ClaudeToken, Harness, HarnessRun, StartRequest, WorkerScope,
-};
-use crate::init::local_token;
+use crate::harness::{ChildProcess, ClaudeCodeRun, Harness, HarnessRun, StartRequest, WorkerScope};
 use crate::server::Server;
 use crate::worker::ticket::set_ticket_fields;
 
@@ -35,11 +31,8 @@ const KEEP_ENV: &[&str] = &[
     "CLAUDE_CONFIG_DIR",
 ];
 
-/// The official Claude Code CLI (`claude -p`), for personal use on this machine. Sandboxed (the
-/// default), it runs in its workspace's world with its own `~/.claude` and logs in with the home's
-/// stored `claude setup-token` token, or - when there is none - with the user's own login, their
-/// `~/.claude/.credentials.json` mounted read-write so a refresh writes through. With the sandbox
-/// off, it runs on the machine's own login and composer never reads its credentials.
+/// The official Claude Code CLI (`claude -p`), for personal use on this machine. It runs on the
+/// machine's own login; composer never reads its credentials.
 pub struct ClaudeCodeHarness;
 
 #[async_trait]
@@ -104,20 +97,9 @@ impl Harness for ClaudeCodeHarness {
         let mut dirs: Vec<&Path> = files.iter().filter_map(|p| p.parent()).collect();
         dirs.dedup();
         let read_dirs = read_dirs(&config.read_dirs, |p| server.foreign_path(p));
-        let read_paths: Vec<PathBuf> = read_dirs.iter().map(|(path, _)| path.clone()).collect();
-        let world = claude_code_world(server, Path::new(&folder), &dirs, &read_paths)?;
-        if world.is_none() {
-            check_login(&config.command).await?;
-        }
-        let mut mcp_env: std::collections::BTreeMap<&str, String> =
+        check_login(&config.command).await?;
+        let mcp_env: std::collections::BTreeMap<&str, String> =
             server.home.env().into_iter().collect();
-        if world.is_some() {
-            // The sandbox has no `state/`, so `composer mcp` can't read the token there.
-            mcp_env.insert(
-                "COMPOSER_TOKEN",
-                local_token(&server.home).map_err(|e| e.to_string())?,
-            );
-        }
         let mcp = json!({ "mcpServers": { "composer": {
             "type": "stdio",
             "command": server.worker_exe,
@@ -151,17 +133,13 @@ impl Harness for ClaudeCodeHarness {
             )
         };
         // The prompt goes first: the list options after it take every following word.
-        let (program, sandbox_args) = match &world {
-            Some((spec, _)) => spec.wrap(&config.command)?,
-            None => (config.command.clone().into(), Vec::new()),
-        };
+        let program: std::ffi::OsString = config.command.clone().into();
         let (mut command, scope) = WorkerScope::command(
             &program,
             &request.session,
             &server.config().agent.worker_memory_max,
         );
         command
-            .args(sandbox_args)
             .arg("-p")
             .arg(&prompt)
             .args(["--output-format", "stream-json", "--verbose"])
@@ -221,14 +199,6 @@ impl Harness for ClaudeCodeHarness {
         if scope.is_some() {
             WorkerScope::keep_env(&mut command);
         }
-        if let Some((_, token)) = &world {
-            // Its login is the sandbox's own ~/.claude: the user's credential file mounted
-            // read-write (the one shared file), and a stored token on top of it when there is one.
-            command.env_remove("CLAUDE_CONFIG_DIR");
-            if let Some(token) = token {
-                command.env(ClaudeToken::ENV, token.as_str());
-            }
-        }
         if config.ask {
             // Its MCP calls (a question to the user) may wait as long as the run may.
             command.env(
@@ -249,10 +219,6 @@ impl Harness for ClaudeCodeHarness {
 }
 
 /// `claude auth status`: logged in, with the same cleared environment the run gets.
-#[allow(
-    clippy::disallowed_methods,
-    reason = "only with the sandbox off (a sandboxed run logs in through its mounted files)"
-)]
 async fn check_login(command: &str) -> Result<(), String> {
     let output = tokio::process::Command::new(command)
         .args(["auth", "status", "--json"])

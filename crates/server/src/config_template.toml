@@ -76,14 +76,7 @@ default_time = "09:00"
 
 [claude_code]
 # The Claude Code CLI, for tickets with `harness: claude-code` in projects that allow it.
-# In the sandbox (the default) each workspace has its own ~/.claude (your CLAUDE.md, settings,
-# skills, agents, commands and plugins are lent read-only). A run logs in with a stored token:
-# run `claude setup-token`, then `composer claude-token` and paste it; the run gets it as
-# CLAUDE_CODE_OAUTH_TOKEN (so its own tools can read it: it is the login it already uses).
-# Without a stored token it logs in as you: your ~/.claude/.credentials.json is mounted
-# read-write into the run (the one file of yours a sandbox writes; a revoke or usage limit then
-# hits every workspace's runs). With neither, the run is refused.
-# With [sandbox] enabled = false it runs on this machine's `claude auth login` instead.
+# It runs as you, with your ~/.claude, on this machine's `claude auth login`.
 command = "claude"
 # --model; empty: the CLI's default.
 model = ""
@@ -106,10 +99,6 @@ read_dirs = ["~/.cargo/registry/src", "~/.cargo/git/checkouts", "~/.rustup/toolc
 idle_hours = 24
 # Output kept per terminal (for a client joining late, and for the agent to read), in KB.
 scrollback_kb = 256
-# Your shell config, lent read-only (a terminal's $HOME is otherwise empty; add what your shell's
-# setup reads, plugins and themes included); keep secrets out of these files: the agent could
-# read them too.
-lend = ["~/.zshrc", "~/.zshenv", "~/.zprofile", "~/.p10k.zsh", "~/.oh-my-zsh", "~/.bashrc", "~/.profile", "~/.config/fish", "~/.config/starship.toml", "~/.config/nvim", "~/.local/share/nvim"]
 
 [apps]
 # Apps that are clients of this workspace: opened with its full access (sessions, approvals),
@@ -121,23 +110,6 @@ clients = ["chat"]
 # This workspace's colour, `#rrggbb`, in the desktop and the phone (its dot and title bar); empty:
 # one derived from the workspace's name, so its windows are still told apart.
 color = ""
-
-[sandbox]
-# Every recipe, Claude Code run and stdio MCP server runs in a bwrap sandbox: its workspace's sites
-# and its project read-write, these folders read-only, a private /tmp and an empty $HOME. Nothing of
-# other workspaces, the library or composer's state/ is inside. Needs `bwrap` (bubblewrap); without
-# it those spawns are refused. `enabled = false` runs them unsandboxed (your explicit choice).
-enabled = true
-system_dirs = ["/opt", "/sys", "/run/systemd/resolve"]
-toolchains = ["~/.rustup", "~/.cargo/bin", "~/.bun/bin", "~/.local/bin"]
-# Package caches, read-write and shared by every workspace.
-caches = ["~/.cargo/registry", "~/.cargo/git", "~/.bun/install/cache", "~/.cache/uv"]
-# More paths (a workspace's config.toml may set these too): binds_rw = ["~/Projects"] for a site
-# whose recipes take any project; devices = ["/dev/dri"] for the GPU. Another workspace's projects
-# inside a bind stay hidden.
-binds_ro = []
-binds_rw = []
-devices = []
 
 [attachments]
 # Largest upload, in MB.
@@ -190,10 +162,6 @@ inline_max_kb = 100
 # env = { GITHUB_PERSONAL_ACCESS_TOKEN = "${GITHUB_TOKEN}" }
 # allow = ["get_*", "list_*", "search_*"]
 # sites = ["coding"]
-# A stdio server runs in the workspace's sandbox (its sites, the toolchains, an empty `$HOME`);
-# give it what else it needs, checked like `[sandbox]` binds:
-# binds_ro = ["~/.config/github-mcp"]
-# binds_rw = []
 #
 # [mcp.docs]
 # url = "https://example.com/mcp"
@@ -201,7 +169,7 @@ inline_max_kb = 100
 #
 # An HTTP server whose token is in a file (wayai): `bearer_file` is read at every connect and
 # sent as `Authorization: Bearer <token>`; a file that cannot be read fails the connect. An
-# `Authorization` in `headers` wins. The file is outside every agent's sandbox unless you bind it.
+# `Authorization` in `headers` wins.
 # [mcp.wayai]
 # url = "http://127.0.0.1:7878/mcp"
 # bearer_file = "~/.local/share/wayai/token"
@@ -210,6 +178,6 @@ inline_max_kb = 100
 # [mcp.blender]
 # allow = ["get_*"]
 # sites = ["3d"]                 # the sites whose `mcp: [blender]` grants its tools
-# Its unpacked code is read-only to it; it may write in the folder `$COMPOSER_BUNDLE_STATE` names
+# It writes in the folder `$COMPOSER_BUNDLE_STATE` names
 # (`<home>/state/mcps/.run/blender/`), where a `uv` bundle's environment and cache also live.
 # config = { api_key = "..." }   # the bundle's settings

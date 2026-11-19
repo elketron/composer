@@ -164,15 +164,11 @@ fn new_file_diff(file: &str, text: &str) -> String {
     out
 }
 
-/// In the git jail ([`crate::sandbox::git_jailed`]).
-#[allow(
-    clippy::disallowed_methods,
-    reason = "the git jail's own bwrap (or git, with the sandbox off)"
-)]
 async fn git(path: &Path, args: &[&str]) -> Result<String, String> {
-    let (program, jailed) = crate::sandbox::git_jailed(path, args)?;
-    let output = Command::new(program)
-        .args(jailed)
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(path)
+        .args(args)
         .env("GIT_OPTIONAL_LOCKS", "0")
         .output()
         .await

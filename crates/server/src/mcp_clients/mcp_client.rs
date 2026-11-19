@@ -7,7 +7,6 @@ use crate::McpServerConfig;
 use crate::mcp_clients::http_transport::HttpTransport;
 use crate::mcp_clients::stdio_transport::StdioTransport;
 use crate::mcp_clients::types::{RemoteTool, Transport};
-use crate::sandbox::SandboxSpec;
 use crate::tools::CallResult;
 use crate::tools::expand_home;
 
@@ -25,13 +24,13 @@ pub struct McpClient {
 
 impl McpClient {
     /// Starts or reaches the server, does the handshake and lists its tools. A stdio server
-    /// starts in `sandbox` (with its own `binds_*` added), in the workspace's sites (or its `cwd`), with
-    /// `workspace`'s variables set (its own `env` on top).
+    /// starts in the workspace's `sites` (or its `cwd`), with `workspace`'s variables set (its own
+    /// `env` on top).
     pub async fn connect(
         name: &str,
         config: &McpServerConfig,
         workspace: &BTreeMap<String, String>,
-        sandbox: &SandboxSpec,
+        sites: &std::path::Path,
     ) -> Result<Self, String> {
         if let Some(problem) = &config.problem {
             return Err(problem.clone());
@@ -41,25 +40,13 @@ impl McpClient {
             for (key, value) in &config.env {
                 env.insert(key.clone(), expand(value, workspace)?);
             }
-            let mut spec = sandbox.clone();
-            for bind in &config.binds_ro {
-                spec = spec.with_ro(expand_home(&expand(bind, workspace)?));
-            }
-            for bind in &config.binds_rw {
-                spec = spec.with_rw(expand_home(&expand(bind, workspace)?));
-            }
             let dir = if config.cwd.is_empty() {
-                spec.sites().to_path_buf()
+                sites.to_path_buf()
             } else {
-                let cwd = expand_home(&expand(&config.cwd, workspace)?);
-                // A bundle's code is bound read-only (its own `binds_ro`); it writes elsewhere.
-                if !config.cwd_read_only {
-                    spec = spec.with_rw(cwd.clone());
-                }
-                cwd
+                expand_home(&expand(&config.cwd, workspace)?)
             };
-            let mut command = spec.in_dir(dir).command(&config.command)?;
-            command.args(&config.args).envs(&env);
+            let mut command = tokio::process::Command::new(&config.command);
+            command.current_dir(dir).args(&config.args).envs(&env);
             Box::new(StdioTransport::spawn(
                 name,
                 &config.command,

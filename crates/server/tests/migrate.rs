@@ -1,9 +1,5 @@
 //! `composer migrate` (ticket 0145): a home from before workspaces becomes the `default`
 //! workspace with its pages, sessions, token, tickets and worktrees intact.
-#![allow(
-    clippy::disallowed_methods,
-    reason = "tests set up repos and fakes outside the sandbox"
-)]
 
 mod support;
 

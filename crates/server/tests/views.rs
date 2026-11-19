@@ -1,9 +1,5 @@
 //! The HTML views (ticket 0183): a page rendered with no way to run what's in it, a project's
 //! changes, both behind the workspace token.
-#![allow(
-    clippy::disallowed_methods,
-    reason = "tests set up repos outside the sandbox"
-)]
 
 mod support;
 

@@ -1,11 +1,6 @@
-//! Server-owned terminals (ticket 0176): a session's terminal is a shell in the workspace's
-//! sandbox, in its project, a tab on its desk; its output streams to the session's clients and a
+//! Server-owned terminals (ticket 0176): a session's terminal is the user's shell in its project, a tab on its desk; its output streams to the session's clients and a
 //! late one gets the scrollback; the agent reads it, and types into it only when the user
 //! approves; an idle one is reaped and opens again fresh where it was.
-#![allow(
-    clippy::disallowed_methods,
-    reason = "tests set up repos and fakes outside the sandbox"
-)]
 
 mod support;
 
@@ -20,13 +15,6 @@ use composer_server::tools::ToolContext;
 use serde_json::json;
 use support::*;
 use tokio_util::sync::CancellationToken;
-
-fn has(tool: &str) -> bool {
-    std::process::Command::new(tool)
-        .arg("--version")
-        .output()
-        .is_ok_and(|o| o.status.success())
-}
 
 /// The terminal output seen on `socket` until it contains `wanted` (10 s).
 async fn output_until(socket: &mut Socket, id: &str, wanted: &str) -> String {
@@ -64,10 +52,7 @@ async fn reply(socket: &mut Socket, id: u64, command: ClientCommand) -> CommandR
 }
 
 #[tokio::test]
-async fn a_sessions_terminal_runs_in_its_sandbox() {
-    if !has("bwrap") {
-        return;
-    }
+async fn a_sessions_terminal_runs_in_its_project() {
     // SAFETY: before the server starts; the only test in this binary.
     unsafe { std::env::set_var("SHELL", "/bin/sh") };
     let projects = tempfile::tempdir().unwrap();
@@ -77,7 +62,7 @@ async fn a_sessions_terminal_runs_in_its_sandbox() {
     std::fs::write(game.join("README"), "the game\n").unwrap();
     let mut config = Config::defaults();
     config.projects.dir = root.display().to_string();
-    let (dir, server, _provider, addr) = start_with(config, vec![]).await;
+    let (_dir, server, _provider, addr) = start_with(config, vec![]).await;
     let session = server
         .sessions
         // The worker page has the terminal tools; the orchestrator's base set does not (0200).
@@ -110,9 +95,7 @@ async fn a_sessions_terminal_runs_in_its_sandbox() {
         panic!()
     };
     assert_eq!(session.desk().active, Some(format!("terminal:{id}")));
-    // In its project, in the sandbox: no state/ (the workspace's token).
-    let token = dir.path().join("state/token");
-    assert!(token.exists());
+    // In its project.
     let input = |data: String| ClientCommand::TerminalInput {
         terminal: id.clone(),
         data,
@@ -120,16 +103,13 @@ async fn a_sessions_terminal_runs_in_its_sandbox() {
     reply(
         &mut client,
         3,
-        input(format!(
-            "echo at-$(pwd) sum-$((40+2)); cat README; test -e {} && echo $((0+1))-LEAK || echo $((1+1))-SAFE\r",
-            token.display()
-        )),
+        input("echo at-$(pwd) sum-$((40+2)); cat README; echo $((1+1))-DONE\r".into()),
     )
     .await;
-    let seen = output_until(&mut client, &id, "2-SAFE").await;
+    let seen = output_until(&mut client, &id, "2-DONE").await;
     assert!(seen.contains(&format!("at-{}", game.display())), "{seen}");
     assert!(
-        seen.contains("sum-42") && seen.contains("the game") && !seen.contains("1-LEAK"),
+        seen.contains("sum-42") && seen.contains("the game"),
         "{seen}"
     );
     reply(

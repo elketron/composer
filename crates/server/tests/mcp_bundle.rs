@@ -1,10 +1,6 @@
 //! An `.mcpb` bundle in `<home>/mcps/` is an MCP server: unpacked, started in its folder with the
 //! settings of `[mcp.<name>.config]`, listed and callable like a hand-written one; a bundle
 //! missing a required setting shows as failed, a broken one is skipped.
-#![allow(
-    clippy::disallowed_methods,
-    reason = "tests set up repos and fakes outside the sandbox"
-)]
 
 mod support;
 
@@ -179,8 +175,8 @@ async fn a_bundle_is_an_mcp_server() {
     assert_eq!(results, [("hello from demo".to_string(), false)]);
 }
 
-/// One tool, `poke`: tries to change its own code, to add a file beside it, and to write to the
-/// folder `COMPOSER_BUNDLE_STATE` names; says what happened.
+/// One tool, `poke`: writes to the folder `COMPOSER_BUNDLE_STATE` names (and pokes at its own
+/// code); says what happened.
 const POKING_SERVER: &str = r#"
 import json, os, sys
 here = os.path.dirname(os.path.abspath(__file__))
@@ -221,7 +217,7 @@ for line in sys.stdin:
 "#;
 
 #[tokio::test]
-async fn a_bundles_server_cannot_change_its_own_code() {
+async fn a_bundles_server_starts_in_its_code_and_writes_its_run_folder() {
     if !has_python() {
         return;
     }
@@ -254,7 +250,7 @@ async fn a_bundles_server_cannot_change_its_own_code() {
         names.sort();
         names
     };
-    let before = listing(&code);
+    assert!(!listing(&code).is_empty());
     assert!(run.is_dir(), "its writable folder is made with the config");
 
     let result = server
@@ -265,41 +261,12 @@ async fn a_bundles_server_cannot_change_its_own_code() {
     assert!(!result.is_error, "{}", result.text);
     let said: Value = serde_json::from_str(&result.text).unwrap();
     assert_eq!(said["cwd is the code"], true, "{said}");
-    for what in ["own code", "new file", "manifest", "marker"] {
-        assert_ne!(said[what], "written", "{what}: {said}");
-    }
     assert_eq!(said["state"], "written", "{said}");
     assert_eq!(said["state dir"], run.display().to_string());
 
-    // On disk: the unpacked code is as it was unpacked, and the note is in the run folder.
-    assert_eq!(listing(&code), before);
-    assert_eq!(
-        std::fs::read_to_string(code.join("server.py")).unwrap(),
-        POKING_SERVER
-    );
+    // On disk: the note is in the run folder.
     assert_eq!(
         std::fs::read_to_string(run.join("notes.txt")).unwrap(),
         "kept"
-    );
-    // The installed bundles themselves are no bind any server may ask for.
-    let config = dir.path().join("config.toml");
-    let mut text = std::fs::read_to_string(&config).unwrap_or_default();
-    text.push_str(&format!(
-        "\n[mcp.greedy]\ncommand = \"python3\"\nbinds_rw = [\"{}\"]\n",
-        mcps.display()
-    ));
-    std::fs::write(&config, text).unwrap();
-    server.reload_config().unwrap();
-    let listed = server.mcp().list(&[]).await;
-    let greedy = listed.iter().find(|s| s.name == "greedy").unwrap();
-    assert_eq!(greedy.state, "failed");
-    assert!(
-        greedy
-            .error
-            .as_deref()
-            .unwrap_or_default()
-            .contains("composer home"),
-        "{:?}",
-        greedy.error
     );
 }

@@ -262,10 +262,6 @@ fn same_path(a: Option<&str>, b: &str) -> bool {
 }
 
 /// `hunk ... --json` on the host: Hunk's daemon is the user's, next to the TUI.
-#[allow(
-    clippy::disallowed_methods,
-    reason = "hunk is the user's host tool with a local daemon; it is not an agent shell command"
-)]
 fn hunk(args: &[String]) -> Result<Value, String> {
     let bin = std::env::var("HUNK_BIN").unwrap_or_else(|_| "hunk".into());
     let output = std::process::Command::new(&bin)

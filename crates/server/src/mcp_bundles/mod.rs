@@ -2,8 +2,8 @@
 //! server. `<home>/mcps/*.mcpb` are unpacked to `<home>/state/mcps/<name>/` and merged into
 //! the `[mcp.<name>]` entries of every workspace's config ([`InstalledMcpBundles::merge_into`]).
 //!
-//! A bundle's server never writes its own code: the unpacked folder is bound read-only in its
-//! sandbox, and what it writes goes to `<home>/state/mcps/.run/<name>/` ([`McpBundle::config`]).
+//! A bundle's server writes to `<home>/state/mcps/.run/<name>/` ([`McpBundle::config`]), not
+//! next to its unpacked code.
 //! Archives are unpacked within [`BUNDLE_LIMITS`].
 
 mod installed_mcp_bundles;

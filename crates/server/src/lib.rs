@@ -28,7 +28,6 @@ mod migrate;
 pub mod project;
 pub mod provider;
 pub mod reminders;
-pub mod sandbox;
 mod secret;
 mod server;
 pub mod session;
@@ -54,7 +53,7 @@ pub use config::Config;
 pub use config_sections::{
     AgentConfig, ApplicationConfig, AppsConfig, AttachmentsConfig, ClaudeCodeConfig, LauncherEntry,
     McpServerConfig, ProjectSettings, ProjectsConfig, ProviderConfig, RemindersConfig,
-    SandboxConfig, ServerConfig,
+    ServerConfig,
 };
 pub use error::{Result, ServerError};
 pub use hash::content_hash;

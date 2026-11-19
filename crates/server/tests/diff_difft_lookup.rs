@@ -1,9 +1,5 @@
 //! `project_diff` looks difft up once, and without it does none of the per-file difft work
 //! (no `git show` of the old content). Watched through a `git` wrapper on a temp PATH.
-#![allow(
-    clippy::disallowed_methods,
-    reason = "tests set up repos and fakes outside the sandbox"
-)]
 
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
@@ -65,10 +61,7 @@ async fn no_difft_means_no_git_show_and_difft_means_one_per_file() {
             .filter(|l| l.contains(" show "))
             .count()
     };
-    // This counts calls to a git on PATH; the git jail would run the real one inside.
-    let mut off = composer_server::Config::defaults().sandbox;
-    off.enabled = false;
-    composer_server::sandbox::configure_git_jail(&off);
+    // This counts calls to the git on PATH.
     let old_path = std::env::var_os("PATH").unwrap();
     unsafe { std::env::set_var("PATH", bin.path()) };
 

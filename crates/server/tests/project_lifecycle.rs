@@ -3,10 +3,6 @@
 //! starts a watch whose changes reach the clients that opened it (not `node_modules`); a dropped
 //! connection closes what it opened, the last close stops it. Home lists `tile` apps with their
 //! `tile.md`.
-#![allow(
-    clippy::disallowed_methods,
-    reason = "tests set up repos and fakes outside the sandbox"
-)]
 
 mod support;
 

@@ -11,7 +11,6 @@ use crate::agent::{AgentDefinition, Site};
 use crate::mcp_clients::McpClient;
 use crate::mcp_clients::types::{Slot, glob_matches, tool_name, transport_kind};
 use crate::provider::ToolSpec;
-use crate::sandbox::SandboxSpec;
 use crate::tools::ToolContext;
 use crate::tools::{CallResult, text_result};
 
@@ -27,19 +26,15 @@ pub struct McpServers {
     /// The workspace's environment ([`crate::WorkspaceHome::env`]): set for every stdio server it
     /// starts, and what `${COMPOSER_WORKSPACE}` in a config expands to.
     workspace: BTreeMap<String, String>,
-    /// The world a stdio server starts in, as it is when it starts (other workspaces' projects
-    /// change).
-    sandbox: SandboxWorld,
+    /// The workspace's sites: where a stdio server without a `cwd` starts.
+    sites: std::path::PathBuf,
 }
-
-/// Makes the [`SandboxSpec`] of a spawn now.
-pub type SandboxWorld = Arc<dyn Fn() -> SandboxSpec + Send + Sync>;
 
 impl McpServers {
     pub fn new(
         configs: &BTreeMap<String, McpServerConfig>,
         workspace: BTreeMap<String, String>,
-        sandbox: SandboxWorld,
+        sites: std::path::PathBuf,
     ) -> Self {
         let mut usable = BTreeMap::new();
         for (name, config) in configs {
@@ -62,14 +57,14 @@ impl McpServers {
                 .collect(),
             configs: usable,
             workspace,
-            sandbox,
+            sites,
         }
     }
 
     /// The servers of a new config: an unchanged server keeps its connection, a changed or
     /// removed one is dropped (its process stops once no call is using it).
     pub fn reconfigured(&self, configs: &BTreeMap<String, McpServerConfig>) -> Self {
-        let mut next = Self::new(configs, self.workspace.clone(), self.sandbox.clone());
+        let mut next = Self::new(configs, self.workspace.clone(), self.sites.clone());
         for (name, slot) in &mut next.slots {
             if let Some(kept) = self.slots.get(name)
                 && self.configs.get(name) == next.configs.get(name)
@@ -99,14 +94,7 @@ impl McpServers {
         {
             return Err(error.clone());
         }
-        match McpClient::connect(
-            name,
-            &self.configs[name],
-            &self.workspace,
-            &(self.sandbox)(),
-        )
-        .await
-        {
+        match McpClient::connect(name, &self.configs[name], &self.workspace, &self.sites).await {
             Ok(client) => {
                 let client = Arc::new(client);
                 tracing::info!(

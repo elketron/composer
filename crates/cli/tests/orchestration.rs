@@ -1,9 +1,5 @@
 //! An orchestrator spawns a real worker process (this crate's `composer` binary) on a
 //! ticket; both talk to a fake OpenAI-compatible model that answers by role.
-#![allow(
-    clippy::disallowed_methods,
-    reason = "tests set up repos and fakes outside the sandbox"
-)]
 
 mod support;
 

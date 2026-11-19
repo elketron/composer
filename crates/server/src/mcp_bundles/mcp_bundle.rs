@@ -82,11 +82,6 @@ impl McpBundle {
                 .map(|(k, v)| (k.clone(), sub(v)))
                 .collect(),
             cwd: dirname.clone(),
-            // The code read-only (and, before it, nothing else of the bundle read-write): `cwd`
-            // is either that folder or inside `run`.
-            cwd_read_only: true,
-            binds_ro: vec![folder],
-            binds_rw: vec![state.clone()],
             enabled: true,
             ..Default::default()
         };
@@ -195,8 +190,6 @@ impl McpBundle {
         }
         let mut config = self.config(&entry.config, user_home, run);
         config.env.extend(entry.env.clone());
-        config.binds_ro.extend(entry.binds_ro.clone());
-        config.binds_rw.extend(entry.binds_rw.clone());
         config.allow = entry.allow.clone();
         config.sites = entry.sites.clone();
         config.enabled = entry.enabled;
@@ -261,9 +254,6 @@ mod tests {
     fn the_code_is_read_only_and_writes_go_to_the_run_folder() {
         let c = config(&bundle(MANIFEST), &[]);
         assert_eq!(c.cwd, "/state/mcps/demo");
-        assert!(c.cwd_read_only);
-        assert_eq!(c.binds_ro, ["/state/mcps/demo"]);
-        assert_eq!(c.binds_rw, ["/state/mcps/.run/demo"]);
         assert_eq!(c.env[STATE_ENV], "/state/mcps/.run/demo");
         assert!(!c.env.contains_key("UV_CACHE_DIR"));
 
@@ -282,9 +272,6 @@ mod tests {
         assert_eq!(c.env[STATE_ENV], "/state/mcps/.run/demo");
         assert_eq!(c.cwd, "/state/mcps/.run/demo/project");
         assert_eq!(c.args[2], "/state/mcps/.run/demo/project");
-        assert!(c.cwd_read_only);
-        assert_eq!(c.binds_ro, ["/state/mcps/demo"]);
-        assert_eq!(c.binds_rw, ["/state/mcps/.run/demo"]);
     }
 
     #[test]
@@ -383,7 +370,6 @@ mod tests {
         // An entry without command or url overlays it.
         let entry = McpServerConfig {
             env: [("PLAIN".to_string(), "2".to_string())].into(),
-            binds_ro: vec!["/ro".into()],
             allow: vec!["get_*".into()],
             sites: vec!["3d".into()],
             enabled: false,
@@ -396,7 +382,6 @@ mod tests {
         assert_eq!(c.args[1], "--key=k");
         assert_eq!(c.env["PLAIN"], "2");
         assert_eq!(c.env["HOME_DIR"], "/h/linux");
-        assert_eq!(c.binds_ro, ["/state/mcps/demo", "/ro"]);
         assert_eq!((c.allow, c.enabled), (vec!["get_*".to_string()], false));
         assert_eq!(c.sites, ["3d"], "the overlay says which sites may grant it");
         assert_eq!(c.config["key"], "k");

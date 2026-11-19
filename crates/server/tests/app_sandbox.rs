@@ -4,10 +4,6 @@
 //! the viewer's, its HTTP routes, pairing), even with the workspace's cookie. And
 //! `POST /api/web-session`: a browser session of the caller's kind, for clients that set the
 //! workspace's cookie themselves (the desktop's panes, the phone's live view).
-#![allow(
-    clippy::disallowed_methods,
-    reason = "tests set up repos and fakes outside the sandbox"
-)]
 
 mod support;
 

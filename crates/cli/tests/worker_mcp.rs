@@ -2,10 +2,6 @@
 //! call (one MCP server process), and its orchestrator decides the approval: it denies the first
 //! call with a reason the worker gets, and approves the second. A recipe it denies tells the
 //! worker process why too.
-#![allow(
-    clippy::disallowed_methods,
-    reason = "tests set up repos and fakes outside the sandbox"
-)]
 
 mod support;
 

@@ -1,10 +1,6 @@
 //! An app messages the session it was opened from (ticket 0172): opened with `?session=` (or
 //! `app.open { session }`), its messages go to that session and no other; opened outside a chat,
 //! it messages none; an unknown session isn't opened from.
-#![allow(
-    clippy::disallowed_methods,
-    reason = "tests set up repos and fakes outside the sandbox"
-)]
 
 mod support;
 

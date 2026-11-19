@@ -4,10 +4,6 @@
 //! site and its project, runs only its own site's actions, and its socket sends only what an app
 //! needs. A forged or revoked token: not found. The workspace's credentials don't work there, and
 //! `Origin: null` (what the sandboxed page sends) works only there.
-#![allow(
-    clippy::disallowed_methods,
-    reason = "tests set up repos and fakes outside the sandbox"
-)]
 
 mod support;
 

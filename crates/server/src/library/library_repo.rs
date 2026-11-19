@@ -4,7 +4,7 @@ use composer_core::SiteUrl;
 
 use crate::home::Home;
 use crate::library::LibraryCommit;
-use crate::project::git::{library_git as git, library_git_output};
+use crate::project::git::{git, git_output};
 
 /// The library folder (`<home>/sites/`) as a local git repo: every change to it (a stock update,
 /// later a publish) is a commit, so an installed copy can be merged against the version it came
@@ -84,7 +84,7 @@ impl Library {
     /// Whether `site` changed between `commit` and HEAD.
     pub fn changed_since(&self, commit: &LibraryCommit, site: &str) -> Result<bool, String> {
         let site = site_name(site)?;
-        let output = library_git_output(
+        let output = git_output(
             &self.root,
             &[
                 "diff",
@@ -94,6 +94,7 @@ impl Library {
                 "--",
                 &format!("{site}/"),
             ],
+            &[],
         )?;
         match output.status.code() {
             Some(0) => Ok(false),
@@ -105,7 +106,7 @@ impl Library {
     /// Whether the library has `commit`.
     pub fn has(&self, commit: &LibraryCommit) -> Result<bool, String> {
         let spec = format!("{commit}^{{commit}}");
-        let output = library_git_output(&self.root, &["cat-file", "-e", &spec])?;
+        let output = git_output(&self.root, &["cat-file", "-e", &spec], &[])?;
         Ok(output.status.success())
     }
 
@@ -175,7 +176,7 @@ impl Library {
         let site = site_name(site)?;
         let path = relative(path)?;
         let spec = format!("{commit}:{site}/{}", path.display());
-        let output = library_git_output(&self.root, &["show", &spec])?;
+        let output = git_output(&self.root, &["show", &spec], &[])?;
         Ok(output.status.success().then_some(output.stdout))
     }
 }
