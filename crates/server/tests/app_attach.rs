@@ -1,10 +1,6 @@
 //! Apps attached to projects (ticket 0162): a site's `app:` block says where it shows and which
 //! projects it attaches to; a project's `[projects."<path>"]` entry pins, hides, tags and names.
 //! Listed over HTTP (`/api/apps`, `/api/projects/<name>/apps`) and ws (`apps.list`).
-#![allow(
-    clippy::disallowed_methods,
-    reason = "tests set up repos and fakes outside the sandbox"
-)]
 
 mod support;
 

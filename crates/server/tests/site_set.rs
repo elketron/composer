@@ -1,10 +1,6 @@
 //! `site.set` over the socket: the user enters a site or leaves it. The reply is a
 //! `note` with what happened (the application's outcome included); the session's new state
 //! arrives as `session.updated`.
-#![allow(
-    clippy::disallowed_methods,
-    reason = "tests set up fakes outside the sandbox"
-)]
 
 mod support;
 
@@ -56,7 +52,6 @@ fn config(scratch: &std::path::Path) -> Config {
         McpServerConfig {
             command: "python3".into(),
             args: vec![script.display().to_string()],
-            binds_rw: vec![scratch.display().to_string()],
             enabled: true,
             ..Default::default()
         },

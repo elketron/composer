@@ -1,9 +1,5 @@
 //! The `hunk` tool: it reads a live review and its notes through Hunk's session CLI, replies,
 //! comments, navigates, and exports a review page. A fake `hunk` stands in for the daemon.
-#![allow(
-    clippy::disallowed_methods,
-    reason = "tests set up repos and fakes outside the sandbox"
-)]
 
 mod support;
 

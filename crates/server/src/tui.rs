@@ -158,7 +158,7 @@ impl TuiPage {
     }
 
     /// Starts the program in a terminal on the session's desk. The terminal is a client (like the
-    /// desktop TUI), so it runs outside the agent's sandbox; the page's control is one of
+    /// desktop TUI), so the page's control is one of
     /// [`CONTROLS`], not an arbitrary shell.
     pub fn open(&self, context: &ToolContext, page: &Page) -> Result<String, String> {
         let cwd = self.resolve_cwd(context, page)?;

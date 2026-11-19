@@ -248,23 +248,21 @@ An MCP Bundle is a zip with a `manifest.json` that says how to start a local ser
 [plan.md](plan.md) ("Bundles (`.mcpb`)"); the code is `crates/server/src/mcp_bundles/`.
 
 - A file in `<home>/mcps/` is the install, shared by every workspace. It is unpacked to
-  `<home>/state/mcps/<name>/`, again only when the file's hash changes. No sandbox bind may reach
-  `<home>/mcps`.
+  `<home>/state/mcps/<name>/`, again only when the file's hash changes.
 - Limits (`BUNDLE_LIMITS`): the file at most 256 MiB, 100,000 entries, 256 MiB per unpacked file
   and 1 GiB unpacked in all, counted while the bytes are written; a bundle over one is skipped
   with a warning that names the limit, and nothing of it stays on disk.
-- The server cannot write its own code: the unpacked folder is bound read-only in its sandbox.
-  What it writes goes to `<home>/state/mcps/.run/<name>/`, the one folder bound read-write, named
-  in `COMPOSER_BUNDLE_STATE`. A `uv` bundle's environment and cache are there
+- What the server writes goes to `<home>/state/mcps/.run/<name>/`, named in
+  `COMPOSER_BUNDLE_STATE`, not beside its unpacked code. A `uv` bundle's environment and cache are there
   (`UV_PROJECT_ENVIRONMENT=<run>/venv`, `UV_CACHE_DIR=<run>/uv-cache`), and it starts in
   `<run>/project/` instead of the unpacked folder, because `uv run` writes `uv.lock` beside
   `pyproject.toml`: that folder holds copies of the bundle's top-level files and links to its
   top-level folders, is made again on every config load (only `uv.lock` and `*.egg-info` are
   kept), and is what `${__dirname}` means for a `uv` bundle. Other bundles start in the unpacked
-  folder. With `[sandbox] enabled = false` none of this is enforced.
+  folder. Nothing enforces this: the server runs as the user (no sandbox since 2026-11-19).
 - The name is the manifest's `name` as a slug (`Blender` → `blender`).
 - No `[mcp.<name>]` entry is needed to register it. One without `command` or `url` overlays the
-  bundle: `allow`, `sites`, `enabled`, `env`, binds, and `[mcp.<name>.config]` for the manifest's
+  bundle: `allow`, `sites`, `enabled`, `env`, and `[mcp.<name>.config]` for the manifest's
   `user_config`.
 - A bundle's tools come with a workflow only through that overlay: `[mcp.<name>] sites = ["3d"]`
   names the sites whose `mcp:` may grant them. A bundle without the entry is granted by no site
@@ -273,7 +271,7 @@ An MCP Bundle is a zip with a `manifest.json` that says how to start a local ser
 - `McpServerConfig` gained `cwd`, usable in hand-written entries too.
 
 Verified 2026-11-10 with Blender Lab's `blender-1.0.3.mcpb` on a scratch server: unpacked, `ready`
-with 26 tools inside the sandbox, an `allow = ["get_*"]` overlay applied, and an agent listed the open
+with 26 tools, an `allow = ["get_*"]` overlay applied, and an agent listed the open
 scene through `blender__get_objects_summary`. The bundle's server needs Blender's MCP add-on enabled
 and listening (`localhost:9876`); both sides take another port (`BLENDER_MCP_PORT`, the add-on's
 preference), which a second Blender in wayai needs.
@@ -289,8 +287,6 @@ Known limits:
 - only the `linux` platform override is applied; composer ships no runtimes (`uv`, Node, Python come
   from the machine);
 - `user_config` and its missing-settings error are covered by unit tests only;
-- the sandbox allows binds under `<home>/state/mcps` (`SandboxSpec::allowed`), which is how the
-  code (read-only) and the run folder get in;
 - `execute_blender_code` is unrestricted Python in Blender (the add-on's own sandbox only blocks
   `sys.exit()`): leave it on approval.
 
@@ -410,8 +406,7 @@ bearer_file = "~/.local/share/wayai/token"   # read for every proxied request an
 (scheme, host and port), and to nothing for a viewer anywhere else. The proxy adds the header to
 what it sends upstream; it takes no `Authorization` from the client, returns none, and sends no
 `Origin` (wayai refuses one that is not its own). A file that cannot be read fails clearly: the MCP
-connect with the path in its error, the proxy with 502 and the path. The file is in the user's
-home, which is empty inside every sandbox (`--tmpfs $HOME`) unless a bind names it. The proxy
+connect with the path in its error, the proxy with 502 and the path. The proxy
 refuses (404) a path below `/view` with `..`, an empty segment, a backslash or an encoded dot,
 slash or backslash, and rewrites an upstream redirect only when it stays on the viewer.
 

@@ -36,7 +36,7 @@ pub async fn rebuild_plan(server: &Server, all: bool) -> Vec<(String, String)> {
     plan
 }
 
-/// Runs each planned `ui-build` in the sandbox (as the site's recipe on Home): `(site, status,
+/// Runs each planned `ui-build` (as the site's recipe on Home): `(site, status,
 /// the end of its output)`. The user's command is the approval.
 pub async fn rebuild(server: &Arc<Server>, all: bool) -> Vec<(String, String, String)> {
     let timeout = Duration::from_secs(server.config().agent.recipe_timeout_secs);

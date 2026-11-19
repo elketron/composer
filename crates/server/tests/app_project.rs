@@ -3,10 +3,6 @@
 //! recipes, which get `PROJECT_ROOT`, `PROJECT_NAME` and `APP_DATA` and can write the project and
 //! the data, not another project. An ignored test builds a fresh app from the template in the
 //! sandbox and opens it on a project (needs `bun` and its package cache).
-#![allow(
-    clippy::disallowed_methods,
-    reason = "tests set up repos and fakes outside the sandbox"
-)]
 
 mod support;
 
@@ -188,13 +184,9 @@ async fn an_apps_recipe_gets_its_project_and_data() {
     }
     let (_projects, root, dir, server, addr) = setup().await;
     let cad = dir.path().join("sites/cad");
-    let notes = root.join("notes");
     write(
         &cad.join("justfile"),
-        &format!(
-            "probe:\n    echo \"$PROJECT_NAME|$PROJECT_ROOT\" > \"$APP_DATA/env.txt\"\n    touch \"$PROJECT_ROOT/from-recipe\"\n    touch '{}/escaped' 2>/dev/null || true\n",
-            notes.display()
-        ),
+        "probe:\n    echo \"$PROJECT_NAME|$PROJECT_ROOT\" > \"$APP_DATA/env.txt\"\n    touch \"$PROJECT_ROOT/from-recipe\"\n",
     );
     let justfile = Justfile::load(&cad).await.unwrap();
     server
@@ -217,11 +209,10 @@ async fn an_apps_recipe_gets_its_project_and_data() {
     let env = std::fs::read_to_string(dir.path().join("state/projects/game/cad/env.txt")).unwrap();
     assert_eq!(env.trim(), format!("game|{}", root.join("game").display()));
     assert!(root.join("game/from-recipe").is_file());
-    assert!(!notes.join("escaped").exists(), "another project");
 }
 
 /// `cargo test -p composer-server --test app_project -- --ignored`: a fresh app from the
-/// template builds with its `ui-build` in the sandbox and runs on a project.
+/// template builds with its `ui-build` and runs on a project.
 #[tokio::test]
 #[ignore = "needs bun and its package cache; run on demand"]
 async fn a_fresh_app_from_the_template_builds_and_runs_on_a_project() {

@@ -2,10 +2,6 @@
 //! `[mcp.<name>] sites` lists the site (the page alone grants nothing), and its `app:` starts
 //! an `[applications.<name>]` entry through the `launch` tool of an MCP server on entering.
 //! The server is a fake stdio one in Python that records the calls it gets.
-#![allow(
-    clippy::disallowed_methods,
-    reason = "tests set up fakes outside the sandbox"
-)]
 
 mod support;
 
@@ -83,8 +79,6 @@ fn fake_config(scratch: &std::path::Path) -> Config {
         McpServerConfig {
             command: "python3".into(),
             args: vec![script.display().to_string()],
-            // The sandbox has its own `/tmp`: the directory is a declared bind, writable for the log.
-            binds_rw: vec![scratch.display().to_string()],
             allow: vec!["echo".into()],
             sites: vec!["lab".into(), "mcponly".into()],
             enabled: true,

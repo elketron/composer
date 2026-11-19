@@ -1,10 +1,6 @@
 //! wayai's viewer through composer (`<workspace>/view`): proxied to a fake upstream on loopback,
 //! behind the workspace's token, view only. The fake serves a page, a WebSocket of binary frames
 //! that records everything it receives, and an annotations endpoint that records its posts.
-#![allow(
-    clippy::disallowed_methods,
-    reason = "tests set up fakes outside the sandbox"
-)]
 
 mod support;
 

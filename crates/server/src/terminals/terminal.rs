@@ -7,7 +7,7 @@ use portable_pty::{Child, MasterPty, PtySize};
 
 use crate::terminals::Scrollback;
 
-/// One server-owned terminal of a session (ticket 0176): a shell in the workspace's sandbox on a
+/// One server-owned terminal of a session (ticket 0176): the user's shell on a
 /// PTY, its recent output, and when someone last used it.
 pub struct Terminal {
     pub id: String,

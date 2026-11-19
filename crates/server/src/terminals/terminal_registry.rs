@@ -68,8 +68,8 @@ impl Terminals {
     }
 
     /// Starts a `type: tui` page's program in a terminal on `session`'s desk. It is a client
-    /// (like the desktop TUI), so it runs outside the agent's sandbox; the page has already
-    /// checked the program against its `control:` adapter.
+    /// (like the desktop TUI); the page has already checked the program against its `control:`
+    /// adapter.
     pub fn open_tui(
         &self,
         server: &Arc<Server>,
@@ -112,9 +112,8 @@ impl Terminals {
         Ok(id)
     }
 
-    /// Starts the TUI for desktop window `window` in a terminal of its own (ticket 0177): not in
-    /// the sandbox (decision 2026-11-06: the TUI is a client, with the workspace's token, not an
-    /// agent). Its id.
+    /// Starts the TUI for desktop window `window` in a terminal of its own (ticket 0177): a
+    /// client, with the workspace's token, not an agent. Its id.
     pub fn open_window(
         &self,
         server: &Arc<Server>,
@@ -126,7 +125,7 @@ impl Terminals {
         let pair = native_pty_system()
             .openpty(size(cols, rows))
             .map_err(|e| format!("a terminal: {e}"))?;
-        let mut command = builder(server.worker_exe.as_os_str());
+        let mut command = CommandBuilder::new(&server.worker_exe);
         command.args([
             "--workspace",
             server.home.name().as_str(),
@@ -266,7 +265,7 @@ fn place(server: &Server, session: &Session) -> PathBuf {
         .unwrap_or_else(|| server.home.sites())
 }
 
-/// The shell, in the sandbox (decision 2026-11-07: the user's terminals too), on a new PTY.
+/// The user's shell, on a new PTY.
 fn spawn(
     server: &Arc<Server>,
     session: &Session,
@@ -275,25 +274,11 @@ fn spawn(
     cols: u16,
     rows: u16,
 ) -> Result<Arc<Terminal>, String> {
-    let mut spec = server.sandbox().tty().in_dir(cwd);
-    // The user's shell config, read-only ([terminals] lend): composer's own choice of mounts.
-    for lent in &server.config().terminals.lend {
-        spec = spec.with_mount(crate::sandbox::Mount::Ro(crate::tools::expand_home(lent)));
-    }
-    if let Some(project) = session
-        .info()
-        .project
-        .and_then(|p| server.see_project(&p).ok())
-    {
-        spec = spec.with_rw(project);
-    }
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".into());
-    let (program, args) = spec.wrap(&shell)?;
     let pair = native_pty_system()
         .openpty(size(cols, rows))
         .map_err(|e| format!("a terminal: {e}"))?;
-    let mut command = builder(&program);
-    command.args(args);
+    let mut command = CommandBuilder::new(&shell);
     command.env("TERM", "xterm-256color");
     command.env("COLORTERM", "truecolor");
     command.cwd(cwd);
@@ -317,19 +302,8 @@ fn spawn(
     }))
 }
 
+/// A `type: tui` page's program: the user's live view, the same trust as a desktop window. The agent uses the program's control adapter, not this terminal.
 #[allow(
-    clippy::disallowed_methods,
-    reason = "the sandbox's bwrap with the shell after it (or the shell, with the sandbox off); \
-              or composer's own TUI for a window, a client, not an agent"
-)]
-fn builder(program: &std::ffi::OsStr) -> CommandBuilder {
-    CommandBuilder::new(program)
-}
-
-/// A `type: tui` page's program, outside the sandbox: it is the user's live view, the same trust
-/// as a desktop window. The agent uses the program's control adapter, not this terminal.
-#[allow(
-    clippy::disallowed_methods,
     clippy::too_many_arguments,
     reason = "a TUI page's program is the user's client, not an agent shell; the page's control \
               adapter chose it, and the spawn needs the terminal's identity and size"
@@ -347,7 +321,7 @@ fn spawn_tui(
     let pair = native_pty_system()
         .openpty(size(cols, rows))
         .map_err(|e| format!("a terminal: {e}"))?;
-    let mut command = builder(std::ffi::OsStr::new(program));
+    let mut command = CommandBuilder::new(program);
     command.args(args.iter());
     command.env("TERM", "xterm-256color");
     command.env("COLORTERM", "truecolor");

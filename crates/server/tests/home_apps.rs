@@ -4,10 +4,6 @@
 //! apps (the user's `[apps] clients`, the chat app), opened with a one-time code that becomes the
 //! cookie: the workspace token is never in an app's URL. A site's own `client: true` only asks:
 //! unlisted, it opens with a token like any app. A project-only app doesn't open on Home.
-#![allow(
-    clippy::disallowed_methods,
-    reason = "tests set up repos and fakes outside the sandbox"
-)]
 
 mod support;
 

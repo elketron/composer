@@ -1,8 +1,4 @@
 //! A garbled call from a local model's chat template reaches the tool the way its schema says.
-#![allow(
-    clippy::disallowed_methods,
-    reason = "tests set up repos and fakes outside the sandbox"
-)]
 
 mod support;
 

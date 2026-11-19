@@ -1,9 +1,5 @@
 //! A `type: tui` page opens its program in a terminal on the session's desk, in the project (or
 //! the work's `project/` view). The hunk control adapter is tested separately.
-#![allow(
-    clippy::disallowed_methods,
-    reason = "tests set up repos and fakes outside the sandbox"
-)]
 
 mod support;
 

@@ -162,8 +162,8 @@ The pack records these names, never the definitions:
 - `library:` extras are included in the definition; they are not requirements.
 
 No site config is packed. A site does not own `config.toml`; its needs live in
-the workspace's config. This avoids copying provider keys, MCP commands,
-sandbox binds or project paths into a GitHub repo.
+the workspace's config. This avoids copying provider keys, MCP commands
+or project paths into a GitHub repo.
 
 ## Projects and mounts
 

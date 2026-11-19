@@ -2,10 +2,6 @@
 //! keeps for a project (text as text, an image shown, a folder listed), `data://<project>/` lists
 //! the apps with data, `data://@home/<app>/...` an app's Home data. Read-only, inside the app's
 //! folder, only this workspace's projects, and only the apps of sites the agent may read.
-#![allow(
-    clippy::disallowed_methods,
-    reason = "tests set up repos and fakes outside the sandbox"
-)]
 
 mod support;
 

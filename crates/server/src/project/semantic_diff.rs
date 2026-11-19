@@ -25,10 +25,6 @@ fn find_in(path_var: &OsStr) -> Option<PathBuf> {
 /// `difft` (the executable at `difft`) on `file` as of `base` against its current content in
 /// the checkout at `path`. `None` when difft doesn't know the file's language (it would only
 /// diff it as text), has nothing to show, fails or times out.
-#[allow(
-    clippy::disallowed_methods,
-    reason = "the git jail's own bwrap (or git, with the sandbox off)"
-)]
 pub async fn semantic_diff(
     difft: &Path,
     path: &Path,
@@ -45,9 +41,13 @@ pub async fn semantic_diff(
     if status.starts_with('A') {
         std::fs::write(&old, "").ok()?;
     } else {
-        let (program, jailed) =
-            crate::sandbox::git_jailed(path, &["show", &format!("{base}:{file}")]).ok()?;
-        let shown = Command::new(program).args(jailed).output().await.ok()?;
+        let shown = Command::new("git")
+            .arg("-C")
+            .arg(path)
+            .args(["show", &format!("{base}:{file}")])
+            .output()
+            .await
+            .ok()?;
         if !shown.status.success() {
             return None;
         }
@@ -57,7 +57,7 @@ pub async fn semantic_diff(
         std::fs::write(&new, "").ok()?;
     } else {
         // The file as the worktree has it, never what a symlink there points to (a run could
-        // link `~/.ssh/id_ed25519`): composer reads it outside the sandbox.
+        // link `~/.ssh/id_ed25519`).
         let changed = path.join(file);
         if std::fs::symlink_metadata(&changed)
             .ok()?
@@ -71,10 +71,6 @@ pub async fn semantic_diff(
     run_difft(difft, &old, &new, DIFFT_TIMEOUT).await
 }
 
-#[allow(
-    clippy::disallowed_methods,
-    reason = "composer's own difft on files git gave it"
-)]
 async fn run_difft(difft: &Path, old: &Path, new: &Path, timeout: Duration) -> Option<String> {
     let run = Command::new(difft)
         .args(["--color", "never", "--display", "inline", "--context", "3"])
@@ -106,7 +102,6 @@ mod tests {
 
     /// A `difft` script in a fresh directory that runs `body`. It is run once as a probe until it
     /// starts: another test's fork may still hold it open for writing ("text file busy").
-    #[allow(clippy::disallowed_methods, reason = "a test's probe of its own fake")]
     fn fake_difft(body: &str) -> (tempfile::TempDir, PathBuf) {
         let dir = tempfile::tempdir().unwrap();
         let bin = dir.path().join("difft");

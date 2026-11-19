@@ -598,11 +598,9 @@ Built (milestone 13):
   `~/.rustup/toolchains`, `~/.cache/huggingface/hub`, Go, Dart, NuGet, Bun, uv, Gradle, Maven; each existing one
   is an `--add-dir` with `Read(…/**)` allowed and `Edit`/`Write` in `--disallowedTools`, and is named in the
   appended prompt; source folders only, never `~/.cargo` or `~/.cache/huggingface` themselves, which hold tokens).
-- **Login:** in the sandbox (the default) a run uses the home's stored `composer claude-token` token when
-  there is one, and otherwise the user's own `~/.claude/.credentials.json`, mounted read-write so a
-  refresh writes through (the one shared live file, decided 2026-11-15); with neither, refused. Only with
-  `[sandbox] enabled = false` is the machine's logged-in CLI used instead: `claude auth status --json`
-  (with the same cleared environment) must say `loggedIn`. Not logged in or not installed: the
+- **Login:** the machine's logged-in CLI (the bwrap sandbox, its per-workspace `~/.claude` and the stored
+  `composer claude-token` were removed 2026-11-19): `claude auth status --json` (with the same cleared
+  environment) must say `loggedIn`. Not logged in or not installed: the
   spawn fails with the error and the ticket stays as it was; no retry.
 - **Environment:** cleared; only `PATH`, `HOME`, `USER`, `LOGNAME`, `SHELL`, `TERM`, `LANG`, `LC_*`,
   `TMPDIR`, `XDG_*` and `CLAUDE_CONFIG_DIR` pass. A set `ANTHROPIC_API_KEY` would win over the login and
@@ -1088,7 +1086,7 @@ enabled = true
 
 An MCP Bundle (a zip with a `manifest.json` that says how to start a local server) is installed by putting
 the file in `<home>/mcps/`; every workspace sees it. Composer unpacks it to `<home>/state/mcps/<name>/`
-(again only when the file's hash changed) and starts the server there, in the workspace's sandbox.
+(again only when the file's hash changed) and starts the server there.
 
 - The name is the manifest's `name` as a slug (`Blender` → `blender`; the file name when that is empty).
   `command`, `args` and `env` come from `server.mcp_config` (the `linux` platform override on top);
@@ -1195,16 +1193,16 @@ does. Entering makes the site part of the session, like the active project.
 
 ### Ideas (not planned)
 
-- **A sandbox around spawns:** Claude Code runs and recipes in a `bwrap` namespace built from what composer
-  already knows (the worktree or project read-write; `read_dirs`, toolchains and `/usr` read-only; a tmpfs
-  `$HOME` plus the CLI's config; no `state/`, no other projects). The filesystem becomes the boundary instead of
-  the command list, so `allowed_tools` could loosen. Threat model: mistakes, not malice (no network namespace,
-  no uid per agent). `[sandbox]`, off by default.
+- **A sandbox around spawns** (built in tickets 0157–0161 and 0203, removed 2026-11-19 in 0243): every
+  recipe, Claude Code run, stdio MCP server and terminal ran in a `bwrap` namespace, and composer's own git ran
+  in a jail. Workflows that drive real applications (Blender, the GPU, Wayland, the user's configs) needed a
+  growing list of binds, and since sites come from the user there was nothing untrusted to contain. Spawns now
+  run as the user; workspaces are kept apart by their tokens.
 - **Overlay tickets for plain folders:** a ticket on a project that isn't a git checkout gets worktree
   behaviour from overlayfs (bwrap's `--overlay-src`/`--overlay`): the project as the lower layer, writes in
   `state/overlays/<ticket>/upper`. Changes lists `upper`; merge copies it down (whiteouts delete); discard
-  removes it. Same `ticket.merge` / `ticket.discard`; a site's app shows what a binary diff can't. Needs the
-  sandbox above.
+  removes it. Same `ticket.merge` / `ticket.discard`; a site's app shows what a binary diff can't. Would
+  need bwrap (or another overlayfs mount) back for this alone.
 - **Extra read grants:** a work's `reads:` (other projects, read-only), for a video that uses a game's assets.
 
 ### Milestones

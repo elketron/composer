@@ -5,8 +5,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::config_sections::{
     AgentConfig, ApplicationConfig, AppsConfig, AttachmentsConfig, ClaudeCodeConfig, DesktopConfig,
-    LauncherEntry, McpServerConfig, ProjectsConfig, ProviderConfig, RemindersConfig, SandboxConfig,
-    ServerConfig, System1Config, TerminalsConfig, ViewerConfig,
+    LauncherEntry, McpServerConfig, ProjectsConfig, ProviderConfig, RemindersConfig, ServerConfig,
+    System1Config, TerminalsConfig, ViewerConfig,
 };
 use crate::error::{Result, ServerError};
 
@@ -29,8 +29,6 @@ pub struct Config {
     pub claude_code: ClaudeCodeConfig,
     #[serde(default = "section")]
     pub attachments: AttachmentsConfig,
-    #[serde(default = "section")]
-    pub sandbox: SandboxConfig,
     #[serde(default = "section")]
     pub apps: AppsConfig,
     #[serde(default = "section")]
@@ -155,6 +153,22 @@ mod tests {
         assert!(c.launcher[1].args.is_empty());
         assert_eq!(Config::parse(&c.to_toml()).unwrap(), c);
     }
+    #[test]
+    fn a_config_from_before_the_sandbox_was_removed_still_loads() {
+        let c = Config::parse(
+            "[sandbox]\nenabled = true\nsystem_dirs = [\"/opt\"]\nbinds_rw = [\"~/Projects\"]\n\n\
+             [terminals]\nidle_hours = 3\nlend = [\"~/.zshrc\"]\n\n\
+             [mcp.blender]\ncommand = \"blender-mcp\"\nbinds_ro = [\"/ro\"]\nbinds_rw = []\n",
+        )
+        .unwrap();
+        assert_eq!(c.terminals.idle_hours, 3);
+        assert_eq!(c.mcp["blender"].command, "blender-mcp");
+        let saved = c.to_toml();
+        for gone in ["[sandbox]", "lend =", "binds_ro", "binds_rw"] {
+            assert!(!saved.contains(gone), "{gone} in {saved}");
+        }
+    }
+
     #[test]
     fn workspace_config_goes_on_top_of_global() {
         let dir = tempfile::tempdir().unwrap();

@@ -2,10 +2,6 @@
 //! starts the real TUI (`composer --window <id>`) in a terminal of its own, whose output goes to
 //! that window only; when the TUI shows a session, the window hears `window.changed` (its stage
 //! follows); the window going ends its TUI.
-#![allow(
-    clippy::disallowed_methods,
-    reason = "tests set up repos and fakes outside the sandbox"
-)]
 
 mod support;
 

@@ -1,10 +1,6 @@
 //! A model reply that breaks off or comes back empty: the turn makes the call again by itself,
 //! and when that keeps failing it stops with the error instead of ending quietly (2026-11-17: an
 //! orchestrator went silent after `set_project` when the provider cut its stream).
-#![allow(
-    clippy::disallowed_methods,
-    reason = "tests set up repos and fakes outside the sandbox"
-)]
 
 mod support;
 

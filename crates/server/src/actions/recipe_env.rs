@@ -1,21 +1,16 @@
 use composer_core::SiteUrl;
 
 use crate::project::ProjectMode;
-use crate::sandbox::SandboxSpec;
 use crate::server::Server;
 use crate::session::Session;
 
 /// What a recipe is told through its environment: its site, the session that ran it and that
 /// session's project, and the workspace it belongs to (`COMPOSER_WORKSPACE`, ...), so a
 /// `composer` command it runs opens its own workspace, never the one the server was started from.
-/// Built only from the server that runs the recipe, with the sandbox it runs in: the workspace's
-/// sites and that project read-write.
+/// Built only from the server that runs the recipe.
 #[derive(Debug, Clone)]
 pub struct RecipeEnv {
     vars: Vec<(&'static str, String)>,
-    /// Refused when the project's git can't be trusted (a worktree whose repository doesn't
-    /// name it back): the recipe then doesn't run.
-    sandbox: Result<SandboxSpec, String>,
 }
 
 impl RecipeEnv {
@@ -40,7 +35,7 @@ impl RecipeEnv {
 
     /// For a recipe an app runs: its own site's, on the project it was opened on.
     /// It also gets `PROJECT_ROOT`, `PROJECT_NAME` and `APP_DATA` (its data folder, made now and
-    /// writable in the sandbox).
+    /// made now).
     pub fn for_app(server: &Server, grant: &crate::apps::AppGrant) -> Self {
         let project = grant
             .project
@@ -51,13 +46,7 @@ impl RecipeEnv {
         if let Err(e) = std::fs::create_dir_all(&data) {
             tracing::warn!("{}: {e}", data.display());
         }
-        let mut env = Self::with_project(
-            server,
-            &grant.site,
-            None,
-            project.clone(),
-            Some(project.clone()),
-        );
+        let mut env = Self::with_project(server, &grant.site, None, project.clone(), Some(project));
         env.vars.extend([
             (
                 "PROJECT_NAME",
@@ -69,10 +58,6 @@ impl RecipeEnv {
             ),
             ("APP_DATA", data.display().to_string()),
         ]);
-        // Composer's own choice of a folder in the workspace's state: mounted, not a bind.
-        env.sandbox = env
-            .sandbox
-            .map(|sandbox| sandbox.with_mount(crate::sandbox::Mount::Rw(data)));
         env
     }
 
@@ -99,17 +84,7 @@ impl RecipeEnv {
             vars.push(("PROJECT_ROOT", root));
         }
         vars.extend(server.home.env());
-        let sandbox = if project.is_empty() {
-            Ok(server.sandbox())
-        } else {
-            server.sandbox().with_project(project)
-        };
-        Self { vars, sandbox }
-    }
-
-    /// The sandbox the recipe runs in, or why it can't run.
-    pub fn sandbox(&self) -> Result<&SandboxSpec, String> {
-        self.sandbox.as_ref().map_err(Clone::clone)
+        Self { vars }
     }
 
     /// The variables to set, by name.

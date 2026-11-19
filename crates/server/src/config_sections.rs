@@ -111,29 +111,6 @@ pub struct TerminalsConfig {
     /// Output kept per terminal for a client that joins late, and for the agent to read.
     #[serde(default = "default_scrollback_kb")]
     pub scrollback_kb: usize,
-    /// The user's shell config lent to terminals read-only (their `$HOME` is otherwise empty):
-    /// missing ones are skipped. What is here the agent could read too (with approval to type):
-    /// keep secrets out of these files.
-    #[serde(default = "default_lend")]
-    pub lend: Vec<String>,
-}
-
-fn default_lend() -> Vec<String> {
-    [
-        "~/.zshrc",
-        "~/.zshenv",
-        "~/.zprofile",
-        "~/.p10k.zsh",
-        "~/.oh-my-zsh",
-        "~/.bashrc",
-        "~/.profile",
-        "~/.config/fish",
-        "~/.config/starship.toml",
-        "~/.config/nvim",
-        "~/.local/share/nvim",
-    ]
-    .map(String::from)
-    .to_vec()
 }
 
 fn default_idle_hours() -> u64 {
@@ -179,36 +156,6 @@ pub struct ViewerConfig {
     /// `bearer_file` when the viewer is at that server's address, else no header.
     #[serde(default)]
     pub bearer_file: String,
-}
-
-/// `[sandbox]`: the world each spawn an agent or a site controls runs in (`bwrap`). The home's
-/// global config sets the machine's paths; a workspace's config may add `binds_ro`, `binds_rw` and
-/// `devices` of its own. Paths are `~/` or absolute; missing ones are skipped.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct SandboxConfig {
-    /// `false` runs spawns as they are, without a sandbox: only by the user's explicit choice.
-    #[serde(default = "default_true")]
-    pub enabled: bool,
-    /// System folders mounted read-only besides `/usr` and `/etc`.
-    #[serde(default = "default_sandbox_system_dirs")]
-    pub system_dirs: Vec<String>,
-    /// Toolchains, read-only.
-    #[serde(default = "default_sandbox_toolchains")]
-    pub toolchains: Vec<String>,
-    /// Caches package managers write to, read-write (shared by every workspace).
-    #[serde(default = "default_sandbox_caches")]
-    pub caches: Vec<String>,
-    /// More folders or files, read-only.
-    #[serde(default)]
-    pub binds_ro: Vec<String>,
-    /// More folders or files, read-write (`~/Projects` for a site whose recipes take any project).
-    /// Another workspace's projects inside one stay hidden; a bind into the composer home or
-    /// another workspace's project is refused.
-    #[serde(default)]
-    pub binds_rw: Vec<String>,
-    /// Devices (`/dev/dri` for the GPU).
-    #[serde(default)]
-    pub devices: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -304,19 +251,13 @@ pub struct McpServerConfig {
     /// cannot). Empty, the default: no site may.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub sites: Vec<String>,
-    /// What a stdio server needs from outside its workspace's sandbox, read-only and read-write
-    /// (`~/` and `${VAR}` expanded; checked like `[sandbox]` binds).
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub binds_ro: Vec<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub binds_rw: Vec<String>,
     /// Tools that run without asking: names or `prefix*` (`get_*`); `*` for all.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub allow: Vec<String>,
     #[serde(default = "default_true")]
     pub enabled: bool,
-    /// Where a stdio server starts (`~/` expanded; bound read-write in its sandbox), instead of
-    /// the workspace's sites.
+    /// Where a stdio server starts (`~/` and `${VAR}` expanded), instead of the workspace's
+    /// sites.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub cwd: String,
     /// Settings of an `.mcpb` bundle (`[mcp.<name>.config]`), by the manifest's `user_config` keys.
@@ -325,9 +266,6 @@ pub struct McpServerConfig {
     /// Why the server cannot start (a bundle's missing settings): `connect` fails with it.
     #[serde(skip)]
     pub problem: Option<String>,
-    /// `cwd` is bound read-only (a bundle's unpacked code), never set from `config.toml`.
-    #[serde(skip)]
-    pub cwd_read_only: bool,
 }
 
 /// An app a site's app can launch on this machine's desktop: one `[[launcher]]` entry per
@@ -434,29 +372,6 @@ fn default_claude_tools() -> Vec<String> {
         "Bash(git log:*)",
         "Bash(git add:*)",
         "Bash(git commit:*)",
-    ]
-    .map(String::from)
-    .to_vec()
-}
-
-fn default_sandbox_system_dirs() -> Vec<String> {
-    ["/opt", "/sys", "/run/systemd/resolve"]
-        .map(String::from)
-        .to_vec()
-}
-
-fn default_sandbox_toolchains() -> Vec<String> {
-    ["~/.rustup", "~/.cargo/bin", "~/.bun/bin", "~/.local/bin"]
-        .map(String::from)
-        .to_vec()
-}
-
-fn default_sandbox_caches() -> Vec<String> {
-    [
-        "~/.cargo/registry",
-        "~/.cargo/git",
-        "~/.bun/install/cache",
-        "~/.cache/uv",
     ]
     .map(String::from)
     .to_vec()

@@ -74,7 +74,7 @@ impl OpenProjects {
     }
 }
 
-/// Runs the `on_open` recipes of the apps attached to `name`, each in the sandbox on the project
+/// Runs the `on_open` recipes of the apps attached to `name`, each on the project
 /// like an app's action, and reports each (`on_open.ran`). One that isn't approved for apps is
 /// reported, not run; one that fails doesn't stop the rest.
 async fn run_on_open(server: &Arc<Server>, name: &str) {

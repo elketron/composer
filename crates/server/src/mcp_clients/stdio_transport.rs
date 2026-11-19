@@ -28,7 +28,7 @@ pub struct StdioTransport {
 }
 
 impl StdioTransport {
-    /// Starts `command` (`program`, wrapped by the sandbox or not) with its stdio piped.
+    /// Starts `command` (`program`) with its stdio piped.
     pub fn spawn(
         name: &str,
         program: &str,
@@ -47,7 +47,7 @@ impl StdioTransport {
         let stderr = child.stderr.take().ok_or("no stderr")?;
 
         let waiting: Waiting = Arc::default();
-        // Its last stderr line says why it exited (a sandboxed one that can't start says so here).
+        // Its last stderr line says why it exited (one that can't start says so here).
         let last_error: Arc<Mutex<String>> = Arc::default();
         let alive = Arc::new(AtomicBool::new(true));
         let tools_changed = Arc::new(AtomicBool::new(false));

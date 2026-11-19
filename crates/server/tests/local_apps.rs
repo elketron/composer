@@ -3,10 +3,6 @@
 //! recipes on the project (its allowance is their approval), writing its project and data but no
 //! site; a changed justfile turns it off again; `app.promote` copies it into the workspace, whose
 //! copy wins from then on.
-#![allow(
-    clippy::disallowed_methods,
-    reason = "tests set up repos and fakes outside the sandbox"
-)]
 
 mod support;
 

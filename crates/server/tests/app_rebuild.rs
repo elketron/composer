@@ -1,10 +1,6 @@
 //! Old app builds (ticket 0169): an app built with an sdk from before its current routes (the
 //! sandboxed `/a/<token>/`, sdk 3) says so there instead of showing nothing, and the listings flag it; `apps.rebuild` shows the
 //! `ui-build` recipes it would run, and with `yes` runs them in the sandbox.
-#![allow(
-    clippy::disallowed_methods,
-    reason = "tests set up repos and fakes outside the sandbox"
-)]
 
 mod support;
 

@@ -42,7 +42,6 @@ impl Host {
         for name in names {
             tracing::info!("workspace {name}");
             let server = Server::start(home.workspace(&name)).await?;
-            server.report_sandbox();
             workspaces.insert(name, server);
         }
         Self::new(home, workspaces)
