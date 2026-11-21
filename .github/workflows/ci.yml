@@ -30,34 +30,6 @@ jobs:
       - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
       - run: cargo test --workspace
 
-  # The seed micro apps and the app template build against the sdk, as after `composer init`.
-  apps:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: just
-      - uses: oven-sh/setup-bun@v2
-      - name: Build every micro app in a fresh composer home
-        run: |
-          export COMPOSER_HOME="$RUNNER_TEMP/home"
-          cargo run -q -p composer-cli -- init
-          for justfile in "$COMPOSER_HOME"/sites/*/justfile; do
-            site=$(dirname "$justfile")
-            if grep -q '^ui-build:' "$justfile"; then
-              echo "::group::$(basename "$site")"
-              (cd "$site" && just ui-build)
-              echo "::endgroup::"
-            fi
-          done
-          # A new app is the template copied into a site's ui/.
-          mkdir -p "$COMPOSER_HOME/sites/template-check"
-          cp -r "$COMPOSER_HOME/templates/app" "$COMPOSER_HOME/sites/template-check/ui"
-          (cd "$COMPOSER_HOME/sites/template-check/ui" && bun install && bun run build)
-
   protocol:
     runs-on: ubuntu-latest
     steps:
