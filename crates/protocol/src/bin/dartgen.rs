@@ -763,6 +763,27 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
                 pattern: "site://video/work/renders/**".into(),
             },
         },
+        ServerMessage::TurnQueued {
+            session: s(),
+            seq: 6,
+            source: MessageSource::Process {
+                terminal: "t1a2b3c4d".into(),
+                command: "npm run dev".into(),
+            },
+        },
+        ServerMessage::ProcessesChanged {
+            session: s(),
+            processes: vec![ProcessInfo {
+                terminal: "t1a2b3c4d".into(),
+                command: "npm run dev".into(),
+                cwd: "/home/u/app".into(),
+                started: "2026-11-21T12:00:00Z".into(),
+            }],
+        },
+        ServerMessage::Ok {
+            id: 60,
+            result: CommandResult::Processes { processes: vec![] },
+        },
     ];
     let commands = vec![
         ClientCommand::SessionCreate {
@@ -816,6 +837,17 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
         },
         ClientCommand::Subscribe {
             urls: vec!["*".into()],
+        },
+        ClientCommand::ProcessList { session: s() },
+        ClientCommand::ProcessStop {
+            terminal: "t1a2b3c4d".into(),
+        },
+        ClientCommand::TerminalOpen {
+            session: s(),
+            terminal: None,
+            cols: 100,
+            rows: 30,
+            command: Some("nvim notes.md".into()),
         },
         ClientCommand::ToolList { session: s() },
         ClientCommand::ToolCall {

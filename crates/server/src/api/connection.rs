@@ -312,12 +312,17 @@ impl Connection {
                 terminal,
                 cols,
                 rows,
+                command,
             } => {
                 let s = server.sessions.get(&session).map_err(|e| e.to_string())?;
-                let (id, scrollback) =
-                    server
-                        .terminals
-                        .open(server, &s, terminal.as_deref(), cols, rows)?;
+                let (id, scrollback) = server.terminals.open(
+                    server,
+                    &s,
+                    terminal.as_deref(),
+                    command.as_deref(),
+                    cols,
+                    rows,
+                )?;
                 Ok(CommandResult::Terminal {
                     terminal: id,
                     scrollback: base64::engine::general_purpose::STANDARD.encode(scrollback),
@@ -347,6 +352,18 @@ impl Connection {
             }
             ClientCommand::TerminalClose { terminal } => {
                 server.terminals.close(server, &terminal)?;
+                Ok(CommandResult::Done)
+            }
+            ClientCommand::ProcessList { session } => {
+                server.sessions.get(&session).map_err(|e| e.to_string())?;
+                Ok(CommandResult::Processes {
+                    processes: server.terminals.processes(&session),
+                })
+            }
+            ClientCommand::ProcessStop { terminal } => {
+                server
+                    .terminals
+                    .stop_process(&terminal, crate::terminals::StoppedBy::User)?;
                 Ok(CommandResult::Done)
             }
             ClientCommand::DeskGet { session } => Ok(CommandResult::Desk {
