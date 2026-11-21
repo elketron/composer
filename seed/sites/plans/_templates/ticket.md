@@ -6,7 +6,6 @@ status: open
 plan:
 project:
 created: {{date}}
-# merge_into: dev   # optional: branch merge_ticket lands this work on (an explicit into arg wins)
 ---
 # {{title}}
 

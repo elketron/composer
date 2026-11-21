@@ -1,7 +1,6 @@
 ---
 title: ICM
 type: index
-library: [AGENTS.md, CONTEXT.md, _shared/]
 ---
 # ICM
 

@@ -35,14 +35,14 @@ fn lists_sites() {
     let (_dir, ws) = seed();
     let sites = ws.sites().unwrap();
     let names: Vec<_> = sites.iter().map(|s| s.name.as_str()).collect();
-    for name in ["home", "icm", "memory", "plans", "projects"] {
+    for name in ["home", "icm", "memory", "plans"] {
         assert!(names.contains(&name), "{name} in {names:?}");
     }
     let icm = sites.iter().find(|s| s.name == "icm").unwrap();
     assert!(icm.has_justfile && icm.has_index);
-    let projects = sites.iter().find(|s| s.name == "projects").unwrap();
-    assert!(projects.has_index);
-    assert_eq!(projects.title, "Projects");
+    let plans = sites.iter().find(|s| s.name == "plans").unwrap();
+    assert!(plans.has_index);
+    assert_eq!(plans.title, "Plans");
 }
 
 #[test]
