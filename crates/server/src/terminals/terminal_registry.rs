@@ -1,9 +1,7 @@
 use std::collections::HashMap;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, Weak};
-use std::time::{Duration, Instant};
 
 use base64::Engine;
 use composer_protocol::{DeskBy, DeskTab, ServerMessage};
@@ -14,14 +12,10 @@ use crate::session::Session;
 use crate::terminals::Scrollback;
 use crate::terminals::terminal::{Terminal, size};
 
-/// How often idle terminals are looked for.
-const REAP_EVERY: Duration = Duration::from_secs(60);
-
 /// A workspace's server-owned terminals, by id (ticket 0176).
 #[derive(Default)]
 pub struct Terminals {
     open: Mutex<HashMap<String, Arc<Terminal>>>,
-    reaping: AtomicBool,
 }
 
 impl Terminals {
@@ -53,7 +47,6 @@ impl Terminals {
             .expect("terminals lock")
             .insert(id.clone(), terminal.clone());
         read_into(server, terminal);
-        self.reap_later(server);
         let desk = session.change_desk(|desk| {
             desk.open(DeskTab::Terminal { id: id.clone() }, true, DeskBy::User)
                 .map(|_| ())
@@ -98,7 +91,6 @@ impl Terminals {
             .expect("terminals lock")
             .insert(id.clone(), terminal.clone());
         read_into(server, terminal);
-        self.reap_later(server);
         let desk = session.change_desk(|desk| {
             desk.open(DeskTab::Terminal { id: id.clone() }, true, DeskBy::Agent)
                 .map(|_| ())
@@ -134,42 +126,6 @@ impl Terminals {
         terminal.kill();
         exited(server, &terminal);
         Ok(())
-    }
-
-    /// Ends the terminals nobody used for `idle`; their ids.
-    pub fn reap(&self, server: &Server, idle: Duration) -> Vec<String> {
-        let stale: Vec<Arc<Terminal>> = {
-            let mut open = self.open.lock().expect("terminals lock");
-            let ids: Vec<String> = open
-                .values()
-                .filter(|t| t.idle_for() >= idle)
-                .map(|t| t.id.clone())
-                .collect();
-            ids.iter().filter_map(|id| open.remove(id)).collect()
-        };
-        for terminal in &stale {
-            terminal.kill();
-            exited(server, terminal);
-        }
-        stale.iter().map(|t| t.id.clone()).collect()
-    }
-
-    /// Starts the reaper once.
-    fn reap_later(&self, server: &Arc<Server>) {
-        if self.reaping.swap(true, Ordering::SeqCst) {
-            return;
-        }
-        let server = Arc::downgrade(server);
-        tokio::spawn(async move {
-            loop {
-                tokio::time::sleep(REAP_EVERY).await;
-                let Some(server) = server.upgrade() else {
-                    return;
-                };
-                let idle = Duration::from_secs(server.config().terminals.idle_hours * 3600);
-                server.terminals.reap(&server, idle);
-            }
-        });
     }
 
     fn forget(&self, id: &str) -> Option<Arc<Terminal>> {
@@ -237,7 +193,6 @@ fn spawn(
         writer: Mutex::new(writer),
         child: Mutex::new(child),
         scrollback: Mutex::new(Scrollback::new(cap)),
-        last_used: Mutex::new(Instant::now()),
     }))
 }
 
@@ -280,7 +235,6 @@ fn spawn_tui(
         writer: Mutex::new(writer),
         child: Mutex::new(child),
         scrollback: Mutex::new(Scrollback::new(cap)),
-        last_used: Mutex::new(Instant::now()),
     }))
 }
 

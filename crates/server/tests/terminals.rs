@@ -1,6 +1,6 @@
 //! Server-owned terminals (ticket 0176): a session's terminal is the user's shell in its project, a tab on its desk; its output streams to the session's clients and a
 //! late one gets the scrollback; the agent reads it, and types into it only when the user
-//! approves; an idle one is reaped and opens again fresh where it was.
+//! approves; a closed one opens again fresh where it was.
 
 mod support;
 
@@ -207,9 +207,8 @@ async fn a_sessions_terminal_runs_in_its_project() {
     }
     output_until(&mut client, &id, "typed-by-the-agent\r\n").await;
 
-    // Idle: reaped; opened again by its id, a fresh shell where it was.
-    let reaped = server.terminals.reap(&server, Duration::ZERO);
-    assert_eq!(reaped, std::slice::from_ref(&id));
+    // Closed: opened again by its id, a fresh shell where it was.
+    server.terminals.close(&server, &id).unwrap();
     reply(
         &mut client,
         7,

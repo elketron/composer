@@ -34,9 +34,8 @@ pub mod watches;
 
 pub use config::Config;
 pub use config_sections::{
-    AgentConfig, ApplicationConfig, AppsConfig, AttachmentsConfig, ClaudeCodeConfig, LauncherEntry,
-    McpServerConfig, ProjectSettings, ProjectsConfig, ProviderConfig, RemindersConfig,
-    ServerConfig,
+    AgentConfig, AttachmentsConfig, McpServerConfig, ProjectSettings, ProjectsConfig,
+    ProviderConfig, ServerConfig,
 };
 pub use error::{Result, ServerError};
 pub use hash::content_hash;

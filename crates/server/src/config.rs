@@ -4,9 +4,8 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::config_sections::{
-    AgentConfig, ApplicationConfig, AppsConfig, AttachmentsConfig, ClaudeCodeConfig, DesktopConfig,
-    LauncherEntry, McpServerConfig, ProjectsConfig, ProviderConfig, RemindersConfig, ServerConfig,
-    System1Config, TerminalsConfig, ViewerConfig,
+    AgentConfig, AttachmentsConfig, DesktopConfig, McpServerConfig, ProjectsConfig, ProviderConfig,
+    ServerConfig, TerminalsConfig, ViewerConfig,
 };
 use crate::error::{Result, ServerError};
 
@@ -16,21 +15,13 @@ pub struct Config {
     #[serde(default = "section")]
     pub provider: ProviderConfig,
     #[serde(default = "section")]
-    pub system1: System1Config,
-    #[serde(default = "section")]
     pub server: ServerConfig,
     #[serde(default = "section")]
     pub agent: AgentConfig,
     #[serde(default = "section")]
     pub projects: ProjectsConfig,
     #[serde(default = "section")]
-    pub reminders: RemindersConfig,
-    #[serde(default = "section")]
-    pub claude_code: ClaudeCodeConfig,
-    #[serde(default = "section")]
     pub attachments: AttachmentsConfig,
-    #[serde(default = "section")]
-    pub apps: AppsConfig,
     #[serde(default = "section")]
     pub terminals: TerminalsConfig,
     #[serde(default = "section")]
@@ -40,12 +31,6 @@ pub struct Config {
     /// MCP servers by name, `[mcp.github]`.
     #[serde(default)]
     pub mcp: BTreeMap<String, McpServerConfig>,
-    /// Launcher entries, `[[launcher]]`: apps the web's apps can open on the desktop.
-    #[serde(default)]
-    pub launcher: Vec<LauncherEntry>,
-    /// Applications a site's `app:` starts on entering, `[applications.blender]`.
-    #[serde(default)]
-    pub applications: BTreeMap<String, ApplicationConfig>,
 }
 
 impl Config {
@@ -107,25 +92,14 @@ mod tests {
     }
 
     #[test]
-    fn launcher_entries() {
-        let c = Config::parse(
-            "[[launcher]]\nname = \"blender\"\ncommand = \"blender\"\nfolder = \"app/blockouts\"\nargs = [\"--background\"]\n\n[[launcher]]\nname = \"viewer\"\ncommand = \"xdg-open\"\nfolder = \"app\"\n",
-        )
-        .unwrap();
-        assert_eq!(c.launcher.len(), 2);
-        assert_eq!(c.launcher[0].args, ["--background"]);
-        assert!(c.launcher[1].args.is_empty());
-        assert_eq!(Config::parse(&c.to_toml()).unwrap(), c);
-    }
-    #[test]
     fn a_config_from_before_the_sandbox_was_removed_still_loads() {
         let c = Config::parse(
             "[sandbox]\nenabled = true\nsystem_dirs = [\"/opt\"]\nbinds_rw = [\"~/Projects\"]\n\n\
-             [terminals]\nidle_hours = 3\nlend = [\"~/.zshrc\"]\n\n\
+             [terminals]\nscrollback_kb = 3\nlend = [\"~/.zshrc\"]\n\n\
              [mcp.blender]\ncommand = \"blender-mcp\"\nbinds_ro = [\"/ro\"]\nbinds_rw = []\n",
         )
         .unwrap();
-        assert_eq!(c.terminals.idle_hours, 3);
+        assert_eq!(c.terminals.scrollback_kb, 3);
         assert_eq!(c.mcp["blender"].command, "blender-mcp");
         let saved = c.to_toml();
         for gone in ["[sandbox]", "lend =", "binds_ro", "binds_rw"] {

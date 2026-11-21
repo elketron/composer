@@ -16,16 +16,6 @@ tool_images = true
 # OpenRouter: base_url = "https://openrouter.ai/api/v1" and your key. Sessions can use another of
 # its models: `:model` in the TUI, Model… in the app's chat menu.
 
-[system1]
-# A fast model that decides workers' approvals (approve, deny, or ask you) in one call, instead
-# of a turn of their orchestrator. Empty: off, the orchestrator decides.
-model = ""
-# Empty: the [provider]'s (sharing its slots), and its key unless api_key is set.
-base_url = ""
-api_key = ""
-# How much it thinks before deciding (none, low, medium, high). Empty: not sent.
-reasoning_effort = "low"
-
 [server]
 # Keep it on localhost; reach it from other devices with `tailscale serve` (see `composer pair`).
 bind = "127.0.0.1:7420"
@@ -36,8 +26,7 @@ name = ""
 # Model requests at once, across all sessions (your model server's parallelism).
 slots = 2
 # Tokens a turn may use before it stops: what the model writes plus what its steps bring in (tool
-# results), not the context it started with. A worker then waits for its orchestrator to continue
-# or stop it. 0: no limit.
+# results), not the context it started with. 0: no limit.
 turn_tokens = 200000
 # Model calls per turn before it stops, as well. 0: no limit.
 max_steps = 0
@@ -45,12 +34,6 @@ max_steps = 0
 compaction_threshold = 160000
 # A recipe run is killed after this many seconds.
 recipe_timeout_secs = 300
-# Worker processes running at once.
-max_workers = 1
-# Memory a worker run and everything it starts may use ("50%" of RAM, "12G"; "": no cap). Each run
-# gets its own systemd scope: past this it is killed there, not the server or your terminal, and
-# what it leaves running (daemons too) is stopped when it ends. Without systemd: no cap.
-worker_memory_max = "50%"
 # How much models think: none, low, medium or high, sent as `reasoning_effort` (Strata, vLLM,
 # llama.cpp's convention, OpenAI's reasoning models). An agent's `reasoning:` overrides it.
 # Empty: not sent, the provider decides.
@@ -70,41 +53,9 @@ dir = "~/Projects"
 # models = ["claude-code:sonnet", "composer"]
 # Turn a harness off for a while without editing this: `composer harness <project> off`.
 
-[reminders]
-# When a reminder page with a due date but no time goes off (local time).
-default_time = "09:00"
-
-[claude_code]
-# The Claude Code CLI, for tickets with `harness: claude-code` in projects that allow it.
-# It runs as you, with your ~/.claude, on this machine's `claude auth login`.
-command = "claude"
-# --model; empty: the CLI's default.
-model = ""
-max_turns = 60
-# A run is stopped after this long.
-timeout_minutes = 60
-# What it may do without asking. Projects can add to it.
-allowed_tools = ["Read", "Edit", "Write", "Glob", "Grep", "mcp__composer", "Bash(git status:*)", "Bash(git diff:*)", "Bash(git log:*)", "Bash(git add:*)", "Bash(git commit:*)"]
-# Anything else is asked of you (an approval in the worker's chat; "always" remembers it for the
-# project, in state/tool_rules.json). false: denied without asking.
-ask = true
-# Folders it may read (Read, Glob, Grep) but never edit: dependency sources and model caches, so it
-# can look up how a library really works. Missing ones are skipped. Only source folders: ~/.cargo
-# itself can hold credentials.toml, ~/.cache/huggingface a token.
-read_dirs = ["~/.cargo/registry/src", "~/.cargo/git/checkouts", "~/.rustup/toolchains", "~/.cache/huggingface/hub", "~/go/pkg/mod", "~/.pub-cache/hosted", "~/.pub-cache/git", "~/.nuget/packages", "~/.bun/install/cache", "~/.cache/uv", "~/.gradle/caches/modules-2/files-2.1", "~/.m2/repository"]
-
 [terminals]
-# A terminal nobody typed into or read for this long ends; showing its tab again starts a fresh
-# shell in the same folder.
-idle_hours = 24
 # Output kept per terminal (for a client joining late, and for the agent to read), in KB.
 scrollback_kb = 256
-
-[apps]
-# Apps that are clients of this workspace: opened with its full access (sessions, approvals),
-# like the TUI. Every other app gets a token of its own (it reads every page, writes only its own
-# site, project and data). A site's own `client: true` only asks; it is listed here by you.
-clients = ["chat"]
 
 [desktop]
 # This workspace's colour, `#rrggbb`, in the desktop and the phone (its dot and title bar); empty:
@@ -118,26 +69,6 @@ max_mb = 20
 image_max_edge = 1500
 # Text and PDF text beyond this many KB is cut before it reaches the model.
 inline_max_kb = 100
-
-# Apps the web's apps can launch on this machine's desktop: one [[launcher]] entry per
-# launch button, and declaring an entry is its approval. The folder must be inside the
-# projects directory (a project, or a folder inside one: the scoped slice you want the app
-# to see; the directory itself counts too); the command runs as `command <args...> <folder>`, working in that folder. The
-# apps ask `GET /api/launcher` and `POST /api/launcher/<name>`.
-# [[launcher]]
-# name = "blender-blockouts"
-# command = "xterminal"
-# folder = "myproject/blockouts"
-# args = ["--class", "blender"]
-
-# Applications a site's `app:` (its index.md frontmatter) starts when a session enters the site.
-# The command lives here, not in the page, so declaring it is your approval. It is started
-# through the `launch` tool of the MCP server `mcp` (default "wayai"), in the session's project.
-# [applications.blender]
-# command = "blender"
-# args = []
-# env = {}
-# mcp = "wayai"
 
 # wayai's live view, served to your other devices at `<workspace>/view` behind the workspace's
 # token (view only: nothing a device sends reaches the application). Without `url` it is taken from

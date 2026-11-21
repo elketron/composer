@@ -1,14 +1,13 @@
 use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Mutex;
-use std::time::Instant;
 
 use portable_pty::{Child, MasterPty, PtySize};
 
 use crate::terminals::Scrollback;
 
 /// One server-owned terminal of a session (ticket 0176): the user's shell on a
-/// PTY, its recent output, and when someone last used it.
+/// PTY and its recent output.
 pub struct Terminal {
     pub id: String,
     /// The session it belongs to.
@@ -18,13 +17,11 @@ pub struct Terminal {
     pub(crate) writer: Mutex<Box<dyn Write + Send>>,
     pub(crate) child: Mutex<Box<dyn Child + Send + Sync>>,
     pub(crate) scrollback: Mutex<Scrollback>,
-    pub(crate) last_used: Mutex<Instant>,
 }
 
 impl Terminal {
     /// Types `data` into it.
     pub fn input(&self, data: &[u8]) -> Result<(), String> {
-        self.touch();
         let mut writer = self.writer.lock().expect("terminal writer lock");
         writer
             .write_all(data)
@@ -42,21 +39,12 @@ impl Terminal {
 
     /// Its scrollback, as bytes.
     pub fn scrollback(&self) -> Vec<u8> {
-        self.touch();
         self.scrollback.lock().expect("scrollback lock").bytes()
     }
 
     /// Its last `lines` lines as text.
     pub fn text(&self, lines: usize) -> String {
         self.scrollback.lock().expect("scrollback lock").text(lines)
-    }
-
-    pub fn idle_for(&self) -> std::time::Duration {
-        self.last_used.lock().expect("terminal use lock").elapsed()
-    }
-
-    pub(crate) fn touch(&self) {
-        *self.last_used.lock().expect("terminal use lock") = Instant::now();
     }
 
     pub(crate) fn kill(&self) {
