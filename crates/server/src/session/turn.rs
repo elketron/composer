@@ -5,7 +5,7 @@ use std::sync::Arc;
 use composer_protocol::{ChatMessage, MessageSource, Role, ServerMessage, ToolCall, TurnState};
 use tokio_util::sync::CancellationToken;
 
-use crate::agent::{AgentDefinition, system_prompt};
+use crate::agent::{RunSettings, system_prompt};
 use crate::attachments::{ForModel, for_model};
 use crate::provider::{ModelMessage, ModelRequest, ModelToolCall};
 use crate::server::Server;
@@ -131,9 +131,7 @@ async fn run_turn(
     session: &Arc<Session>,
     cancel: &CancellationToken,
 ) -> Result<(), String> {
-    let agent = Arc::new(
-        AgentDefinition::load(&server.web, &session.info().agent).map_err(|e| e.to_string())?,
-    );
+    let settings = RunSettings::for_session(&session.info());
     let site = session
         .info()
         .site
@@ -142,12 +140,13 @@ async fn run_turn(
         .map(Arc::new);
     let tools = server
         .tools
-        .specs_with_mcp(server, &agent, site.as_deref())
+        .specs_with_mcp(server, settings.kind, site.as_deref())
         .await;
     let context = ToolContext {
         server: server.clone(),
         session: session.clone(),
-        agent: agent.clone(),
+        kind: settings.kind,
+        only: None,
         site: site.clone(),
         cancel: cancel.clone(),
     };
@@ -177,7 +176,7 @@ async fn run_turn(
         // The prompt is rebuilt every step: memory or the active project may have changed.
         let mut messages = vec![ModelMessage::System {
             content: system_prompt(
-                &agent,
+                &settings,
                 &server.web,
                 &server.index.read().expect("index lock"),
                 &session.info(),
@@ -191,8 +190,8 @@ async fn run_turn(
         let request = ModelRequest {
             messages,
             tools: tools.clone(),
-            model: None,
-            reasoning_effort: None,
+            model: settings.model.clone(),
+            reasoning_effort: settings.reasoning.clone(),
         };
         let step = model_step_continuing(server, session, request, cancel, true).await?;
         let written: String = step

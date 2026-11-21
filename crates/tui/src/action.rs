@@ -1,7 +1,7 @@
 //! Everything that changes state is an `Action`.
 
 use composer_protocol::http::{SearchHit, SiteSummary};
-use composer_protocol::{ApprovalDecision, Attachment, ServerMessage};
+use composer_protocol::{ApprovalDecision, Attachment, RunKind, ServerMessage};
 
 use crate::store::types::{FlashLevel, Mode, PageView, Pane, PickerKind};
 
@@ -39,8 +39,9 @@ pub enum Action {
     CancelTurn,
     /// Save memory and summarize older messages now.
     Compact,
+    /// `:new [kind]`: a new session of that run kind (default: the startup's).
     NewSession {
-        agent: Option<String>,
+        kind: Option<RunKind>,
     },
     AttachSession(String),
     /// Scrolled up to the oldest message shown: fetch the ones before it.

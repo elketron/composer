@@ -18,11 +18,7 @@ enum Speaker {
 /// All chat lines for `width` columns (including the 1-column padding inside bands).
 pub fn chat_lines(state: &AppState, width: u16) -> Vec<Line<'static>> {
     let inner = width.saturating_sub(2);
-    let agent_name = state
-        .session
-        .current_info()
-        .map(|s| s.agent.clone())
-        .unwrap_or_else(|| "agent".into());
+    let agent_name = "agent".to_string();
     let mut blocks: Vec<(Speaker, Vec<Line<'static>>)> = Vec::new();
 
     let agent_block = |blocks: &mut Vec<(Speaker, Vec<Line<'static>>)>| -> usize {

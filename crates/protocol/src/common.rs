@@ -12,15 +12,15 @@ pub type Seq = u64;
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct SessionInfo {
     pub id: SessionId,
-    /// Agent definition name (`site://agents/<agent>`).
-    pub agent: String,
+    /// What its runs are: a single shot, a workflow run or an agentic session.
+    #[serde(default)]
+    pub kind: RunKind,
     /// Active project directory, if any.
     pub project: Option<String>,
     /// The site the agent entered (`enter_site`), if any.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub site: Option<String>,
-    /// The session that spawned this one.
-    // rewrite: phase 2: set when a session spawns a run.
+    /// The session that spawned this one (phase 3 spawns runs; none yet).
     pub parent: Option<SessionId>,
     pub state: TurnState,
     /// Last seq written to the transcript.
@@ -35,6 +35,22 @@ pub struct SessionInfo {
     pub preview: Option<String>,
     /// RFC 3339.
     pub updated: String,
+}
+
+/// What a run is, and so which tools it has.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum RunKind {
+    /// One model call without tools: the instructions and the input in, the answer out.
+    SingleShot,
+    /// A loop with read-only tools that ends when the model calls `finish(value)`; the value is
+    /// its result.
+    Workflow,
+    /// A conversation with every tool.
+    #[default]
+    Agentic,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

@@ -27,7 +27,8 @@ async fn session(socket: &mut Socket) -> String {
         socket,
         1,
         ClientCommand::SessionCreate {
-            agent: "default".into(),
+            kind: composer_protocol::RunKind::Agentic,
+            model: None,
             project: None,
         },
     )
@@ -238,7 +239,7 @@ async fn manual_compaction_between_turns() {
 }
 
 #[tokio::test]
-async fn prompt_names_the_agent_and_lists_memory_pages() {
+async fn prompt_names_the_run_kind_and_lists_memory_pages() {
     let (_dir, server, provider, addr) = start(vec![answer("ok", 100)]).await;
     let mut socket = connect(addr, &server.token).await;
     let id = session(&mut socket).await;
@@ -246,10 +247,7 @@ async fn prompt_names_the_agent_and_lists_memory_pages() {
     let ModelMessage::System { content } = &provider.requests()[0].messages[0] else {
         panic!()
     };
-    assert!(
-        content.contains("you are the `default` agent (site://agents/default.md)"),
-        "{content}"
-    );
+    assert!(content.contains("- run: agentic"), "{content}");
     assert!(
         content.contains("- User — site://memory/user.md (user)"),
         "{content}"

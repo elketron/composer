@@ -2,34 +2,6 @@
 // Source of truth: crates/protocol (Rust).
 // ignore_for_file: annotate_overrides, prefer_const_constructors, unnecessary_this
 
-/// `GET /api/agents`: the agent definitions (`site://agents`).
-class AgentSummary {
-  const AgentSummary({
-    required this.name,
-    required this.title,
-    required this.description,
-  });
-
-  final String name;
-
-  final String title;
-
-  /// `description:`, else the title.
-  final String description;
-
-  factory AgentSummary.fromJson(Map<String, Object?> json) => AgentSummary(
-        name: json['name'] as String,
-        title: json['title'] as String,
-        description: json['description'] as String,
-      );
-
-  Map<String, Object?> toJson() => {
-        'name': name,
-        'title': title,
-        'description': description,
-      };
-}
-
 /// `POST /api/sessions/{id}/messages`: a message to the agent over HTTP.
 class AppMessage {
   const AppMessage({
@@ -270,22 +242,29 @@ sealed class ClientCommand {
 
 final class ClientCommandSessionCreate extends ClientCommand {
   const ClientCommandSessionCreate({
-    required this.agent,
+    this.kind,
+    this.model,
     this.project,
   });
 
-  final String agent;
+  /// Default: an agentic session.
+  final RunKind? kind;
+
+  /// The model its runs use; default: the server's.
+  final String? model;
 
   final String? project;
 
   factory ClientCommandSessionCreate.fromJson(Map<String, Object?> json) => ClientCommandSessionCreate(
-        agent: json['agent'] as String,
+        kind: json['kind'] == null ? null : RunKind.fromJson(json['kind']),
+        model: json['model'] == null ? null : json['model'] as String,
         project: json['project'] == null ? null : json['project'] as String,
       );
 
   Map<String, Object?> toJson() => {
         'type': 'session.create',
-        'agent': agent,
+        if (kind != null) 'kind': kind?.toJson(),
+        if (model != null) 'model': model,
         if (project != null) 'project': project,
       };
 }
@@ -1330,7 +1309,7 @@ class McpServerInfo {
     required this.state,
     this.error,
     required this.tools,
-    required this.agents,
+    required this.sites,
   });
 
   final String name;
@@ -1343,11 +1322,11 @@ class McpServerInfo {
 
   final String? error;
 
-  /// Its tools as agents list them (`github__get_issue`).
+  /// Its tools as agents see them (`github__get_issue`).
   final List<String> tools;
 
-  /// The agents whose `tools:` include some of them.
-  final List<String> agents;
+  /// The sites that may grant its tools (`sites` in its config).
+  final List<String> sites;
 
   factory McpServerInfo.fromJson(Map<String, Object?> json) => McpServerInfo(
         name: json['name'] as String,
@@ -1355,7 +1334,7 @@ class McpServerInfo {
         state: json['state'] as String,
         error: json['error'] == null ? null : json['error'] as String,
         tools: (json['tools'] as List).map((e) => e as String).toList(),
-        agents: (json['agents'] as List).map((e) => e as String).toList(),
+        sites: (json['sites'] as List).map((e) => e as String).toList(),
       );
 
   Map<String, Object?> toJson() => {
@@ -1364,7 +1343,7 @@ class McpServerInfo {
         'state': state,
         if (error != null) 'error': error,
         'tools': tools,
-        'agents': agents,
+        'sites': sites,
       };
 }
 
@@ -1612,6 +1591,25 @@ enum Role {
 
   static Role fromJson(Object? json) =>
       values.firstWhere((v) => v.wire == json, orElse: () => throw FormatException('unknown Role: $json'));
+
+  String toJson() => wire;
+}
+
+/// What a run is, and so which tools it has.
+enum RunKind {
+  /// One model call without tools: the instructions and the input in, the answer out.
+  singleShot('single_shot'),
+  /// A loop with read-only tools that ends when the model calls `finish(value)`; the value is
+  /// its result.
+  workflow('workflow'),
+  /// A conversation with every tool.
+  agentic('agentic');
+
+  const RunKind(this.wire);
+  final String wire;
+
+  static RunKind fromJson(Object? json) =>
+      values.firstWhere((v) => v.wire == json, orElse: () => throw FormatException('unknown RunKind: $json'));
 
   String toJson() => wire;
 }
@@ -2361,7 +2359,7 @@ final class ServerMessageUnknown extends ServerMessage {
 class SessionInfo {
   const SessionInfo({
     required this.id,
-    required this.agent,
+    this.kind,
     this.project,
     this.site,
     this.parent,
@@ -2375,8 +2373,8 @@ class SessionInfo {
 
   final String id;
 
-  /// Agent definition name (`site://agents/<agent>`).
-  final String agent;
+  /// What its runs are: a single shot, a workflow run or an agentic session.
+  final RunKind? kind;
 
   /// Active project directory, if any.
   final String? project;
@@ -2384,7 +2382,7 @@ class SessionInfo {
   /// The site the agent entered (`enter_site`), if any.
   final String? site;
 
-  /// The session that spawned this one.
+  /// The session that spawned this one (phase 3 spawns runs; none yet).
   final String? parent;
 
   final TurnState state;
@@ -2406,7 +2404,7 @@ class SessionInfo {
 
   factory SessionInfo.fromJson(Map<String, Object?> json) => SessionInfo(
         id: json['id'] as String,
-        agent: json['agent'] as String,
+        kind: json['kind'] == null ? null : RunKind.fromJson(json['kind']),
         project: json['project'] == null ? null : json['project'] as String,
         site: json['site'] == null ? null : json['site'] as String,
         parent: json['parent'] == null ? null : json['parent'] as String,
@@ -2420,7 +2418,7 @@ class SessionInfo {
 
   Map<String, Object?> toJson() => {
         'id': id,
-        'agent': agent,
+        if (kind != null) 'kind': kind?.toJson(),
         if (project != null) 'project': project,
         if (site != null) 'site': site,
         if (parent != null) 'parent': parent,

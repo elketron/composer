@@ -87,11 +87,11 @@ async fn a_bundle_is_an_mcp_server() {
     std::fs::write(mcps.join("junk.mcpb"), "not a zip").unwrap();
     let config = dir.path().join("config.toml");
     let mut text = std::fs::read_to_string(&config).unwrap_or_default();
-    text.push_str("\n[mcp.demo]\nallow = [\"greet\"]\n[mcp.demo.config]\ngreeting = \"hello\"\n");
+    text.push_str("\n[mcp.demo]\nallow = [\"greet\"]\nsites = [\"bundled\"]\n[mcp.demo.config]\ngreeting = \"hello\"\n");
     std::fs::write(&config, text).unwrap();
     server.reload_config().unwrap();
 
-    let mut listed = server.mcp().list(&[]).await;
+    let mut listed = server.mcp().list().await;
     listed.sort_by(|a, b| a.name.cmp(&b.name));
     let names: Vec<_> = listed.iter().map(|s| s.name.as_str()).collect();
     assert_eq!(names, ["demo", "needy"], "the junk file is skipped");
@@ -106,16 +106,18 @@ async fn a_bundle_is_an_mcp_server() {
     );
     assert!(dir.path().join("state/mcps/demo/server.py").exists());
 
-    // Called through an agent's turn; `allow` runs it without asking.
-    let url = composer_core::SiteUrl::new("agents", "bundled.md").unwrap();
-    let page = "---\ntitle: bundled\ntype: agent\ntools: [open, demo__*]\n---\nYou use tools.\n";
+    // Called in a turn of a session in a site that names it; `allow` runs it without asking.
+    std::fs::create_dir_all(server.home.sites().join("bundled")).unwrap();
+    let url = composer_core::SiteUrl::new("bundled", "index.md").unwrap();
+    let page = "---\ntitle: bundled\nmcp: [demo]\n---\nYou use tools.\n";
     server.write_page(&url, page, ChangedBy::External).unwrap();
     let mut socket = connect(addr, &server.token).await;
     send(
         &mut socket,
         1,
         ClientCommand::SessionCreate {
-            agent: "bundled".into(),
+            kind: composer_protocol::RunKind::Agentic,
+            model: None,
             project: None,
         },
     )
@@ -132,6 +134,19 @@ async fn a_bundle_is_an_mcp_server() {
         panic!("{:?}", reply.last())
     };
     let id = session.id.clone();
+    send(
+        &mut socket,
+        4,
+        ClientCommand::SiteSet {
+            session: id.clone(),
+            site: Some("bundled".into()),
+        },
+    )
+    .await;
+    until(&mut socket, |e| {
+        matches!(e, ServerMessage::Ok { id: 4, .. })
+    })
+    .await;
     send(
         &mut socket,
         2,

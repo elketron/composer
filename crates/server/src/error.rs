@@ -18,9 +18,6 @@ pub enum ServerError {
     #[error("provider: {0}")]
     Provider(String),
 
-    #[error("agent `{0}` not found in site://agents")]
-    AgentNotFound(String),
-
     #[error("session `{0}` not found")]
     SessionNotFound(String),
 

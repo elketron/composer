@@ -37,7 +37,6 @@ impl Tool for EditTool {
     async fn call(&self, context: &ToolContext, args: Value) -> Result<String, String> {
         let args: EditArgs = serde_json::from_value(args).map_err(|e| e.to_string())?;
         let url = context.url(&args.url)?;
-        context.check_write(&url)?;
         if args.old_text.is_empty() {
             return Err("old_text is empty; use `write` to replace a whole page".into());
         }

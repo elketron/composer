@@ -1,4 +1,4 @@
-//! What the app lists: agents, and sites with their descriptions.
+//! What the app lists: sites with their descriptions.
 
 mod support;
 
@@ -6,7 +6,7 @@ use composer_server::Config;
 use support::*;
 
 #[tokio::test]
-async fn agents_and_sites() {
+async fn sites() {
     let projects = tempfile::tempdir().unwrap();
     let mut config = Config::defaults();
     config.projects.dir = projects.path().display().to_string();
@@ -29,19 +29,6 @@ async fn agents_and_sites() {
 
     let info = get("/api/info").await;
     assert_eq!(info["projects_dir"], projects.path().display().to_string());
-
-    let agents = get("/api/agents").await;
-    let agent = |name: &str| {
-        agents
-            .as_array()
-            .unwrap()
-            .iter()
-            .find(|a| a["name"] == name)
-            .cloned()
-            .unwrap()
-    };
-    // The built-in agent, without a page.
-    assert_eq!(agent("default")["title"], "Composer");
 
     let sites = get("/api/sites").await;
     let memory = sites

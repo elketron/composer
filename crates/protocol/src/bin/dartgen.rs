@@ -12,8 +12,8 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use composer_protocol::http::{
-    AgentSummary, AppMessage, ChangedFile, PageResponse, ProjectDiff, PutPageRequest,
-    PutPageResponse, SearchHit, ServerInfo, SiteSummary, WebSession,
+    AppMessage, ChangedFile, PageResponse, ProjectDiff, PutPageRequest, PutPageResponse, SearchHit,
+    ServerInfo, SiteSummary, WebSession,
 };
 use composer_protocol::*;
 use serde_json::{Map, Value, json};
@@ -70,7 +70,6 @@ fn definitions() -> Map<String, Value> {
     let _ = generator.subschema_for::<AppMessage>();
     let _ = generator.subschema_for::<ProjectDiff>();
     let _ = generator.subschema_for::<ChangedFile>();
-    let _ = generator.subschema_for::<AgentSummary>();
     // Phase 4: apps on projects (0162-0168).
     let _ = generator.subschema_for::<WebSession>();
     let defs = generator.take_definitions(true);
@@ -550,7 +549,7 @@ fn variant_name(parent: &str, value: &str) -> String {
 fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
     let info = SessionInfo {
         id: "a3f1".into(),
-        agent: "default".into(),
+        kind: RunKind::Agentic,
         project: Some("/home/me/project".into()),
         site: Some("plans".into()),
         parent: None,
@@ -768,7 +767,8 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
     ];
     let commands = vec![
         ClientCommand::SessionCreate {
-            agent: "default".into(),
+            kind: RunKind::Workflow,
+            model: Some("qwen3".into()),
             project: None,
         },
         ClientCommand::SessionList,
@@ -873,11 +873,6 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
                 semantic: Some("a.rs --- Rust\n1 fn a() {}\n".into()),
             }],
             diff: "+x".into(),
-        }),
-        serde_json::to_value(AgentSummary {
-            name: "coder".into(),
-            title: "Coder".into(),
-            description: "writes code".into(),
         }),
     ]
     .into_iter()

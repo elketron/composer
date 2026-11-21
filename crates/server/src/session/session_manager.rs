@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 
-use composer_protocol::{SessionId, SessionInfo, TurnState};
+use composer_protocol::{RunKind, SessionId, SessionInfo, TurnState};
 
 use crate::error::{Result, ServerError};
 use crate::session::{Session, SessionFolder};
@@ -38,7 +38,12 @@ impl SessionManager {
         })
     }
 
-    pub fn create(&self, agent: &str, project: Option<String>) -> Result<Arc<Session>> {
+    pub fn create(
+        &self,
+        kind: RunKind,
+        model: Option<String>,
+        project: Option<String>,
+    ) -> Result<Arc<Session>> {
         let mut sessions = self.sessions.write().expect("sessions lock");
         let id = loop {
             let id = format!("{:04x}", rand::random::<u16>());
@@ -48,14 +53,14 @@ impl SessionManager {
         };
         let info = SessionInfo {
             id: id.clone(),
-            agent: agent.to_string(),
+            kind,
             project,
             site: None,
             parent: None,
             state: TurnState::Idle,
             last_seq: 0,
             context_tokens: 0,
-            model: None,
+            model,
             preview: None,
             updated: chrono::Utc::now().to_rfc3339(),
         };

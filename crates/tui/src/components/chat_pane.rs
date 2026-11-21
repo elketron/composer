@@ -8,6 +8,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
 use crate::action::Action;
+use crate::commands::kind_name;
 use crate::components::Component;
 use crate::components::chat_lines::chat_lines;
 use crate::components::composer::Composer;
@@ -74,13 +75,13 @@ impl ChatPane {
             .and_then(|p| state.session.sessions.iter().find(|s| &s.id == p))
         {
             spans.push(Span::styled(
-                parent.agent.clone(),
+                kind_name(parent.kind),
                 Style::new().fg(theme::ACCENT),
             ));
             spans.push(Span::styled(" › ", theme::faint()));
         }
         spans.push(Span::styled(
-            info.agent.clone(),
+            kind_name(info.kind),
             Style::new().fg(theme::ACCENT),
         ));
         if let Some(project) = &info.project {

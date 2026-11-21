@@ -1,35 +1,14 @@
 //! Entering and leaving a site for a session: the one implementation behind the `enter_site` and
 //! `leave_site` tools and the user's own switch (a client command).
-//!
-//! Two entry points make the one difference explicit: an agent may enter only sites its page's
-//! `sites:` lets it read ([`enter_site_as_agent`]); the user is not an agent and has no such
-//! scope ([`enter_site_as_client`]).
 
 use std::sync::Arc;
 
-use crate::agent::{AgentDefinition, Entered, Site};
+use crate::agent::{Entered, Site};
 use crate::server::Server;
 use crate::session::Session;
 
-/// An agent enters `name`: refused unless its `sites:` lets it read the site.
-pub async fn enter_site_as_agent(
-    server: &Arc<Server>,
-    session: &Session,
-    agent: &AgentDefinition,
-    name: &str,
-) -> Result<Entered, String> {
-    let site = Site::load(&server.web, name)?;
-    if !agent.sites.can_read(&site.name) {
-        return Err(format!(
-            "agent `{}` may not read site `{}`",
-            agent.name, site.name
-        ));
-    }
-    enter(server, session, site).await
-}
-
-/// The user enters `name` (a client command): no agent scope applies.
-pub async fn enter_site_as_client(
+/// The session enters `name`.
+pub async fn enter_site(
     server: &Arc<Server>,
     session: &Session,
     name: &str,

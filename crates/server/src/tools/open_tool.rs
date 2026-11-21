@@ -60,7 +60,6 @@ impl Tool for OpenTool {
     async fn call(&self, context: &ToolContext, args: Value) -> Result<String, String> {
         let args: OpenArgs = serde_json::from_value(args).map_err(|e| e.to_string())?;
         let url = context.url(&args.url)?;
-        context.check_read(&url)?;
         let server = &context.server;
         let page = match server.web.read_page(&url) {
             Ok(page) => page,
@@ -172,13 +171,13 @@ fn image_path(context: &ToolContext, raw: &str) -> Option<Result<PathBuf, String
         Ok(url) => url,
         Err(error) => return Some(Err(error)),
     };
-    Some(context.check_read(&url).and_then(|()| {
+    Some(
         context
             .server
             .web
             .locate(&url)
-            .map_err(|e| format!("{e}. Use `search` to find pages, or `list_sites`."))
-    }))
+            .map_err(|e| format!("{e}. Use `search` to find pages, or `list_sites`.")),
+    )
 }
 
 /// `raw` in the session's project, which it may not leave.

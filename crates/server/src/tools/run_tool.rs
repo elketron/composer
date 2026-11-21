@@ -41,7 +41,6 @@ impl Tool for RunTool {
             .trim_start_matches("site://")
             .trim_end_matches('/')
             .to_string();
-        context.check_write(&context.url(&format!("site://{site}"))?)?;
         let server = &context.server;
         let site_dir = server.web.root().join(&site);
 

@@ -1,7 +1,9 @@
 use std::io::Write;
 
 use anyhow::{Context, bail};
-use composer_protocol::{ClientCommand, ClientRequest, CommandResult, Role, ServerMessage};
+use composer_protocol::{
+    ClientCommand, ClientRequest, CommandResult, Role, RunKind, ServerMessage,
+};
 use futures::{SinkExt, StreamExt};
 use tokio_tungstenite::tungstenite::Message;
 
@@ -9,7 +11,8 @@ use tokio_tungstenite::tungstenite::Message;
 #[derive(Debug, Clone)]
 pub struct AskOptions {
     pub text: String,
-    pub agent: String,
+    /// The run kind of a new session.
+    pub kind: RunKind,
     /// Continue this session instead of creating one.
     pub session: Option<String>,
     pub project: Option<String>,
@@ -49,7 +52,8 @@ pub async fn ask(options: AskOptions) -> anyhow::Result<()> {
         None => {
             socket
                 .send(request(ClientCommand::SessionCreate {
-                    agent: options.agent,
+                    kind: options.kind,
+                    model: None,
                     project: options.project,
                 }))
                 .await?;

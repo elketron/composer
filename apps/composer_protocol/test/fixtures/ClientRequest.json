@@ -2,7 +2,8 @@
   {
     "id": 1,
     "type": "session.create",
-    "agent": "default",
+    "kind": "workflow",
+    "model": "qwen3",
     "project": null
   },
   {

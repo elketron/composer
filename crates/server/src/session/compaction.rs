@@ -3,10 +3,10 @@
 
 use std::sync::Arc;
 
-use composer_protocol::ServerMessage;
+use composer_protocol::{RunKind, ServerMessage};
 use tokio_util::sync::CancellationToken;
 
-use crate::agent::{AgentDefinition, system_prompt};
+use crate::agent::{RunSettings, system_prompt};
 use crate::provider::{ModelMessage, ModelRequest};
 use crate::server::Server;
 use crate::session::Session;
@@ -52,18 +52,17 @@ pub async fn compact(
         return Ok(0);
     }
     let older = prepare_history(server, history[..cut].to_vec(), thinking_budget(server));
-    let agent =
-        AgentDefinition::load(&server.web, &session.info().agent).map_err(|e| e.to_string())?;
+    let settings = RunSettings::for_session(&session.info());
     let system = ModelMessage::System {
         content: system_prompt(
-            &agent,
+            &settings,
             &server.web,
             &server.index.read().expect("index lock"),
             &session.info(),
         ),
     };
 
-    save_memory(server, session, &agent, &system, &older, cancel).await?;
+    save_memory(server, session, &system, &older, cancel).await?;
     if cancel.is_cancelled() {
         return Ok(0);
     }
@@ -160,19 +159,18 @@ fn turn_cut(history: &[ModelMessage], keep: u32) -> usize {
 async fn save_memory(
     server: &Arc<Server>,
     session: &Arc<Session>,
-    agent: &AgentDefinition,
     system: &ModelMessage,
     older: &[ModelMessage],
     cancel: &CancellationToken,
 ) -> Result<(), String> {
-    let mut restricted = agent.clone();
-    restricted.tools = Some(MEMORY_TOOLS.iter().map(|t| t.to_string()).collect());
-    let restricted = Arc::new(restricted);
-    let tools = server.tools.specs_for(&restricted, None);
+    let tools = server
+        .tools
+        .specs_for(RunKind::Agentic, Some(&MEMORY_TOOLS));
     let context = ToolContext {
         server: server.clone(),
         session: session.clone(),
-        agent: restricted,
+        kind: RunKind::Agentic,
+        only: Some(&MEMORY_TOOLS),
         site: None,
         cancel: cancel.clone(),
     };

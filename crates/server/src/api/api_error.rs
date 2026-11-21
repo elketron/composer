@@ -20,8 +20,7 @@ impl From<ServerError> for ApiError {
     fn from(error: ServerError) -> Self {
         let status = match &error {
             ServerError::Core(CoreError::PageNotFound(_) | CoreError::SiteNotFound(_))
-            | ServerError::SessionNotFound(_)
-            | ServerError::AgentNotFound(_) => StatusCode::NOT_FOUND,
+            | ServerError::SessionNotFound(_) => StatusCode::NOT_FOUND,
             ServerError::Core(CoreError::InvalidUrl { .. }) | ServerError::Invalid(_) => {
                 StatusCode::BAD_REQUEST
             }

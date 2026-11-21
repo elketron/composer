@@ -1,6 +1,7 @@
 use composer_protocol::SessionInfo;
 use composer_protocol::http::{SearchHit, SiteSummary};
 
+use crate::commands::kind_name;
 use crate::effect::Effect;
 use crate::store::SessionStore;
 use crate::store::types::{PickerItem, PickerKind, PickerTarget};
@@ -141,7 +142,7 @@ fn session_item(s: &SessionInfo, store: &SessionStore) -> PickerItem {
     };
     let preview = s.preview.clone().unwrap_or_default();
     PickerItem {
-        title: format!("{indent}{} #{}{here}", s.agent, s.id),
+        title: format!("{indent}{} #{}{here}", kind_name(s.kind), s.id),
         detail: preview,
         right: match store.status(s) {
             "idle" => s.updated.get(..16).unwrap_or("").replace('T', " "),

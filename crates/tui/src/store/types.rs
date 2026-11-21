@@ -2,7 +2,7 @@
 
 use composer_protocol::Attachment;
 use composer_protocol::http::{SearchHit, SiteSummary};
-use composer_protocol::{ClientCommand, ModelInfo, Seq};
+use composer_protocol::{ClientCommand, ModelInfo, RunKind, Seq};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
@@ -160,7 +160,8 @@ pub struct Outgoing {
 pub struct Startup {
     pub session: Option<String>,
     pub new: bool,
-    pub agent: String,
+    /// The run kind of a new session.
+    pub kind: RunKind,
     pub project: Option<String>,
     /// `[projects] dir` from the config (`~/Projects`).
     pub projects_dir: Option<String>,

@@ -46,12 +46,11 @@ void main() {
   });
 
   test('http bodies', () {
-    final [info, site, page, diff, agent] = fixture('http');
+    final [info, site, page, diff] = fixture('http');
     roundTrip(info, ServerInfo.fromJson, (v) => v.toJson());
     roundTrip(site, SiteSummary.fromJson, (v) => v.toJson());
     roundTrip(page, PageResponse.fromJson, (v) => v.toJson());
     roundTrip(diff, ProjectDiff.fromJson, (v) => v.toJson());
-    roundTrip(agent, AgentSummary.fromJson, (v) => v.toJson());
   });
 
   test('typed access and exhaustive switches', () {

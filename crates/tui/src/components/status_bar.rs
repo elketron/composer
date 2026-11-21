@@ -142,7 +142,7 @@ mod tests {
         state.conn.state = ConnState::Connected;
         state.session.upsert(SessionInfo {
             id: "s1".into(),
-            agent: "default".into(),
+            kind: composer_protocol::RunKind::Agentic,
             project: None,
             site: site.map(Into::into),
             parent: None,

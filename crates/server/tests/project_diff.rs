@@ -105,7 +105,8 @@ async fn endpoint_uses_the_session_project() {
         &mut socket,
         1,
         ClientCommand::SessionCreate {
-            agent: "default".into(),
+            kind: composer_protocol::RunKind::Agentic,
+            model: None,
             project: None,
         },
     )
@@ -141,7 +142,8 @@ async fn endpoint_uses_the_session_project() {
         &mut socket,
         2,
         ClientCommand::SessionCreate {
-            agent: "default".into(),
+            kind: composer_protocol::RunKind::Agentic,
+            model: None,
             project: Some(path),
         },
     )

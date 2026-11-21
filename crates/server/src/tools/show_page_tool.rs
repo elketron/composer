@@ -31,7 +31,6 @@ impl Tool for ShowPageTool {
     async fn call(&self, context: &ToolContext, args: Value) -> Result<String, String> {
         let raw = args["url"].as_str().unwrap_or_default();
         let url = context.url(raw)?;
-        context.check_read(&url)?;
         context
             .server
             .web

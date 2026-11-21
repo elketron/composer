@@ -7,7 +7,6 @@ use std::sync::Arc;
 use composer_protocol::{ApprovalDecision, ClientCommand, CommandResult, ServerMessage};
 use composer_server::Server;
 use composer_server::actions::{Approvals, Justfile};
-use composer_server::agent::AgentDefinition;
 use composer_server::provider::ModelEvent;
 use composer_server::tools::{CallResult, ToolContext};
 use serde_json::json;
@@ -26,7 +25,8 @@ async fn session(socket: &mut Socket) -> String {
         socket,
         1,
         ClientCommand::SessionCreate {
-            agent: "default".into(),
+            kind: composer_protocol::RunKind::Agentic,
+            model: None,
             project: None,
         },
     )
@@ -334,11 +334,15 @@ async fn approve(server: &Server, site: &std::path::Path, recipe: &str) {
 
 /// The agent's `run` of `recipe` in site `tools` with `args`, outside a turn.
 async fn run(server: &Arc<Server>, recipe: &str, args: &[&str]) -> CallResult {
-    let session = server.sessions.create("default", None).unwrap();
+    let session = server
+        .sessions
+        .create(composer_protocol::RunKind::Agentic, None, None)
+        .unwrap();
     let context = ToolContext {
         server: server.clone(),
         session,
-        agent: Arc::new(AgentDefinition::load(&server.web, "default").unwrap()),
+        kind: composer_protocol::RunKind::Agentic,
+        only: None,
         site: None,
         cancel: CancellationToken::new(),
     };
@@ -456,12 +460,17 @@ async fn the_sh_escape_hatch_takes_one_command_with_quotes_and_newlines() {
     std::fs::write(project.path().join("README"), "hi\n").unwrap();
     let session = server
         .sessions
-        .create("default", Some(project.path().display().to_string()))
+        .create(
+            composer_protocol::RunKind::Agentic,
+            None,
+            Some(project.path().display().to_string()),
+        )
         .unwrap();
     let context = ToolContext {
         server: server.clone(),
         session,
-        agent: Arc::new(AgentDefinition::load(&server.web, "default").unwrap()),
+        kind: composer_protocol::RunKind::Agentic,
+        only: None,
         site: None,
         cancel: CancellationToken::new(),
     };

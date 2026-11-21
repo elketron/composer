@@ -1,5 +1,5 @@
-//! MCP servers from `config.toml`: listed with their state (`mcp.list`), their tools offered to the
-//! agents that list them, calls approved unless `allow` or an earlier `always` covers them, a
+//! MCP servers from `config.toml`: listed with their state (`mcp.list`), their tools offered to
+//! sessions in a site that names them (and that their `sites` lists), calls approved unless `allow` or an earlier `always` covers them, a
 //! server's changed tools picked up; over stdio (a fake server in Python) and streamable HTTP.
 
 mod support;
@@ -11,7 +11,9 @@ use axum::Router;
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::post;
-use composer_protocol::{ApprovalDecision, ChangedBy, ClientCommand, CommandResult, ServerMessage};
+use composer_protocol::{
+    ApprovalDecision, ChangedBy, ClientCommand, CommandResult, RunKind, ServerMessage,
+};
 use composer_server::provider::ModelEvent;
 use composer_server::{Config, McpServerConfig};
 use serde_json::{Value, json};
@@ -79,12 +81,14 @@ async fn command(socket: &mut Socket, id: u64, command: ClientCommand) -> Comman
     }
 }
 
-async fn session(socket: &mut Socket, agent: &str) -> String {
+/// A new session, in `site`.
+async fn session(socket: &mut Socket, site: &str) -> String {
     let CommandResult::Session { session } = command(
         socket,
         1,
         ClientCommand::SessionCreate {
-            agent: agent.into(),
+            kind: RunKind::Agentic,
+            model: None,
             project: None,
         },
     )
@@ -92,6 +96,15 @@ async fn session(socket: &mut Socket, agent: &str) -> String {
     else {
         panic!()
     };
+    command(
+        socket,
+        90,
+        ClientCommand::SiteSet {
+            session: session.id.clone(),
+            site: Some(site.into()),
+        },
+    )
+    .await;
     command(
         socket,
         2,
@@ -145,10 +158,11 @@ fn asked(events: &[ServerMessage]) -> bool {
         .any(|e| matches!(e, ServerMessage::ApprovalRequest { .. }))
 }
 
-/// Through the server, so the index has it right away.
-fn write_agent(server: &composer_server::Server, name: &str, tools: &str) {
-    let url = composer_core::SiteUrl::new("agents", &format!("{name}.md")).unwrap();
-    let page = format!("---\ntitle: {name}\ntype: agent\ntools: {tools}\n---\nYou use tools.\n");
+/// A site whose `mcp:` names `servers`; through the server, so the index has it right away.
+fn write_site(server: &composer_server::Server, name: &str, servers: &str) {
+    std::fs::create_dir_all(server.home.sites().join(name)).unwrap();
+    let url = composer_core::SiteUrl::new(name, "index.md").unwrap();
+    let page = format!("---\ntitle: {name}\nmcp: {servers}\n---\nYou use tools.\n");
     server.write_page(&url, &page, ChangedBy::External).unwrap();
 }
 
@@ -167,6 +181,7 @@ async fn stdio_servers() {
             command: "python3".into(),
             args: vec![script.display().to_string()],
             allow: vec!["echo".into()],
+            sites: vec!["tools".into()],
             enabled: true,
             ..Default::default()
         },
@@ -192,10 +207,8 @@ async fn stdio_servers() {
     scripts.extend(turn("fake__add_numbers", json!({ "a": 2, "b": 3 })));
     scripts.extend(turn("fake__add_numbers", json!({ "a": 1, "b": 1 })));
     scripts.extend(turn("fake__boom", json!({})));
-    scripts.extend(turn("fake__echo", json!({ "text": "x" })));
     let (dir, server, provider, addr) = start_with(config, scripts).await;
-    write_agent(&server, "mcpuser", "[open, fake__*]");
-    write_agent(&server, "picky", "[open, fake__echo]");
+    write_site(&server, "tools", "[fake]");
     let mut socket = connect(addr, &server.token).await;
 
     // The servers and their state; listing connects the ones that are on.
@@ -214,7 +227,7 @@ async fn stdio_servers() {
         fake.tools,
         ["fake__echo", "fake__add_numbers", "fake__boom"]
     );
-    assert_eq!(fake.agents, ["mcpuser", "picky"]);
+    assert_eq!(fake.sites, ["tools"]);
     let broken = by_name("broken");
     assert_eq!(broken.state, "failed");
     assert!(broken.error.unwrap().contains("/nonexistent/mcp-server"));
@@ -225,7 +238,7 @@ async fn stdio_servers() {
     );
 
     // `allow`ed: runs without asking. The model saw the server's tools, named for it.
-    let id = session(&mut socket, "mcpuser").await;
+    let id = session(&mut socket, "tools").await;
     say(&mut socket, &id, 3).await;
     let events = until(&mut socket, |e| matches!(e, ServerMessage::TurnDone { .. })).await;
     assert!(!asked(&events));
@@ -309,22 +322,6 @@ async fn stdio_servers() {
     assert_eq!(results(&events), [("it broke".to_string(), true)]);
     let last = provider.requests().last().unwrap().clone();
     assert!(last.tools.iter().any(|t| t.name == "fake__late"));
-
-    // An agent listing one tool gets that one; calling another is unknown to it.
-    let picky = session(&mut socket, "picky").await;
-    say(&mut socket, &picky, 9).await;
-    let events = until(&mut socket, |e| matches!(e, ServerMessage::TurnDone { .. })).await;
-    assert_eq!(results(&events), [("x".to_string(), false)]);
-    let mcp: Vec<String> = provider
-        .requests()
-        .last()
-        .unwrap()
-        .tools
-        .iter()
-        .filter(|t| t.name.contains("__"))
-        .map(|t| t.name.clone())
-        .collect();
-    assert_eq!(mcp, ["fake__echo"]);
 }
 
 /// A 2x2 red PNG.
@@ -423,6 +420,7 @@ async fn http_servers() {
             )]
             .into(),
             allow: vec!["*".into()],
+            sites: vec!["search".into()],
             enabled: true,
             ..Default::default()
         },
@@ -430,10 +428,10 @@ async fn http_servers() {
     let mut scripts = turn("web__lookup", json!({ "q": "rust" }));
     scripts.extend(turn("web__lookup", json!({ "q": "screen" })));
     let (_dir, server, provider, addr) = start_with(config, scripts).await;
-    write_agent(&server, "searcher", "[web__*]");
+    write_site(&server, "search", "[web]");
     let mut socket = connect(addr, &server.token).await;
 
-    let id = session(&mut socket, "searcher").await;
+    let id = session(&mut socket, "search").await;
     say(&mut socket, &id, 2).await;
     let events = until(&mut socket, |e| matches!(e, ServerMessage::TurnDone { .. })).await;
     assert!(served.load(Ordering::SeqCst));
@@ -444,7 +442,7 @@ async fn http_servers() {
         .iter()
         .map(|t| t.name.clone())
         .collect();
-    assert_eq!(offered, ["web__lookup"]);
+    assert!(offered.contains(&"web__lookup".to_string()), "{offered:?}");
 
     // A screenshot goes to the model as an image in the tool message (history keeps a stored
     // attachment; the request a data URL).
@@ -544,7 +542,7 @@ async fn an_http_server_gets_the_token_of_its_bearer_file() {
         config.mcp.insert(name.into(), entry);
     }
     let (_dir, server, _provider, _addr) = start_with(config, vec![]).await;
-    let listed = server.mcp().list(&[]).await;
+    let listed = server.mcp().list().await;
     let state = |name: &str| {
         let info = listed.iter().find(|s| s.name == name).unwrap();
         (info.state.clone(), info.error.clone().unwrap_or_default())
@@ -600,7 +598,7 @@ async fn an_http_server_gets_the_token_of_its_bearer_file() {
         [(Some("Bearer old-token".to_string()), None)]
     );
     std::fs::write(&late, "tok-123").unwrap();
-    let listed = server.mcp().list(&[]).await;
+    let listed = server.mcp().list().await;
     let late = listed.iter().find(|s| s.name == "late").unwrap();
     assert_eq!(late.state, "ready", "{:?}", late.error);
 }

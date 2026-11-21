@@ -8,7 +8,6 @@ use composer_protocol::{
 };
 use tokio::sync::mpsc;
 
-use crate::agent::AgentDefinition;
 use crate::api::event_scope::{EventScope, scope};
 use crate::api::glob::url_matches;
 use crate::api::viewer_proxy;
@@ -111,7 +110,7 @@ impl Connection {
                         Ok(context) => Ok(CommandResult::Tools {
                             tools: server
                                 .tools
-                                .infos_for(&server.mcp(), &context.agent, context.site.as_deref())
+                                .infos_for(&server.mcp(), context.kind, context.site.as_deref())
                                 .await,
                         }),
                         Err(message) => Err(message),
@@ -131,11 +130,7 @@ impl Connection {
             ClientCommand::McpList => {
                 let (connection, server) = (self.clone(), server.clone());
                 tokio::spawn(async move {
-                    let agents = {
-                        let index = server.index.read().expect("index lock");
-                        AgentDefinition::all(&server.web, &index)
-                    };
-                    let servers = server.mcp().list(&agents).await;
+                    let servers = server.mcp().list().await;
                     connection.reply(id, Ok(CommandResult::McpServers { servers }));
                 });
                 None
@@ -180,15 +175,21 @@ impl Connection {
 
     fn run(&self, server: &Arc<Server>, command: ClientCommand) -> Result<CommandResult, String> {
         match command {
-            ClientCommand::SessionCreate { agent, project } => {
-                AgentDefinition::load(&server.web, &agent).map_err(|e| e.to_string())?;
+            ClientCommand::SessionCreate {
+                kind,
+                model,
+                project,
+            } => {
+                let model = model
+                    .map(|m| m.trim().to_string())
+                    .filter(|m| !m.is_empty());
                 let project = project
                     .as_deref()
                     .map(|p| server.project_folder(p))
                     .transpose()?;
                 let session = server
                     .sessions
-                    .create(&agent, project)
+                    .create(kind, model, project)
                     .map_err(|e| e.to_string())?;
                 server.hub.send(ServerMessage::SessionUpdated {
                     session: session.info(),
@@ -409,7 +410,7 @@ async fn set_site(
             None => "The session was not in a site.".into(),
         });
     };
-    let entered = crate::agent::enter_site_as_client(server, &session, name).await?;
+    let entered = crate::agent::enter_site(server, &session, name).await?;
     let mut text = format!("Entered {} ({}).", entered.site, entered.title);
     let notes = entered.notes();
     if !notes.is_empty() {

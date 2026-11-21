@@ -46,10 +46,5 @@
       }
     ],
     "diff": "+x"
-  },
-  {
-    "name": "coder",
-    "title": "Coder",
-    "description": "writes code"
   }
 ]

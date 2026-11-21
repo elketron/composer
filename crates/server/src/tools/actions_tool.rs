@@ -40,7 +40,6 @@ impl Tool for ActionsTool {
             })
             .or_else(|| context.site.as_ref().map(|site| site.name.clone()))
             .ok_or_else(|| "which site? pass `site`, or enter one first".to_string())?;
-        context.check_read(&context.url(&format!("site://{site}"))?)?;
         let site_dir = context.server.web.root().join(&site);
         if !site_dir.is_dir() {
             return Err(format!("site://{site} is not a site"));

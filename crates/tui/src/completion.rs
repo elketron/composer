@@ -1,7 +1,9 @@
 //! Completing `:` commands with Tab, as vim's command line does: command names, then each
 //! command's argument (session ids, agents, sites and pages, models).
 
-use crate::commands::COMMANDS;
+use composer_protocol::RunKind;
+
+use crate::commands::{COMMANDS, RUN_KINDS, kind_name};
 use crate::store::AppState;
 
 /// One choice in the menu.
@@ -47,7 +49,7 @@ pub fn complete(line: &str, state: &AppState) -> Completions {
     let arg = &line[start..];
     let items = match name {
         "attach" | "a" => sessions(arg, state),
-        "new" => agents(arg, state),
+        "new" => kinds(arg),
         "open" | "o" => pages(arg, state),
         "site" => all_sites(arg, state),
         "model" | "m" => models(arg, state),
@@ -109,7 +111,7 @@ fn sessions(arg: &str, state: &AppState) -> Vec<Candidate> {
         all.iter()
             .filter(|s| {
                 let preview = s.preview.as_deref().unwrap_or("");
-                s.agent.to_lowercase().contains(&needle) || preview.to_lowercase().contains(&needle)
+                kind_name(s.kind).contains(&needle) || preview.to_lowercase().contains(&needle)
             })
             .collect()
     } else {
@@ -119,7 +121,11 @@ fn sessions(arg: &str, state: &AppState) -> Vec<Candidate> {
         .into_iter()
         .map(|s| Candidate {
             text: s.id.clone(),
-            detail: format!("{}  {}", s.agent, s.preview.as_deref().unwrap_or("")),
+            detail: format!(
+                "{}  {}",
+                kind_name(s.kind),
+                s.preview.as_deref().unwrap_or("")
+            ),
         })
         .collect()
 }
@@ -164,21 +170,19 @@ fn models(arg: &str, state: &AppState) -> Vec<Candidate> {
         .collect()
 }
 
-/// Agent definitions: the pages of `site://agents`.
-fn agents(arg: &str, state: &AppState) -> Vec<Candidate> {
-    state
-        .catalog
-        .pages
+/// The run kinds a new session can be.
+fn kinds(arg: &str) -> Vec<Candidate> {
+    RUN_KINDS
         .iter()
-        .filter_map(|page| {
-            let name = page
-                .url
-                .strip_prefix("site://agents/")?
-                .strip_suffix(".md")?;
-            (name != "index" && !name.contains('/') && starts_with(name, arg)).then(|| Candidate {
-                text: name.to_string(),
-                detail: page.title.clone(),
-            })
+        .filter(|(name, _)| starts_with(name, arg))
+        .map(|(name, kind)| Candidate {
+            text: name.to_string(),
+            detail: match kind {
+                RunKind::Agentic => "a conversation with every tool",
+                RunKind::Workflow => "read-only tools; ends with finish(value)",
+                RunKind::SingleShot => "one model call, no tools",
+            }
+            .to_string(),
         })
         .collect()
 }
@@ -252,9 +256,9 @@ mod tests {
 
     fn state() -> AppState {
         let mut state = AppState::new(Startup::default(), 160_000);
-        let session = |id: &str, agent: &str, preview: &str| SessionInfo {
+        let session = |id: &str, kind: RunKind, preview: &str| SessionInfo {
             id: id.into(),
-            agent: agent.into(),
+            kind,
             project: None,
             site: None,
             parent: None,
@@ -266,11 +270,11 @@ mod tests {
             updated: String::new(),
         };
         state.session.sessions = vec![
-            session("a3f1", "default", "fix the login bug"),
-            session("b2c3", "default", "plan the release"),
+            session("a3f1", RunKind::Agentic, "fix the login bug"),
+            session("b2c3", RunKind::Workflow, "plan the release"),
             SessionInfo {
                 parent: Some("b2c3".into()),
-                ..session("c4d5", "default", "a spawned run")
+                ..session("c4d5", RunKind::Agentic, "a spawned run")
             },
         ];
         let site = |name: &str, title: &str| SiteSummary {
@@ -301,9 +305,6 @@ mod tests {
                 page("site://memory/index.md", "Memory"),
                 page("site://memory/user.md", "User"),
                 page("site://memory/topics/rust.md", "Rust"),
-                page("site://agents/index.md", "Agents"),
-                page("site://agents/default.md", "Default"),
-                page("site://agents/writer.md", "Writer"),
             ],
             models: vec![
                 ModelInfo {
@@ -374,9 +375,9 @@ mod tests {
     }
 
     #[test]
-    fn agents_from_the_agents_site() {
-        assert_eq!(texts("new "), ["default", "writer"]);
-        assert_eq!(texts("new wr"), ["writer"]);
+    fn run_kinds_for_new_sessions() {
+        assert_eq!(texts("new "), ["agentic", "workflow", "single"]);
+        assert_eq!(texts("new wo"), ["workflow"]);
     }
 
     #[test]

@@ -3,20 +3,20 @@ use std::path::Path;
 use composer_core::{Index, SiteUrl, Web};
 use composer_protocol::SessionInfo;
 
-use crate::agent::AgentDefinition;
+use crate::agent::RunSettings;
 
 /// Memory pages listed in the prompt, at most.
 const MEMORY_LIST_MAX: usize = 60;
 
-/// The system prompt: agent body → `site://home` → environment → relevant memory → the active
+/// The system prompt: the run's prompt → the site or `site://home` → environment → relevant memory → the active
 /// project, which changes most often, last.
 pub fn system_prompt(
-    agent: &AgentDefinition,
+    settings: &RunSettings,
     workspace: &Web,
     index: &Index,
     session: &SessionInfo,
 ) -> String {
-    let mut sections = vec![agent.prompt.clone()];
+    let mut sections = vec![settings.prompt.clone()];
     let site = session
         .site
         .as_deref()
@@ -50,9 +50,12 @@ pub fn system_prompt(
     }
 
     sections.push(format!(
-        "# Environment\n- you are the `{name}` agent ({url}); pages about other agents describe their roles, not yours\n- date: {date}\n- session: {id}",
-        name = agent.name,
-        url = agent.url,
+        "# Environment\n- run: {kind}\n- date: {date}\n- session: {id}",
+        kind = match settings.kind {
+            composer_protocol::RunKind::SingleShot => "single shot",
+            composer_protocol::RunKind::Workflow => "workflow (read-only)",
+            composer_protocol::RunKind::Agentic => "agentic",
+        },
         date = chrono::Local::now().format("%Y-%m-%d %A"),
         id = session.id,
     ));

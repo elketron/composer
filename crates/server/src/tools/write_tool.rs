@@ -33,7 +33,6 @@ impl Tool for WriteTool {
     async fn call(&self, context: &ToolContext, args: Value) -> Result<String, String> {
         let args: WriteArgs = serde_json::from_value(args).map_err(|e| e.to_string())?;
         let url = context.url(&args.url)?;
-        context.check_write(&url)?;
         let (written, created) = context
             .server
             .write_page(&url, &args.content, ChangedBy::Agent)

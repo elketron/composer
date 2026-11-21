@@ -14,7 +14,8 @@ async fn create_session(socket: &mut Socket) -> String {
         socket,
         1,
         ClientCommand::SessionCreate {
-            agent: "default".into(),
+            kind: composer_protocol::RunKind::Agentic,
+            model: None,
             project: None,
         },
     )
@@ -612,7 +613,8 @@ async fn open_shows_an_image_to_the_model() {
         &mut socket,
         1,
         ClientCommand::SessionCreate {
-            agent: "default".into(),
+            kind: composer_protocol::RunKind::Agentic,
+            model: None,
             project: Some(project.path().display().to_string()),
         },
     )
@@ -675,21 +677,17 @@ async fn open_shows_an_image_to_the_model() {
 }
 
 #[tokio::test]
-async fn an_agents_reasoning_goes_with_its_requests() {
+async fn a_sessions_model_goes_with_its_requests() {
     let answer = || vec![ModelEvent::Content("ok".into()), finished(vec![])];
     let (_dir, server, provider, addr) = start(vec![answer(), answer()]).await;
-    let page = "---\ntitle: Thinker\ntype: agent\nreasoning: Medium\n---\nYou think a little.\n";
-    let url = composer_core::SiteUrl::new("agents", "thinker.md").unwrap();
-    server
-        .write_page(&url, page, composer_protocol::ChangedBy::External)
-        .unwrap();
     let mut socket = connect(addr, &server.token).await;
-    for (id, agent) in [(1, "thinker"), (10, "default")] {
+    for (id, model) in [(1, Some("thinker")), (10, None)] {
         send(
             &mut socket,
             id,
             ClientCommand::SessionCreate {
-                agent: agent.into(),
+                kind: composer_protocol::RunKind::Agentic,
+                model: model.map(String::from),
                 project: None,
             },
         )
@@ -706,6 +704,7 @@ async fn an_agents_reasoning_goes_with_its_requests() {
         else {
             panic!("{reply:?}")
         };
+        assert_eq!(session.model.as_deref(), model);
         attach(&mut socket, &session.id).await;
         send(
             &mut socket,
@@ -721,11 +720,10 @@ async fn an_agents_reasoning_goes_with_its_requests() {
         .await;
         until(&mut socket, |e| matches!(e, ServerMessage::TurnDone { .. })).await;
     }
-    let efforts: Vec<_> = provider
-        .requests()
-        .into_iter()
-        .map(|r| r.reasoning_effort)
-        .collect();
-    // The agent's `reasoning:`; the default agent, without one and no config: not sent.
-    assert_eq!(efforts, [Some("medium".to_string()), None]);
+    let requests = provider.requests();
+    let models: Vec<_> = requests.iter().map(|r| r.model.clone()).collect();
+    // The session's model; without one, the provider's (not sent).
+    assert_eq!(models, [Some("thinker".to_string()), None]);
+    // No `[agent] reasoning_effort` in the config: not sent.
+    assert!(requests.iter().all(|r| r.reasoning_effort.is_none()));
 }

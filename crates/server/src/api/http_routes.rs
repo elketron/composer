@@ -6,12 +6,12 @@ use axum::extract::{Extension, Path, Query, State};
 use axum::http::StatusCode;
 use composer_core::SiteUrl;
 use composer_protocol::http::{
-    AgentSummary, AppMessage, PageResponse, ProjectDiff, PutPageRequest, PutPageResponse,
-    SearchHit, ServerInfo, SiteSummary,
+    AppMessage, PageResponse, ProjectDiff, PutPageRequest, PutPageResponse, SearchHit, ServerInfo,
+    SiteSummary,
 };
 use composer_protocol::{ChangedBy, ChatMessage, MessageSource, Role};
 
-use crate::agent::{AgentDefinition, Site};
+use crate::agent::Site;
 use crate::api::{ApiError, Credential};
 use crate::server::Server;
 use crate::session::submit;
@@ -41,20 +41,6 @@ pub async fn info(State(server): State<Arc<Server>>) -> Json<ServerInfo> {
         projects_dir: config.projects.dir.clone(),
         viewer: crate::api::viewer_proxy::viewer_path(&server),
     })
-}
-
-pub async fn agents(State(server): State<Arc<Server>>) -> Json<Vec<AgentSummary>> {
-    let index = server.index.read().expect("index lock");
-    Json(
-        AgentDefinition::all(&server.web, &index)
-            .into_iter()
-            .map(|a| AgentSummary {
-                name: a.name,
-                title: a.title,
-                description: a.description,
-            })
-            .collect(),
-    )
 }
 
 pub async fn sites(State(server): State<Arc<Server>>) -> Result<Json<Vec<SiteSummary>>, ApiError> {

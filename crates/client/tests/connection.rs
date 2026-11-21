@@ -72,7 +72,8 @@ async fn a_connection_reconnects_and_pairs_replies() {
     let created = ask(
         &connection,
         ClientCommand::SessionCreate {
-            agent: "default".into(),
+            kind: composer_protocol::RunKind::Agentic,
+            model: None,
             project: None,
         },
     )

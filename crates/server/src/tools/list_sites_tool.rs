@@ -23,7 +23,6 @@ impl Tool for ListSitesTool {
         let sites = context.server.web.sites().map_err(|e| e.to_string())?;
         let lines: Vec<String> = sites
             .iter()
-            .filter(|s| context.agent.sites.can_read(&s.name))
             .map(|s| {
                 let mut line = format!("- site://{} — {}", s.name, s.title);
                 if s.has_justfile {

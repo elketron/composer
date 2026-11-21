@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
-use composer_protocol::ToolInfo;
+use composer_protocol::{RunKind, ToolInfo};
 use serde_json::Value;
 
-use crate::agent::{AgentDefinition, Site};
+use crate::agent::Site;
 use crate::mcp_clients::McpServers;
 use crate::provider::{ModelToolCall, ToolSpec};
 use crate::server::Server;
@@ -26,7 +26,10 @@ use crate::tools::write_tool::WriteTool;
 use crate::tools::{CallResult, Tool, ToolContext, text_result};
 use crate::watches::WRITER;
 
-/// All tools the server provides. An agent gets the ones its `tools:` lists.
+/// The tools a workflow run has: it reads, it does not change anything.
+pub const READ_ONLY_TOOLS: [&str; 5] = ["open", "search", "list_sites", "set_site", "finish"];
+
+/// All tools the server provides. A run gets the ones its kind allows.
 pub struct ToolRegistry {
     tools: Vec<Arc<dyn Tool>>,
 }
@@ -54,10 +57,11 @@ impl ToolRegistry {
         }
     }
 
-    pub fn specs_for(&self, agent: &AgentDefinition, site: Option<&Site>) -> Vec<ToolSpec> {
+    /// The native tools a run of `kind` has, narrowed to `only` when given.
+    pub fn specs_for(&self, kind: RunKind, only: Option<&[&str]>) -> Vec<ToolSpec> {
         self.tools
             .iter()
-            .filter(|t| Self::allowed(agent, site, t.name()))
+            .filter(|t| Self::allowed(kind, only, t.name()))
             .map(|t| ToolSpec {
                 name: t.name().to_string(),
                 description: t.description().to_string(),
@@ -66,20 +70,30 @@ impl ToolRegistry {
             .collect()
     }
 
-    /// The agent's base `tools:` plus the tools of the site it entered.
-    fn allowed(agent: &AgentDefinition, site: Option<&Site>, tool: &str) -> bool {
-        agent.allows_tool(tool) || site.is_some_and(|site| site.allows_tool(tool))
+    /// Whether a run of `kind` has the native tool `tool`: none for a single shot, the
+    /// read-only ones for a workflow run, all but `finish` for an agentic one.
+    pub fn kind_allows(kind: RunKind, tool: &str) -> bool {
+        match kind {
+            RunKind::SingleShot => false,
+            RunKind::Workflow => READ_ONLY_TOOLS.contains(&tool),
+            RunKind::Agentic => tool != "finish",
+        }
     }
 
-    /// The native tools `agent` lists, then the MCP tools it lists (servers it can reach).
+    fn allowed(kind: RunKind, only: Option<&[&str]>, tool: &str) -> bool {
+        Self::kind_allows(kind, tool) && only.is_none_or(|only| only.contains(&tool))
+    }
+
+    /// The native tools a run of `kind` has, then the MCP tools of `site` it has (servers it
+    /// can reach).
     pub async fn specs_with_mcp(
         &self,
         server: &Server,
-        agent: &AgentDefinition,
+        kind: RunKind,
         site: Option<&Site>,
     ) -> Vec<ToolSpec> {
-        let mut specs = self.specs_for(agent, site);
-        specs.extend(server.mcp().specs_for(agent, site).await);
+        let mut specs = self.specs_for(kind, None);
+        specs.extend(server.mcp().specs_for(kind, site).await);
         specs
     }
 
@@ -87,11 +101,11 @@ impl ToolRegistry {
     pub async fn infos_for(
         &self,
         mcp: &McpServers,
-        agent: &AgentDefinition,
+        kind: RunKind,
         site: Option<&Site>,
     ) -> Vec<ToolInfo> {
-        let mut specs = self.specs_for(agent, site);
-        specs.extend(mcp.specs_for(agent, site).await);
+        let mut specs = self.specs_for(kind, None);
+        specs.extend(mcp.specs_for(kind, site).await);
         specs
             .into_iter()
             .map(|spec| ToolInfo {
@@ -131,9 +145,11 @@ impl ToolRegistry {
 
     /// Runs a call with parsed arguments (models, and harnesses through `tool.call`).
     pub async fn call_value(&self, context: &ToolContext, name: &str, args: Value) -> CallResult {
-        let Some(tool) = self.tools.iter().find(|t| {
-            t.name() == name && Self::allowed(&context.agent, context.site.as_deref(), t.name())
-        }) else {
+        let Some(tool) = self
+            .tools
+            .iter()
+            .find(|t| t.name() == name && Self::allowed(context.kind, context.only, t.name()))
+        else {
             if let Some(result) = context.server.mcp().call(context, name, args).await {
                 return result;
             }

@@ -4,13 +4,11 @@
 
 mod support;
 
-use std::sync::Arc;
 use std::time::Duration;
 
 use base64::Engine;
 use composer_protocol::{ApprovalDecision, ClientCommand, CommandResult, ServerMessage};
 use composer_server::Config;
-use composer_server::agent::AgentDefinition;
 use composer_server::tools::ToolContext;
 use serde_json::json;
 use support::*;
@@ -65,8 +63,11 @@ async fn a_sessions_terminal_runs_in_its_project() {
     let (_dir, server, _provider, addr) = start_with(config, vec![]).await;
     let session = server
         .sessions
-        // The worker page has the terminal tools; the orchestrator's base set does not (0200).
-        .create("worker", Some(game.display().to_string()))
+        .create(
+            composer_protocol::RunKind::Agentic,
+            None,
+            Some(game.display().to_string()),
+        )
         .unwrap();
     let sid = session.id().to_string();
     let mut client = connect(addr, &server.token).await;
@@ -143,7 +144,8 @@ async fn a_sessions_terminal_runs_in_its_project() {
     let context = ToolContext {
         server: server.clone(),
         session: session.clone(),
-        agent: Arc::new(AgentDefinition::load(&server.web, "default").unwrap()),
+        kind: composer_protocol::RunKind::Agentic,
+        only: None,
         site: None,
         cancel: CancellationToken::new(),
     };
@@ -154,7 +156,10 @@ async fn a_sessions_terminal_runs_in_its_project() {
     assert!(read.text.contains("sum-42"), "{}", read.text);
 
     // Another session's agent can't read or type into it.
-    let other = server.sessions.create("default", None).unwrap();
+    let other = server
+        .sessions
+        .create(composer_protocol::RunKind::Agentic, None, None)
+        .unwrap();
     let elsewhere = ToolContext {
         session: other,
         ..context.clone()

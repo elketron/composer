@@ -67,8 +67,7 @@ impl Tool for WatchTool {
                 "{pattern}: only a trailing /* or /** is supported, e.g. site://x/dir/**"
             ));
         }
-        let url = context.url(&base)?;
-        context.check_read(&url)?;
+        context.url(&base)?;
         server.watches.add(FileWatch {
             session: session.to_string(),
             pattern: pattern.clone(),

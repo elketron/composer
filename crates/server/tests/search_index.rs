@@ -129,7 +129,8 @@ vec![
         &mut socket,
         1,
         ClientCommand::SessionCreate {
-            agent: "default".into(),
+            kind: composer_protocol::RunKind::Agentic,
+            model: None,
             project: None,
         },
     )

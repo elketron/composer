@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use serde_json::{Value, json};
 
-use crate::agent::enter_site_as_agent;
+use crate::agent::enter_site;
 use crate::tools::{Tool, ToolContext};
 
 pub struct EnterSiteTool;
@@ -29,8 +29,7 @@ impl Tool for EnterSiteTool {
 
     async fn call(&self, context: &ToolContext, args: Value) -> Result<String, String> {
         let site = args["site"].as_str().unwrap_or_default();
-        let entered =
-            enter_site_as_agent(&context.server, &context.session, &context.agent, site).await?;
+        let entered = enter_site(&context.server, &context.session, site).await?;
         let notes = entered.notes();
         Ok(format!(
             "entered site://{} ({}). Its index, tools and MCP servers apply from your next turn; \

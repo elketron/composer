@@ -82,7 +82,8 @@ async fn a_client_uses_a_sessions_tools_through_mcp() {
         &mut socket,
         1,
         ClientCommand::SessionCreate {
-            agent: "default".into(),
+            kind: composer_protocol::RunKind::Agentic,
+            model: None,
             project: None,
         },
     )

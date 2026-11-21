@@ -46,17 +46,6 @@ pub struct SiteSummary {
     pub mcp: Vec<String>,
 }
 
-/// `GET /api/agents`: the agent definitions (`site://agents`).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-pub struct AgentSummary {
-    pub name: String,
-    pub title: String,
-    /// `description:`, else the title.
-    pub description: String,
-}
-
 /// `POST /api/web-session`: a new browser session of the caller's kind, for a client that sets
 /// the workspace's cookie itself (the desktop's panes, the phone's webviews) instead of putting a
 /// token in a cookie or a URL.
@@ -83,10 +72,10 @@ pub struct McpServerInfo {
     /// `ready`, `failed` (see `error`) or `off` (`enabled = false`).
     pub state: String,
     pub error: Option<String>,
-    /// Its tools as agents list them (`github__get_issue`).
+    /// Its tools as agents see them (`github__get_issue`).
     pub tools: Vec<String>,
-    /// The agents whose `tools:` include some of them.
-    pub agents: Vec<String>,
+    /// The sites that may grant its tools (`sites` in its config).
+    pub sites: Vec<String>,
 }
 
 /// `GET /api/pages/{site}/{path}`. The `ETag` header carries `hash`.

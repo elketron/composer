@@ -59,7 +59,10 @@ async fn the_user_enters_and_leaves_a_site() {
         &sites.join("game/index.md"),
         "---\ntitle: Game\nproject: required\n---\n# Game\n",
     );
-    let session = server.sessions.create("default", None).unwrap();
+    let session = server
+        .sessions
+        .create(composer_protocol::RunKind::Agentic, None, None)
+        .unwrap();
     let id = session.id().to_string();
     let mut socket = connect(addr, &server.token).await;
 

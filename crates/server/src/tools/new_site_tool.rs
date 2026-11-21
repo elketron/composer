@@ -43,7 +43,6 @@ impl Tool for NewSiteTool {
             .trim_start_matches("site://")
             .trim_end_matches('/');
         let url = SiteUrl::new(name, "").map_err(|e| e.to_string())?;
-        context.check_write(&url)?;
         let server = &context.server;
         let dir = server.web.root().join(name);
         if dir.exists() {
@@ -96,10 +95,6 @@ fn homepage(title: &str, about: &str) -> String {
 
 /// Adds the site to the table on Home. Returns a note for the result.
 fn list_on_home(context: &ToolContext, name: &str, about: &str) -> String {
-    let home = SiteUrl::new("home", "").expect("valid");
-    if context.check_write(&home).is_err() {
-        return "; not listed on Home (you may not edit it), add it there yourself".into();
-    }
     match add_to_home(&context.server, name, about, ChangedBy::Agent) {
         Ok(()) => " and listed it on Home".into(),
         Err(why) => format!("; not listed on Home ({why}), add it there yourself"),

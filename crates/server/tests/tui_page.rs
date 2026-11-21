@@ -4,7 +4,6 @@
 mod support;
 
 use composer_protocol::DeskTab;
-use composer_server::agent::AgentDefinition;
 use composer_server::tools::ToolContext;
 use serde_json::json;
 use support::*;
@@ -43,12 +42,17 @@ async fn a_tui_page_starts_in_the_project() {
 
     let session = server
         .sessions
-        .create("default", Some(project.display().to_string()))
+        .create(
+            composer_protocol::RunKind::Agentic,
+            None,
+            Some(project.display().to_string()),
+        )
         .unwrap();
     let context = ToolContext {
         server: server.clone(),
         session: session.clone(),
-        agent: std::sync::Arc::new(AgentDefinition::load(&server.web, "default").unwrap()),
+        kind: composer_protocol::RunKind::Agentic,
+        only: None,
         site: None,
         cancel: CancellationToken::new(),
     };
@@ -113,12 +117,17 @@ async fn a_run_tui_page_starts_in_its_runs_project() {
 
     let session = server
         .sessions
-        .create("default", Some(project.display().to_string()))
+        .create(
+            composer_protocol::RunKind::Agentic,
+            None,
+            Some(project.display().to_string()),
+        )
         .unwrap();
     let context = ToolContext {
         server: server.clone(),
         session: session.clone(),
-        agent: std::sync::Arc::new(AgentDefinition::load(&server.web, "default").unwrap()),
+        kind: composer_protocol::RunKind::Agentic,
+        only: None,
         site: None,
         cancel: CancellationToken::new(),
     };

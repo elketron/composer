@@ -1,5 +1,5 @@
 use composer_protocol::{
-    ApprovalKind, ClientCommand, CommandResult, DeskBy, DeskTab, Seq, ServerMessage,
+    ApprovalKind, ClientCommand, CommandResult, DeskBy, DeskTab, RunKind, Seq, ServerMessage,
 };
 
 use crate::action::Action;
@@ -34,7 +34,7 @@ pub struct AppState {
     /// Files attached to the message being written.
     pub attachments: AttachmentStore,
     startup: Option<Startup>,
-    default_agent: String,
+    default_kind: RunKind,
     /// Where project names point (`--project composer`), when known.
     pub projects_dir: Option<String>,
 }
@@ -52,7 +52,7 @@ impl AppState {
             project: ProjectStore::default(),
             catalog: Catalog::default(),
             attachments: AttachmentStore::default(),
-            default_agent: startup.agent.clone(),
+            default_kind: startup.kind,
             projects_dir: startup.projects_dir.clone(),
             startup: Some(startup),
         }
@@ -221,12 +221,16 @@ impl AppState {
                 }
                 None => vec![],
             },
-            Action::NewSession { agent } => {
-                let agent = agent.unwrap_or_else(|| self.default_agent.clone());
+            Action::NewSession { kind } => {
+                let kind = kind.unwrap_or(self.default_kind);
                 // The new chat gets this session's project.
                 let project = self.session.current_info().and_then(|s| s.project.clone());
                 self.send(
-                    ClientCommand::SessionCreate { agent, project },
+                    ClientCommand::SessionCreate {
+                        kind,
+                        model: None,
+                        project,
+                    },
                     Pending::CreateSession,
                 )
             }
@@ -1063,7 +1067,8 @@ impl AppState {
             Some(id) if !startup.new => self.attach(&id, false),
             _ => self.send(
                 ClientCommand::SessionCreate {
-                    agent: startup.agent,
+                    kind: startup.kind,
+                    model: None,
                     project: startup.project,
                 },
                 Pending::CreateSession,
@@ -1126,10 +1131,10 @@ fn mcp_summary(servers: &[composer_protocol::http::McpServerInfo]) -> (String, F
     let parts: Vec<String> = servers
         .iter()
         .map(|s| {
-            let agents = if s.agents.is_empty() {
-                "no agent lists it".to_string()
+            let agents = if s.sites.is_empty() {
+                "no site may grant it".to_string()
             } else {
-                format!("for {}", s.agents.join(", "))
+                format!("for {}", s.sites.join(", "))
             };
             match s.state.as_str() {
                 "ready" => format!("{} ready, {} tools, {agents}", s.name, s.tools.len()),
@@ -1163,7 +1168,7 @@ mod tests {
     fn info(id: &str, parent: Option<&str>) -> SessionInfo {
         SessionInfo {
             id: id.into(),
-            agent: "default".into(),
+            kind: composer_protocol::RunKind::Agentic,
             project: None,
             site: None,
             parent: parent.map(Into::into),
@@ -1179,7 +1184,7 @@ mod tests {
     fn connected() -> (AppState, Vec<Effect>) {
         let mut state = AppState::new(
             Startup {
-                agent: "default".into(),
+                kind: composer_protocol::RunKind::Agentic,
                 ..Startup::default()
             },
             160_000,
@@ -1580,7 +1585,7 @@ mod tests {
             state: state.into(),
             error: error.map(Into::into),
             tools: vec!["a__x".into(), "a__y".into()],
-            agents: vec!["default".into()],
+            sites: vec!["lab".into()],
         };
         let (text, level) = mcp_summary(&[
             server("github", "ready", None),
@@ -1589,7 +1594,7 @@ mod tests {
         ]);
         assert_eq!(
             text,
-            "mcp: github ready, 2 tools, for default · docs off · broken failed: starting `x`: not found"
+            "mcp: github ready, 2 tools, for lab · docs off · broken failed: starting `x`: not found"
         );
         assert_eq!(level, FlashLevel::Warn);
         assert!(mcp_summary(&[]).0.starts_with("no MCP servers"));

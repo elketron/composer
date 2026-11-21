@@ -2,7 +2,6 @@
 
 mod support;
 
-use composer_server::agent::AgentDefinition;
 use composer_server::tools::ToolContext;
 use serde_json::json;
 use support::*;
@@ -28,11 +27,15 @@ async fn a_folder_lists_and_a_page_shows_its_hash() {
         &dir.path().join("sites/flow/notes/b.md"),
         "---\ntitle: B\n---\n# B\n",
     );
-    let session = server.sessions.create("default", None).unwrap();
+    let session = server
+        .sessions
+        .create(composer_protocol::RunKind::Agentic, None, None)
+        .unwrap();
     let context = ToolContext {
         server: server.clone(),
         session,
-        agent: std::sync::Arc::new(AgentDefinition::load(&server.web, "default").unwrap()),
+        kind: composer_protocol::RunKind::Agentic,
+        only: None,
         site: None,
         cancel: CancellationToken::new(),
     };

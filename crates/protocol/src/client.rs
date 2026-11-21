@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::common::{ApprovalDecision, Attachment, Seq, SessionId, Url};
+use crate::common::{ApprovalDecision, Attachment, RunKind, Seq, SessionId, Url};
 
 /// A command from a client. The server answers with `ok` or `error` carrying the same `id`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -19,7 +19,12 @@ pub struct ClientRequest {
 pub enum ClientCommand {
     #[serde(rename = "session.create")]
     SessionCreate {
-        agent: String,
+        /// Default: an agentic session.
+        #[serde(default)]
+        kind: RunKind,
+        /// The model its runs use; default: the server's.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        model: Option<String>,
         project: Option<String>,
     },
 

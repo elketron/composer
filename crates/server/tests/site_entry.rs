@@ -6,9 +6,8 @@ mod support;
 
 use std::sync::Arc;
 
-use composer_core::SiteUrl;
-use composer_protocol::ChangedBy;
-use composer_server::agent::{AgentDefinition, Site, enter_site_as_client, leave_site};
+use composer_protocol::RunKind;
+use composer_server::agent::{Site, enter_site, leave_site};
 use composer_server::tools::ToolContext;
 use composer_server::{Config, McpServerConfig, Server};
 use serde_json::{Value, json};
@@ -96,7 +95,7 @@ fn calls(scratch: &std::path::Path) -> Vec<Value> {
 fn context(
     server: &Arc<Server>,
     session: &Arc<composer_server::session::Session>,
-    agent: &str,
+    kind: RunKind,
 ) -> ToolContext {
     let site = session
         .info()
@@ -107,7 +106,8 @@ fn context(
     ToolContext {
         server: server.clone(),
         session: session.clone(),
-        agent: Arc::new(AgentDefinition::load(&server.web, agent).unwrap()),
+        kind,
+        only: None,
         site,
         cancel: CancellationToken::new(),
     }
@@ -116,21 +116,11 @@ fn context(
 async fn offered(server: &Arc<Server>, context: &ToolContext) -> Vec<String> {
     server
         .tools
-        .specs_with_mcp(server, &context.agent, context.site.as_deref())
+        .specs_with_mcp(server, context.kind, context.site.as_deref())
         .await
         .into_iter()
         .map(|spec| spec.name)
         .collect()
-}
-
-fn write_agent(server: &Server) {
-    server
-        .write_page(
-            &SiteUrl::new("agents", "base.md").unwrap(),
-            "---\ntitle: base\ntype: agent\nname: base\ntools: [open, enter_site, leave_site]\nsites: all\n---\nYou are base.\n",
-            ChangedBy::External,
-        )
-        .unwrap();
 }
 
 #[tokio::test]
@@ -140,7 +130,6 @@ async fn a_site_grants_mcp_tools_while_the_session_is_in_it() {
     }
     let scratch = tempfile::tempdir().unwrap();
     let (dir, server, _provider, _addr) = start_with(fake_config(scratch.path()), vec![]).await;
-    write_agent(&server);
     write(
         &dir.path().join("sites/lab/index.md"),
         "---\ntitle: Lab\nmcp: [fake, not_configured]\n---\n# Lab\n",
@@ -149,10 +138,13 @@ async fn a_site_grants_mcp_tools_while_the_session_is_in_it() {
         &dir.path().join("sites/plain/index.md"),
         "---\ntitle: Plain\n---\n# Plain\n",
     );
-    let session = server.sessions.create("base", None).unwrap();
+    let session = server
+        .sessions
+        .create(RunKind::Agentic, None, None)
+        .unwrap();
 
     // Outside: not offered, and a call is unknown.
-    let outside = context(&server, &session, "base");
+    let outside = context(&server, &session, RunKind::Agentic);
     assert!(
         !offered(&server, &outside)
             .await
@@ -170,22 +162,20 @@ async fn a_site_grants_mcp_tools_while_the_session_is_in_it() {
 
     // Inside: offered (a server in `mcp:` that is not configured is skipped, and said so), and
     // the call runs without asking (`allow`).
-    let entered = enter_site_as_client(&server, &session, "lab")
-        .await
-        .unwrap();
+    let entered = enter_site(&server, &session, "lab").await.unwrap();
     assert_eq!(entered.mcp_refused.len(), 1, "{:?}", entered.mcp_refused);
     assert!(
         entered.mcp_refused[0].contains("there is no [mcp.not_configured]"),
         "{:?}",
         entered.mcp_refused
     );
-    let inside = context(&server, &session, "base");
+    let inside = context(&server, &session, RunKind::Agentic);
     let names = offered(&server, &inside).await;
     assert!(names.contains(&"fake__echo".to_string()), "{names:?}");
     assert!(names.contains(&"open".to_string()));
     let info = server
         .tools
-        .infos_for(&server.mcp(), &inside.agent, inside.site.as_deref())
+        .infos_for(&server.mcp(), inside.kind, inside.site.as_deref())
         .await;
     assert!(info.iter().any(|t| t.name == "fake__echo"));
     let ran = server
@@ -195,10 +185,8 @@ async fn a_site_grants_mcp_tools_while_the_session_is_in_it() {
     assert!(!ran.is_error && ran.text == "hi", "{}", ran.text);
 
     // Another site without `mcp:` takes it away again.
-    enter_site_as_client(&server, &session, "plain")
-        .await
-        .unwrap();
-    let other = context(&server, &session, "base");
+    enter_site(&server, &session, "plain").await.unwrap();
+    let other = context(&server, &session, RunKind::Agentic);
     assert!(
         !offered(&server, &other)
             .await
@@ -213,11 +201,9 @@ async fn a_site_grants_mcp_tools_while_the_session_is_in_it() {
     );
 
     // Leaving too.
-    enter_site_as_client(&server, &session, "lab")
-        .await
-        .unwrap();
+    enter_site(&server, &session, "lab").await.unwrap();
     assert_eq!(leave_site(&server, &session).as_deref(), Some("lab"));
-    let after = context(&server, &session, "base");
+    let after = context(&server, &session, RunKind::Agentic);
     let refused = server
         .tools
         .call_value(&after, "fake__echo", json!({ "text": "hi" }))
@@ -236,7 +222,6 @@ async fn a_page_cannot_grant_a_server_its_config_does_not_list_the_site_for() {
     }
     let scratch = tempfile::tempdir().unwrap();
     let (dir, server, _provider, addr) = start_with(fake_config(scratch.path()), vec![]).await;
-    write_agent(&server);
     // Any agent can write this page; `[mcp.fake] sites` lists `lab` and `mcponly` only.
     write(
         &dir.path().join("sites/sneaky/index.md"),
@@ -246,13 +231,14 @@ async fn a_page_cannot_grant_a_server_its_config_does_not_list_the_site_for() {
         &dir.path().join("sites/lab/index.md"),
         "---\ntitle: Lab\nmcp: fake\n---\n# Lab\n",
     );
-    let session = server.sessions.create("base", None).unwrap();
+    let session = server
+        .sessions
+        .create(RunKind::Agentic, None, None)
+        .unwrap();
     let says = "site sneaky names MCP server fake, but [mcp.fake] does not list it in `sites`";
 
     // The user enters: told in words, and nothing is granted.
-    let entered = enter_site_as_client(&server, &session, "sneaky")
-        .await
-        .unwrap();
+    let entered = enter_site(&server, &session, "sneaky").await.unwrap();
     assert_eq!(entered.mcp_refused.len(), 1);
     assert!(
         entered.mcp_refused[0].contains(says),
@@ -260,13 +246,13 @@ async fn a_page_cannot_grant_a_server_its_config_does_not_list_the_site_for() {
         entered.mcp_refused
     );
     assert!(entered.notes().contains(says), "{}", entered.notes());
-    let inside = context(&server, &session, "base");
+    let inside = context(&server, &session, RunKind::Agentic);
     assert_eq!(session.info().site.as_deref(), Some("sneaky"));
     let names = offered(&server, &inside).await;
     assert!(!names.iter().any(|n| n.starts_with("fake__")), "{names:?}");
     let info = server
         .tools
-        .infos_for(&server.mcp(), &inside.agent, inside.site.as_deref())
+        .infos_for(&server.mcp(), inside.kind, inside.site.as_deref())
         .await;
     assert!(!info.iter().any(|t| t.name.starts_with("fake__")));
     let refused = server
@@ -288,7 +274,7 @@ async fn a_page_cannot_grant_a_server_its_config_does_not_list_the_site_for() {
     let result = server
         .tools
         .call_value(
-            &context(&server, &session, "base"),
+            &context(&server, &session, RunKind::Agentic),
             "enter_site",
             json!({ "site": "sneaky" }),
         )
@@ -321,11 +307,9 @@ async fn a_page_cannot_grant_a_server_its_config_does_not_list_the_site_for() {
     assert!(text.contains(says), "{text}");
 
     // A listed site grants it, and says nothing.
-    let entered = enter_site_as_client(&server, &session, "lab")
-        .await
-        .unwrap();
+    let entered = enter_site(&server, &session, "lab").await.unwrap();
     assert!(entered.mcp_refused.is_empty(), "{:?}", entered.mcp_refused);
-    let inside = context(&server, &session, "base");
+    let inside = context(&server, &session, RunKind::Agentic);
     assert!(
         offered(&server, &inside)
             .await
@@ -336,17 +320,17 @@ async fn a_page_cannot_grant_a_server_its_config_does_not_list_the_site_for() {
     let mut config = fake_config(scratch.path());
     config.mcp.get_mut("fake").unwrap().sites.clear();
     let (dir, server, _provider, _addr) = start_with(config, vec![]).await;
-    write_agent(&server);
     write(
         &dir.path().join("sites/lab/index.md"),
         "---\ntitle: Lab\nmcp: fake\n---\n# Lab\n",
     );
-    let session = server.sessions.create("base", None).unwrap();
-    let entered = enter_site_as_client(&server, &session, "lab")
-        .await
+    let session = server
+        .sessions
+        .create(RunKind::Agentic, None, None)
         .unwrap();
+    let entered = enter_site(&server, &session, "lab").await.unwrap();
     assert_eq!(entered.mcp_refused.len(), 1);
-    let inside = context(&server, &session, "base");
+    let inside = context(&server, &session, RunKind::Agentic);
     assert!(
         !offered(&server, &inside)
             .await

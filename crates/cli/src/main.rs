@@ -1,12 +1,15 @@
+mod kind;
 mod remote;
 
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 use composer_client::cli::{AskOptions, ask};
+use composer_protocol::RunKind;
 use composer_server::mcp::{McpOptions, run_mcp};
 use composer_server::{Home, Server, init_home};
 use composer_tui::{Startup, TuiOptions};
+use kind::Kind;
 
 #[derive(Parser)]
 #[command(name = "composer", about = "Agents browsing a web of markdown sites")]
@@ -20,9 +23,9 @@ struct Cli {
     /// Start a new session instead of resuming.
     #[arg(long, short = 'n')]
     new: bool,
-    /// Agent for new sessions.
-    #[arg(long, default_value = "default", global = true)]
-    agent: String,
+    /// Run kind of new sessions.
+    #[arg(long, value_enum, default_value_t = Kind::Agentic, global = true)]
+    kind: Kind,
     /// Active project for a new session: a name in the projects directory (`[projects] dir`,
     /// default ~/Projects), `.` for this directory, or a path.
     #[arg(long, short, global = true)]
@@ -115,7 +118,7 @@ async fn main() -> anyhow::Result<()> {
 
     match cli.command {
         None => {
-            let options = tui_options(&home, &cli.agent, cli.session, cli.new, cli.project)?;
+            let options = tui_options(&home, cli.kind.into(), cli.session, cli.new, cli.project)?;
             composer_tui::run(options).await?
         }
         Some(Command::Init) => {
@@ -143,7 +146,7 @@ async fn main() -> anyhow::Result<()> {
             let (server_url, token) = remote::client(&home)?;
             let options = AskOptions {
                 text,
-                agent: cli.agent,
+                kind: cli.kind.into(),
                 session: cli.session,
                 project: cli.project,
                 show_thinking: thinking,
@@ -174,7 +177,7 @@ async fn main() -> anyhow::Result<()> {
         }
         Some(Command::Script { file, out, new }) => {
             let script = std::fs::read_to_string(&file)?;
-            let options = tui_options(&home, &cli.agent, cli.session, new, cli.project)?;
+            let options = tui_options(&home, cli.kind.into(), cli.session, new, cli.project)?;
             for snapshot in composer_tui::run_script(options, &script, &out).await? {
                 println!("{}", snapshot.display());
             }
@@ -199,7 +202,7 @@ fn project_arg(project: String) -> String {
 /// Connects to the remote server from `composer login`, or the local one.
 fn tui_options(
     home: &Home,
-    agent: &str,
+    kind: RunKind,
     session: Option<String>,
     new: bool,
     project: Option<String>,
@@ -212,7 +215,7 @@ fn tui_options(
         startup: Startup {
             session,
             new,
-            agent: agent.to_string(),
+            kind,
             project,
             projects_dir: Some(config.projects.dir.clone()),
         },

@@ -1,12 +1,38 @@
 //! `:` commands.
 
+use composer_protocol::RunKind;
+
 use crate::action::Action;
+
+/// The run kinds by the names commands take, first the default.
+pub const RUN_KINDS: [(&str, RunKind); 3] = [
+    ("agentic", RunKind::Agentic),
+    ("workflow", RunKind::Workflow),
+    ("single", RunKind::SingleShot),
+];
+
+/// A run kind by its name (`single-shot` and `single_shot` too).
+pub fn parse_kind(name: &str) -> Option<RunKind> {
+    match name.trim().to_lowercase().as_str() {
+        "single-shot" | "single_shot" => Some(RunKind::SingleShot),
+        name => RUN_KINDS.iter().find(|(n, _)| *n == name).map(|(_, k)| *k),
+    }
+}
+
+/// A run kind's name, as commands take it and lists show it.
+pub fn kind_name(kind: RunKind) -> &'static str {
+    RUN_KINDS
+        .iter()
+        .find(|(_, k)| *k == kind)
+        .map(|(n, _)| *n)
+        .expect("every kind has a name")
+}
 
 /// Every command, as shown by help: (usage, what it does).
 pub const COMMANDS: [(&str, &str); 14] = [
     (
-        ":new [agent]",
-        "start a new session (the default agent, or name one)",
+        ":new [agentic|workflow|single]",
+        "start a new session: agentic (the default), a read-only workflow run, or a single shot",
     ),
     (":attach <id>", "switch to a session by id (or Space w)"),
     (
@@ -19,7 +45,7 @@ pub const COMMANDS: [(&str, &str); 14] = [
     ),
     (
         ":mcp",
-        "the MCP servers in config.toml: connects them and says which work, their tools and agents",
+        "the MCP servers in config.toml: connects them and says which work, their tools and sites",
     ),
     (
         ":reload",
@@ -51,7 +77,12 @@ pub fn parse_command(line: &str) -> Result<Action, String> {
     let arg = (!arg.is_empty()).then(|| arg.to_string());
     match name {
         "q" | "quit" => Ok(Action::Quit),
-        "new" => Ok(Action::NewSession { agent: arg }),
+        "new" => match arg.as_deref() {
+            None => Ok(Action::NewSession { kind: None }),
+            Some(name) => parse_kind(name)
+                .map(|kind| Action::NewSession { kind: Some(kind) })
+                .ok_or_else(|| format!("`{name}` isn't a run kind: agentic, workflow or single")),
+        },
         "attach" | "a" => arg
             .map(Action::AttachSession)
             .ok_or_else(|| "usage: :attach <session id>".into()),
@@ -108,11 +139,13 @@ mod tests {
     fn parses() {
         assert_eq!(parse_command("q"), Ok(Action::Quit));
         assert_eq!(
-            parse_command("new default"),
+            parse_command("new workflow"),
             Ok(Action::NewSession {
-                agent: Some("default".into())
+                kind: Some(RunKind::Workflow)
             })
         );
+        assert_eq!(parse_command("new"), Ok(Action::NewSession { kind: None }));
+        assert!(parse_command("new default").is_err());
         assert_eq!(
             parse_command("open memory/user"),
             Ok(Action::OpenUrl("site://memory/user".into()))

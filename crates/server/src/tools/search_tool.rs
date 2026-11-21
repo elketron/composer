@@ -44,7 +44,6 @@ impl Tool for SearchTool {
             .expect("index lock")
             .search(&query)
             .into_iter()
-            .filter(|h| context.agent.sites.can_read(h.url.site()))
             .collect();
         if hits.is_empty() {
             return Ok("no pages match".into());

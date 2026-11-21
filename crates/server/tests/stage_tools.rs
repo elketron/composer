@@ -4,13 +4,10 @@
 
 mod support;
 
-use std::sync::Arc;
 use std::time::Duration;
 
-use composer_core::SiteUrl;
-use composer_protocol::{ChangedBy, ClientCommand, DeskBy, ServerMessage};
+use composer_protocol::{ClientCommand, DeskBy, ServerMessage};
 use composer_server::Config;
-use composer_server::agent::AgentDefinition;
 use composer_server::tools::ToolContext;
 use serde_json::{Value, json};
 use support::*;
@@ -31,16 +28,13 @@ async fn the_agent_puts_things_on_the_stage() {
     let (dir, server, _provider, addr) = start_with(config, vec![]).await;
     let sites = dir.path().join("sites");
     write(&sites.join("cad/index.md"), "---\ntitle: CAD\n---\n# CAD\n");
-    server
-        .write_page(
-            &SiteUrl::new("agents", "stager.md").unwrap(),
-            "---\ntitle: stager\ntype: agent\nname: stager\ntools: [show_page, desk]\nsites: all\n---\nShows.\n",
-            ChangedBy::External,
-        )
-        .unwrap();
     let session = server
         .sessions
-        .create("stager", Some(root.join("game").display().to_string()))
+        .create(
+            composer_protocol::RunKind::Agentic,
+            None,
+            Some(root.join("game").display().to_string()),
+        )
         .unwrap();
     let id = session.id().to_string();
     let mut client = connect(addr, &server.token).await;
@@ -60,7 +54,8 @@ async fn the_agent_puts_things_on_the_stage() {
     let context = ToolContext {
         server: server.clone(),
         session: session.clone(),
-        agent: Arc::new(AgentDefinition::load(&server.web, "stager").unwrap()),
+        kind: composer_protocol::RunKind::Agentic,
+        only: None,
         site: None,
         cancel: CancellationToken::new(),
     };
@@ -127,18 +122,15 @@ async fn the_agent_puts_the_live_view_on_the_stage_when_there_is_one() {
     with.viewer.url = "http://127.0.0.1:9/view".into();
     for (config, viewer) in [(Config::defaults(), false), (with, true)] {
         let (_dir, server, _provider, _addr) = start_with(config, vec![]).await;
-        server
-            .write_page(
-                &SiteUrl::new("agents", "stager.md").unwrap(),
-                "---\ntitle: stager\ntype: agent\nname: stager\ntools: [desk]\nsites: all\n---\nShows.\n",
-                ChangedBy::External,
-            )
+        let session = server
+            .sessions
+            .create(composer_protocol::RunKind::Agentic, None, None)
             .unwrap();
-        let session = server.sessions.create("stager", None).unwrap();
         let context = ToolContext {
             server: server.clone(),
             session: session.clone(),
-            agent: Arc::new(AgentDefinition::load(&server.web, "stager").unwrap()),
+            kind: composer_protocol::RunKind::Agentic,
+            only: None,
             site: None,
             cancel: CancellationToken::new(),
         };
