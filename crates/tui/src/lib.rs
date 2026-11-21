@@ -24,6 +24,7 @@ mod options;
 mod row;
 pub mod snapshot;
 pub mod store;
+mod term_keys;
 mod terminal;
 mod theme;
 use composer_client::tool_text;

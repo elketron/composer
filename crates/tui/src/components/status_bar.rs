@@ -65,6 +65,15 @@ impl Component for StatusBar {
                     slots.push_str(&format!(" · {} waiting", state.conn.slots_waiting));
                 }
                 left.push(Span::styled(slots, theme::muted()));
+                // The agent's background processes: `:ps` lists them, `:stop` ends one.
+                let running = state.terminals.processes.len();
+                if running > 0 {
+                    left.push(sep());
+                    left.push(Span::styled(
+                        format!("{running} running (:ps)"),
+                        Style::new().fg(theme::WARN),
+                    ));
+                }
                 if let Some(scope) = &state.session.scope {
                     left.push(sep());
                     left.push(Span::styled(

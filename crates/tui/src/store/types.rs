@@ -145,6 +145,14 @@ pub enum Pending {
     Desk {
         session: String,
     },
+    /// `terminal.open` from `:term` (or Enter on an ended one): its screen.
+    TerminalOpen,
+    /// `terminal.read` of a terminal on the stage: its scrollback, for its screen.
+    TerminalRead(String),
+    /// `process.list` for one session.
+    Processes {
+        session: String,
+    },
     Ignore,
 }
 

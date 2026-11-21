@@ -63,6 +63,11 @@ impl Keymap {
                 "sessions",
             ),
             (vec![tab], Action::FocusNext, "switch pane"),
+            (
+                vec![(KeyCode::Char(' '), KeyModifiers::CONTROL)],
+                Action::FocusNext,
+                "switch pane; in a terminal on the stage, back to the chat (it has every other key)",
+            ),
             // The desktop's keys for the same thing, on purpose: this is its tab list. A
             // terminal that speaks the kitty keyboard protocol reports these as themselves;
             // one that doesn't cannot tell ctrl-tab from tab, and there it stays "switch pane".

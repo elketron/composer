@@ -29,7 +29,7 @@ pub fn kind_name(kind: RunKind) -> &'static str {
 }
 
 /// Every command, as shown by help: (usage, what it does).
-pub const COMMANDS: [(&str, &str); 14] = [
+pub const COMMANDS: [(&str, &str); 17] = [
     (
         ":new [agentic|workflow|single]",
         "start a new session: agentic (the default), a read-only workflow run, or a single shot",
@@ -59,6 +59,18 @@ pub const COMMANDS: [(&str, &str); 14] = [
     (
         ":site [site]",
         "set the site of this session (set_site: its page, tools and folder); no name leaves it",
+    ),
+    (
+        ":term [command]",
+        "a terminal on the stage: a shell, or a program (:term nvim notes.md); ctrl-space leaves it",
+    ),
+    (
+        ":ps",
+        "the session's background processes (the agent's process_start)",
+    ),
+    (
+        ":stop [id]",
+        "stop a background process: the one shown, or the only one, unless named",
     ),
     (":compact", "save memory, then summarize older messages now"),
     (":follow", "toggle following the agent's pages (F)"),
@@ -119,6 +131,9 @@ pub fn parse_command(line: &str) -> Result<Action, String> {
             .ok_or_else(|| "usage: :open <site://url>".into()),
         "follow" => Ok(Action::ToggleFollow),
         "compact" => Ok(Action::Compact),
+        "term" | "terminal" => Ok(Action::OpenTerminal(arg)),
+        "ps" => Ok(Action::ListProcesses),
+        "stop" => Ok(Action::StopProcess(arg)),
         "site" => Ok(Action::SetSite(arg.map(|s| {
             s.trim_start_matches("site://")
                 .trim_end_matches('/')
@@ -162,6 +177,16 @@ mod tests {
             Action::SetSite(Some("3d".into()))
         );
         assert_eq!(parse_command("site  ").unwrap(), Action::SetSite(None));
+        assert_eq!(parse_command("term").unwrap(), Action::OpenTerminal(None));
+        assert_eq!(
+            parse_command("term nvim notes.md").unwrap(),
+            Action::OpenTerminal(Some("nvim notes.md".into()))
+        );
+        assert_eq!(parse_command("ps").unwrap(), Action::ListProcesses);
+        assert_eq!(
+            parse_command("stop t1").unwrap(),
+            Action::StopProcess(Some("t1".into()))
+        );
         assert!(parse_command("attach").is_err());
         assert!(parse_command("frobnicate").is_err());
     }

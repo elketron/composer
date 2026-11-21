@@ -11,6 +11,7 @@ mod page_store;
 mod picker_store;
 mod session_store;
 mod stage_tab;
+mod terminal_store;
 pub mod types;
 mod ui_store;
 
@@ -23,4 +24,5 @@ pub use desk_store::{DeskStore, StageTab, page_key};
 pub use page_store::PageStore;
 pub use picker_store::PickerStore;
 pub use session_store::SessionStore;
+pub use terminal_store::{TerminalSink, TerminalStore};
 pub use ui_store::UiStore;

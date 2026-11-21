@@ -11,7 +11,7 @@ use crate::store::types::{
 };
 use crate::store::{
     ApprovalStore, AttachmentStore, ChangesStore, ConnectionStore, DeskStore, PageStore,
-    PickerStore, SessionStore, UiStore,
+    PickerStore, SessionStore, TerminalStore, UiStore,
 };
 
 /// Messages a session opens with, and fetches each time you scroll up to the oldest.
@@ -33,6 +33,8 @@ pub struct AppState {
     pub catalog: Catalog,
     /// Files attached to the message being written.
     pub attachments: AttachmentStore,
+    /// The server terminals on the stage, and the session's background processes.
+    pub terminals: TerminalStore,
     startup: Option<Startup>,
     default_kind: RunKind,
 }
@@ -50,6 +52,7 @@ impl AppState {
             changes: ChangesStore::default(),
             catalog: Catalog::default(),
             attachments: AttachmentStore::default(),
+            terminals: TerminalStore::new(),
             default_kind: startup.kind,
             startup: Some(startup),
         }
@@ -307,6 +310,44 @@ impl AppState {
                 vec![]
             }
             Action::RefreshChanges => self.refresh_changes(),
+            Action::OpenTerminal(command) => self.open_terminal(None, command),
+            Action::TerminalKey(key) => self.terminal_key(key),
+            Action::TerminalPaste(text) => {
+                if let Some(screen) = self.shown_screen() {
+                    screen.paste(&text);
+                }
+                vec![]
+            }
+            Action::TerminalWrite { terminal, data } => self.send(
+                ClientCommand::TerminalInput {
+                    terminal,
+                    data: String::from_utf8_lossy(&data).into_owned(),
+                },
+                Pending::Ignore,
+            ),
+            Action::TerminalScroll(lines) => {
+                if let Some(screen) = self.shown_screen() {
+                    screen.scroll_by(lines);
+                }
+                vec![]
+            }
+            Action::TerminalResize(cols, rows) => {
+                self.terminals.size = (cols.max(2), rows.max(2));
+                vec![]
+            }
+            Action::ListProcesses => {
+                let text = match self.terminals.processes.as_slice() {
+                    [] => "no background processes".to_string(),
+                    processes => processes
+                        .iter()
+                        .map(|p| format!("{} `{}`", p.terminal, p.command))
+                        .collect::<Vec<_>>()
+                        .join(" \u{b7} "),
+                };
+                self.ui.flash(text, FlashLevel::Info);
+                vec![]
+            }
+            Action::StopProcess(id) => self.stop_process(id),
             Action::DiffSemantic => {
                 self.changes.toggle_semantic();
                 vec![]
@@ -437,7 +478,118 @@ impl AppState {
 
     /// The tabs the stage can draw: the desk's pages and changes, in the desk's order.
     pub fn stage_tabs(&self) -> Vec<StageTab> {
-        self.desk.visible()
+        let mut tabs = self.desk.visible();
+        for tab in &mut tabs {
+            if let StageTab::Terminal {
+                terminal, label, ..
+            } = tab
+            {
+                *label = self.terminals.process(terminal).map(|p| p.command.clone());
+            }
+        }
+        tabs
+    }
+
+    /// The server terminal on the screen, if a terminal tab is shown.
+    pub fn shown_terminal(&self) -> Option<String> {
+        match self.shown_tab()? {
+            StageTab::Terminal { terminal, .. } => Some(terminal),
+            _ => None,
+        }
+    }
+
+    /// Whether keys go to the terminal on the screen: it is shown, the stage has the focus,
+    /// and nothing else (a mode, an overlay) has the keys.
+    pub fn terminal_focused(&self) -> bool {
+        self.ui.focus == Pane::Stage
+            && self.ui.mode == Mode::Normal
+            && !self.ui.picker_open
+            && !self.ui.help_open
+            && self.approvals.current().is_none()
+            && self.shown_terminal().is_some()
+    }
+
+    fn shown_screen(&mut self) -> Option<&mut composer_term::TermScreen> {
+        let id = self.shown_terminal()?;
+        self.terminals.screen_mut(&id)
+    }
+
+    /// `terminal.open`: a new terminal (`command`: a program in it), or (`id`) a fresh shell
+    /// where an ended one was. Shown when the desk says so.
+    fn open_terminal(&mut self, id: Option<String>, command: Option<String>) -> Vec<Effect> {
+        let Some(session) = self.session.current.clone() else {
+            self.ui.flash("no session", FlashLevel::Warn);
+            return vec![];
+        };
+        let (cols, rows) = self.terminals.size;
+        let effects = self.send(
+            ClientCommand::TerminalOpen {
+                session,
+                terminal: id,
+                cols,
+                rows,
+                command,
+            },
+            Pending::TerminalOpen,
+        );
+        self.terminals.opening = !effects.is_empty();
+        self.reduce(Action::FocusPane(Pane::Stage));
+        effects
+    }
+
+    /// A key for the terminal on the screen: encoded by its screen (what it writes arrives as
+    /// `TerminalWrite`); Enter on one that ended opens a fresh shell there.
+    fn terminal_key(&mut self, key: crossterm::event::KeyEvent) -> Vec<Effect> {
+        let Some(id) = self.shown_terminal() else {
+            return vec![];
+        };
+        if self.terminals.ended.contains(&id) {
+            if key.code == crossterm::event::KeyCode::Enter {
+                return self.open_terminal(Some(id), None);
+            }
+            return vec![];
+        }
+        if let (Some(screen), Some((code, mods))) = (
+            self.terminals.screen_mut(&id),
+            crate::term_keys::term_key(key),
+        ) {
+            screen.key(code, mods);
+        }
+        vec![]
+    }
+
+    /// `:stop [id]`: the one named, else the one shown, else the only one.
+    fn stop_process(&mut self, id: Option<String>) -> Vec<Effect> {
+        let processes = &self.terminals.processes;
+        let shown = self
+            .shown_terminal()
+            .filter(|id| processes.iter().any(|p| &p.terminal == id));
+        let only = (processes.len() == 1).then(|| processes[0].terminal.clone());
+        match id.or(shown).or(only) {
+            Some(terminal) => self.send(ClientCommand::ProcessStop { terminal }, Pending::Ignore),
+            None => {
+                let text = if processes.is_empty() {
+                    "no background processes"
+                } else {
+                    "which one? :stop <id> (:ps lists them)"
+                };
+                self.ui.flash(text, FlashLevel::Warn);
+                vec![]
+            }
+        }
+    }
+
+    /// The session's background processes, asked for.
+    fn fetch_processes(&mut self) -> Vec<Effect> {
+        let Some(session) = self.session.current.clone() else {
+            return vec![];
+        };
+        self.send(
+            ClientCommand::ProcessList {
+                session: session.clone(),
+            },
+            Pending::Processes { session },
+        )
     }
 
     /// The ids of the desk's tabs a terminal can draw, in order.
@@ -499,6 +651,15 @@ impl AppState {
         let ids = self.showable_ids();
         self.desk.reconcile(&ids);
         self.page.forget(&self.visible_ids());
+        let terminals: Vec<String> = self
+            .stage_tabs()
+            .into_iter()
+            .filter_map(|tab| match tab {
+                StageTab::Terminal { terminal, .. } => Some(terminal),
+                _ => None,
+            })
+            .collect();
+        self.terminals.keep(&terminals);
         let shown = self.shown_tab();
         match shown {
             Some(StageTab::Page { id, url, .. }) => {
@@ -513,6 +674,10 @@ impl AppState {
                     }
                     _ => vec![],
                 }
+            }
+            Some(StageTab::Terminal { terminal, .. }) => {
+                self.page.hide();
+                self.sync_terminal(&terminal)
             }
             Some(StageTab::Changes { .. }) => {
                 self.page.hide();
@@ -530,6 +695,40 @@ impl AppState {
                 vec![]
             }
         }
+    }
+
+    /// The terminal on the screen has a screen here (its scrollback asked for once) at the
+    /// stage's size (the server told of a new one).
+    fn sync_terminal(&mut self, id: &str) -> Vec<Effect> {
+        let (cols, rows) = self.terminals.size;
+        let ended = self.terminals.ended.contains(id);
+        if let Some(screen) = self.terminals.screen_mut(id) {
+            if screen.resize(cols as usize, rows as usize) && !ended {
+                return self.send(
+                    ClientCommand::TerminalResize {
+                        terminal: id.to_string(),
+                        cols,
+                        rows,
+                    },
+                    Pending::Ignore,
+                );
+            }
+            return vec![];
+        }
+        if self.terminals.reading.contains(id)
+            || self.terminals.opening
+            || self.terminals.ended.contains(id)
+            || !self.conn.is_connected()
+        {
+            return vec![];
+        }
+        self.terminals.reading.insert(id.to_string());
+        self.send(
+            ClientCommand::TerminalRead {
+                terminal: id.to_string(),
+            },
+            Pending::TerminalRead(id.to_string()),
+        )
     }
 
     /// A page becomes a tab on the desk (the desk derives the id from the page, so the same page
@@ -669,7 +868,7 @@ impl AppState {
                     effects.push(effect);
                 }
             }
-            Some(StageTab::Changes { .. }) => {
+            Some(StageTab::Changes { .. } | StageTab::Terminal { .. }) => {
                 self.page.hide();
             }
             None => self.page.hide(),
@@ -726,7 +925,16 @@ impl AppState {
         // unasked and does not broadcast one on attach.
         self.desk.clear();
         self.page.forget(&[]);
+        self.terminals.clear();
         let mut effects = self.fetch_history(id.to_string(), None);
+        effects.extend(self.send(
+            ClientCommand::ProcessList {
+                session: id.to_string(),
+            },
+            Pending::Processes {
+                session: id.to_string(),
+            },
+        ));
         effects.extend(self.send(
             ClientCommand::DeskGet {
                 session: id.to_string(),
@@ -791,6 +999,9 @@ impl AppState {
                 self.fetch_history(current, None)
             });
             effects.extend(self.fetch_desk());
+            // What the terminals printed meanwhile: read again.
+            self.terminals.clear();
+            effects.extend(self.fetch_processes());
         }
         effects
     }
@@ -802,6 +1013,17 @@ impl AppState {
                 let pending = id.map(|id| self.conn.take_pending(id));
                 match pending {
                     Some(Pending::Models) => vec![],
+                    // Gone: shown as ended (Enter opens a fresh shell there).
+                    Some(Pending::TerminalRead(id)) => {
+                        self.terminals.exited(&id);
+                        vec![]
+                    }
+                    Some(Pending::Processes { .. }) => vec![],
+                    Some(Pending::TerminalOpen) => {
+                        self.terminals.opening = false;
+                        self.ui.flash(message, FlashLevel::Error);
+                        vec![]
+                    }
                     // An older server: the whole chat replays.
                     Some(Pending::History {
                         session,
@@ -884,6 +1106,29 @@ impl AppState {
                     DeskBy::Agent if followed => self.show_tab_id(&opened.unwrap_or_default()),
                     _ => vec![],
                 }
+            }
+            ServerMessage::TerminalOutput {
+                session,
+                terminal,
+                data,
+            } if self.session.current.as_deref() == Some(session.as_str()) => {
+                use base64::Engine;
+                if let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(data) {
+                    self.terminals.output(&terminal, &bytes);
+                }
+                vec![]
+            }
+            ServerMessage::TerminalExited { session, terminal }
+                if self.session.current.as_deref() == Some(session.as_str()) =>
+            {
+                self.terminals.exited(&terminal);
+                vec![]
+            }
+            ServerMessage::ProcessesChanged { session, processes }
+                if self.session.current.as_deref() == Some(session.as_str()) =>
+            {
+                self.terminals.processes = processes;
+                vec![]
             }
             ServerMessage::ApprovalRequest {
                 request,
@@ -1015,6 +1260,26 @@ impl AppState {
                     let (text, level) = config_reload_line(false, &restart_needed, None);
                     self.ui.flash(text, level);
                 }
+                vec![]
+            }
+            (
+                Pending::TerminalOpen | Pending::TerminalRead(_),
+                CommandResult::Terminal {
+                    terminal,
+                    scrollback,
+                },
+            ) => {
+                use base64::Engine;
+                let bytes = base64::engine::general_purpose::STANDARD
+                    .decode(scrollback)
+                    .unwrap_or_default();
+                self.terminals.open(&terminal, &bytes);
+                vec![]
+            }
+            (Pending::Processes { session }, CommandResult::Processes { processes })
+                if self.session.current.as_deref() == Some(session.as_str()) =>
+            {
+                self.terminals.processes = processes;
                 vec![]
             }
             // The stage of the session this TUI shows, from the horse's mouth: this answer is
@@ -1852,23 +2117,17 @@ mod tests {
     fn kinds_a_terminal_cannot_draw_are_kept_but_neither_shown_nor_written() {
         let mut state = showing_a_session();
         let app = entry("live", DeskTab::LiveView, false);
-        let terminal = entry("terminal:t1", DeskTab::Terminal { id: "t1".into() }, false);
-        say_desk(
-            &mut state,
-            vec![app.clone(), terminal.clone()],
-            Some("live"),
-            DeskBy::User,
-        );
+        say_desk(&mut state, vec![app.clone()], Some("live"), DeskBy::User);
         assert_eq!(
             state.stage_tabs(),
             vec![],
-            "an app and a terminal aren't ours to draw"
+            "the live view isn't ours to draw"
         );
         assert_eq!(shown_title(&state), None);
         assert_eq!(
             state.desk.desk.tabs,
-            vec![app, terminal],
-            "kept exactly as received: the TUI is not their owner"
+            vec![app],
+            "kept exactly as received: the TUI is not its owner"
         );
         // Nothing to walk, nothing to close, and no command back to the desk.
         for action in [Action::CycleTab(1), Action::CycleTab(-1), Action::CloseTab] {
@@ -1878,7 +2137,7 @@ mod tests {
                 "{action:?} must not touch the desk: {effects:?}"
             );
         }
-        // And a page next to them is still listed on its own, with the others left alone.
+        // And a page next to it is still listed on its own, with the other left alone.
         say_desk(
             &mut state,
             vec![entry("live", DeskTab::LiveView, false), page("site://a")],
@@ -2395,5 +2654,79 @@ mod tests {
             "what was open belongs to the session you were on"
         );
         assert_eq!(state.page.current, None);
+    }
+
+    #[test]
+    fn a_terminal_tab_reads_its_terminal_draws_its_output_and_lists_processes() {
+        let mut state = showing_a_session();
+        let tab = entry("terminal:t1", DeskTab::Terminal { id: "t1".into() }, false);
+        let effects = say_desk(&mut state, vec![tab], Some("terminal:t1"), DeskBy::User);
+        assert_eq!(state.shown_terminal().as_deref(), Some("t1"));
+        assert!(
+            sent(&effects).iter().any(|(_, c)| *c
+                == ClientCommand::TerminalRead {
+                    terminal: "t1".into()
+                }),
+            "{effects:?}"
+        );
+        let (id, _) = sent(&effects)
+            .into_iter()
+            .find(|(_, c)| matches!(c, ClientCommand::TerminalRead { .. }))
+            .unwrap();
+        settle(
+            &mut state,
+            Action::Server(ServerMessage::Ok {
+                id,
+                result: CommandResult::Terminal {
+                    terminal: "t1".into(),
+                    scrollback: "b2xkCg==".into(), // "old\n"
+                },
+            }),
+        );
+        settle(
+            &mut state,
+            Action::Server(ServerMessage::TerminalOutput {
+                session: "s".into(),
+                terminal: "t1".into(),
+                data: "bmV3".into(), // "new"
+            }),
+        );
+        let text = state.terminals.screen("t1").unwrap().text();
+        assert_eq!(text[0], "old");
+        assert!(text[1].ends_with("new"), "{text:?}");
+        // Focused on the stage, keys belong to the terminal.
+        settle(&mut state, Action::FocusPane(Pane::Stage));
+        assert!(state.terminal_focused());
+
+        // The session's background processes: listed, the only one stopped by `:stop`.
+        settle(
+            &mut state,
+            Action::Server(ServerMessage::ProcessesChanged {
+                session: "s".into(),
+                processes: vec![composer_protocol::ProcessInfo {
+                    terminal: "t1".into(),
+                    command: "npm run dev".into(),
+                    cwd: "/p".into(),
+                    started: "2026-11-21T12:00:00Z".into(),
+                }],
+            }),
+        );
+        assert_eq!(titles(&state), ["$ npm run dev"]);
+        let effects = settle(&mut state, Action::StopProcess(None));
+        assert!(
+            sent(&effects).iter().any(|(_, c)| *c
+                == ClientCommand::ProcessStop {
+                    terminal: "t1".into()
+                }),
+            "{effects:?}"
+        );
+        settle(
+            &mut state,
+            Action::Server(ServerMessage::TerminalExited {
+                session: "s".into(),
+                terminal: "t1".into(),
+            }),
+        );
+        assert!(state.terminals.ended.contains("t1"));
     }
 }

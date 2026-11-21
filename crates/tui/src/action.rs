@@ -67,6 +67,27 @@ pub enum Action {
     /// Close the tab on the screen; its neighbour is shown, as on the desk.
     CloseTab,
 
+    // ---- terminals (server terminals on the stage) ----
+    /// `:term [command]`: a new terminal on the stage: a shell, or a program in it.
+    OpenTerminal(Option<String>),
+    /// A key for the terminal on the screen (it has the focus).
+    TerminalKey(crossterm::event::KeyEvent),
+    /// Text pasted into the terminal on the screen.
+    TerminalPaste(String),
+    /// Bytes a terminal's screen wrote for its program (keys, answers): to the server.
+    TerminalWrite {
+        terminal: String,
+        data: Vec<u8>,
+    },
+    /// Scroll the terminal on the screen back (positive) or forward, in lines.
+    TerminalScroll(i64),
+    /// The stage's terminal view is this big now (columns, rows).
+    TerminalResize(u16, u16),
+    /// `:ps`: the session's background processes.
+    ListProcesses,
+    /// `:stop [id]`: stop a background process (default: the one shown, or the only one).
+    StopProcess(Option<String>),
+
     // ---- pages ----
     OpenUrl(String),
     PageBack,

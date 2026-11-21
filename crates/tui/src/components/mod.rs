@@ -14,6 +14,7 @@ mod root;
 mod selection;
 mod status_bar;
 mod tab_bar;
+mod terminal_view;
 mod widgets;
 
 pub use approval_popup::ApprovalPopup;
@@ -29,3 +30,4 @@ pub use root::Root;
 pub use selection::Selection;
 pub use status_bar::StatusBar;
 pub use tab_bar::TabBar;
+pub use terminal_view::TerminalView;
