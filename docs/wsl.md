@@ -1,6 +1,6 @@
 # composer on a Windows PC (server in WSL)
 
-The server is Linux-only, so on Windows it runs inside WSL2; the app runs natively on Windows.
+The server is Linux-only, so on Windows it runs inside WSL2; the desktop runs natively on Windows.
 Everything below is untested on a real work PC so far: correct it as you go.
 
 ## 1. WSL and the tools
@@ -9,7 +9,6 @@ In PowerShell: `wsl --install -d Ubuntu` (or another distribution), then inside 
 
 ```sh
 sudo apt install git just unzip            # just: or `cargo install just`
-curl -fsSL https://bun.sh/install | bash    # micro apps are built with bun
 ```
 
 Keep projects inside the WSL filesystem (`~/src/...`), not under `/mnt/c`: git (the changes view)
@@ -22,7 +21,7 @@ runs on most distributions), or `cargo install --path crates/cli` from a checkou
 
 ```sh
 tar xzf composer-*-linux-x86_64.tar.gz && install composer-*/composer ~/.local/bin/
-composer init                 # ~/.composer: seed sites, templates, config.toml
+composer init                 # ~/.composer: seed sites, config.toml, state/
 $EDITOR ~/.composer/config.toml   # [provider] base_url / model of your model server
 ```
 
@@ -45,18 +44,11 @@ WantedBy=default.target
 `systemctl --user enable --now composer`. WSL stops when its last window closes unless something
 keeps it up; `loginctl enable-linger $USER` keeps user services running.
 
-For the TUI's "open app in browser", let WSL reach the Windows browser: `sudo apt install wslu`
-and `export BROWSER=wslview`. That is the convenience route only: with no browser the TUI can
-reach it says so, shows the app's URL and puts it on your clipboard (OSC 52, which Windows Terminal
-hands to the Windows clipboard; over ssh it reaches the machine you sit at), so nothing has to be
-installed to paste that URL into a Windows browser — §3's forwarded `localhost` makes it
-load.
-
-## 3. Reaching it: the app on this PC
+## 3. Reaching it: the desktop on this PC
 
 WSL2 forwards `localhost`, so the Windows desktop can reach the server at `http://127.0.0.1:7420`.
 Point the desktop's `COMPOSER_HOME` at the WSL server's home as described below; it reads the
-workspace's token from there.
+home's token from there.
 
 ## 4. Reaching it: your other devices (Tailscale)
 
@@ -73,7 +65,7 @@ Expose it to your tailnet only, with one of:
 
 The phone can pair separately with the server using the code from `composer pair`.
 
-## 5. The Windows app
+## 5. The Windows desktop
 
 Unpack `composer-desktop-<version>-windows-x86_64.zip` from a release. In PowerShell, point the
 desktop at the WSL home (substitute your distribution and Linux username) and run it:

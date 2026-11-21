@@ -3,10 +3,9 @@
 Proposal · 2026-11-14 · **12 screens** (6 desktop, 6 phone) · mockups only, not shipped UI.
 
 This surface starts again from the user's three Composer Desktop Refresh
-screenshots and supplied Noema theme. The previous twelve-screen study,
-including work in progress, is preserved in
-[`../next-archive-2026-11-14/`](../next-archive-2026-11-14/README.md).
-It is design history, not another current direction.
+screenshots and supplied Noema theme. Screens 11 (Home) and 12 (Projects) show
+workspaces, projects and tickets, which composer no longer has; the desktop
+and the phone still follow the other screens and the tokens.
 
 ## Inventory
 
@@ -83,7 +82,6 @@ Landscape phone sizes: 844×390, 740×360, and 932×430. The landscape study
 also opens as a centered wide canvas on desktop; tap Collapse to compare its
 full-width conversation state.
 Open them and check the composition; passing automated checks is not approval.
-Serve the `docs/` parent so links to the archived study and desktop contract also work.
 
 The desktop screen buttons and Escape navigate between mockup states. The switcher and
 palette can be filtered and traversed with the arrow keys. This is not a working

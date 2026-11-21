@@ -10,4 +10,4 @@ one `composer login` paired this machine with. Start the server first (`composer
 Needs: a Wayland or X11 desktop with Vulkan or OpenGL drivers (fonts are built in). The
 Chromium runtime (CEF) is in this folder: keep the files together.
 Keys: ctrl+1 chat, ctrl+2 stage, ctrl+tab tabs, ctrl+shift+p palette, ctrl+shift+s sessions,
-ctrl+shift+h home. More: docs/desktop.md.
+ctrl+shift+h home.

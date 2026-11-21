@@ -1,67 +1,53 @@
-# TUI mode
+# TUI pages and terminals
 
-Status: first slice. Hunk is the control adapter; generic screen + keys is not built.
+Composer shows terminal programs in two ways: terminals on a session's stage, and `type: tui`
+pages that start one trusted program.
 
-A **TUI capability** is a site page whose UI is an existing terminal program. It sits between a
-micro app (a Svelte UI over pages) and a full app (its own window): the program already exists, the
-human uses it, and the agent needs a small control surface — not a custom UI and not a screenshot
-loop.
+## Terminals on the stage
 
-The first rule is: **do not make the agent play the TUI**. Use the program's own API when it has
-one. Hunk is the model: its TUI is for the human, and `hunk session …` is for the agent.
+Every session can have terminals, owned by the server. The TUI shows them as tabs in its second
+pane and the desktop on its stage; the phone lists the session's background processes and can stop
+them.
 
-## The page
+- In the TUI, `:term [command]` opens a terminal (a shell, or `nvim`, `lazygit`, ...),
+  `Ctrl-Space` leaves it, `:ps` lists the session's background processes (an id opens its
+  terminal) and `:stop` stops one.
+- Terminals start in the folder of the session's site (`folder:` in its `index.md`).
+- The agent reads a terminal with `terminal_read` and types into one with `terminal_send`; each
+  command is approved by the user (or always, for that command).
+- `process_start` runs a long command (a dev server, a watcher) in a terminal of its own. Its exit
+  code and last lines come back to the session as a message. Processes end with `process_stop`,
+  from a client, or when the server stops.
+
+## `type: tui` pages
+
+A **TUI page** is a site page whose UI is an existing terminal program. The program already
+exists, the person uses it, and the agent works through the program's own API, not its keys.
 
 ```yaml
 ---
 title: Review
 type: tui
-command: hunk diff
+command: hunk diff main
 control: hunk
-cwd: project
+cwd: folder
 ---
 # Review
 ```
 
-- `open` starts `command` in a terminal on the session's desk; the terminal is the human's view.
-- `cwd` is `project` (default), `site`, `home`, or a path. `project` uses the work's `project/`
-  view when the page is inside a work, else the session's project.
-- `control` names a trusted adapter. The first slice supports `hunk`; the command must be `hunk`
-  and plain arguments (no shell). A page cannot run an arbitrary command through `open`.
-- `cols` / `rows` size the PTY (default 120×40).
-- The body is the manual: what the human does, and which agent actions exist.
+- `open` on the page starts `command` in a terminal on the session's stage.
+- `control` names a trusted adapter. Only `hunk` exists. The command must be `hunk diff`, `show`,
+  `status` or `log` with plain arguments: no shell, no extensions. A page cannot run an arbitrary
+  command through `open`.
+- `cwd` is `folder` (default: the folder of the session's site), `site`, `home`, or a path inside
+  the site or that folder.
+- `cols` / `rows` size the terminal (default 120×40).
+- The body is the manual: what the person does there, and what the agent may do.
 
-The TUI terminal is the user's client, like a desktop window, not an agent shell. The trusted `control` adapter decides the program.
-
-## Hunk
-
-`hunk` (the tool) drives the live session through the CLI; the TUI and the tool share the same
-daemon:
-
-| action | does |
-|---|---|
-| `sessions` | live reviews, their repos, selected file |
-| `review` | files, hunks, counts, selected hunk |
-| `notes` | the user's inline notes (`all: true` includes agent notes) |
-| `reply` | answer a note in place (`note`, `text`) |
-| `comment` | leave an agent note at `file` + `line` |
-| `navigate` | move the user's view to a note, or a file and line |
-| `export` | write a `type: review` page from `hunk session review --json` |
-
-The live notes are the writeback: the user presses `c`, the agent reads `notes`, replies with
-`reply`, and the reply appears under the note. The review page is the durable artifact, linked
-from the work or plan. A hunk the user started outside Composer works too, as long as the session
-project or the only live review points at its repo.
-
-The site lists `hunk` in its `tools:`. The coding site's run template ships
-`review.md`; `works/<ticket>/review.md` opens Hunk in that run's `project/`,
-against its base branch, and `tools: [hunk]` lives in the site, not the
-pipeline template.
+The agent drives Hunk with its CLI (`hunk session …`) through a recipe or a terminal; composer has
+no Hunk tool of its own.
 
 ## Later
 
-- `control: git` for lazygit: the human uses the TUI, the agent uses `git`; the repo is the shared
-  state.
-- Generic `tui_screen` / `tui_keys` for programs with no control API: a terminal screen buffer
-  (visible grid + cursor), named keys, and a key allowlist. Read-only first; keys only after a
-  handoff.
+- `control: git` for lazygit: the person uses the TUI, the agent uses `git`.
+- A generic screen and key reader for programs with no control API.
