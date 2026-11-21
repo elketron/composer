@@ -61,6 +61,8 @@ ChatState _apply(ChatState chat, ServerMessage message) {
 }
 
 ChatState _done(ChatState chat, ChatMessage message) => switch (message.role) {
+      Role.user when message.source is MessageSourceProcess => chat.copyWith(
+          items: [...chat.items, ProcessEndedItem((message.source as MessageSourceProcess).command, message.content)]),
       Role.user => chat.copyWith(items: [...chat.items, UserItem(message.content, source: _source(message.source), attachments: message.attachments)]),
       Role.assistant => chat.copyWith(streaming: null, items: [
           ...chat.items,

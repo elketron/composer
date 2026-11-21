@@ -64,12 +64,22 @@ final class FetchHistory extends AppEffect {
 
 /// `session.create`, then open it.
 final class CreateSession extends AppEffect {
-  const CreateSession(this.url, this.kind, {this.site});
+  const CreateSession(this.url, this.kind, {this.site, this.harness});
   final String url;
   final RunKind kind;
 
   /// The site it starts in.
   final String? site;
+
+  /// The outside agent that runs it; null: composer's own.
+  final String? harness;
+}
+
+/// `process.list` for a session (`ProcessesLoaded`).
+final class FetchProcesses extends AppEffect {
+  const FetchProcesses(this.url, this.session);
+  final String url;
+  final String session;
 }
 
 /// Read the device's saved preferences (`PreferencesLoaded`).

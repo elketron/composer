@@ -67,7 +67,7 @@ class SiteRow extends StatelessWidget {
       child: Row(children: [
         chip,
         const SizedBox(width: 8),
-        Expanded(child: Text(session == null ? '' : runKindLabel(session!.kind), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: t.muted))),
+        Expanded(child: Text(session == null ? '' : sessionLabel(session!), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: t.muted))),
         if (model != null) ...[
           const SizedBox(width: 8),
           ConstrainedBox(

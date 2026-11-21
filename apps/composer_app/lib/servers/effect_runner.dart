@@ -112,9 +112,13 @@ class EffectRunner {
           },
           onError: (Object e) { if (kDebugMode) debugPrint('MEASURE history-error $session: $e'); dispatch(HistoryLoaded(url, session, before, null)); },
         );
-      case CreateSession(:final url, :final kind, :final site):
-        _request(url, ClientCommandSessionCreate(kind: kind, site: site), dispatch).then((result) {
+      case CreateSession(:final url, :final kind, :final site, :final harness):
+        _request(url, ClientCommandSessionCreate(kind: kind, site: site, harness: harness), dispatch).then((result) {
           if (result is CommandResultSession) dispatch(SessionOpened(url, result.session.id));
+        });
+      case FetchProcesses(:final url, :final session):
+        _request(url, ClientCommandProcessList(session: session), dispatch).then((result) {
+          if (result is CommandResultProcesses) dispatch(ProcessesLoaded(url, session, result.processes));
         });
     }
   }

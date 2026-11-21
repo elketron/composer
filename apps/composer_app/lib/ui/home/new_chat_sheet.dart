@@ -39,6 +39,9 @@ class _NewChatSheetState extends State<NewChatSheet> {
   RunKind _kind = RunKind.agentic;
   late String? _site = widget.site;
 
+  /// The outside agent that runs it; null: composer's own. Agentic only.
+  String? _harness;
+
   static const _kinds = [
     (RunKind.agentic, 'a conversation with every tool'),
     (RunKind.workflow, 'read-only tools; ends with a result'),
@@ -47,11 +50,13 @@ class _NewChatSheetState extends State<NewChatSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final sites = StoreScope.of(context).state.statusOf(widget.url).sites;
+    final status = StoreScope.of(context).state.statusOf(widget.url);
+    final sites = status.sites;
+    final harnesses = status.info?.harnesses ?? const <String>[];
 
     void start() {
       Navigator.pop(context);
-      StoreScope.read(widget.parent).dispatch(NewSessionRequested(widget.url, kind: _kind, site: _site));
+      StoreScope.read(widget.parent).dispatch(NewSessionRequested(widget.url, kind: _kind, site: _site, harness: _harness));
       pushChat(widget.parent, widget.url);
     }
 
@@ -95,6 +100,13 @@ class _NewChatSheetState extends State<NewChatSheet> {
           onSelected: (_) => setState(() => _site = site),
         );
 
+    Widget harnessChip(String? harness) => ChoiceChip(
+          key: Key('new-chat-harness-${harness ?? 'composer'}'),
+          label: Text(harness ?? 'composer', style: mono(size: 12)),
+          selected: harness == _harness,
+          onSelected: (_) => setState(() => _harness = harness),
+        );
+
     final names = {for (final s in sites) s.name, ?widget.site};
     return SafeArea(
       child: Padding(
@@ -105,6 +117,12 @@ class _NewChatSheetState extends State<NewChatSheet> {
           Text('KIND', style: mono(size: 10.5, color: t.faint)),
           const SizedBox(height: 8),
           for (final (kind, description) in _kinds) choice(kind, description),
+          if (_kind == RunKind.agentic && harnesses.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text('AGENT', style: mono(size: 10.5, color: t.faint)),
+            const SizedBox(height: 8),
+            Wrap(spacing: 6, runSpacing: 6, children: [harnessChip(null), for (final h in harnesses) harnessChip(h)]),
+          ],
           const SizedBox(height: 10),
           Text('SITE', style: mono(size: 10.5, color: t.faint)),
           const SizedBox(height: 8),

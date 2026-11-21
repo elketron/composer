@@ -42,7 +42,7 @@ class SessionCard extends StatelessWidget {
             Row(children: [
               ActivityDot(activity),
               const SizedBox(width: 8),
-              Text(runKindLabel(session.kind), style: mono(size: 13, color: t.text, weight: FontWeight.w500)),
+              Text(sessionLabel(session), style: mono(size: 13, color: t.text, weight: FontWeight.w500)),
               const SizedBox(width: 8),
               Text('#${session.id}', style: mono(size: 11, color: t.faint)),
               const Spacer(),

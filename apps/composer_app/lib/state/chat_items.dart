@@ -54,6 +54,13 @@ final class NoteItem extends ChatItem {
   final String text;
 }
 
+/// A background process the agent started ended; `text` is what the agent was told.
+final class ProcessEndedItem extends ChatItem {
+  const ProcessEndedItem(this.command, this.text);
+  final String command;
+  final String text;
+}
+
 final class CompactedItem extends ChatItem {
   const CompactedItem(this.summary, this.messages);
   final String summary;

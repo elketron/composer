@@ -1,3 +1,5 @@
+import 'package:composer_protocol/composer_protocol.dart';
+
 import 'chat_items.dart';
 import 'types.dart';
 
@@ -21,6 +23,7 @@ class ChatState {
     this.rowBase = 0,
     this.atBottom = true,
     this.newSince = 0,
+    this.processes = const [],
   });
 
   final String session;
@@ -61,6 +64,9 @@ class ChatState {
   /// Rows that landed while the view was scrolled up; what the "new" pill counts.
   final int newSince;
 
+  /// Its background processes that are running (`process.list`, `processes.changed`).
+  final List<ProcessInfo> processes;
+
   ChatState copyWith({
     List<ChatItem>? items,
     Object? streaming = _keep,
@@ -75,6 +81,7 @@ class ChatState {
     int? rowBase,
     bool? atBottom,
     int? newSince,
+    List<ProcessInfo>? processes,
   }) =>
       ChatState(
         session: session,
@@ -92,5 +99,6 @@ class ChatState {
         rowBase: rowBase ?? this.rowBase,
         atBottom: atBottom ?? this.atBottom,
         newSince: newSince ?? this.newSince,
+        processes: processes ?? this.processes,
       );
 }

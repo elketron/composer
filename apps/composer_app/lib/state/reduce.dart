@@ -55,7 +55,12 @@ import 'types.dart';
         _historyLoaded(s, url, session, before, events, more),
       SessionClosed(:final url) => _close(s, url),
       ViewScrolled(:final url, :final session, :final atBottom) => (_scrolled(s, url, session, atBottom), const []),
-      NewSessionRequested(:final url, :final kind, :final site) => (s, [CreateSession(url, kind, site: site)]),
+      NewSessionRequested(:final url, :final kind, :final site, :final harness) =>
+        (s, [CreateSession(url, kind, site: site, harness: kind == RunKind.agentic ? harness : null)]),
+      SessionDeleteRequested(:final url, :final session) => _delete(s, url, session),
+      ProcessesLoaded(:final url, :final session, :final processes) =>
+        (_withChat(s, url, (c) => c.session == session ? c.copyWith(processes: processes) : c), const []),
+      ProcessStopRequested(:final url, :final terminal) => (s, [SendCommand(url, ClientCommandProcessStop(terminal: terminal))]),
       SiteChosen(:final url, :final site, :final session) => _siteChosen(s, url, site, session),
       PreferencesLoaded(:final liveViewSize) => (s.copyWith(liveViewSize: liveViewSize), const []),
       LiveViewResized(:final size) => _liveViewSized(s, size),
@@ -168,6 +173,13 @@ import 'types.dart';
       NoticeShown(:final text) => (s.copyWith(notice: Notice((s.notice?.id ?? 0) + 1, text)), const []),
     };
 
+/// The open chat closes first (its page goes), then the server deletes it.
+(AppState, List<AppEffect>) _delete(AppState s, String url, String session) {
+  final open = s.status[url]?.chat?.session == session;
+  final (closed, effects) = open ? _close(s, url) : (s, const <AppEffect>[]);
+  return (closed, [...effects, SendCommand(url, ClientCommandSessionDelete(session: session))]);
+}
+
 /// `site.set` for the session (default: the open chat's); the reply's sentence comes back as a notice.
 (AppState, List<AppEffect>) _siteChosen(AppState s, String url, String? site, String? session) {
   final target = session ?? s.status[url]?.chat?.session;
@@ -225,7 +237,7 @@ import 'types.dart';
     next,
     [
       FetchCatalog(url),
-      if (chat != null) _reattach(url, chat),
+      if (chat != null) ...[_reattach(url, chat), FetchProcesses(url, chat.session)],
     ],
   );
 }
@@ -289,7 +301,10 @@ AppState _scrolled(AppState s, String url, String session, bool atBottom) {
   return (
     next,
     [
-      if (attach) SendCommand(url, ClientCommandSessionAttach(session: session, since: events == null ? null : since)),
+      if (attach) ...[
+        SendCommand(url, ClientCommandSessionAttach(session: session, since: events == null ? null : since)),
+        FetchProcesses(url, session),
+      ],
     ],
   );
 }
@@ -414,7 +429,7 @@ AppState _withUpload(AppState s, String url, int id, Upload Function(Upload uplo
         [
           Notify(
             key: 'turn:${session.id}',
-            title: '${runKindLabel(session.kind)} #${session.id} finished',
+            title: '${sessionLabel(session)} #${session.id} finished',
             body: session.preview ?? 'on $server',
             url: url,
             session: session.id,
@@ -480,6 +495,18 @@ AppState _event(AppState s, String url, ServerMessage message) => switch (messag
             unread: finished ? {...x.unread, session.id} : null,
           );
         }),
+      ServerMessageSessionDeleted(:final session) => _updateStatus(
+          s,
+          url,
+          (x) => x.copyWith(
+            sessions: [for (final y in x.sessions) if (y.id != session) y],
+            approvals: [for (final a in x.approvals) if (a.session != session) a],
+            unread: x.unread.contains(session) ? ({...x.unread}..remove(session)) : null,
+            chat: x.chat?.session == session ? null : x.chat,
+          ),
+        ),
+      ServerMessageProcessesChanged(:final session, :final processes) =>
+        _withChat(s, url, (c) => c.session == session ? c.copyWith(processes: processes) : c),
       ServerMessageOk(result: final CommandResultModels models) => _updateStatus(s, url, (x) => x.copyWith(models: models)),
       ServerMessageSlots(:final used) => _updateStatus(s, url, (x) => x.copyWith(slotsUsed: used)),
       ServerMessagePageChanged(url: final page, :final by) when by == ChangedBy.agent =>

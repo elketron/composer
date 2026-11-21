@@ -72,6 +72,18 @@ void main() {
     expect(chat.streaming, isNull);
   });
 
+  test("a background process's exit is a compact line, not your message", () {
+    final chat = play([
+      ServerMessageMessageDone(
+        session: 'a',
+        seq: 1,
+        message: const ChatMessage(role: Role.user, content: 'exited 0', source: MessageSourceProcess(terminal: 't1', command: 'make')),
+      ),
+    ]);
+    final item = chat.items.single as ProcessEndedItem;
+    expect((item.command, item.text), ('make', 'exited 0'));
+  });
+
   test('tool arguments on one line', () {
     expect(summarizeArgs({'url': 'site://home'}), 'site://home');
     expect(summarizeArgs(<String, Object?>{}), '');

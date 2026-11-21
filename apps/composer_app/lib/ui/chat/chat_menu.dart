@@ -31,6 +31,7 @@ class ChatMenu extends StatelessWidget {
         'model' => showModelSheet(context, url),
         'compact' => store.dispatch(CompactRequested(url)),
         'stop' => store.dispatch(CancelRequested(url)),
+        'delete' => _delete(context, session!),
         _ => null,
       },
       itemBuilder: (_) => [
@@ -39,7 +40,31 @@ class ChatMenu extends StatelessWidget {
           PopupMenuItem(value: 'model', child: Text(session.model == null ? 'Model…' : 'Model: ${session.model}…')),
         const PopupMenuItem(value: 'compact', child: Text('Compact (save memory, summarize)')),
         if (session != null && session.state != TurnState.idle) const PopupMenuItem(value: 'stop', child: Text('Stop the turn')),
+        if (session != null) const PopupMenuItem(key: Key('delete-chat'), value: 'delete', child: Text('Delete chat…')),
       ],
     );
+  }
+
+  /// After a yes: the server deletes it, and its page closes.
+  Future<void> _delete(BuildContext context, SessionInfo session) async {
+    final store = StoreScope.read(context);
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: const Text('Delete this chat?'),
+        content: Text('#${session.id} and its transcript are deleted on the server.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialog, false), child: const Text('Cancel')),
+          TextButton(
+            key: const Key('confirm-delete'),
+            onPressed: () => Navigator.pop(dialog, true),
+            child: const Text('Delete', style: TextStyle(color: t.err)),
+          ),
+        ],
+      ),
+    );
+    if (yes != true) return;
+    store.dispatch(SessionDeleteRequested(url, session.id));
+    if (context.mounted) Navigator.maybePop(context);
   }
 }

@@ -126,12 +126,37 @@ final class SessionClosed extends AppAction {
 }
 
 final class NewSessionRequested extends AppAction {
-  const NewSessionRequested(this.url, {this.kind = RunKind.agentic, this.site});
+  const NewSessionRequested(this.url, {this.kind = RunKind.agentic, this.site, this.harness});
   final String url;
   final RunKind kind;
 
   /// The site it starts in; null for none.
   final String? site;
+
+  /// The outside agent that runs it (agentic only); null: composer's own.
+  final String? harness;
+}
+
+/// Delete a session (asked for confirmation first); it goes when `session.deleted` arrives.
+final class SessionDeleteRequested extends AppAction {
+  const SessionDeleteRequested(this.url, this.session);
+  final String url;
+  final String session;
+}
+
+/// `process.list`'s reply for a session.
+final class ProcessesLoaded extends AppAction {
+  const ProcessesLoaded(this.url, this.session, this.processes);
+  final String url;
+  final String session;
+  final List<ProcessInfo> processes;
+}
+
+/// Stop a background process of the open session.
+final class ProcessStopRequested extends AppAction {
+  const ProcessStopRequested(this.url, this.terminal);
+  final String url;
+  final String terminal;
 }
 
 final class MessageSubmitted extends AppAction {

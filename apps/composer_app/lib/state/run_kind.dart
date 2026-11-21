@@ -6,3 +6,6 @@ String runKindLabel(RunKind? kind) => switch (kind ?? RunKind.agentic) {
       RunKind.workflow => 'workflow',
       RunKind.agentic => 'agentic',
     };
+
+/// A session's label: its run kind, and the outside agent that runs it, if any (`agentic · claude`).
+String sessionLabel(SessionInfo session) => [runKindLabel(session.kind), ?session.harness].join(' · ');

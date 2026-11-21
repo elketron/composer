@@ -233,6 +233,47 @@ void main() {
       expect(reduce(state, LinkChanged(home.url, LinkState.online)).$1.statusOf(home.url).approvals, isEmpty);
     });
 
+    test('a harness goes with agentic sessions only', () {
+      final state = loaded([home]);
+      CreateSession created(RunKind kind) =>
+          reduce(state, NewSessionRequested(home.url, kind: kind, harness: 'claude')).$2.single as CreateSession;
+      expect(created(RunKind.agentic).harness, 'claude');
+      expect(created(RunKind.workflow).harness, isNull);
+    });
+
+    test('deleting: the open chat closes first; session.deleted drops it everywhere', () {
+      var state = withChat(loaded([home]), 'a');
+      state = reduce(state, ServerEvent(home.url, ServerMessageSessionUpdated(session: session('a', '2026-01-01T00:00:00Z')))).$1;
+      state = reduce(state, ServerEvent(home.url, approval('r1'))).$1;
+      final (closed, effects) = reduce(state, const SessionDeleteRequested('https://home.ts.net', 'a'));
+      expect(closed.statusOf(home.url).chat, isNull);
+      expect(effects.whereType<SendCommand>().map((e) => e.command.runtimeType), [ClientCommandSessionDetach, ClientCommandSessionDelete]);
+
+      state = reduce(state, ServerEvent(home.url, const ServerMessageSessionDeleted(session: 'a'))).$1;
+      final status = state.statusOf(home.url);
+      expect(status.sessions, isEmpty);
+      expect(status.approvals, isEmpty);
+      expect(status.chat, isNull);
+    });
+
+    test("background processes: listed on attach, kept current, stopped by terminal", () {
+      var (state, effects) = reduce(reduce(loaded([home]), SessionOpened(home.url, 'a')).$1, const HistoryLoaded('https://home.ts.net', 'a', null, []));
+      expect(effects.whereType<FetchProcesses>().single.session, 'a');
+      const p = ProcessInfo(terminal: 't1', command: 'npm run dev', cwd: '/x', started: '2026-01-01T00:00:00Z');
+      state = reduce(state, const ProcessesLoaded('https://home.ts.net', 'a', [p])).$1;
+      expect(state.statusOf(home.url).chat!.processes.single.command, 'npm run dev');
+      // Another session's change is not this chat's.
+      state = reduce(state, ServerEvent(home.url, const ServerMessageProcessesChanged(session: 'b', processes: []))).$1;
+      expect(state.statusOf(home.url).chat!.processes, hasLength(1));
+      state = reduce(state, ServerEvent(home.url, const ServerMessageProcessesChanged(session: 'a', processes: []))).$1;
+      expect(state.statusOf(home.url).chat!.processes, isEmpty);
+      final stop = reduce(state, const ProcessStopRequested('https://home.ts.net', 't1')).$2.single as SendCommand;
+      expect((stop.command as ClientCommandProcessStop).terminal, 't1');
+      expect(reduce(state, LinkChanged(home.url, LinkState.online)).$2.whereType<FetchProcesses>(), hasLength(1), reason: 'again after a reconnect');
+      // tools.changed is nothing to the app.
+      expect(identical(reduce(state, ServerEvent(home.url, const ServerMessageToolsChanged(session: 'a'))).$1, state), isTrue);
+    });
+
     test('failed commands become notices', () {
       final state = reduce(loaded([home]), CommandFailed(home.url, 'no such session')).$1;
       expect(state.notice!.text, 'no such session');

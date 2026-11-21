@@ -43,6 +43,13 @@ class ChatItemView extends StatelessWidget {
             body: detail == null ? result : [detail, ?result].join('\n\n'),
           ),
         NoteItem(:final text) => Text(text, style: mono(size: 12, color: t.warn)),
+        ProcessEndedItem(:final command, :final text) => CollapsibleRow(
+            label: TextSpan(children: [
+              const TextSpan(text: 'process ended · '),
+              TextSpan(text: command, style: const TextStyle(color: t.info)),
+            ]),
+            body: text,
+          ),
         CompactedItem(:final summary, :final messages) =>
           CollapsibleRow(label: TextSpan(text: 'compacted $messages messages · summary'), body: summary),
       };

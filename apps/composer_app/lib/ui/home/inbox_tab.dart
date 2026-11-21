@@ -50,7 +50,7 @@ class InboxTab extends StatelessWidget {
                   child: ApprovalTile(
                     url: url,
                     approval: a,
-                    kind: switch (status.session(a.session)) { final s? => runKindLabel(s.kind), null => null },
+                    kind: switch (status.session(a.session)) { final s? => sessionLabel(s), null => null },
                   ),
                 ),
               for (final s in unread) card(s),

@@ -71,7 +71,7 @@ class SiteTile extends StatelessWidget {
               child: Row(children: [
                 ActivityDot(status.activity(s)),
                 const SizedBox(width: 8),
-                Text(runKindLabel(s.kind), style: mono(size: 12, color: t.text)),
+                Text(sessionLabel(s), style: mono(size: 12, color: t.text)),
                 const SizedBox(width: 6),
                 Text('#${s.id}', style: mono(size: 11, color: t.faint)),
                 const SizedBox(width: 8),

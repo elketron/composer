@@ -19,6 +19,7 @@ import 'new_content_pill.dart';
 import 'steps_view.dart';
 import 'message_composer.dart';
 import 'older_messages.dart';
+import 'processes_bar.dart';
 
 /// A session's chat: transcript (newest first or last, see [chatNewestFirst]; it follows the
 /// stream), its approvals, and the composer.
@@ -194,6 +195,7 @@ class _ChatViewState extends State<ChatView> {
                   ),
               ]),
       ),
+      ProcessesBar(url: widget.url, processes: chat.processes),
       MessageComposer(key: ValueKey('composer-${widget.url}-${chat.session}'), url: widget.url, busy: busy, showStop: !widget.stopInHeader),
     ]);
   }

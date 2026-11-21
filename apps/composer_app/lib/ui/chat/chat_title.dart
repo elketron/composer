@@ -21,7 +21,7 @@ class ChatTitle extends StatelessWidget {
     final activity = session == null ? 'idle' : status.activity(session!);
     return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text(
-        session == null ? 'new chat' : runKindLabel(session!.kind),
+        session == null ? 'new chat' : sessionLabel(session!),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
