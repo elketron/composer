@@ -1,9 +1,7 @@
 use async_trait::async_trait;
 use serde_json::{Value, json};
 
-use composer_protocol::{ApprovalDecision, ApprovalKind};
-
-use crate::tools::terminal_tools::terminal;
+use crate::tools::terminal_tools::{approve_command, terminal};
 use crate::tools::{Tool, ToolContext};
 
 /// Types into a terminal of the session, with the user's approval (ticket 0176).
@@ -39,44 +37,12 @@ impl Tool for TerminalSendTool {
         if text.trim().is_empty() || text.contains('\u{1b}') {
             return Err("give the command as plain text".into());
         }
-        let server = &context.server;
-        // Rules per folder, as for Claude Code's Bash: `Bash(<command>:*)`.
-        let key = format!(
-            "terminal:{}",
-            context
-                .site
-                .as_ref()
-                .and_then(|site| site.existing_folder().ok())
-                .map_or_else(|| "home".into(), |folder| folder.display().to_string())
-        );
-        let input = json!({ "command": text });
-        if !server.tool_rules.allows(&key, "Bash", &input) {
-            let rule = format!("Bash({}:*)", text.trim());
-            let decision = server
-                .ask_approval(
-                    &*context.session()?,
-                    ApprovalKind::Tool,
-                    format!("Type into terminal {}", terminal.id),
-                    text.clone(),
-                    Some(rule.clone()),
-                    &context.cancel,
-                )
-                .await;
-            match decision {
-                Some(ApprovalDecision::Approve) => {}
-                Some(ApprovalDecision::Always) => {
-                    if let Err(e) = server.tool_rules.add(&key, &rule) {
-                        tracing::warn!("saving the rule {rule}: {e}");
-                    }
-                }
-                Some(ApprovalDecision::Deny) => {
-                    return Err(format!(
-                        "The user didn't let you type `{text}`. Don't try to get around it."
-                    ));
-                }
-                None => return Err("cancelled".into()),
-            }
-        }
+        approve_command(
+            context,
+            &text,
+            format!("Type into terminal {}", terminal.id),
+        )
+        .await?;
         let enter = args["enter"].as_bool().unwrap_or(true);
         let typed = if enter {
             format!("{text}\r")

@@ -96,6 +96,7 @@ async fn a_sessions_terminal_runs_in_the_folder_of_its_site() {
             terminal: None,
             cols: 100,
             rows: 30,
+            command: None,
         },
     )
     .await
@@ -229,6 +230,7 @@ async fn a_sessions_terminal_runs_in_the_folder_of_its_site() {
             terminal: Some(id.clone()),
             cols: 80,
             rows: 24,
+            command: None,
         },
     )
     .await;
@@ -243,4 +245,29 @@ async fn a_sessions_terminal_runs_in_the_folder_of_its_site() {
     )
     .await;
     assert!(server.terminals.get(&id).is_none());
+
+    // A program instead of a shell (`:term nvim notes.md`): it runs, and ends the terminal.
+    let CommandResult::Terminal {
+        terminal: program, ..
+    } = reply(
+        &mut client,
+        10,
+        ClientCommand::TerminalOpen {
+            session: sid.clone(),
+            terminal: None,
+            cols: 80,
+            rows: 24,
+            command: Some("sleep 0.3; echo program-$((6*7))".into()),
+        },
+    )
+    .await
+    else {
+        panic!()
+    };
+    output_until(&mut client, &program, "program-42").await;
+    until(
+        &mut client,
+        |e| matches!(e, ServerMessage::TerminalExited { terminal, .. } if *terminal == program),
+    )
+    .await;
 }

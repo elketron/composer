@@ -85,3 +85,37 @@ fn server_events() {
         json!({ "type": "ok", "id": 9, "result": { "kind": "done" } }),
     );
 }
+
+#[test]
+fn background_processes() {
+    round_trip(
+        &ServerMessage::ProcessesChanged {
+            session: "a3f1".into(),
+            processes: vec![composer_protocol::ProcessInfo {
+                terminal: "t1".into(),
+                command: "npm run dev".into(),
+                cwd: "/p".into(),
+                started: "2026-11-21T12:00:00Z".into(),
+            }],
+        },
+        json!({ "type": "processes.changed", "session": "a3f1", "processes": [
+            { "terminal": "t1", "command": "npm run dev", "cwd": "/p", "started": "2026-11-21T12:00:00Z" }
+        ] }),
+    );
+    round_trip(
+        &MessageSource::Process {
+            terminal: "t1".into(),
+            command: "npm run dev".into(),
+        },
+        json!({ "kind": "process", "terminal": "t1", "command": "npm run dev" }),
+    );
+    round_trip(
+        &ClientRequest {
+            id: 3,
+            command: ClientCommand::ProcessStop {
+                terminal: "t1".into(),
+            },
+        },
+        json!({ "id": 3, "type": "process.stop", "terminal": "t1" }),
+    );
+}

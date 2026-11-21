@@ -9,7 +9,7 @@ use ratatui::{Frame, Terminal};
 use crate::action::Action;
 use crate::components::{
     ApprovalPopup, ChangesView, ChatPane, CommandLine, Component, Help, PageViewer, Picker,
-    Selection, StatusBar, TabBar,
+    Selection, StatusBar, TabBar, TerminalView,
 };
 use crate::store::AppState;
 use crate::store::StageTab;
@@ -27,6 +27,7 @@ pub struct Root {
     pub chat: ChatPane,
     pub page: PageViewer,
     changes: ChangesView,
+    terminal: TerminalView,
     tabs: TabBar,
     status: StatusBar,
     command: CommandLine,
@@ -46,6 +47,7 @@ impl Root {
             chat: ChatPane::new(),
             page: PageViewer::new(),
             changes: ChangesView::new(),
+            terminal: TerminalView,
             tabs: TabBar,
             status: StatusBar,
             command: CommandLine::new(),
@@ -142,6 +144,10 @@ impl Root {
         match pane {
             Pane::Chat => return self.chat.scroll_by(up, WHEEL_LINES, state),
             Pane::Stage => match state.shown_tab() {
+                Some(StageTab::Terminal { .. }) => {
+                    let lines = WHEEL_LINES as i64;
+                    return vec![Action::TerminalScroll(if up { lines } else { -lines })];
+                }
                 Some(StageTab::Changes { .. }) => {
                     for _ in 0..WHEEL_LINES {
                         self.changes.handle_key(key, state);
@@ -158,18 +164,38 @@ impl Root {
         Layout::vertical([Constraint::Min(3), Constraint::Length(1)]).areas(area)
     }
 
-    /// The stage: its tab bar, then the view of the tab that is shown.
-    fn render_stage(&self, frame: &mut Frame, area: Rect, state: &AppState) {
-        let content = match TabBar::row(area) {
-            Some(row) if !state.stage_tabs().is_empty() => {
-                self.tabs.render(frame, row, state);
+    /// Where the stage's view goes in the stage's `area`: under its tab bar, when it has one.
+    fn stage_content(area: Rect, state: &AppState) -> Rect {
+        match TabBar::row(area) {
+            Some(_) if !state.stage_tabs().is_empty() => {
                 let [_, content] =
                     Layout::vertical([Constraint::Length(1), Constraint::Min(1)]).areas(area);
                 content
             }
             _ => area,
-        };
+        }
+    }
+
+    /// The cells a terminal on the stage has, on a `screen` this big (whether or not one is
+    /// shown): `None` when the stage isn't on the screen.
+    pub fn terminal_grid(screen: Rect, state: &AppState) -> Option<Rect> {
+        let [panes, _] = Self::split(screen);
+        let (_, stage) = pane_areas(panes, state)
+            .into_iter()
+            .find(|(pane, _)| *pane == Pane::Stage)?;
+        Some(TerminalView::grid(Self::stage_content(stage, state)))
+    }
+
+    /// The stage: its tab bar, then the view of the tab that is shown.
+    fn render_stage(&self, frame: &mut Frame, area: Rect, state: &AppState) {
+        if let Some(row) = TabBar::row(area)
+            && !state.stage_tabs().is_empty()
+        {
+            self.tabs.render(frame, row, state);
+        }
+        let content = Self::stage_content(area, state);
         match state.shown_tab() {
+            Some(StageTab::Terminal { .. }) => self.terminal.render(frame, content, state),
             Some(StageTab::Changes { .. }) => self.changes.render(frame, content, state),
             Some(StageTab::Page { .. }) => self.page.render(frame, content, state),
             // Nothing open: the stage says what would put something here.
@@ -180,6 +206,9 @@ impl Root {
     /// Pasted text (bracketed paste, and what a terminal hands a file drop over as):
     /// paths attach in any mode; other text is typed in while writing.
     pub fn handle_paste(&mut self, text: &str, state: &AppState) -> Vec<Action> {
+        if state.terminal_focused() {
+            return vec![Action::TerminalPaste(text.to_string())];
+        }
         self.chat.composer.paste(text, state.mode() == Mode::Insert)
     }
 }
@@ -194,7 +223,7 @@ fn empty_stage(frame: &mut Frame, area: Rect, state: &AppState) {
     frame.render_widget(block, area);
     frame.render_widget(
         Paragraph::new(Line::from(Span::styled(
-            "nothing open \u{b7} \u{b7}p a page \u{b7} gd the changes of the site's folder \u{b7} the agent's\n  pages and anything it puts on the stage appear here",
+            "nothing open \u{b7} \u{b7}p a page \u{b7} gd the changes of the site's folder \u{b7} :term a shell \u{b7}\n  the agent's pages and anything it puts on the stage appear here",
             theme::faint(),
         ))),
         inner,
@@ -239,6 +268,7 @@ impl Component for Root {
                 Pane::Chat => self.chat.handle_key(key, state),
                 // The tab on the screen owns the stage's keys.
                 Pane::Stage => match state.shown_tab() {
+                    Some(StageTab::Terminal { .. }) => self.terminal.handle_key(key, state),
                     Some(StageTab::Changes { .. }) => self.changes.handle_key(key, state),
                     Some(StageTab::Page { .. }) | None => self.page.handle_key(key, state),
                 },

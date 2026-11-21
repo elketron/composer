@@ -10,6 +10,7 @@ repository.workspace = true
 composer-core.workspace = true
 composer-protocol.workspace = true
 composer-client.workspace = true
+composer-term.workspace = true
 anyhow.workspace = true
 arboard.workspace = true
 base64.workspace = true

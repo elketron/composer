@@ -2,8 +2,8 @@
 //!
 //! The desk is the server's: the same one the desktop and the phone render, and the one the
 //! agent's `show_page` lands on. The TUI reads it and draws the tabs a terminal can draw — a
-//! page, a site's folder's changes. `Terminal` and `LiveView` tabs are kept exactly as received: never
-//! shown, never written back.
+//! page, a site's folder's changes, a server terminal. `LiveView` tabs are kept exactly as
+//! received: never shown, never written back.
 
 use composer_core::SiteUrl;
 use composer_protocol::{Desk, DeskTab};
@@ -51,7 +51,13 @@ impl DeskStore {
                     site: site.clone(),
                     unseen: entry.unseen,
                 }),
-                // An app, a terminal, the live view: not this terminal's to show or change.
+                DeskTab::Terminal { id } => Some(StageTab::Terminal {
+                    id: entry.id.clone(),
+                    terminal: id.clone(),
+                    label: None,
+                    unseen: entry.unseen,
+                }),
+                // The live view: not this terminal's to show or change.
                 _ => None,
             })
             .collect()

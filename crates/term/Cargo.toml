@@ -1,0 +1,12 @@
+[package]
+name = "composer-term"
+description = "A terminal emulator model without a UI: wezterm-term's grid, keys and scrollback, for the TUI (and later the desktop)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+tattoy-wezterm-term = "0.1.0-fork.5"
+wezterm-surface = { package = "tattoy-wezterm-surface", version = "0.1.0-fork.1" }

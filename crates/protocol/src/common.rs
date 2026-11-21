@@ -92,6 +92,11 @@ pub enum MessageSource {
     Watch {
         pattern: String,
     },
+    /// A background process the agent started (`process_start`) exited.
+    Process {
+        terminal: String,
+        command: String,
+    },
 }
 
 /// A complete chat message, as stored in the transcript.

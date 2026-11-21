@@ -115,6 +115,10 @@ pub enum ClientCommand {
         cols: u16,
         #[serde(default = "default_rows")]
         rows: u16,
+        /// A program to run in it instead of a shell (`nvim notes.md`), through the user's
+        /// shell; the terminal ends when it exits. Ignored when `terminal` names a live one.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        command: Option<String>,
     },
 
     /// Typed into a terminal (text, escape sequences included). The reply is `done`.
@@ -136,6 +140,15 @@ pub enum ClientCommand {
     /// Ends a terminal. The reply is `done`.
     #[serde(rename = "terminal.close")]
     TerminalClose { terminal: String },
+
+    /// A session's background processes (`process_start`); the reply is `processes`.
+    #[serde(rename = "process.list")]
+    ProcessList { session: SessionId },
+
+    /// Stops a background process and everything it started (its process group); the agent is
+    /// told, as for any exit. The reply is `done`.
+    #[serde(rename = "process.stop")]
+    ProcessStop { terminal: String },
 
     /// A session's desk; the reply is `desk`.
     #[serde(rename = "desk.get")]

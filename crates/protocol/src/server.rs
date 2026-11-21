@@ -161,6 +161,13 @@ pub enum ServerMessage {
         session: SessionId,
         terminal: String,
     },
+    /// A session's background processes changed (one started or ended): all of them now, to
+    /// the clients attached to it.
+    #[serde(rename = "processes.changed")]
+    ProcessesChanged {
+        session: SessionId,
+        processes: Vec<crate::ProcessInfo>,
+    },
     /// A session's desk changed (`by` the user or the agent): to the clients attached to it.
     #[serde(rename = "desk.changed")]
     DeskChanged {
@@ -230,6 +237,10 @@ pub enum CommandResult {
     Terminal {
         terminal: String,
         scrollback: String,
+    },
+    /// `process.list`: the session's background processes, oldest first.
+    Processes {
+        processes: Vec<crate::ProcessInfo>,
     },
     /// `desk.*`: the session's desk now.
     Desk {

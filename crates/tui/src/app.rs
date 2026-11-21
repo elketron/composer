@@ -1,6 +1,8 @@
 use std::time::Duration;
 
-use crossterm::event::{Event, EventStream, KeyEvent, KeyEventKind, MouseEventKind};
+use crossterm::event::{
+    Event, EventStream, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEventKind,
+};
 use futures::StreamExt;
 use ratatui::backend::Backend;
 use ratatui::layout::Rect;
@@ -16,7 +18,7 @@ use crate::effect_runner::EffectRunner;
 use crate::keymap::Keymap;
 use crate::options::TuiOptions;
 use crate::store::AppState;
-use crate::store::types::{FlashLevel, Mode};
+use crate::store::types::{FlashLevel, Mode, Pane};
 
 /// The shortest time between two draws (60 a second).
 const FRAME: Duration = Duration::from_millis(16);
@@ -41,6 +43,13 @@ impl App {
         let mut state = AppState::new(options.startup.clone(), options.context_limit);
         state.conn.server_url = options.server_url.trim_end_matches('/').to_string();
         state.conn.token = options.token.clone();
+        // What a terminal's screen writes for its program comes back as an action.
+        let writes = dispatcher.clone();
+        state
+            .terminals
+            .set_sink(std::sync::Arc::new(move |terminal, data| {
+                writes.dispatch(Action::TerminalWrite { terminal, data })
+            }));
         Self {
             state,
             root: Root::new(keymap.help()),
@@ -55,6 +64,19 @@ impl App {
     /// Turns a key into actions: overlays and non-Normal modes go straight to their
     /// component; in Normal mode the keymap goes first.
     pub fn handle_key(&mut self, key: KeyEvent) {
+        // A terminal with the focus gets every key but the one that leaves it, and shift with
+        // the page keys, which scroll its history.
+        if self.state.terminal_focused() {
+            let half = (self.state.terminals.size.1 / 2).max(1) as i64;
+            let action = match (key.code, key.modifiers) {
+                (KeyCode::Char(' '), KeyModifiers::CONTROL) => Action::FocusPane(Pane::Chat),
+                (KeyCode::PageUp, KeyModifiers::SHIFT) => Action::TerminalScroll(half),
+                (KeyCode::PageDown, KeyModifiers::SHIFT) => Action::TerminalScroll(-half),
+                _ => Action::TerminalKey(key),
+            };
+            self.dispatcher.dispatch(action);
+            return;
+        }
         let normal = self.state.mode() == Mode::Normal
             && !self.state.ui.picker_open
             && !self.state.ui.help_open
@@ -176,9 +198,17 @@ impl App {
     }
 
     pub fn draw<B: Backend>(&self, terminal: &mut Terminal<B>) -> anyhow::Result<()> {
-        terminal
+        let frame = terminal
             .draw(|frame| self.root.render(frame, frame.area(), &self.state))
             .map_err(|e| anyhow::anyhow!("draw: {e:?}"))?;
+        // A terminal on the stage takes the stage's size (the server's PTY follows).
+        if let Some(grid) = Root::terminal_grid(frame.area, &self.state) {
+            let size = (grid.width.max(2), grid.height.max(2));
+            if size != self.state.terminals.size {
+                self.dispatcher
+                    .dispatch(Action::TerminalResize(size.0, size.1));
+            }
+        }
         Ok(())
     }
 

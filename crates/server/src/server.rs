@@ -274,15 +274,19 @@ impl Server {
         self.start_background(addr)?;
         let router = crate::api::router(self.clone());
         let serving = axum::serve(listener, router);
-        tokio::select! {
+        let result = tokio::select! {
             served = serving => {
-                served.map_err(|e| ServerError::Invalid(format!("server stopped: {e}")))?;
+                served.map_err(|e| ServerError::Invalid(format!("server stopped: {e}")))
             }
             _ = shutdown_signal() => {
                 tracing::info!("shutting down");
+                Ok(())
             }
-        }
-        Ok(())
+        };
+        // Nothing a session started outlives the server: background processes, shells.
+        let server = self.clone();
+        let _ = tokio::task::spawn_blocking(move || server.terminals.shutdown()).await;
+        result
     }
 
     /// Writes a page, updates the index and broadcasts `page.changed`.
