@@ -38,7 +38,10 @@ pub fn scope(message: &ServerMessage) -> EventScope<'_> {
             id: session,
             seq: None,
         },
-        SessionUpdated { .. } | Slots { .. } | ConfigReloaded { .. } => EventScope::Global,
+        // Every client: `composer mcp` follows a session's tools without attaching to it.
+        SessionUpdated { .. } | ToolsChanged { .. } | Slots { .. } | ConfigReloaded { .. } => {
+            EventScope::Global
+        }
         Ok { .. } | Error { .. } => EventScope::Reply,
     }
 }

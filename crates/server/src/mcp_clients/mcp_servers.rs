@@ -1,34 +1,45 @@
-use std::collections::BTreeMap;
-use std::sync::Arc;
+use std::collections::{BTreeMap, HashMap};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use composer_protocol::http::McpServerInfo;
-use composer_protocol::{ApprovalDecision, ApprovalKind};
+use composer_protocol::{ApprovalDecision, ApprovalKind, RunKind};
 use serde_json::Value;
 
 use crate::McpServerConfig;
-use composer_protocol::RunKind;
-
-use crate::agent::Site;
 use crate::mcp_clients::McpClient;
 use crate::mcp_clients::types::{Slot, glob_matches, tool_name, transport_kind};
 use crate::provider::ToolSpec;
+use crate::site_mcp::SiteServers;
 use crate::tools::ToolContext;
 use crate::tools::{CallResult, text_result};
 
 /// After a failed connect, turns don't try again for this long (a call does).
 const RETRY_AFTER: Duration = Duration::from_secs(30);
 
-/// The MCP servers of `config.toml`. Each connects at its first use and stays up; one that
-/// exited or failed connects again on the next use.
+/// Connections, one per distinct server config, shared by every server entry that starts the
+/// same thing (two sites naming the same command get one process).
+type Pool = Mutex<HashMap<String, Arc<tokio::sync::Mutex<Slot>>>>;
+
+/// One server a run can reach: from `config.toml` (`site` is `None`) or from the `mcp.toml` of
+/// the site the run is in.
+struct Entry<'a> {
+    name: &'a str,
+    config: &'a McpServerConfig,
+    site: Option<&'a str>,
+}
+
+/// The MCP servers: `config.toml`'s, in every session, and the approved servers of a run's site
+/// ([`crate::site_mcp`]). Each connects at its first use and stays up in a pool keyed by what it
+/// starts; one that exited or failed connects again on the next use.
 pub struct McpServers {
     configs: BTreeMap<String, McpServerConfig>,
-    /// Shared with the next config's `McpServers` while the server's config is unchanged.
-    slots: BTreeMap<String, Arc<tokio::sync::Mutex<Slot>>>,
-    /// The workspace's environment ([`crate::Home::env`]): set for every stdio server it
-    /// starts, and what `${COMPOSER_WORKSPACE}` in a config expands to.
+    /// Shared with the next config's `McpServers`.
+    pool: Arc<Pool>,
+    /// The home's environment ([`crate::Home::env`]): set for every stdio server it starts, and
+    /// what `${COMPOSER_HOME}` in a config expands to.
     workspace: BTreeMap<String, String>,
-    /// The workspace's sites: where a stdio server without a `cwd` starts.
+    /// The sites folder: where a stdio server without a `cwd` starts.
     sites: std::path::PathBuf,
 }
 
@@ -40,50 +51,73 @@ impl McpServers {
     ) -> Self {
         let mut usable = BTreeMap::new();
         for (name, config) in configs {
-            let valid = !name.is_empty()
-                && !name.contains("__")
-                && name
-                    .chars()
-                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_'));
-            if valid {
+            if crate::site_mcp::valid_name(name) {
                 usable.insert(name.clone(), config.clone());
             } else {
                 tracing::warn!("[mcp.{name}]: a server name is letters, digits, - and _ (no `__`)");
             }
         }
         Self {
-            slots: usable
-                .iter()
-                .filter(|(_, c)| c.enabled)
-                .map(|(name, _)| (name.clone(), Arc::default()))
-                .collect(),
             configs: usable,
+            pool: Arc::default(),
             workspace,
             sites,
         }
     }
 
-    /// The servers of a new config: an unchanged server keeps its connection, a changed or
-    /// removed one is dropped (its process stops once no call is using it).
+    /// The servers of a new config: a connection whose config is still a `config.toml` server's
+    /// is kept, every other one is dropped (its process stops once no call is using it). Sites'
+    /// servers are made again from the new config on next use.
     pub fn reconfigured(&self, configs: &BTreeMap<String, McpServerConfig>) -> Self {
-        let mut next = Self::new(configs, self.workspace.clone(), self.sites.clone());
-        for (name, slot) in &mut next.slots {
-            if let Some(kept) = self.slots.get(name)
-                && self.configs.get(name) == next.configs.get(name)
-            {
-                *slot = kept.clone();
-            }
-        }
+        let next = Self::new(configs, self.workspace.clone(), self.sites.clone());
+        let keep: Vec<String> = next.configs.values().map(pool_key).collect();
+        let old = self.pool.lock().expect("pool lock");
+        *next.pool.lock().expect("pool lock") = old
+            .iter()
+            .filter(|(key, _)| keep.contains(key))
+            .map(|(key, slot)| (key.clone(), slot.clone()))
+            .collect();
+        drop(old);
         next
     }
 
-    /// The server's connection, made now if there is none. `retry`: also when it failed a
+    /// `config.toml`'s servers that are on, then `site`'s (a name `config.toml` uses is left out
+    /// of a site's when it is resolved).
+    fn entries<'a>(&'a self, site: Option<&'a SiteServers>) -> Vec<Entry<'a>> {
+        let global = self
+            .configs
+            .iter()
+            .filter(|(_, config)| config.enabled)
+            .map(|(name, config)| Entry {
+                name,
+                config,
+                site: None,
+            });
+        let own = site.into_iter().flat_map(|site| {
+            site.servers.iter().map(|server| Entry {
+                name: &server.name,
+                config: &server.config,
+                site: Some(&site.site),
+            })
+        });
+        global.chain(own).collect()
+    }
+
+    /// The connection of `config`, made now if there is none. `retry`: also when it failed a
     /// moment ago.
-    async fn client(&self, name: &str, retry: bool) -> Result<Arc<McpClient>, String> {
+    async fn client(
+        &self,
+        name: &str,
+        config: &McpServerConfig,
+        retry: bool,
+    ) -> Result<Arc<McpClient>, String> {
         let slot = self
-            .slots
-            .get(name)
-            .ok_or_else(|| format!("no MCP server `{name}` is on"))?;
+            .pool
+            .lock()
+            .expect("pool lock")
+            .entry(pool_key(config))
+            .or_default()
+            .clone();
         let mut slot = slot.lock().await;
         if let Some(client) = &slot.client
             && client.alive()
@@ -96,7 +130,7 @@ impl McpServers {
         {
             return Err(error.clone());
         }
-        match McpClient::connect(name, &self.configs[name], &self.workspace, &self.sites).await {
+        match McpClient::connect(name, config, &self.workspace, &self.sites).await {
             Ok(client) => {
                 let client = Arc::new(client);
                 tracing::info!(
@@ -121,81 +155,40 @@ impl McpServers {
         }
     }
 
-    /// Whether `[mcp.<server>]` lets the site called `site` grant its tools (`sites` lists it).
-    /// The page's `mcp:` alone grants nothing: agents can write pages, not `config.toml`.
-    pub fn site_may_grant(&self, site: &str, server: &str) -> bool {
-        self.configs
-            .get(server)
-            .is_some_and(|config| config.sites.iter().any(|allowed| allowed == site))
+    /// Whether a run of `kind` has `tool` (as its server lists it) of a server configured as
+    /// `config`: an agentic run every tool, a workflow run those `read_only` matches, a single
+    /// shot none. Every place that decides MCP tool availability asks this one.
+    pub fn kind_allows(kind: RunKind, config: &McpServerConfig, tool: &str) -> bool {
+        match kind {
+            RunKind::Agentic => true,
+            RunKind::Workflow => config
+                .read_only
+                .iter()
+                .any(|pattern| glob_matches(pattern, tool)),
+            RunKind::SingleShot => false,
+        }
     }
 
-    /// The servers `site` names in `mcp:` and may grant.
-    pub fn granted_by(&self, site: &Site) -> Vec<String> {
-        site.mcp
-            .iter()
-            .filter(|server| self.site_may_grant(&site.name, server))
-            .cloned()
-            .collect()
-    }
-
-    /// For each server `site` names in `mcp:` and does not get: why, in a sentence for the user.
-    pub fn refused_grants(&self, site: &Site) -> Vec<String> {
-        site.mcp
-            .iter()
-            .filter(|server| !self.site_may_grant(&site.name, server))
-            .map(|server| match self.configs.contains_key(server) {
-                true => format!(
-                    "site {0} names MCP server {server}, but [mcp.{server}] does not list it in \
-                     `sites`: its tools are not added (add `sites = [\"{0}\"]` there to allow it)",
-                    site.name
-                ),
-                false => format!(
-                    "site {} names MCP server {server}, but there is no [mcp.{server}] in \
-                     config.toml: its tools are not added",
-                    site.name
-                ),
-            })
-            .collect()
-    }
-
-    /// Whether a run of `kind`, in `site` (the one it is in), has the MCP tool `tool`
-    /// (`blender__get_objects`): only an agentic run, and only when the site names the tool's
-    /// server in `mcp:` and the server's config lets that site grant it. (No site marks a
-    /// server's tools read-only yet, so a workflow run has none.) Every place that decides MCP
-    /// tool availability asks this one.
-    pub fn allows(&self, kind: RunKind, site: Option<&Site>, tool: &str) -> bool {
-        kind == RunKind::Agentic
-            && site.is_some_and(|site| {
-                tool.split_once("__").is_some_and(|(server, _)| {
-                    site.mcp.iter().any(|named| named == server)
-                        && self.site_may_grant(&site.name, server)
-                })
-            })
-    }
-
-    /// Every tool of the servers `site` (the one the run is in) names in `mcp:` and may grant
-    /// ([`Self::granted_by`]), from servers that are configured, on and reachable now; none for
-    /// a run of a kind without MCP tools.
-    pub async fn specs_for(&self, kind: RunKind, site: Option<&Site>) -> Vec<ToolSpec> {
-        let servers = match site {
-            Some(site) if kind == RunKind::Agentic => self.granted_by(site),
-            _ => Vec::new(),
-        };
+    /// Every tool a run of `kind` has from `config.toml`'s servers and `site`'s (the approved
+    /// servers of the site it is in), from the servers reachable now.
+    pub async fn specs_for(&self, kind: RunKind, site: Option<&SiteServers>) -> Vec<ToolSpec> {
         let mut specs = Vec::new();
-        for server in servers {
-            if !self.slots.contains_key(&server) {
+        for entry in self.entries(site) {
+            // Nothing to offer: don't start the server for it.
+            if kind == RunKind::SingleShot
+                || (kind == RunKind::Workflow && entry.config.read_only.is_empty())
+            {
                 continue;
             }
             // A failed connect is logged where it happens; the turn goes on without it.
-            let Ok(client) = self.client(&server, false).await else {
+            let Ok(client) = self.client(entry.name, entry.config, false).await else {
                 continue;
             };
             for tool in client.tools().await {
-                let name = tool_name(&server, &tool.name);
-                if self.allows(kind, site, &name) {
+                if Self::kind_allows(kind, entry.config, &tool.name) {
                     specs.push(ToolSpec {
-                        name,
-                        description: format!("[{server}] {}", tool.description),
+                        name: tool_name(entry.name, &tool.name),
+                        description: format!("[{}] {}", entry.name, tool.description),
                         parameters: tool.input_schema,
                     });
                 }
@@ -204,73 +197,78 @@ impl McpServers {
         specs
     }
 
-    /// Runs `name` (`github__get_issue`) if it is an MCP tool: `None` when it isn't one.
-    pub async fn call(&self, context: &ToolContext, name: &str, args: Value) -> Option<CallResult> {
+    /// Starts `site`'s servers (those not running yet), side by side. What did not start, each
+    /// a sentence.
+    pub async fn connect(&self, site: &SiteServers) -> Vec<String> {
+        let tries = site.servers.iter().map(|server| async move {
+            self.client(&server.name, &server.config, true)
+                .await
+                .err()
+                .map(|e| format!("MCP server {} did not start: {e}", server.name))
+        });
+        futures::future::join_all(tries)
+            .await
+            .into_iter()
+            .flatten()
+            .collect()
+    }
+
+    /// Runs `name` (`github__get_issue`) if it is an MCP tool of the run's servers (`site`: those
+    /// of the site it is in): `None` when it isn't one.
+    pub async fn call(
+        &self,
+        context: &ToolContext,
+        site: Option<&SiteServers>,
+        name: &str,
+        args: Value,
+    ) -> Option<CallResult> {
         let (server, _) = name.split_once("__")?;
-        if !self.configs.contains_key(server) {
-            return None;
-        }
-        if !self.allows(context.kind, context.site.as_deref(), name) {
-            return Some(text_result(format!("unknown tool `{name}`"), true));
-        }
+        let entries = self.entries(site);
+        let entry = entries.iter().find(|entry| entry.name == server)?;
         Some(
-            self.call_tool(context, server, name, args)
+            self.call_tool(context, entry, name, args)
                 .await
                 .unwrap_or_else(|e| text_result(e, true)),
         )
     }
 
-    /// A call the server makes itself (an `app:` launch): by the tool's own name (`launch`), no
-    /// agent `tools:` check and no approval. The caller's authority is a `config.toml` entry.
-    /// Never reachable from a model's tool call: [`Self::call`] is that path.
-    pub async fn call_internal(
-        &self,
-        server: &str,
-        tool: &str,
-        args: Value,
-    ) -> Result<CallResult, String> {
-        if !self.configs.contains_key(server) {
-            return Err(format!("no MCP server `{server}` in config.toml"));
-        }
-        let client = self.client(server, true).await?;
-        let found = client.tools().await.into_iter().any(|t| t.name == tool);
-        if !found {
-            return Err(format!("MCP server `{server}` has no tool `{tool}`"));
-        }
-        client.call(tool, args).await
-    }
-
     async fn call_tool(
         &self,
         context: &ToolContext,
-        server: &str,
+        entry: &Entry<'_>,
         name: &str,
         args: Value,
     ) -> Result<CallResult, String> {
-        let client = self.client(server, true).await?;
+        let client = self.client(entry.name, entry.config, true).await?;
         let tool = client
             .tools()
             .await
             .into_iter()
-            .find(|t| tool_name(server, &t.name) == name)
-            .ok_or_else(|| format!("`{server}` has no tool `{name}` (any more)"))?;
-        self.approve(context, server, &tool.name, name, &args)
+            .find(|t| tool_name(entry.name, &t.name) == name)
+            .filter(|t| Self::kind_allows(context.kind, entry.config, &t.name))
+            .ok_or_else(|| format!("unknown tool `{name}`"))?;
+        self.approve(context, entry, &tool.name, name, &args)
             .await?;
         client.call(&tool.name, args).await
     }
 
-    /// Asks the user unless `allow` or an earlier `always` covers the tool.
+    /// Asks the user unless `allow` or an earlier `always` covers the tool. A site's server keeps
+    /// its `always` rules apart from `config.toml`'s.
     async fn approve(
         &self,
         context: &ToolContext,
-        server: &str,
+        entry: &Entry<'_>,
         tool: &str,
         name: &str,
         args: &Value,
     ) -> Result<(), String> {
         let server_ref = &context.server;
-        let rules_key = format!("mcp:{server}");
-        let allowed = self.configs[server]
+        let rules_key = match entry.site {
+            None => format!("mcp:{}", entry.name),
+            Some(site) => format!("mcp:{site}/{}", entry.name),
+        };
+        let allowed = entry
+            .config
             .allow
             .iter()
             .any(|pattern| glob_matches(pattern, tool));
@@ -282,7 +280,7 @@ impl McpServers {
             .ask_approval(
                 &*context.session()?,
                 ApprovalKind::Mcp,
-                format!("MCP {server}: {tool}"),
+                format!("MCP {}: {tool}", entry.name),
                 body,
                 Some(name.to_string()),
                 &context.cancel,
@@ -304,20 +302,31 @@ impl McpServers {
         }
     }
 
-    /// Every configured server with its state, connecting the ones that are on.
-    pub async fn list(&self) -> Vec<McpServerInfo> {
+    /// Every server with its state: `config.toml`'s (connecting the ones that are on), then those
+    /// of the sites in `sites`.
+    pub async fn list(&self, sites: &[Arc<SiteServers>]) -> Vec<McpServerInfo> {
         let mut infos = Vec::new();
-        for (name, config) in &self.configs {
+        let mut all: Vec<(&String, &McpServerConfig, Option<String>)> = self
+            .configs
+            .iter()
+            .map(|(name, config)| (name, config, None))
+            .collect();
+        for site in sites {
+            for server in &site.servers {
+                all.push((&server.name, &server.config, Some(site.site.clone())));
+            }
+        }
+        for (name, config, site) in all {
             let mut info = McpServerInfo {
                 name: name.clone(),
                 transport: transport_kind(&config.command).into(),
                 state: "off".into(),
                 error: None,
                 tools: vec![],
-                sites: config.sites.clone(),
+                sites: site.into_iter().collect(),
             };
             if config.enabled {
-                match self.client(name, true).await {
+                match self.client(name, config, true).await {
                     Ok(client) => {
                         info.state = "ready".into();
                         info.tools = client
@@ -337,4 +346,21 @@ impl McpServers {
         }
         infos
     }
+}
+
+/// What tells two server configs apart as processes: what they start or reach, not which of
+/// their tools run unasked.
+fn pool_key(config: &McpServerConfig) -> String {
+    let started = McpServerConfig {
+        allow: Vec::new(),
+        read_only: Vec::new(),
+        enabled: true,
+        config: BTreeMap::new(),
+        ..config.clone()
+    };
+    format!(
+        "{}{}",
+        serde_json::to_string(&started).expect("a config serializes"),
+        started.problem.as_deref().unwrap_or_default()
+    )
 }

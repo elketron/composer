@@ -191,7 +191,7 @@ impl McpBundle {
         let mut config = self.config(&entry.config, user_home, run);
         config.env.extend(entry.env.clone());
         config.allow = entry.allow.clone();
-        config.sites = entry.sites.clone();
+        config.read_only = entry.read_only.clone();
         config.enabled = entry.enabled;
         config.config = entry.config.clone();
         Some(config)
@@ -366,12 +366,12 @@ mod tests {
         // No entry: the bundle registers itself.
         let c = b.merged(None, "/h", cache).unwrap();
         assert!(c.enabled && c.allow.is_empty() && !c.command.is_empty());
-        assert!(c.sites.is_empty(), "alone, no site may grant it");
+        assert!(c.read_only.is_empty(), "alone, no tool is read-only");
         // An entry without command or url overlays it.
         let entry = McpServerConfig {
             env: [("PLAIN".to_string(), "2".to_string())].into(),
             allow: vec!["get_*".into()],
-            sites: vec!["3d".into()],
+            read_only: vec!["get_*".into()],
             enabled: false,
             config: [("key".to_string(), "k".to_string())].into(),
             ..Default::default()
@@ -383,7 +383,11 @@ mod tests {
         assert_eq!(c.env["PLAIN"], "2");
         assert_eq!(c.env["HOME_DIR"], "/h/linux");
         assert_eq!((c.allow, c.enabled), (vec!["get_*".to_string()], false));
-        assert_eq!(c.sites, ["3d"], "the overlay says which sites may grant it");
+        assert_eq!(
+            c.read_only,
+            ["get_*"],
+            "the overlay says which tools only read"
+        );
         assert_eq!(c.config["key"], "k");
         // An entry with its own command wins.
         let own = McpServerConfig {

@@ -38,7 +38,8 @@ pub struct SiteSummary {
     /// Pages in the site.
     #[serde(default)]
     pub pages: u32,
-    /// `mcp:` of its `index.md`: the MCP servers whose tools the agent has while in the site.
+    /// The MCP servers its `mcp.toml` declares: their tools come with the site once the user
+    /// approved the file.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub mcp: Vec<String>,
 }
@@ -58,7 +59,8 @@ pub struct WebSession {
     pub path: String,
 }
 
-/// An MCP server from `config.toml` (`[mcp.<name>]`), whose tools agents may list.
+/// An MCP server: one from `config.toml` (`[mcp.<name>]`, in every session) or one a site's
+/// approved `mcp.toml` declares (in sessions in that site).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
@@ -71,7 +73,7 @@ pub struct McpServerInfo {
     pub error: Option<String>,
     /// Its tools as agents see them (`github__get_issue`).
     pub tools: Vec<String>,
-    /// The sites that may grant its tools (`sites` in its config).
+    /// The site whose `mcp.toml` declares it; empty for a `config.toml` server.
     pub sites: Vec<String>,
 }
 

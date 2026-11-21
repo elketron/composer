@@ -1098,12 +1098,12 @@ fn config_reload_line(
     )
 }
 
-/// `:mcp`'s line: each server's state, tool count and agents; a warning when one failed.
+/// `:mcp`'s line: each server's state, tool count and site; a warning when one failed.
 fn mcp_summary(servers: &[composer_protocol::http::McpServerInfo]) -> (String, FlashLevel) {
     if servers.is_empty() {
         return (
-            "no MCP servers: add [mcp.<name>] to config.toml, then list its tools in an agent's \
-             tools: (<name>__*)"
+            "no MCP servers: add [mcp.<name>] to config.toml (every session), or \
+             [servers.<name>] to a site's mcp.toml"
                 .into(),
             FlashLevel::Info,
         );
@@ -1119,7 +1119,7 @@ fn mcp_summary(servers: &[composer_protocol::http::McpServerInfo]) -> (String, F
         .iter()
         .map(|s| {
             let agents = if s.sites.is_empty() {
-                "no site may grant it".to_string()
+                "every session".to_string()
             } else {
                 format!("for {}", s.sites.join(", "))
             };

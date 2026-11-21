@@ -103,11 +103,11 @@ pub struct AgentConfig {
     pub reasoning_effort: String,
 }
 
-/// An MCP server whose tools composer's agents may use, `[mcp.<name>]`: a `command` (stdio) or
-/// a `url` (streamable HTTP). `${VAR}` in `env` and `headers` is taken from composer's environment.
+/// An MCP server: a `command` (stdio) or a `url` (streamable HTTP). `${VAR}` in `env` and
+/// `headers` is taken from composer's environment.
 ///
-/// An agent gets its tools from its own page's `tools:`, or from the site its session is in when
-/// that site's `mcp:` names the server and `sites` here lists the site.
+/// `[mcp.<name>]` in `config.toml` is a server in every session. A site's own servers are in its
+/// `mcp.toml` ([`crate::site_mcp`]) and end as this same shape once the user approved the file.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct McpServerConfig {
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -125,14 +125,13 @@ pub struct McpServerConfig {
     /// itself. A file that cannot be read fails the connect.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub bearer_file: String,
-    /// The sites that may grant this server's tools with `mcp:` in their `index.md`: a site not
-    /// listed here grants nothing, whatever its page says (agents can write pages; this file they
-    /// cannot). Empty, the default: no site may.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub sites: Vec<String>,
     /// Tools that run without asking: names or `prefix*` (`get_*`); `*` for all.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub allow: Vec<String>,
+    /// Tools a workflow run also gets (it only reads), the same patterns as `allow`. Empty, the
+    /// default: only agentic runs have the server's tools.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub read_only: Vec<String>,
     #[serde(default = "default_true")]
     pub enabled: bool,
     /// Where a stdio server starts (`~/` and `${VAR}` expanded), instead of the workspace's

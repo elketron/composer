@@ -20,4 +20,10 @@ pub trait ToolSource: Send + Sync {
 
     /// The output, whether the call failed and its images; `Err` when it could not run at all.
     async fn call(&self, name: &str, args: Value) -> Result<CallResult, String>;
+
+    /// Resolves when the tools changed since the last time it resolved (the session's site was
+    /// set). One that never changes never resolves.
+    async fn changed(&self) {
+        std::future::pending::<()>().await
+    }
 }

@@ -14,8 +14,8 @@ impl Tool for SetSiteTool {
 
     fn description(&self) -> &'static str {
         "Set the site you work in: from your next turn its index.md is part of your context, its \
-         `tools:` and MCP servers join your tools, and its `folder:` is where terminals start. \
-         `site: null` leaves it."
+         `tools:` and the MCP servers of its mcp.toml (once the user approved the file) join your \
+         tools, and its `folder:` is where terminals start. `site: null` leaves it."
     }
 
     fn parameters(&self) -> Value {
@@ -32,7 +32,7 @@ impl Tool for SetSiteTool {
 
     async fn call(&self, context: &ToolContext, args: Value) -> Result<String, String> {
         let site = args["site"].as_str();
-        let set = set_site(&context.server, &*context.run, site).await?;
+        let set = set_site(&context.server, &*context.run, site, &context.cancel).await?;
         Ok(match set {
             SiteSet::Entered(_) => format!("{} It applies from your next turn.", set.text()),
             _ => set.text(),

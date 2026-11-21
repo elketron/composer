@@ -746,6 +746,7 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
         ServerMessage::SessionUpdated {
             session: info.clone(),
         },
+        ServerMessage::ToolsChanged { session: s() },
         ServerMessage::PageChanged {
             url: "site://memory/user.md".into(),
             kind: PageChangeKind::Modified,

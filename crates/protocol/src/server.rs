@@ -134,6 +134,12 @@ pub enum ServerMessage {
     #[serde(rename = "session.updated")]
     SessionUpdated { session: SessionInfo },
 
+    /// The tools a session has changed: its site was set (or left), or the site's MCP servers
+    /// came up after the user approved its `mcp.toml`. An MCP client of the session lists them
+    /// again (`composer mcp` tells its harness with `notifications/tools/list_changed`).
+    #[serde(rename = "tools.changed")]
+    ToolsChanged { session: SessionId },
+
     // ---- global events ----
     #[serde(rename = "page.changed")]
     PageChanged {

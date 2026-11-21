@@ -28,13 +28,16 @@ pub fn system_prompt(
         } else {
             format!("its tools are: {}", site.tools.join(", "))
         };
-        let tools = if site.mcp.is_empty() {
+        let servers: Vec<String> = crate::site_mcp::load(workspace, &site.name)
+            .map(|file| file.servers.into_iter().map(|s| s.name).collect())
+            .unwrap_or_default();
+        let tools = if servers.is_empty() {
             tools
         } else {
             format!(
-                "{tools}; it also names the MCP servers: {} (their tools are yours here where \
-                 config.toml lets this site grant them)",
-                site.mcp.join(", ")
+                "{tools}; its mcp.toml declares the MCP servers: {} (their tools are yours here \
+                 once the user approved the file)",
+                servers.join(", ")
             )
         };
         sections.push(format!(

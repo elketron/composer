@@ -42,12 +42,17 @@ impl InstalledMcpBundles {
         }
     }
 
-    /// Registers the bundles in `configs`, or overlays them on the entries of their name.
+    /// Overlays the bundles on the `[mcp.<name>]` entries of their name, which makes them servers
+    /// in every session. A bundle `config.toml` does not name is only a site's to use
+    /// (`bundle = "<name>"` in its `mcp.toml`).
     pub fn merge_into(&self, configs: &mut BTreeMap<String, McpServerConfig>) {
         let user_home = std::env::var("HOME").unwrap_or_default();
         for bundle in &self.bundles {
+            let Some(entry) = configs.get(&bundle.name) else {
+                continue;
+            };
             let run = self.run.join(&bundle.name);
-            match bundle.merged(configs.get(&bundle.name), &user_home, &run) {
+            match bundle.merged(Some(entry), &user_home, &run) {
                 Some(config) => {
                     // Made here, not at connect, so the bind has something to show.
                     if let Err(e) = bundle.prepare(&run) {
@@ -61,5 +66,23 @@ impl InstalledMcpBundles {
                 ),
             }
         }
+    }
+
+    /// The bundle called `name`, as a server: `settings` are its `[mcp.<name>.config]`. Its run
+    /// folder is made here, so the server has one to write in. `None` when none is installed.
+    pub fn server(
+        &self,
+        name: &str,
+        settings: &BTreeMap<String, String>,
+        user_home: &str,
+    ) -> Option<Result<McpServerConfig, String>> {
+        let bundle = self.bundles.iter().find(|b| b.name == name)?;
+        let run = self.run.join(&bundle.name);
+        Some(
+            bundle
+                .prepare(&run)
+                .map(|()| bundle.config(settings, user_home, &run))
+                .map_err(|e| format!("preparing the bundle `{name}`: {e}")),
+        )
     }
 }

@@ -4,7 +4,6 @@ use composer_protocol::{RunKind, ToolInfo};
 use serde_json::Value;
 
 use crate::agent::Site;
-use crate::mcp_clients::McpServers;
 use crate::provider::{ModelToolCall, ToolSpec};
 use crate::server::Server;
 use crate::tools::actions_tool::ActionsTool;
@@ -97,8 +96,8 @@ impl ToolRegistry {
         offered && Self::kind_allows(kind, tool) && only.is_none_or(|only| only.contains(&tool))
     }
 
-    /// The native tools a run of `kind` has, then the MCP tools of `site` it has (servers it
-    /// can reach).
+    /// The native tools a run of `kind` in `site` has, then the MCP tools it has: those of
+    /// `config.toml`'s servers and of the site's approved `mcp.toml` (servers it can reach).
     pub async fn specs_with_mcp(
         &self,
         server: &Server,
@@ -106,20 +105,20 @@ impl ToolRegistry {
         site: Option<&Site>,
     ) -> Vec<ToolSpec> {
         let mut specs = self.specs_for(kind, site, None);
-        specs.extend(server.mcp().specs_for(kind, site).await);
+        let site_servers = site.and_then(|site| crate::site_mcp::active(server, &site.name));
+        specs.extend(server.mcp().specs_for(kind, site_servers.as_deref()).await);
         specs
     }
 
     /// The same, for the protocol (`tool.list`).
     pub async fn infos_for(
         &self,
-        mcp: &McpServers,
+        server: &Server,
         kind: RunKind,
         site: Option<&Site>,
     ) -> Vec<ToolInfo> {
-        let mut specs = self.specs_for(kind, site, None);
-        specs.extend(mcp.specs_for(kind, site).await);
-        specs
+        self.specs_with_mcp(server, kind, site)
+            .await
             .into_iter()
             .map(|spec| ToolInfo {
                 name: spec.name,
@@ -167,7 +166,12 @@ impl ToolRegistry {
                     t.name(),
                 )
         }) else {
-            if let Some(result) = context.server.mcp().call(context, name, args).await {
+            let site_servers = context
+                .site
+                .as_deref()
+                .and_then(|site| crate::site_mcp::active(&context.server, &site.name));
+            let mcp = context.server.mcp();
+            if let Some(result) = mcp.call(context, site_servers.as_deref(), name, args).await {
                 return result;
             }
             return text_result(format!("unknown tool `{name}`"), true);

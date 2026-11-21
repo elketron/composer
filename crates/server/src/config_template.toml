@@ -67,18 +67,17 @@ inline_max_kb = 100
 # url = "http://127.0.0.1:7878/view"
 # bearer_file = "~/.local/share/wayai/token"
 
-# MCP servers whose tools your agents may use. An agent gets a server's tools by listing them in
-# its `tools:` (`github__*`, or one: `github__get_issue`); calls outside `allow` ask you first
+# MCP servers in every session: an agentic run gets all their tools (`github__get_issue`), a
+# workflow run the ones `read_only` names (none by default); calls outside `allow` ask you first
 # ("always" remembers the tool). `${VAR}` comes from composer's environment.
-# A site whose index.md says `mcp: [github]` gives the server's tools to a session
-# in it only when the server lists that site here: `sites = ["coding"]`. Without `sites` no site
-# may grant it, whatever its page says (agents can write pages, not this file).
+# A server only some sites need goes in that site's own `mcp.toml` instead (`[servers.<name>]`,
+# the same fields): nothing in it starts until you approve the file, and again after each edit.
 # [mcp.github]
 # command = "github-mcp-server"
 # args = ["stdio"]
 # env = { GITHUB_PERSONAL_ACCESS_TOKEN = "${GITHUB_TOKEN}" }
 # allow = ["get_*", "list_*", "search_*"]
-# sites = ["coding"]
+# read_only = ["get_*", "list_*", "search_*"]
 #
 # [mcp.docs]
 # url = "https://example.com/mcp"
@@ -91,10 +90,10 @@ inline_max_kb = 100
 # url = "http://127.0.0.1:7878/mcp"
 # bearer_file = "~/.local/share/wayai/token"
 #
-# An MCP bundle (`<home>/mcps/blender.mcpb`) is a server of its own name; its tools ask until allowed.
+# An MCP bundle (`<home>/mcps/blender.mcpb`) is used by a site with `bundle = "blender"` in its
+# `mcp.toml`. Named here it is a server in every session (`enabled = false`: only its settings).
 # [mcp.blender]
 # allow = ["get_*"]
-# sites = ["3d"]                 # the sites whose `mcp: [blender]` grants its tools
 # It writes in the folder `$COMPOSER_BUNDLE_STATE` names
 # (`<home>/state/mcps/.run/blender/`), where a `uv` bundle's environment and cache also live.
 # config = { api_key = "..." }   # the bundle's settings

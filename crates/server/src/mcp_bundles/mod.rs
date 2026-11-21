@@ -1,6 +1,7 @@
 //! MCP Bundles (`.mcpb`): zip archives with a `manifest.json` that says how to start a local MCP
-//! server. `<home>/mcps/*.mcpb` are unpacked to `<home>/state/mcps/<name>/` and merged into
-//! the `[mcp.<name>]` entries of every workspace's config ([`InstalledMcpBundles::merge_into`]).
+//! server. `<home>/mcps/*.mcpb` are unpacked to `<home>/state/mcps/<name>/`. A site uses one with
+//! `bundle = "<name>"` in its `mcp.toml` ([`InstalledMcpBundles::server`]); a `[mcp.<name>]` entry
+//! in `config.toml` makes it a server in every session ([`InstalledMcpBundles::merge_into`]).
 //!
 //! A bundle's server writes to `<home>/state/mcps/.run/<name>/` ([`McpBundle::config`]), not
 //! next to its unpacked code.

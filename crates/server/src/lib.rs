@@ -23,6 +23,7 @@ pub mod provider;
 mod secret;
 mod server;
 pub mod session;
+pub mod site_mcp;
 mod slot_guard;
 mod slot_pool;
 pub mod terminals;

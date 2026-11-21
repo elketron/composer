@@ -1,5 +1,6 @@
 //! A site as a capability: its `index.md` is the prompt and its `tools:` are the verbs that
-//! exist only while the agent is inside it.
+//! exist only while the agent is inside it. Its MCP servers are in its `mcp.toml`
+//! ([`crate::site_mcp`]).
 
 use std::path::PathBuf;
 
@@ -15,10 +16,6 @@ pub struct Site {
     pub title: String,
     /// `tools:`: the site tools ([`crate::tools::SITE_TOOLS`]) it brings.
     pub tools: Vec<String>,
-    /// `mcp:`: the MCP servers the page names. What the page says, not what is granted: a
-    /// server's tools come with the site only where `[mcp.<server>] sites` in `config.toml` lists
-    /// this site ([`crate::mcp_clients::McpServers::allows`]).
-    pub mcp: Vec<String>,
     /// `folder:`: a folder outside the web the site works on (`~/Projects/composer`), `~`
     /// expanded. Terminals start there and the changes view diffs it.
     pub folder: Option<PathBuf>,
@@ -48,19 +45,6 @@ impl Site {
                     .collect()
             })
             .unwrap_or_default();
-        let mcp = match page.frontmatter.get("mcp") {
-            Some(Value::String(server)) => vec![server.clone()],
-            Some(Value::Array(items)) => items
-                .iter()
-                .filter_map(Value::as_str)
-                .map(str::to_string)
-                .collect(),
-            _ => Vec::new(),
-        }
-        .into_iter()
-        .map(|server| server.trim().to_string())
-        .filter(|server| !server.is_empty())
-        .collect();
         let folder = page
             .frontmatter
             .get_str("folder")
@@ -71,7 +55,6 @@ impl Site {
             name: name.to_string(),
             title: page.title(),
             tools,
-            mcp,
             folder,
             prompt: page.body().trim().to_string(),
         })
@@ -115,16 +98,6 @@ mod tests {
         )
         .unwrap();
         Site::load(&Web::new(dir.path()), "lab").unwrap()
-    }
-
-    #[test]
-    fn mcp_is_a_list_or_a_single_string() {
-        assert_eq!(
-            site("mcp: [blender, comfyui]\n").mcp,
-            ["blender", "comfyui"]
-        );
-        assert_eq!(site("mcp: blender\n").mcp, ["blender"]);
-        assert!(site("").mcp.is_empty());
     }
 
     #[test]

@@ -1,5 +1,5 @@
 //! MCP servers from `config.toml`: listed with their state (`mcp.list`), their tools offered to
-//! sessions in a site that names them (and that their `sites` lists), calls approved unless `allow` or an earlier `always` covers them, a
+//! every session, calls approved unless `allow` or an earlier `always` covers them, a
 //! server's changed tools picked up; over stdio (a fake server in Python) and streamable HTTP.
 
 mod support;
@@ -158,11 +158,11 @@ fn asked(events: &[ServerMessage]) -> bool {
         .any(|e| matches!(e, ServerMessage::ApprovalRequest { .. }))
 }
 
-/// A site whose `mcp:` names `servers`; through the server, so the index has it right away.
-fn write_site(server: &composer_server::Server, name: &str, servers: &str) {
+/// A site; through the server, so the index has it right away.
+fn write_site(server: &composer_server::Server, name: &str) {
     std::fs::create_dir_all(server.home.sites().join(name)).unwrap();
     let url = composer_core::SiteUrl::new(name, "index.md").unwrap();
-    let page = format!("---\ntitle: {name}\nmcp: {servers}\n---\nYou use tools.\n");
+    let page = format!("---\ntitle: {name}\n---\nYou use tools.\n");
     server.write_page(&url, &page, ChangedBy::External).unwrap();
 }
 
@@ -181,7 +181,6 @@ async fn stdio_servers() {
             command: "python3".into(),
             args: vec![script.display().to_string()],
             allow: vec!["echo".into()],
-            sites: vec!["tools".into()],
             enabled: true,
             ..Default::default()
         },
@@ -208,7 +207,7 @@ async fn stdio_servers() {
     scripts.extend(turn("fake__add_numbers", json!({ "a": 1, "b": 1 })));
     scripts.extend(turn("fake__boom", json!({})));
     let (dir, server, provider, addr) = start_with(config, scripts).await;
-    write_site(&server, "tools", "[fake]");
+    write_site(&server, "tools");
     let mut socket = connect(addr, &server.token).await;
 
     // The servers and their state; listing connects the ones that are on.
@@ -227,7 +226,10 @@ async fn stdio_servers() {
         fake.tools,
         ["fake__echo", "fake__add_numbers", "fake__boom"]
     );
-    assert_eq!(fake.sites, ["tools"]);
+    assert!(
+        fake.sites.is_empty(),
+        "a config.toml server is in every session"
+    );
     let broken = by_name("broken");
     assert_eq!(broken.state, "failed");
     assert!(broken.error.unwrap().contains("/nonexistent/mcp-server"));
@@ -420,7 +422,6 @@ async fn http_servers() {
             )]
             .into(),
             allow: vec!["*".into()],
-            sites: vec!["search".into()],
             enabled: true,
             ..Default::default()
         },
@@ -428,7 +429,7 @@ async fn http_servers() {
     let mut scripts = turn("web__lookup", json!({ "q": "rust" }));
     scripts.extend(turn("web__lookup", json!({ "q": "screen" })));
     let (_dir, server, provider, addr) = start_with(config, scripts).await;
-    write_site(&server, "search", "[web]");
+    write_site(&server, "search");
     let mut socket = connect(addr, &server.token).await;
 
     let id = session(&mut socket, "search").await;
@@ -542,7 +543,7 @@ async fn an_http_server_gets_the_token_of_its_bearer_file() {
         config.mcp.insert(name.into(), entry);
     }
     let (_dir, server, _provider, _addr) = start_with(config, vec![]).await;
-    let listed = server.mcp().list().await;
+    let listed = server.mcp().list(&[]).await;
     let state = |name: &str| {
         let info = listed.iter().find(|s| s.name == name).unwrap();
         (info.state.clone(), info.error.clone().unwrap_or_default())
@@ -598,7 +599,7 @@ async fn an_http_server_gets_the_token_of_its_bearer_file() {
         [(Some("Bearer old-token".to_string()), None)]
     );
     std::fs::write(&late, "tok-123").unwrap();
-    let listed = server.mcp().list().await;
+    let listed = server.mcp().list(&[]).await;
     let late = listed.iter().find(|s| s.name == "late").unwrap();
     assert_eq!(late.state, "ready", "{:?}", late.error);
 }

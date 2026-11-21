@@ -1,6 +1,8 @@
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use serde_json::{Value, json};
+use tokio::sync::mpsc;
 
 use crate::mcp::ToolSource;
 use crate::tools::text_result;
@@ -9,16 +11,43 @@ use crate::tools::text_result;
 const PROTOCOL_VERSION: &str = "2025-06-18";
 
 const INSTRUCTIONS: &str = "Composer's tools for one of its sessions. Pages are addressed as \
-site://<site>/<page>; `list_sites` shows the sites and `open site://home` explains the web.";
+site://<site>/<page>; `list_sites` shows the sites and `open site://home` explains the web. \
+`set_site` puts you in a site: its tools and MCP servers join yours (the tool list changes).";
 
-/// The JSON-RPC side of MCP: `initialize`, `tools/list`, `tools/call` and `ping`.
+/// The JSON-RPC side of MCP: `initialize`, `tools/list`, `tools/call` and `ping`, and the one
+/// thing it says unasked, `notifications/tools/list_changed`.
 pub struct McpServer {
     tools: Arc<dyn ToolSource>,
+    /// Lines it sends without being asked (notifications), to the same writer as replies.
+    out: mpsc::UnboundedSender<String>,
+    /// The client said `initialize`: notifications may go to it from now on.
+    initialized: AtomicBool,
 }
 
 impl McpServer {
-    pub fn new(tools: Arc<dyn ToolSource>) -> Self {
-        Self { tools }
+    /// A server whose notifications go to `out`.
+    pub fn new(tools: Arc<dyn ToolSource>, out: mpsc::UnboundedSender<String>) -> Self {
+        Self {
+            tools,
+            out,
+            initialized: AtomicBool::new(false),
+        }
+    }
+
+    /// Tells the client its tool list changed (only once it has initialized).
+    pub fn tools_changed(&self) {
+        if self.initialized.load(Ordering::SeqCst) {
+            let line = json!({ "jsonrpc": "2.0", "method": "notifications/tools/list_changed" });
+            let _ = self.out.send(line.to_string());
+        }
+    }
+
+    /// Passes the tool source's changes on to the client; runs until dropped.
+    pub async fn follow_changes(&self) {
+        loop {
+            self.tools.changed().await;
+            self.tools_changed();
+        }
     }
 
     /// Handles one line from the client. Returns the reply line, or `None` for notifications.
@@ -32,12 +61,15 @@ impl McpServer {
         let params = request.get("params").cloned().unwrap_or(Value::Null);
         let method = request["method"].as_str().unwrap_or_default();
         let result = match method {
-            "initialize" => json!({
+            "initialize" => {
+                self.initialized.store(true, Ordering::SeqCst);
+                json!({
                 "protocolVersion": params["protocolVersion"].as_str().unwrap_or(PROTOCOL_VERSION),
-                "capabilities": { "tools": {} },
+                "capabilities": { "tools": { "listChanged": true } },
                 "serverInfo": { "name": "composer", "version": env!("CARGO_PKG_VERSION") },
                 "instructions": INSTRUCTIONS,
-            }),
+                })
+            }
             "ping" => json!({}),
             "tools/list" => match self.tools.tools().await {
                 Ok(tools) => json!({
@@ -109,8 +141,13 @@ mod tests {
         }
     }
 
+    fn server() -> (McpServer, mpsc::UnboundedReceiver<String>) {
+        let (out, lines) = mpsc::unbounded_channel();
+        (McpServer::new(Arc::new(Fake), out), lines)
+    }
+
     async fn reply(line: Value) -> Value {
-        let server = McpServer::new(Arc::new(Fake));
+        let (server, _lines) = server();
         serde_json::from_str(&server.handle(&line.to_string()).await.unwrap()).unwrap()
     }
 
@@ -121,12 +158,26 @@ mod tests {
         .await;
         assert_eq!(r["id"], 1);
         assert_eq!(r["result"]["protocolVersion"], "2025-03-26");
-        assert!(r["result"]["capabilities"]["tools"].is_object());
+        assert_eq!(r["result"]["capabilities"]["tools"]["listChanged"], true);
+    }
+
+    /// A change is pushed, as a notification, once the client has initialized.
+    #[tokio::test]
+    async fn a_changed_tool_list_is_pushed_after_initialize() {
+        let (server, mut lines) = server();
+        server.tools_changed();
+        assert!(lines.try_recv().is_err(), "not before initialize");
+        let init = json!({ "jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {} });
+        server.handle(&init.to_string()).await.unwrap();
+        server.tools_changed();
+        let line: Value = serde_json::from_str(&lines.try_recv().unwrap()).unwrap();
+        assert_eq!(line["method"], "notifications/tools/list_changed");
+        assert!(line.get("id").is_none());
     }
 
     #[tokio::test]
     async fn notifications_get_no_reply() {
-        let server = McpServer::new(Arc::new(Fake));
+        let (server, _lines) = server();
         let line = json!({ "jsonrpc": "2.0", "method": "notifications/initialized" });
         assert_eq!(server.handle(&line.to_string()).await, None);
     }
@@ -154,7 +205,7 @@ mod tests {
     async fn unknown_methods_and_bad_json_are_errors() {
         let r = reply(json!({ "jsonrpc": "2.0", "id": 4, "method": "resources/list" })).await;
         assert_eq!(r["error"]["code"], -32601);
-        let server = McpServer::new(Arc::new(Fake));
+        let (server, _lines) = server();
         let r: Value = serde_json::from_str(&server.handle("{nope").await.unwrap()).unwrap();
         assert_eq!(r["error"]["code"], -32700);
     }
