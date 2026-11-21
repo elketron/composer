@@ -9,7 +9,7 @@ const _keep = Object();
 
 /// What the app knows about a server right now (not persisted).
 class ServerStatus {
-  const ServerStatus({this.link = LinkState.connecting, this.error, this.retryAt, this.info, this.sessions = const [], this.approvals = const [], this.chat, this.page = const PageState(), this.sites = const [], this.workers = const {}, this.agents = const [], this.projects = const [], this.unread = const {}, this.recent = const [], this.search = const PageSearch(), this.slotsUsed = 0, this.harnesses = const {}, this.reviews = const {}, this.reader, this.projectSearch = const ProjectSearch(), this.overviews = const {}, this.models});
+  const ServerStatus({this.link = LinkState.connecting, this.error, this.retryAt, this.info, this.sessions = const [], this.approvals = const [], this.chat, this.page = const PageState(), this.sites = const [], this.agents = const [], this.unread = const {}, this.recent = const [], this.search = const PageSearch(), this.slotsUsed = 0, this.reader, this.models});
 
   static const initial = ServerStatus();
 
@@ -34,19 +34,13 @@ class ServerStatus {
 
   final PageState page;
 
-  /// From `/api/sites`, for the site list and the "App" button.
+  /// From `/api/sites`, for the site list.
   final List<SiteSummary> sites;
-
-  /// Workers' last `worker.status`, by session id (seen since the app connected).
-  final Map<String, WorkerState> workers;
 
   /// From `/api/agents`, for the New chat sheet.
   final List<AgentSummary> agents;
 
-  /// From `/api/projects`, most recently changed first.
-  final List<ProjectSummary> projects;
-
-  /// Sessions that finished something (a turn, a worker) since you last looked at them.
+  /// Sessions that finished a turn since you last looked at them.
   final Set<String> unread;
 
   /// Pages agents and apps changed lately, newest first.
@@ -57,59 +51,28 @@ class ServerStatus {
   /// Model slots in use (`slots` events).
   final int slotsUsed;
 
-  /// External harnesses (Claude Code) per project folder, as last asked (`harness.list`).
-  final Map<String, List<HarnessSwitch>> harnesses;
-
   /// The provider's models and the server's own, as last asked (`model.list`); null: not yet.
   final CommandResultModels? models;
-
-  /// Tickets on the review screen, by id.
-  final Map<String, TicketReviewState> reviews;
 
   /// What the reader screen shows; null: closed.
   final ReaderTab? reader;
 
-  /// The Projects tab's search.
-  final ProjectSearch projectSearch;
-
-  /// Project overviews as last asked (`project.overview`), by folder.
-  final Map<String, ProjectOverview> overviews;
-
 
   SiteSummary? site(String? name) => name == null ? null : sites.where((s) => s.name == name).firstOrNull;
 
-  /// The sessions in a site now (workers are counted with their orchestrator).
-  List<SessionInfo> sessionsIn(String site) => sessions.where((s) => s.site == site && s.parent == null).toList();
+  /// The sessions in a site now.
+  List<SessionInfo> sessionsIn(String site) => sessions.where((s) => s.site == site).toList();
 
   /// The application the live view of [session] shows, or null: no live view for it.
   String? liveViewOf(SessionInfo? session) => liveViewApp(info: info, site: site(session?.site));
 
-  bool hasApp(String site) => sites.any((s) => s.name == site && s.appBuilt);
-
   SessionInfo? session(String id) => sessions.where((s) => s.id == id).firstOrNull;
 
-  /// The orchestration `id` belongs to: its orchestrator first, then the workers it spawned.
-  /// Empty for a session without workers or orchestrator.
-  List<SessionInfo> orchestration(String id) {
-    final rootId = session(id)?.parent ?? id;
-    final root = session(rootId);
-    if (root == null) return const [];
-    final members = [root, ...sessions.where((s) => s.parent == rootId)];
-    return members.length > 1 ? members : const [];
-  }
-
-  /// What a session is doing: `running`, `waiting`, `approval`, `idle`, or a worker's
-  /// `starting` / `done` / `failed` / `paused` / `stuck` (at its turn limit, waiting for its orchestrator).
-  String activity(SessionInfo s) => switch ((s.state, workers[s.id] ?? s.worker)) {
-        // A finished worker is finished, whatever its last turn state said.
-        (_, WorkerState.done) => 'done',
-        (_, WorkerState.failed) => 'failed',
-        (_, WorkerState.paused) => 'paused',
-        (_, WorkerState.stuck) => 'stuck',
-        (TurnState.running, _) => 'running',
-        (TurnState.waiting, _) => 'waiting',
-        (TurnState.awaitingApproval, _) => 'approval',
-        (TurnState.idle, WorkerState.starting) => 'starting',
+  /// What a session is doing: `running`, `waiting`, `approval` or `idle`.
+  String activity(SessionInfo s) => switch (s.state) {
+        TurnState.running => 'running',
+        TurnState.waiting => 'waiting',
+        TurnState.awaitingApproval => 'approval',
         _ => 'idle',
       };
 
@@ -123,18 +86,12 @@ class ServerStatus {
     Object? chat = _keep,
     PageState? page,
     List<SiteSummary>? sites,
-    Map<String, WorkerState>? workers,
     List<AgentSummary>? agents,
-    List<ProjectSummary>? projects,
     Set<String>? unread,
     List<RecentPage>? recent,
     PageSearch? search,
     int? slotsUsed,
-    Map<String, List<HarnessSwitch>>? harnesses,
-    Map<String, TicketReviewState>? reviews,
     Object? reader = _keep,
-    ProjectSearch? projectSearch,
-    Map<String, ProjectOverview>? overviews,
     CommandResultModels? models,
   }) =>
       ServerStatus(
@@ -147,18 +104,12 @@ class ServerStatus {
         chat: identical(chat, _keep) ? this.chat : chat as ChatState?,
         page: page ?? this.page,
         sites: sites ?? this.sites,
-        workers: workers ?? this.workers,
         agents: agents ?? this.agents,
-        projects: projects ?? this.projects,
         unread: unread ?? this.unread,
         recent: recent ?? this.recent,
         search: search ?? this.search,
         slotsUsed: slotsUsed ?? this.slotsUsed,
-        harnesses: harnesses ?? this.harnesses,
-        reviews: reviews ?? this.reviews,
         reader: identical(reader, _keep) ? this.reader : reader as ReaderTab?,
-        projectSearch: projectSearch ?? this.projectSearch,
-        overviews: overviews ?? this.overviews,
         models: models ?? this.models,
       );
 }

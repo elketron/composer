@@ -5,8 +5,8 @@ import 'package:composer_protocol/composer_protocol.dart';
 /// The phone layout's tabs (the bottom bar, in this order).
 enum PhoneTab { inbox, sites, pages, server }
 
-/// What the reader screen shows: the page, or the micro app opened over it.
-enum ReaderTab { page, app }
+/// What the reader screen shows.
+enum ReaderTab { page }
 
 /// A page an agent or app changed lately (the Pages tab).
 class RecentPage {
@@ -22,16 +22,6 @@ class PageSearch {
 
   /// Null while loading (or with an empty query).
   final List<SearchHit>? hits;
-  final String? error;
-}
-
-/// A project search (`GET /api/projects?q=`): the query and what came back.
-class ProjectSearch {
-  const ProjectSearch({this.query = '', this.hits, this.error});
-  final String query;
-
-  /// Null while loading (or with an empty query: then the full list is `ServerStatus.projects`).
-  final List<ProjectSummary>? hits;
   final String? error;
 }
 
@@ -55,14 +45,11 @@ class PairingState {
 
 /// A tapped notification (or one of its buttons).
 class NotificationTap {
-  const NotificationTap({required this.url, this.session, this.approval, this.page, this.app, this.action});
+  const NotificationTap({required this.url, this.session, this.approval, this.page, this.action});
   final String url;
   final String? session;
   final String? approval;
   final String? page;
-
-  /// A site whose app it opens.
-  final String? app;
 
   /// `approve` / `deny`; null for the notification itself.
   final String? action;
@@ -99,54 +86,5 @@ class Upload {
         progress: progress ?? this.progress,
         attachment: attachment ?? this.attachment,
         error: error,
-      );
-}
-
-/// A ticket's branch on the review screen: its changes, and what became of it.
-class TicketReviewState {
-  const TicketReviewState({
-    this.changes,
-    this.busy = false,
-    this.error,
-    this.merged,
-    this.discarded = false,
-    this.drafts = const [],
-    this.comments = const [],
-  });
-
-  /// The changes against the project's branch, with what merging does (`ticket.changes`).
-  final ProjectDiff? changes;
-
-  /// A command for it is on its way.
-  final bool busy;
-  final String? error;
-
-  /// The merge commit, once merged.
-  final String? merged;
-  final bool discarded;
-
-  /// Comments written in the diff view, not sent yet.
-  final List<DiffComment> drafts;
-
-  /// The comment lines on the ticket page (`- file:line — message`), as the last send left them.
-  final List<String> comments;
-
-  TicketReviewState copyWith({
-    ProjectDiff? changes,
-    bool? busy,
-    String? error,
-    String? merged,
-    bool? discarded,
-    List<DiffComment>? drafts,
-    List<String>? comments,
-  }) =>
-      TicketReviewState(
-        changes: changes ?? this.changes,
-        busy: busy ?? this.busy,
-        error: error,
-        merged: merged ?? this.merged,
-        discarded: discarded ?? this.discarded,
-        drafts: drafts ?? this.drafts,
-        comments: comments ?? this.comments,
       );
 }

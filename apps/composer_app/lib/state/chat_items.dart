@@ -6,7 +6,7 @@ sealed class ChatItem {
   const ChatItem();
 }
 
-/// A user-side message: yours, a micro app's, or a finished worker's report.
+/// A user-side message: yours, or one that came from elsewhere (`source`).
 final class UserItem extends ChatItem {
   const UserItem(this.text, {this.source, this.attachments = const []});
   final String text;
@@ -14,7 +14,7 @@ final class UserItem extends ChatItem {
   /// Files sent with it.
   final List<Attachment> attachments;
 
-  /// `design app`, `worker #b2c3`; null for your own.
+  /// `watch`; null for your own.
   final String? source;
 }
 
@@ -67,8 +67,7 @@ class Streaming {
   final String content;
 }
 
-/// What the chat shows, one entry per row: an item as is, a turn's steps folded into one row,
-/// or a worker's report as a card.
+/// What the chat shows, one entry per row: an item as is, or a turn's steps folded into one row.
 sealed class ChatRow {
   const ChatRow();
 }
@@ -85,23 +84,6 @@ final class StepsRow extends ChatRow {
   /// `ToolItem`s and `ThinkingItem`s, in order.
   final List<ChatItem> steps;
 
-  /// `read 1 page, wrote 0001.md, started a worker`.
+  /// `read 1 page, wrote 0001.md`.
   final String summary;
-}
-
-/// `[worker #96a1 finished ticket 0001: done]` and what follows, as the server writes it.
-final class WorkerRow extends ChatRow {
-  const WorkerRow({required this.worker, required this.ticket, required this.status, required this.summary, this.result, this.branch});
-  final String worker;
-  final String ticket;
-
-  /// `done` or `failed`.
-  final String status;
-  final String summary;
-
-  /// The ticket page holding the Result.
-  final String? result;
-
-  /// `ticket/<id>`, when its changes are on their own branch (a git project).
-  final String? branch;
 }

@@ -10,10 +10,10 @@ Plan: [docs/plan-app.md](../../docs/plan-app.md). Conventions and testing: the a
 End to end on a device or emulator, against a rehearsal server (it sets up the pairing, the scripted
 model and the `tools` site):
 
-    COMPOSER_HOME=<test home> scripts/phone-e2e.sh <device> http://127.0.0.1:7531/w/default
+    COMPOSER_HOME=<test home> scripts/phone-e2e.sh <device> http://127.0.0.1:7531
 
 A headless emulator: `emulator -avd <name> -read-only -no-window -no-audio`.
 
-Add a workspace by running `composer pair --name <device>` on it, then scanning the QR code or
-pasting its link or `composer login` line into "Add a workspace". A device pairs one workspace at
-a time; ones on the same host are grouped in the switcher.
+Add a server by running `composer pair --name <device>` on it, then scanning the QR code or
+pasting its link or `composer login` line into "Add a workspace". A server has one home (no
+`/w/<name>` in its URL); servers on the same host are grouped in the switcher.

@@ -16,7 +16,8 @@ void showNewChat(BuildContext context, String url, {String? site}) => showModalB
       builder: (_) => NewChatSheet(url: url, parent: context, site: site),
     );
 
-/// Agent and project for a new chat; both start on a sensible choice, so Start is one tap.
+/// The agent for a new chat; it starts on `default`, so Start is one tap.
+// rewrite: phase 2 — the sheet picks a run kind instead.
 class NewChatSheet extends StatefulWidget {
   const NewChatSheet({super.key, required this.url, required this.parent, this.site});
 
@@ -33,26 +34,16 @@ class NewChatSheet extends StatefulWidget {
 }
 
 class _NewChatSheetState extends State<NewChatSheet> {
-  String _agent = 'orchestrator';
-  String? _project;
-  bool _picked = false;
+  String _agent = 'default';
 
   @override
   Widget build(BuildContext context) {
     final status = StoreScope.of(context).state.statusOf(widget.url);
-    final agents = status.agents.where((a) => !a.worker).toList();
-    final projects = status.projects.take(8).map((p) => p.name).toList();
-    // The project you are in now (a worker's: its orchestrator's, not its worktree), else the
-    // most recently changed one.
-    final open = status.chat == null ? null : status.session(status.chat!.session);
-    final home = open?.ticket != null && open?.parent != null ? status.session(open!.parent!) : open;
-    // By its full path: it needn't be in the projects folder.
-    final current = home?.project;
-    final project = _picked ? _project : (current ?? projects.firstOrNull);
+    final agents = status.agents;
 
-    void start(String? project) {
+    void start() {
       Navigator.pop(context);
-      StoreScope.read(widget.parent).dispatch(NewSessionRequested(widget.url, agent: _agent, project: project, site: widget.site));
+      StoreScope.read(widget.parent).dispatch(NewSessionRequested(widget.url, agent: _agent, site: widget.site));
       pushChat(widget.parent, widget.url);
     }
 
@@ -89,26 +80,6 @@ class _NewChatSheetState extends State<NewChatSheet> {
       );
     }
 
-    /// `name` is a folder in the projects directory, or a path.
-    Widget projectChip(String? name) {
-      final on = name == project;
-      final label = name?.split('/').last ?? 'none';
-      return ChoiceChip(
-        key: Key('project-$label'),
-        label: Text(label, style: mono(size: 12, color: on ? t.text : t.muted)),
-        selected: on,
-        showCheckmark: false,
-        selectedColor: t.accent.withValues(alpha: 0.12),
-        backgroundColor: t.surface,
-        side: BorderSide(color: on ? t.accent : t.borderStrong),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(t.radius)),
-        onSelected: (_) => setState(() {
-          _picked = true;
-          _project = name;
-        }),
-      );
-    }
-
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -117,26 +88,13 @@ class _NewChatSheetState extends State<NewChatSheet> {
           const SizedBox(height: 12),
           Text('AGENT', style: mono(size: 10.5, color: t.faint)),
           const SizedBox(height: 8),
-          if (agents.isEmpty) choice('orchestrator', 'the agent you talk to'),
+          if (agents.isEmpty) choice('default', 'the agent you talk to'),
           for (final a in agents) choice(a.name, a.description),
-          const SizedBox(height: 10),
-          Text('PROJECT', style: mono(size: 10.5, color: t.faint)),
-          const SizedBox(height: 8),
-          Wrap(spacing: 6, runSpacing: 6, children: [
-            ?current == null ? null : projectChip(current),
-            for (final p in projects)
-              if (p != current?.split('/').last) projectChip(p),
-            projectChip(null),
-          ]),
-          if ((status.info?.projectsDir ?? '').isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Text('Folders in ${status.info!.projectsDir}', style: const TextStyle(fontSize: 12, color: t.faint)),
-          ],
           const SizedBox(height: 18),
           FilledButton(
             key: const Key('start-chat'),
             style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(44)),
-            onPressed: () => start(project),
+            onPressed: start,
             child: const Text('Start chat'),
           ),
         ]),

@@ -68,7 +68,7 @@ void suite({required bool newestFirst}) {
   final away = newestFirst ? -1.0 : 1.0;
   final all = transcript(60);
 
-  /// Bumped to rebuild the chat, as the app does all the time (status, live view, workers).
+  /// Bumped to rebuild the chat, as the app does all the time (status, live view).
   final tick = ValueNotifier(0);
 
   Future<AppStore> openChat(WidgetTester tester) async {

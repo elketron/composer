@@ -35,7 +35,7 @@ class _MessageComposerState extends State<MessageComposer> {
     super.initState();
     _text.addListener(() {
       setState(() {});
-      // Only the change matters (a worker finishing doesn't switch the chat away from a draft).
+      // Only the change matters.
       final drafting = _text.text.trim().isNotEmpty;
       if (drafting != _drafting) {
         _drafting = drafting;

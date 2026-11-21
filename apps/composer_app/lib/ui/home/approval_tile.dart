@@ -23,10 +23,8 @@ class ApprovalTile extends StatelessWidget {
     void answer(ApprovalDecision decision) => store.dispatch(ApprovalAnswered(url, approval.request, decision));
     final asks = switch (approval.kind ?? ApprovalKind.recipe) {
       ApprovalKind.recipe => ' wants to run',
-      ApprovalKind.merge => ' asks to merge',
       ApprovalKind.tool => ' wants to use a tool',
       ApprovalKind.mcp => ' wants to use an MCP tool',
-      ApprovalKind.publish => ' asks to publish a site to the library',
     };
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),

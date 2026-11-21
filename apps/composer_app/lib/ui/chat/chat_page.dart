@@ -19,7 +19,7 @@ import 'site_row.dart';
 
 /// A chat as its own page (phones): the session's title and state with stop on top, the site
 /// row, the live view of its application (when it has one), then the chat and the message bar.
-/// The overflow menu holds the desk, pages, project, model and the rest.
+/// The overflow menu holds pages, the model and the rest.
 ///
 /// In landscape on a phone ([sideBySide]) the chat goes left under one header row (the site
 /// chip in it) and the live view right at full height; the view folds into a rail. With a live

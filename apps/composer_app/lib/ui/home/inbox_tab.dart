@@ -32,8 +32,6 @@ class InboxTab extends StatelessWidget {
         session: s,
         unread: status.unread.contains(s.id),
         onTap: () => openSession(context, url, s.id),
-        // A worker opens its own chat.
-        onWorker: (w) => openSession(context, url, w.id),
       ),
     );
 

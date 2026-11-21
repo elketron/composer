@@ -4,7 +4,6 @@ import 'actions.dart';
 import 'approval_text.dart';
 import 'app_state.dart';
 import 'chat_events.dart';
-import 'chat_items.dart';
 import 'chat_rows.dart';
 import 'chat_state.dart';
 import 'effects.dart';
@@ -41,11 +40,7 @@ import 'types.dart';
       PairFailed(:final message) => (s.copyWith(pairing: PairingState(error: message)), const []),
       PairSucceeded(:final server, :final info) => _paired(
           s,
-          server.withInfo(
-            name: info.name,
-            workspace: info.workspace ?? server.workspace,
-            color: info.workspaceColor ?? server.color,
-          ),
+          server.withName(info.name),
           info,
         ),
       ServerRemoved(:final url) => _removed(s, url),
@@ -59,14 +54,6 @@ import 'types.dart';
         _historyLoaded(s, url, session, before, events, more),
       SessionClosed(:final url) => _close(s, url),
       ViewScrolled(:final url, :final session, :final atBottom) => (_scrolled(s, url, session, atBottom), const []),
-      DeskLoaded(:final url, :final session, :final desk) => _deskLoaded(s, url, session, desk),
-      DeskTabOpened(:final url, :final tab, :final focus) =>
-        _deskCommand(s, url, (session) => ClientCommandDeskOpen(session: session, tab: tab, focus: focus)),
-      DeskTabClosed(:final url, :final tab) =>
-        _deskCommand(s, url, (session) => ClientCommandDeskClose(session: session, tab: tab)),
-      DeskTabFocused(:final url, :final tab) =>
-        _deskCommand(s, url, (session) => ClientCommandDeskFocus(session: session, tab: tab)),
-      SelectionCleared(:final url) => _selectionCleared(s, url),
       NewSessionRequested(:final url, :final agent, :final project, :final site) =>
         (s, [CreateSession(url, agent, project: project, site: site)]),
       SiteChosen(:final url, :final site, :final session) => _siteChosen(s, url, site, session),
@@ -100,41 +87,8 @@ import 'types.dart';
           _updateStatus(s, url, (x) => x.chat == null ? x : x.copyWith(chat: x.chat!.copyWith(drafting: drafting))),
           const [],
         ),
-      ProjectChosen(:final url, :final project) =>
-        _toChat(s, url, (session) => ClientCommandProjectSet(session: session, path: project)),
       ModelsRequested(:final url) => (s, [SendCommand(url, const ClientCommandModelList())]),
       ModelChosen(:final url, :final model) => _toChat(s, url, (session) => ClientCommandModelSet(session: session, model: model)),
-      HarnessesRequested(:final url, :final project) =>
-        (s, [SendCommand(url, ClientCommandHarnessList(project: project))]),
-      HarnessToggled(:final url, :final project, :final entry, :final on) =>
-        (s, [SendCommand(url, ClientCommandHarnessSet(project: project, entry: entry, on: on))]),
-      ReviewRequested(:final url, :final ticket) =>
-        _ticketCommand(s, url, ticket, ClientCommandTicketChanges(ticket: ticket)),
-      TicketMergeRequested(:final url, :final ticket) =>
-        _ticketCommand(s, url, ticket, ClientCommandTicketMerge(ticket: ticket)),
-      TicketDiscardRequested(:final url, :final ticket) =>
-        _ticketCommand(s, url, ticket, ClientCommandTicketDiscard(ticket: ticket)),
-      DiffCommentAdded(:final url, :final ticket, :final comment) =>
-        (_updateDrafts(s, url, ticket, (d) => [...d, comment]), const []),
-      DiffCommentEdited(:final url, :final ticket, :final index, :final message) => (
-          _updateDrafts(s, url, ticket, (d) => [
-            for (var i = 0; i < d.length; i++)
-              if (i != index) d[i] else DiffComment(file: d[i].file, start: d[i].start, end: d[i].end, message: message, quote: d[i].quote),
-          ]),
-          const [],
-        ),
-      DiffCommentRemoved(:final url, :final ticket, :final index) => (
-          _updateDrafts(s, url, ticket, (d) => [
-            for (var i = 0; i < d.length; i++)
-              if (i != index) d[i],
-          ]),
-          const [],
-        ),
-      DiffCommentsSent(:final url, :final ticket) => () {
-          final drafts = s.statusOf(url).reviews[ticket]?.drafts ?? const <DiffComment>[];
-          return drafts.isEmpty ? (s, const <AppEffect>[]) : _ticketCommand(s, url, ticket, ClientCommandTicketComment(ticket: ticket, comments: drafts));
-        }(),
-      TicketReplied(:final url, :final ticket, :final result, :final error) => _ticketReplied(s, url, ticket, result, error),
       CompactRequested(:final url) => _toChat(s, url, (session) => ClientCommandSessionCompact(session: session)),
       TabSelected(:final tab) => (s.copyWith(tab: tab), const []),
       SearchChanged(:final url, :final query) => (
@@ -147,7 +101,6 @@ import 'types.dart';
           const [],
         ),
       AgentsLoaded(:final url, :final agents) => (_updateStatus(s, url, (x) => x.copyWith(agents: agents)), const []),
-      ProjectsLoaded(:final url, :final projects) => (_updateStatus(s, url, (x) => x.copyWith(projects: projects)), const []),
       // What it had seen: a turn that started since (a queued message) keeps going.
       CancelRequested(:final url) => _toChat(
           s,
@@ -210,23 +163,7 @@ import 'types.dart';
           (p) => p.loading == requested ? (p.copyWith(loading: null, error: '$requested: $error'), const []) : (p, const []),
         ),
       FollowToggled(:final url) => _withPage(s, url, (p) => (p.copyWith(follow: !p.follow), const [])),
-      AppRequested(:final url, :final site) =>
-        _withPage(_reader(s, url, ReaderTab.app), url, (p) => (p.copyWith(appSite: site, error: null), const [])),
       ReaderClosed(:final url) => _withPage(_reader(s, url, null), url, (p) => (PageState(follow: p.follow), const [])),
-      ProjectSearchChanged(:final url, :final query) => (
-          _updateStatus(s, url, (x) => x.copyWith(projectSearch: ProjectSearch(query: query, hits: query.trim().isEmpty ? const [] : null))),
-          [if (query.trim().isNotEmpty) SearchProjects(url, query)],
-        ),
-      ProjectsFound(:final url, :final query, :final hits, :final error) => (
-          // A late answer for an older query is dropped.
-          _updateStatus(
-            s,
-            url,
-            (x) => x.projectSearch.query == query ? x.copyWith(projectSearch: ProjectSearch(query: query, hits: hits, error: error)) : x,
-          ),
-          const [],
-        ),
-      ProjectOverviewRequested(:final url, :final project) => (s, [SendCommand(url, ClientCommandProjectOverview(project: project))]),
       CatalogRequested(:final url) => (s, [FetchCatalog(url)]),
       SitesLoaded(:final url, :final sites) => (_updateStatus(s, url, (x) => x.copyWith(sites: sites)), const []),
       NoticeShown(:final text) => (s.copyWith(notice: Notice((s.notice?.id ?? 0) + 1, text)), const []),
@@ -266,20 +203,12 @@ import 'types.dart';
   );
 }
 
-/// Keeps the stored name and workspace in step with the server's.
+/// Keeps the stored name in step with the server's.
 (AppState, List<AppEffect>) _info(AppState s, String url, ServerInfo info) {
   final next = _updateStatus(s, url, (x) => x.copyWith(info: info));
   final entry = s.servers.where((x) => x.url == url).firstOrNull;
-  final workspace = info.workspace ?? '';
-  final color = info.workspaceColor ?? '';
-  if (entry == null ||
-      (entry.name == info.name && entry.workspace == workspace && entry.color == color)) {
-    return (next, const []);
-  }
-  final servers = [
-    for (final x in s.servers)
-      x.url == url ? x.withInfo(name: info.name, workspace: workspace, color: color) : x,
-  ];
+  if (entry == null || entry.name == info.name) return (next, const []);
+  final servers = [for (final x in s.servers) x.url == url ? x.withName(info.name) : x];
   return (next.copyWith(servers: servers), [SaveServers(servers)]);
 }
 
@@ -297,10 +226,7 @@ import 'types.dart';
     next,
     [
       FetchCatalog(url),
-      if (chat != null) ...[
-        _reattach(url, chat),
-        FetchDesk(url, chat.session),
-      ],
+      if (chat != null) _reattach(url, chat),
     ],
   );
 }
@@ -309,27 +235,6 @@ import 'types.dart';
 AppEffect _reattach(String url, ChatState chat) => chat.loaded
     ? SendCommand(url, ClientCommandSessionAttach(session: chat.session, since: chat.lastSeq))
     : FetchHistory(url, chat.session, null);
-
-/// The open chat's desk, if it is that session's.
-(AppState, List<AppEffect>) _deskLoaded(AppState s, String url, String session, Desk desk) {
-  final chat = s.status[url]?.chat;
-  if (chat == null || chat.session != session) return (s, const []);
-  return (_updateStatus(s, url, (x) => x.copyWith(chat: x.chat?.copyWith(desk: desk))), const []);
-}
-
-/// A desk command for the open chat's session (the reply, and the change, come as events).
-(AppState, List<AppEffect>) _deskCommand(AppState s, String url, ClientCommand Function(String session) command) {
-  final chat = s.status[url]?.chat;
-  return chat == null ? (s, const []) : (s, [SendCommand(url, command(chat.session))]);
-}
-
-/// The chip goes now (the server clears it too); the message sent after it has no selection.
-(AppState, List<AppEffect>) _selectionCleared(AppState s, String url) {
-  final chat = s.status[url]?.chat;
-  if (chat == null) return (s, const []);
-  final next = _updateStatus(s, url, (x) => x.copyWith(chat: x.chat?.copyWith(selection: null)));
-  return (next, [SendCommand(url, ClientCommandSelectionClear(session: chat.session))]);
-}
 
 /// The messages before the oldest shown, once at a time.
 (AppState, List<AppEffect>) _older(AppState s, String url, String session) {
@@ -386,8 +291,6 @@ AppState _scrolled(AppState s, String url, String session, bool atBottom) {
     next,
     [
       if (attach) SendCommand(url, ClientCommandSessionAttach(session: session, since: events == null ? null : since)),
-      // Its desk comes with the chat (the agent may have put tabs on it meanwhile).
-      if (attach) FetchDesk(url, session),
     ],
   );
 }
@@ -468,50 +371,9 @@ AppState _withUpload(AppState s, String url, int id, Upload Function(Upload uplo
 }
 
 (AppState, List<AppEffect>) _serverEvent(AppState s, String url, ServerMessage message) {
-  final (handedBack, switches) = _handBack(_event(s, url, message), url, message);
-  final (next, notes) = _notifications(s, handedBack, url, message);
-  final (paged, effects) = _pageEffects(s, next, url, message);
-  final (state, reviews) = _reviewEffects(paged, url, message);
-  return (state, [...switches, ...notes, ...effects, ...reviews]);
-}
-
-/// Tools after which a ticket's files may differ.
-const _changingTools = {'Edit', 'MultiEdit', 'Write', 'NotebookEdit', 'Bash'};
-
-/// An open review follows its worker: refreshed after it changes files (live events of the
-/// open chat) and when its run ends.
-(AppState, List<AppEffect>) _reviewEffects(AppState s, String url, ServerMessage message) {
-  final status = s.status[url];
-  if (status == null) return (s, const []);
-  final ticket = switch (message) {
-    ServerMessageToolResult(:final session, :final seq, :final callId)
-        when status.chat?.session == session &&
-            seq > status.chat!.liveAfter &&
-            status.chat!.items.any((i) => i is ToolItem && i.callId == callId && _changingTools.contains(i.name)) =>
-      status.session(session)?.ticket,
-    ServerMessageWorkerStatus(:final ticket, :final state) when stopped(state) => ticket,
-    _ => null,
-  };
-  final review = ticket == null ? null : status.reviews[ticket];
-  if (review == null || review.busy || review.merged != null || review.discarded) return (s, const []);
-  return _ticketCommand(s, url, ticket!, ClientCommandTicketChanges(ticket: ticket));
-}
-
-/// A worker that ended its run: finished, failed, or paused until later.
-bool stopped(WorkerState state) => state == WorkerState.done || state == WorkerState.failed || state == WorkerState.paused;
-
-/// The worker you were watching finished: back to its orchestrator, which gets the result
-/// next. Not while you're writing a message.
-(AppState, List<AppEffect>) _handBack(AppState s, String url, ServerMessage message) {
-  if (message case ServerMessageWorkerStatus(:final worker, :final ticket, :final parent, :final state)
-      when stopped(state)) {
-    final chat = s.status[url]?.chat;
-    if (chat == null || chat.session != worker || chat.drafting) return (s, const []);
-    final (opened, effects) = _open(s, url, parent);
-    final what = switch (state) { WorkerState.done => 'finished', WorkerState.paused => 'paused', _ => 'failed' };
-    return (opened.copyWith(notice: Notice((s.notice?.id ?? 0) + 1, 'Worker #$worker $what ticket $ticket: back to the orchestrator')), effects);
-  }
-  return (s, const []);
+  final (next, notes) = _notifications(s, _event(s, url, message), url, message);
+  final (state, effects) = _pageEffects(s, next, url, message);
+  return (state, [...notes, ...effects]);
 }
 
 (AppState, List<AppEffect>) _pageEffects(AppState s, AppState next, String url, ServerMessage message) {
@@ -526,64 +388,26 @@ bool stopped(WorkerState state) => state == WorkerState.done || state == WorkerS
     // Follow the agent, live events of the open session only.
     ServerMessageAgentNavigated(:final session, :final seq, url: final target)
         when page.follow && status.chat?.session == session && seq > status.chat!.liveAfter =>
-      // A closed reader opens on the page; an app shown stays up.
+      // A closed reader opens on the page.
       _withPage(status.reader == null ? _reader(next, url, ReaderTab.page) : next, url, (p) => _navigate(url, p, target)),
     _ => (next, const []),
   };
 }
 
-/// What deserves a system notification: approvals while the app is in the background,
-/// finished turns and workers you are not looking at, and reminders always.
+/// What deserves a system notification: approvals while the app is in the background, and
+/// finished turns you are not looking at.
 (AppState, List<AppEffect>) _notifications(AppState before, AppState s, String url, ServerMessage message) {
   final status = before.status[url];
   if (status == null) return (s, const []);
   final server = s.servers.where((x) => x.url == url).firstOrNull?.name ?? url;
-  // After this event: a worker handing back has already switched the chat to its orchestrator.
   bool viewing(String? session) =>
       s.foreground && s.active == url && session != null && s.status[url]?.chat?.session == session;
   switch (message) {
     case ServerMessageApprovalRequest(:final request) when !s.foreground && !s.notifiedApprovals.contains(request):
       return (s.copyWith(notifiedApprovals: {...s.notifiedApprovals, request}), [_approvalNote(url, server, message)]);
-    case ServerMessageReminderDue(url: final page, :final title, :final due, :final late, :final session):
-      return (
-        s,
-        [
-          Notify(
-            key: 'reminder:$page',
-            title: title,
-            body: '${late ? 'was due' : 'due'} $due · $server',
-            url: url,
-            session: session,
-            page: page,
-          ),
-        ],
-      );
     case ServerMessageApprovalResolved(:final request):
       return (s, [CancelNotification('approval:$request')]);
-    case ServerMessageWorkerStatus(:final worker, :final ticket, :final parent, state: final state)
-        when stopped(state) && !viewing(parent):
-      return (
-        s,
-        [
-          Notify(
-            key: 'worker:$worker',
-            title: switch (state) {
-              WorkerState.done => 'Worker finished ticket $ticket',
-              WorkerState.paused => 'Worker paused on ticket $ticket (usage limit)',
-              _ => 'Worker failed on ticket $ticket',
-            },
-            body: 'on $server',
-            url: url,
-            session: parent,
-          ),
-        ],
-      );
-    // Not a turn that answered a worker's approval: the orchestrator decided it, nothing for you.
-    case ServerMessageSessionUpdated(:final session)
-        when session.state == TurnState.idle &&
-            session.ticket == null &&
-            !viewing(session.id) &&
-            !_workerApprovalAsk.hasMatch(session.preview ?? ''):
+    case ServerMessageSessionUpdated(:final session) when session.state == TurnState.idle && !viewing(session.id):
       final previous = status.session(session.id);
       if (previous == null || previous.state == TurnState.idle) return (s, const []);
       return (
@@ -602,47 +426,6 @@ bool stopped(WorkerState state) => state == WorkerState.done || state == WorkerS
       return (s, const []);
   }
 }
-
-(AppState, List<AppEffect>) _ticketCommand(AppState s, String url, String ticket, ClientCommand command) => (
-      _updateStatus(s, url, (x) {
-        final review = x.reviews[ticket] ?? const TicketReviewState();
-        return x.copyWith(reviews: {...x.reviews, ticket: review.copyWith(busy: true)});
-      }),
-      [TicketCommand(url, ticket, command)],
-    );
-
-AppState _updateDrafts(AppState s, String url, String ticket, List<DiffComment> Function(List<DiffComment>) change) =>
-    _updateStatus(s, url, (x) {
-      final review = x.reviews[ticket] ?? const TicketReviewState();
-      return x.copyWith(reviews: {...x.reviews, ticket: review.copyWith(drafts: change(review.drafts))});
-    });
-
-(AppState, List<AppEffect>) _ticketReplied(AppState s, String url, String ticket, CommandResult? result, String? error) {
-  final review = (s.statusOf(url).reviews[ticket] ?? const TicketReviewState()).copyWith(busy: false, error: error);
-  final next = switch (result) {
-    CommandResultChanges(:final changes) => review.copyWith(changes: changes),
-    CommandResultMerged(:final commit) => review.copyWith(merged: commit),
-    CommandResultDone() => review.copyWith(discarded: true),
-    CommandResultComments(:final lines) => review.copyWith(comments: lines, drafts: const []),
-    _ => review,
-  };
-  final notice = switch (result) {
-    CommandResultMerged(:final commit) => 'Ticket $ticket merged as $commit',
-    CommandResultDone() => 'Ticket $ticket discarded',
-    _ => null,
-  };
-  return (
-    _updateStatus(
-      notice == null ? s : s.copyWith(notice: Notice((s.notice?.id ?? 0) + 1, notice)),
-      url,
-      (x) => x.copyWith(reviews: {...x.reviews, ticket: next}),
-    ),
-    const [],
-  );
-}
-
-/// The start of the message that asks an orchestrator to decide a worker's approval.
-final _workerApprovalAsk = RegExp(r'^\[worker #\S+ on ticket \S+ asks to approve:');
 
 Notify _approvalNote(String url, String server, ServerMessageApprovalRequest a) => Notify(
       key: 'approval:${a.request}',
@@ -692,20 +475,15 @@ AppState _event(AppState s, String url, ServerMessage message) => switch (messag
           // A turn ended in a session that isn't open: it has something new for you.
           final finished = session.state == TurnState.idle &&
               (x.session(session.id)?.state ?? TurnState.idle) != TurnState.idle &&
-              session.ticket == null &&
               x.chat?.session != session.id;
           return x.copyWith(
             sessions: _newestFirst([session, for (final y in x.sessions) if (y.id != session.id) y]),
             unread: finished ? {...x.unread, session.id} : null,
           );
         }),
-      ServerMessageOk(result: CommandResultProject(:final overview)) =>
-        _updateStatus(s, url, (x) => x.copyWith(overviews: {...x.overviews, overview.folder: overview})),
       ServerMessageOk(result: final CommandResultModels models) => _updateStatus(s, url, (x) => x.copyWith(models: models)),
-      ServerMessageOk(result: CommandResultHarnesses(:final project, :final harnesses)) =>
-        _updateStatus(s, url, (x) => x.copyWith(harnesses: {...x.harnesses, project: harnesses})),
       ServerMessageSlots(:final used) => _updateStatus(s, url, (x) => x.copyWith(slotsUsed: used)),
-      ServerMessagePageChanged(url: final page, :final by) when by == ChangedBy.agent || by == ChangedBy.app =>
+      ServerMessagePageChanged(url: final page, :final by) when by == ChangedBy.agent =>
         _updateStatus(s, url, (x) => x.copyWith(recent: [RecentPage(page, by), ...x.recent.where((r) => r.url != page)].take(12).toList())),
       ServerMessageApprovalRequest(:final request) => _updateStatus(
           s,
@@ -714,14 +492,6 @@ AppState _event(AppState s, String url, ServerMessage message) => switch (messag
         ),
       ServerMessageApprovalResolved(:final request) =>
         _updateStatus(s, url, (x) => x.copyWith(approvals: [for (final a in x.approvals) if (a.request != request) a])),
-      ServerMessageWorkerStatus(:final worker, :final state) => _updateStatus(s, url, (x) {
-          final finished = stopped(state) && x.chat?.session != worker;
-          return x.copyWith(workers: {...x.workers, worker: state}, unread: finished ? {...x.unread, worker} : null);
-        }),
-      ServerMessageDeskChanged(:final session, :final desk) => _deskLoaded(s, url, session, desk).$1,
-      ServerMessageSelectionChanged(:final session, :final selection)
-          when s.status[url]?.chat?.session == session =>
-        _updateStatus(s, url, (x) => x.copyWith(chat: x.chat?.copyWith(selection: selection))),
       _ when sessionEvent(message) != null => _updateStatus(s, url, (x) {
           final chat = x.chat;
           // Not before its history: the attach after it replays what came meanwhile.

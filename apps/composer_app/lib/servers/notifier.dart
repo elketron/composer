@@ -24,7 +24,7 @@ class Notifier {
   static const _channel = AndroidNotificationChannel(
     'composer',
     'Agents',
-    description: 'Approvals, finished turns and workers',
+    description: 'Approvals and finished turns',
     importance: Importance.high,
   );
 
@@ -68,7 +68,6 @@ class Notifier {
       session: json['session'] as String?,
       approval: json['approval'] as String?,
       page: json['page'] as String?,
-      app: json['app'] as String?,
       action: action == null || action.isEmpty ? null : action,
     );
     // A tap that started the app can arrive before the app listens: hold it for the listener.
@@ -113,7 +112,7 @@ class Notifier {
             : null,
       ),
     );
-    final payload = jsonEncode({'url': note.url, 'session': note.session, 'approval': note.approval, 'page': note.page, 'app': note.app});
+    final payload = jsonEncode({'url': note.url, 'session': note.session, 'approval': note.approval, 'page': note.page});
     try {
       await _plugin.show(id: idOf(note.key), title: note.title, body: note.body, notificationDetails: details, payload: payload);
     } catch (_) {

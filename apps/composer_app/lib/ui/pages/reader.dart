@@ -2,15 +2,13 @@ import 'package:flutter/material.dart';
 
 import '../../state/actions.dart';
 import '../../state/server_status.dart';
-import '../../state/types.dart';
 import '../../theme/composer_theme.dart';
 import '../../theme/tokens.dart' as t;
 import '../store_scope.dart';
-import 'app_view.dart';
 import 'page_body.dart';
 import 'reader_toolbar.dart';
 
-/// The page reader of a server: toolbar, then the page or the site's micro app.
+/// The page reader of a server: toolbar, then the page.
 class Reader extends StatelessWidget {
   const Reader({super.key, required this.url, required this.status, this.onClose});
 
@@ -24,10 +22,7 @@ class Reader extends StatelessWidget {
     final token = state.servers.where((s) => s.url == url).firstOrNull?.token ?? '';
     final p = status.page;
     final Widget body;
-    final app = p.appSite != null && status.reader == ReaderTab.app;
-    if (app) {
-      body = AppView(key: ValueKey('app-$url-${p.appSite}'), url: url, token: token, site: p.appSite!, session: status.chat?.session);
-    } else if (p.page != null) {
+    if (p.page != null) {
       body = PageBody(key: ValueKey(p.page!.url), url: url, token: token, page: p.page!);
     } else if (p.loading != null) {
       body = const Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)));
@@ -41,7 +36,7 @@ class Reader extends StatelessWidget {
     }
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       ReaderToolbar(url: url, status: status, onClose: onClose),
-      if (p.loading != null && p.page != null && !app)
+      if (p.loading != null && p.page != null)
         const LinearProgressIndicator(minHeight: 2, color: t.accent, backgroundColor: Colors.transparent),
       if (p.error != null)
         Container(

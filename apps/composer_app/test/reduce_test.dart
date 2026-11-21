@@ -13,7 +13,7 @@ const work = ServerEntry(url: 'https://work.ts.net', name: 'work', token: 't2');
 const info = ServerInfo(name: 'home-pc', version: '0.1.0', model: 'qwen', slots: 2);
 
 SessionInfo session(String id, String updated) =>
-    SessionInfo(id: id, agent: 'orchestrator', state: TurnState.idle, lastSeq: 0, updated: updated);
+    SessionInfo(id: id, agent: 'default', state: TurnState.idle, lastSeq: 0, updated: updated);
 
 AppState loaded(List<ServerEntry> servers) => reduce(AppState.initial, ServersLoaded(servers)).$1;
 
@@ -74,34 +74,6 @@ void main() {
     expect(state.servers.single.name, 'home-pc');
     expect(effects.single, isA<SaveServers>());
     expect(reduce(state, InfoReceived(home.url, info)).$2, isEmpty);
-  });
-
-  test('the info also stores the workspace and its colour', () {
-    const named = ServerInfo(
-      name: 'home-pc',
-      version: '0.1.0',
-      model: 'qwen',
-      slots: 2,
-      workspace: 'work',
-      workspaceColor: '#ff8800',
-    );
-    final (state, effects) = reduce(loaded([home]), InfoReceived(home.url, named));
-    expect((state.servers.single.workspace, state.servers.single.color), ('work', '#ff8800'));
-    expect(effects.whereType<SaveServers>().single.servers.single.color, '#ff8800');
-    // Nothing changed: no save.
-    expect(reduce(state, const InfoReceived('https://home.ts.net', named)).$2, isEmpty);
-    // The same name, a new colour: still saved.
-    const recoloured = ServerInfo(
-      name: 'home-pc',
-      version: '0.1.0',
-      model: 'qwen',
-      slots: 2,
-      workspace: 'work',
-      workspaceColor: '#123456',
-    );
-    final (next, saved) = reduce(state, const InfoReceived('https://home.ts.net', recoloured));
-    expect(next.servers.single.color, '#123456');
-    expect(saved.whereType<SaveServers>().single.servers.single.color, '#123456');
   });
 
   test('sessions: listed newest first, updated in place', () {
@@ -205,13 +177,6 @@ void main() {
       expect(attach.since, 7);
     });
 
-    test('unsetting the project goes to the open session', () {
-      expect(reduce(loaded([home]), ProjectChosen(home.url, null)).$2, isEmpty);
-      final state = withChat(loaded([home]), 'a');
-      final command = (reduce(state, ProjectChosen(home.url, null)).$2.single as SendCommand).command as ClientCommandProjectSet;
-      expect((command.session, command.path), ('a', null));
-    });
-
     test('attachments: upload as picked, send when ready, retry and remove', () {
       var state = withChat(loaded([home]), 'a');
       final (picked, uploads) = reduce(state, FilesPicked(home.url, const [PickedFile('a.png', path: '/tmp/a.png'), PickedFile('b.md', bytes: [35])]));
@@ -239,67 +204,6 @@ void main() {
       // Ids keep counting, so a late answer for a removed upload can't hit a new one.
       final (_, again) = reduce(sent, FilesPicked(home.url, const [PickedFile('c.txt', path: '/tmp/c.txt')]));
       expect((again.single as UploadAttachment).id, 3);
-    });
-
-    test('external harnesses: asked, stored per project, toggled', () {
-      final ask = reduce(loaded([home]), const HarnessesRequested('https://home.ts.net', '/p')).$2.single as SendCommand;
-      expect((ask.command as ClientCommandHarnessList).project, '/p');
-      final state = reduce(
-        loaded([home]),
-        ServerEvent(home.url, const ServerMessageOk(id: 1, result: CommandResultHarnesses(project: '/p', harnesses: [HarnessSwitch(entry: 'claude-code', allowed: true, on: true)]))),
-      ).$1;
-      expect(state.status[home.url]!.harnesses['/p']!.single.on, isTrue);
-      final toggle = (reduce(state, const HarnessToggled('https://home.ts.net', '/p', 'claude-code', false)).$2.single as SendCommand).command
-          as ClientCommandHarnessSet;
-      expect((toggle.project, toggle.entry, toggle.on), ('/p', 'claude-code', false));
-    });
-
-    test('ticket review: changes asked, merged, discarded, failures kept on the review', () {
-      const url = 'https://home.ts.net';
-      final (asking, ask) = reduce(loaded([home]), const ReviewRequested(url, '0007'));
-      final command = ask.single as TicketCommand;
-      expect((command.ticket, (command.command as ClientCommandTicketChanges).ticket), ('0007', '0007'));
-      expect(asking.status[url]!.reviews['0007']!.busy, isTrue);
-
-      const changes = ProjectDiff(path: '/wt', files: [], diff: '');
-      var state = reduce(asking, const TicketReplied(url, '0007', result: CommandResultChanges(changes: changes))).$1;
-      expect((state.status[url]!.reviews['0007']!.busy, state.status[url]!.reviews['0007']!.changes), (false, changes));
-
-      final (merging, merge) = reduce(state, const TicketMergeRequested(url, '0007'));
-      expect((merge.single as TicketCommand).command, isA<ClientCommandTicketMerge>());
-      state = reduce(merging, const TicketReplied(url, '0007', error: 'conflicts with main in: a.rs')).$1;
-      expect(state.status[url]!.reviews['0007']!.error, contains('conflicts'));
-      expect(state.status[url]!.reviews['0007']!.changes, changes, reason: 'still shown');
-      state = reduce(state, const TicketReplied(url, '0007', result: CommandResultMerged(commit: 'abc1234'))).$1;
-      expect((state.status[url]!.reviews['0007']!.merged, state.status[url]!.reviews['0007']!.error), ('abc1234', null));
-      expect(state.notice!.text, 'Ticket 0007 merged as abc1234');
-
-      final discard = reduce(state, const TicketDiscardRequested(url, '0008')).$2.single as TicketCommand;
-      expect(discard.command, isA<ClientCommandTicketDiscard>());
-      state = reduce(state, const TicketReplied(url, '0008', result: CommandResultDone())).$1;
-      expect(state.status[url]!.reviews['0008']!.discarded, isTrue);
-    });
-
-    test('diff comments: drafted, edited, removed, sent as one command, replaced by the ticket lines', () {
-      const url = 'https://home.ts.net';
-      const a = DiffComment(file: 'a.rs', start: 2, end: 2, message: 'one', quote: 'x');
-      const b = DiffComment(file: 'b.rs', start: 5, end: 7, message: 'two');
-      var state = reduce(loaded([home]), const DiffCommentAdded(url, '0007', a)).$1;
-      state = reduce(state, const DiffCommentAdded(url, '0007', b)).$1;
-      state = reduce(state, const DiffCommentEdited(url, '0007', 0, 'one, better')).$1;
-      expect([for (final d in state.status[url]!.reviews['0007']!.drafts) (d.file, d.message, d.quote)], [('a.rs', 'one, better', 'x'), ('b.rs', 'two', null)]);
-      state = reduce(state, const DiffCommentRemoved(url, '0007', 1)).$1;
-      expect(state.status[url]!.reviews['0007']!.drafts.length, 1);
-
-      expect(reduce(loaded([home]), const DiffCommentsSent(url, '0007')).$2, isEmpty, reason: 'nothing drafted, nothing sent');
-      final (sending, effects) = reduce(state, const DiffCommentsSent(url, '0007'));
-      final send = (effects.single as TicketCommand).command as ClientCommandTicketComment;
-      expect((send.ticket, send.comments.single.message), ('0007', 'one, better'));
-      final failed = reduce(sending, const TicketReplied(url, '0007', error: 'no such ticket')).$1;
-      expect(failed.status[url]!.reviews['0007']!.drafts.length, 1, reason: 'a failed send keeps the drafts');
-      final sent = reduce(sending, const TicketReplied(url, '0007', result: CommandResultComments(lines: ['- a.rs:2:2 — one, better']))).$1;
-      expect(sent.status[url]!.reviews['0007']!.drafts, isEmpty);
-      expect(sent.status[url]!.reviews['0007']!.comments, ['- a.rs:2:2 — one, better']);
     });
 
     test('messages and cancel go to the open session only', () {
@@ -387,7 +291,7 @@ void main() {
     test('follows the agent in the open session, live events only, unless turned off', () {
       final sessions = ServerEvent(
         home.url,
-        ServerMessageOk(id: 1, result: CommandResultSessions(sessions: [SessionInfo(id: 'a', agent: 'orchestrator', state: TurnState.idle, lastSeq: 5, updated: '')])),
+        ServerMessageOk(id: 1, result: CommandResultSessions(sessions: [SessionInfo(id: 'a', agent: 'default', state: TurnState.idle, lastSeq: 5, updated: '')])),
       );
       var state = reduce(loaded([home]), sessions).$1;
       state = withChat(state, 'a');
@@ -404,40 +308,12 @@ void main() {
       expect(reduce(state, nav(7, 'a')).$2, isEmpty);
     });
 
-    test("an open review refreshes after its worker changes files, and when it stops", () {
-      final sessions = ServerEvent(
-        home.url,
-        ServerMessageOk(
-          id: 1,
-          result: CommandResultSessions(sessions: [SessionInfo(id: 'w', agent: 'worker', ticket: '0007', state: TurnState.running, lastSeq: 5, updated: '')]),
-        ),
-      );
-      var state = reduce(loaded([home]), sessions).$1;
-      state = withChat(state, 'w');
-      state = reduce(state, const ReviewRequested('https://home.ts.net', '0007')).$1;
-      state = reduce(state, const TicketReplied('https://home.ts.net', '0007', result: CommandResultChanges(changes: ProjectDiff(path: '/', files: [], diff: '')))).$1;
-      ServerEvent event(ServerMessage m) => ServerEvent(home.url, m);
-      state = reduce(state, event(const ServerMessageToolCall(session: 'w', seq: 6, callId: 'e', name: 'Edit', args: {}))).$1;
-      state = reduce(state, event(const ServerMessageToolCall(session: 'w', seq: 7, callId: 'r', name: 'Read', args: {}))).$1;
-      expect(reduce(state, event(const ServerMessageToolResult(session: 'w', seq: 8, callId: 'r', result: '', isError: false))).$2, isEmpty);
-      final (refreshing, effects) = reduce(state, event(const ServerMessageToolResult(session: 'w', seq: 9, callId: 'e', result: '', isError: false)));
-      expect((effects.single as TicketCommand).command, isA<ClientCommandTicketChanges>());
-      expect(refreshing.statusOf(home.url).reviews['0007']!.busy, isTrue);
-      final done = event(const ServerMessageWorkerStatus(worker: 'w', ticket: '0007', parent: 'o', state: WorkerState.done));
-      expect(reduce(refreshing, done).$2.whereType<TicketCommand>(), isEmpty, reason: 'one at a time');
-      expect(reduce(state, done).$2.whereType<TicketCommand>(), hasLength(1));
-    });
-
-    test('the reader: a page, an app over it, closing; another chat lets the old one go', () {
+    test('the reader: a page, closing; another chat lets the old one go', () {
       var state = withChat(loaded([home]), 'o');
       state = reduce(state, PageRequested(home.url, 'site://plans')).$1;
       expect(state.statusOf(home.url).reader, ReaderTab.page);
-      state = reduce(state, AppRequested(home.url, 'orchestration')).$1;
-      expect(state.statusOf(home.url).reader, ReaderTab.app);
-      state = reduce(state, PageRequested(home.url, 'site://memory')).$1;
-      expect(state.statusOf(home.url).page.appSite, 'orchestration', reason: 'the app is kept to go back to');
       state = reduce(state, ReaderClosed(home.url)).$1;
-      expect((state.statusOf(home.url).reader, state.statusOf(home.url).page.appSite), (null, null));
+      expect((state.statusOf(home.url).reader, state.statusOf(home.url).page.isOpen), (null, false));
 
       final (swapped, effects) = reduce(state, SessionOpened(home.url, 'w'));
       expect((effects.first as SendCommand).command, isA<ClientCommandSessionDetach>().having((c) => c.session, 'session', 'o'));
@@ -445,37 +321,14 @@ void main() {
       expect(reduce(swapped, SessionClosed(home.url)).$2.whereType<SendCommand>().single.command, isA<ClientCommandSessionDetach>());
     });
 
-    test('projects: search (late answers dropped), an overview', () {
+    test('the catalog is fetched again on request', () {
       const url = 'https://home.ts.net';
-      var (state, effects) = reduce(loaded([home]), const ProjectSearchChanged(url, 'ga'));
-      expect((effects.single as SearchProjects).query, 'ga');
-      expect(state.statusOf(url).projectSearch.hits, isNull, reason: 'loading');
-      const game = ProjectSummary(name: 'game', path: '~/Projects/game', modified: '', folder: '/home/me/Projects/game');
-      state = reduce(state, const ProjectSearchChanged(url, 'gam')).$1;
-      expect(reduce(state, const ProjectsFound(url, 'ga', [game])).$1.statusOf(url).projectSearch.hits, isNull, reason: 'an older query');
-      state = reduce(state, const ProjectsFound(url, 'gam', [game])).$1;
-      expect(state.statusOf(url).projectSearch.hits, [game]);
-
-      (state, effects) = reduce(state, const ProjectOverviewRequested(url, '/home/me/Projects/game'));
-      expect(((effects.single as SendCommand).command as ClientCommandProjectOverview).project, '/home/me/Projects/game');
-      const overview = ProjectOverview(
-        name: 'game',
-        path: '~/Projects/game',
-        folder: '/home/me/Projects/game',
-        uncommitted: 0,
-        branches: [],
-        harnesses: [],
-        toolRules: 0,
-      );
-      state = reduce(state, ServerEvent(url, const ServerMessageOk(id: 3, result: CommandResultProject(overview: overview)))).$1;
-      expect(state.statusOf(url).overviews['/home/me/Projects/game'], overview);
-
+      final state = loaded([home]);
       expect(reduce(state, const CatalogRequested(url)).$2.single, isA<FetchCatalog>());
     });
 
-    test('apps show in the reader; closing keeps the follow choice', () {
-      var state = reduce(opened('site://orchestration'), AppRequested(home.url, 'orchestration')).$1;
-      expect(state.statusOf(home.url).page.appSite, 'orchestration');
+    test('closing the reader keeps the follow choice', () {
+      var state = opened('site://plans');
       state = reduce(state, FollowToggled(home.url)).$1;
       state = reduce(state, ReaderClosed(home.url)).$1;
       expect(state.statusOf(home.url).page.isOpen, isFalse);
@@ -491,8 +344,8 @@ void main() {
   group('notifications', () {
     ServerMessageApprovalRequest approval(String id) => ServerMessageApprovalRequest(
           request: id, session: 'a', site: 'tools', recipe: 'greet', args: const ['bob'], body: 'b', hash: 'h');
-    SessionInfo info(String id, TurnState state, {String? ticket}) =>
-        SessionInfo(id: id, agent: 'orchestrator', state: state, lastSeq: 1, updated: '', ticket: ticket, preview: 'hi');
+    SessionInfo info(String id, TurnState state) =>
+        SessionInfo(id: id, agent: 'default', state: state, lastSeq: 1, updated: '', preview: 'hi');
     AppState withSessions(AppState s, List<SessionInfo> sessions) =>
         reduce(s, ServerEvent(home.url, ServerMessageOk(id: 1, result: CommandResultSessions(sessions: sessions)))).$1;
     AppState background(AppState s) => reduce(s, const ForegroundChanged(false)).$1;
@@ -516,17 +369,6 @@ void main() {
       expect(reduce(next, ApprovalAnswered(home.url, 'r2', ApprovalDecision.deny)).$2.whereType<CancelNotification>(), hasLength(1));
     });
 
-    test('reminders: always notified, leading to the page or the session', () {
-      const due = ServerMessageReminderDue(
-          url: 'site://calendar/reminders/call.md', title: 'Call', due: '2026-10-19 20:00', late: false);
-      final note = reduce(loaded([home]), ServerEvent(home.url, due)).$2.whereType<Notify>().single;
-      expect((note.title, note.body, note.page, note.session), ('Call', 'due 2026-10-19 20:00 · home', 'site://calendar/reminders/call.md', null));
-      const late = ServerMessageReminderDue(
-          url: 'site://calendar/reminders/r.md', title: 'Review', due: '2026-10-19 08:00', late: true, session: 'ab12');
-      final agent = reduce(background(loaded([home])), ServerEvent(home.url, late)).$2.whereType<Notify>().single;
-      expect((agent.body, agent.session), ('was due 2026-10-19 08:00 · home', 'ab12'));
-    });
-
     test('going to the background notifies approvals still open', () {
       var state = reduce(loaded([home]), ServerEvent(home.url, approval('r1'))).$1;
       final (next, effects) = reduce(state, const ForegroundChanged(false));
@@ -548,65 +390,10 @@ void main() {
       // Idle to idle, or the list arriving after a reconnect: nothing.
       state = withSessions(loaded([home]), [info('a', TurnState.idle)]);
       expect(reduce(state, done).$2.whereType<Notify>(), isEmpty);
-      // Workers are reported by worker.status instead.
-      state = withSessions(loaded([home]), [info('w', TurnState.running, ticket: '0001')]);
-      expect(
-        reduce(state, ServerEvent(home.url, ServerMessageSessionUpdated(session: info('w', TurnState.idle, ticket: '0001')))).$2,
-        isEmpty,
-      );
-
-      // An orchestrator's turn that decided a worker's approval: nothing (asking you is an approval).
-      state = withSessions(loaded([home]), [info('o', TurnState.running)]);
-      const decided = SessionInfo(
-          id: 'o', agent: 'orchestrator', state: TurnState.idle, lastSeq: 2, updated: '',
-          preview: '[worker #w on ticket 0001 asks to approve: Bash: ls] (request ab12)');
-      expect(reduce(state, ServerEvent(home.url, ServerMessageSessionUpdated(session: decided))).$2.whereType<Notify>(), isEmpty);
-    });
-
-    test('a finished worker leads to its orchestrator', () {
-      final status = ServerEvent(
-        home.url,
-        const ServerMessageWorkerStatus(worker: 'w', ticket: '0001', parent: 'o', state: WorkerState.done),
-      );
-      final note = reduce(loaded([home]), status).$2.whereType<Notify>().single;
-      expect((note.title, note.session), ('Worker finished ticket 0001', 'o'));
-      final running = ServerEvent(
-        home.url,
-        const ServerMessageWorkerStatus(worker: 'w', ticket: '0001', parent: 'o', state: WorkerState.running),
-      );
-      expect(reduce(loaded([home]), running).$2, isEmpty);
-    });
-
-    test('the worker you watch finishing hands back to its orchestrator, unless you are writing', () {
-      SessionInfo member(String id, {String? parent, TurnState state = TurnState.idle}) =>
-          SessionInfo(id: id, agent: 'orchestrator', state: state, lastSeq: 0, updated: '', parent: parent, ticket: parent == null ? null : '0001');
-      final sessions = [member('x'), member('o'), member('w1', parent: 'o'), member('w2', parent: 'o', state: TurnState.running)];
-      var state = reduce(withSessions(loaded([home]), sessions), SessionOpened(home.url, 'w1')).$1;
-      final status = state.statusOf(home.url);
-      expect(status.orchestration('w1').map((s) => s.id), ['o', 'w1', 'w2']);
-      expect(status.orchestration('o').map((s) => s.id), ['o', 'w1', 'w2']);
-      expect(status.orchestration('x'), isEmpty);
-      expect(status.activity(status.session('w2')!), 'running');
-
-      ServerEvent finished(String worker, WorkerState state) =>
-          ServerEvent(home.url, ServerMessageWorkerStatus(worker: worker, ticket: '0001', parent: 'o', state: state));
-      // Another worker: you stay, and it shows as done.
-      var (next, effects) = reduce(state, finished('w2', WorkerState.done));
-      expect(next.statusOf(home.url).chat!.session, 'w1');
-      expect(next.statusOf(home.url).activity(member('w2', parent: 'o')), 'done');
-
-      (next, effects) = reduce(next, finished('w1', WorkerState.done));
-      expect(next.statusOf(home.url).chat!.session, 'o');
-      expect(effects.whereType<FetchHistory>().single.session, 'o');
-      expect(next.notice!.text, contains('back to the orchestrator'));
-      expect(effects.whereType<Notify>(), isEmpty, reason: 'you are looking at the orchestrator now');
-
-      state = reduce(state, DraftChanged(home.url, drafting: true)).$1;
-      expect(reduce(state, finished('w1', WorkerState.failed)).$1.statusOf(home.url).chat!.session, 'w1');
     });
 
     test('the phone home: unread work, recent pages, search, new chats with a project', () {
-      SessionInfo s(String id, TurnState state) => SessionInfo(id: id, agent: 'orchestrator', state: state, lastSeq: 0, updated: '');
+      SessionInfo s(String id, TurnState state) => SessionInfo(id: id, agent: 'default', state: state, lastSeq: 0, updated: '');
       var state = withSessions(loaded([home]), [s('a', TurnState.running), s('b', TurnState.running)]);
       state = withChat(state, 'b');
       ServerEvent idle(String id) => ServerEvent(home.url, ServerMessageSessionUpdated(session: s(id, TurnState.idle)));
@@ -617,10 +404,10 @@ void main() {
 
       ServerEvent changed(String url, ChangedBy by) =>
           ServerEvent(home.url, ServerMessagePageChanged(url: url, kind: PageChangeKind.modified, by: by));
-      for (final e in [changed('site://a.md', ChangedBy.agent), changed('site://b.md', ChangedBy.external), changed('site://a.md', ChangedBy.app)]) {
+      for (final e in [changed('site://a.md', ChangedBy.agent), changed('site://b.md', ChangedBy.external), changed('site://a.md', ChangedBy.agent)]) {
         state = reduce(state, e).$1;
       }
-      expect(state.statusOf(home.url).recent.map((r) => (r.url, r.by)), [('site://a.md', ChangedBy.app)], reason: 'not your own edits; no repeats');
+      expect(state.statusOf(home.url).recent.map((r) => (r.url, r.by)), [('site://a.md', ChangedBy.agent)], reason: 'not your own edits; no repeats');
 
       var (next, effects) = reduce(state, SearchChanged(home.url, 'type:ticket'));
       expect(effects.whereType<SearchPages>().single.query, 'type:ticket');
@@ -629,8 +416,8 @@ void main() {
       expect(reduce(next, SearchLoaded(home.url, 'type:ticket', const [hit])).$1.statusOf(home.url).search.hits, isNull, reason: 'stale');
       expect(reduce(next, SearchLoaded(home.url, 'type:plan', const [hit])).$1.statusOf(home.url).search.hits, [hit]);
 
-      final create = reduce(state, NewSessionRequested(home.url, agent: 'orchestrator', project: 'composer')).$2.single as CreateSession;
-      expect((create.agent, create.project), ('orchestrator', 'composer'));
+      final create = reduce(state, NewSessionRequested(home.url, project: 'composer')).$2.single as CreateSession;
+      expect((create.agent, create.project), ('default', 'composer'));
       expect(reduce(state, const TabSelected(PhoneTab.pages)).$1.tab, PhoneTab.pages);
     });
 
@@ -683,7 +470,7 @@ void main() {
     expect(s.status[home.url]!.chat!.newSince, 3, reason: 'the row was counted when it arrived');
 
     // And an event that adds no row at all is nothing new to read.
-    (s, _) = reduce(s, ServerEvent(home.url, const ServerMessageTurnQueued(session: 'a', seq: 5, source: MessageSourceApp(site: 'home'))));
+    (s, _) = reduce(s, ServerEvent(home.url, const ServerMessageTurnQueued(session: 'a', seq: 5, source: MessageSourceWatch(pattern: 'home/*.md'))));
     expect(s.status[home.url]!.chat!.newSince, 3, reason: 'it added no row');
 
     // Back down at the newest line, and it is seen.

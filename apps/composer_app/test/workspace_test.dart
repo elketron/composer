@@ -5,17 +5,9 @@ import 'package:composer_app/state/workspace_group.dart';
 import 'package:composer_protocol/composer_protocol.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-ServerInfo info({String? workspace, String? color}) => ServerInfo(
-      name: 'home',
-      version: '0.4.0',
-      model: 'm',
-      slots: 2,
-      workspace: workspace,
-      workspaceColor: color,
-    );
+ServerInfo info() => const ServerInfo(name: 'home', version: '0.4.0', model: 'm', slots: 2);
 
-ServerEntry entry(String url, {String workspace = '', String color = ''}) =>
-    ServerEntry(url: url, name: 'home', token: 't', workspace: workspace, color: color);
+ServerEntry entry(String url) => ServerEntry(url: url, name: 'home', token: 't');
 
 void main() {
   group('workspace colour', () {
@@ -36,48 +28,25 @@ void main() {
     });
   });
 
-  group('a workspace as shown', () {
-    test('comes from the server when it says', () {
-      final w = Workspace.of('https://home.ts.net/w/work', info: info(workspace: 'work', color: '#ff8800'));
-      expect(w.name, 'work');
-      expect(w.color.hex, '#ff8800');
-    });
-
-    test('falls back to the URL name and its colour on an old server', () {
-      final w = Workspace.of('https://home.ts.net/w/work', info: info());
-      expect(w.name, 'work');
-      expect(w.color, WorkspaceColor.fromName('work'));
-    });
-
-    test('prefers the server over the saved entry, then the entry', () {
-      final saved = entry('https://home.ts.net/w/work', workspace: 'saved', color: '#123456');
-      final fromServer = Workspace.of(saved.url, info: info(workspace: 'work', color: '#ff8800'), entry: saved);
-      expect(fromServer.name, 'work');
-      expect(fromServer.color.hex, '#ff8800');
-      final offline = Workspace.of(saved.url, info: null, entry: saved);
-      expect(offline.name, 'saved');
-      expect(offline.color.hex, '#123456');
-    });
+  test('a server has one home: default, in its colour', () {
+    final w = Workspace.of('https://home.ts.net', info: info(), entry: entry('https://home.ts.net'));
+    expect(w.name, 'default');
+    expect(w.color, WorkspaceColor.fromName('default'));
   });
 
   group('grouping', () {
-    test('two workspaces of one host share a group', () {
+    test('servers are grouped by host', () {
       final groups = WorkspaceGroup.group([
-        entry('https://home.ts.net/w/default'),
-        entry('https://other.ts.net/w/default'),
-        entry('https://home.ts.net/w/work'),
+        entry('https://home.ts.net'),
+        entry('https://other.ts.net'),
       ]);
       expect(groups.map((g) => g.host), ['home.ts.net', 'other.ts.net']);
-      expect(groups.first.entries.map((e) => e.url), [
-        'https://home.ts.net/w/default',
-        'https://home.ts.net/w/work',
-      ]);
     });
 
     test('a host with a port is its own group', () {
       final groups = WorkspaceGroup.group([
-        entry('http://127.0.0.1:7420/w/default'),
-        entry('http://127.0.0.1:7531/w/default'),
+        entry('http://127.0.0.1:7420'),
+        entry('http://127.0.0.1:7531'),
       ]);
       expect(groups.map((g) => g.host), ['127.0.0.1:7420', '127.0.0.1:7531']);
     });

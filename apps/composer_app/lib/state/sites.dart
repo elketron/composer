@@ -16,12 +16,13 @@ String liveViewUrl(String workspaceUrl, String viewer) {
   return Uri.parse('$workspaceUrl$path').replace(queryParameters: {'bare': '1'}).toString();
 }
 
-/// The application the live view shows for a session in [site]: the server has a viewer and the
-/// site names an application. Null: no live view.
+/// What the live view is labelled with for a session in [site]: the server has a viewer and the
+/// session is in a site. Null: no live view.
+// rewrite: phase 2 — a site's `app:` is ignored now, so entering a site no longer starts an
+// application; the live view shows whatever the viewer has in front, labelled with the site.
 String? liveViewApp({required ServerInfo? info, required SiteSummary? site}) {
   if (viewerPath(info) == null || site == null) return null;
-  final app = site.app;
-  return app == null || app.isEmpty ? null : app;
+  return site.name;
 }
 
 /// `working · step 6`, `idle`: the one line of state under a session's title.

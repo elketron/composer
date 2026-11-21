@@ -1,4 +1,4 @@
-// Opening pages and micro apps: the reader screen (one, whatever it shows).
+// Opening pages: the reader screen.
 
 import 'package:flutter/material.dart';
 
@@ -10,11 +10,6 @@ const readerRoute = 'reader';
 
 void openPage(BuildContext context, String url, String page) {
   StoreScope.read(context).dispatch(PageRequested(url, page));
-  _show(context, url);
-}
-
-void openApp(BuildContext context, String url, String site) {
-  StoreScope.read(context).dispatch(AppRequested(url, site));
   _show(context, url);
 }
 

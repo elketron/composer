@@ -51,23 +51,23 @@ void main() {
     expect(chat.lastSeq, 1);
   });
 
-  test('messages from apps and workers say so; cancelled turns leave a note', () {
+  test('messages from elsewhere say so; cancelled turns leave a note', () {
     final chat = play([
       ServerMessageMessageDone(
         session: 'a',
         seq: 1,
-        message: const ChatMessage(role: Role.user, content: 'box', source: MessageSourceApp(site: 'design')),
+        message: const ChatMessage(role: Role.user, content: 'box', source: MessageSourceWatch(pattern: 'design/*.md')),
       ),
       ServerMessageMessageDone(
         session: 'a',
         seq: 2,
-        message: const ChatMessage(role: Role.user, content: 'done', source: MessageSourceWorker(session: 'b2')),
+        message: const ChatMessage(role: Role.user, content: 'done'),
       ),
       ServerMessageMessageDelta(session: 'a', seq: 3, text: 'par'),
       ServerMessageTurnDone(session: 'a', seq: 4, cancelled: true),
     ]);
-    expect((chat.items[0] as UserItem).source, 'design app');
-    expect((chat.items[1] as UserItem).source, 'worker #b2');
+    expect((chat.items[0] as UserItem).source, 'watch');
+    expect((chat.items[1] as UserItem).source, isNull);
     expect((chat.items[2] as NoteItem).text, 'cancelled');
     expect(chat.streaming, isNull);
   });

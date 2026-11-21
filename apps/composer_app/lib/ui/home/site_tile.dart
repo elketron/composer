@@ -5,7 +5,6 @@ import '../../state/server_status.dart';
 import '../../theme/composer_theme.dart';
 import '../../theme/tokens.dart' as t;
 import '../chat/navigation.dart';
-import '../pages/page_navigation.dart';
 import 'activity_dot.dart';
 import 'new_chat_sheet.dart';
 
@@ -41,18 +40,10 @@ class SiteTile extends StatelessWidget {
                   TextSpan(text: site.name, style: mono(size: 14, color: t.accent, weight: FontWeight.w600)),
                   if (site.title.isNotEmpty && site.title != site.name) TextSpan(text: '  ${site.title}', style: const TextStyle(fontSize: 13, color: t.muted)),
                 ])),
-                if (site.app != null && site.app!.isNotEmpty) fact('app', site.app!),
                 if (site.mcp.isNotEmpty) fact('mcp', site.mcp.join(', ')),
                 fact('in it', sessions.isEmpty ? 'no sessions' : '${sessions.length} session${sessions.length == 1 ? '' : 's'}'),
               ]),
             ),
-            if (site.appBuilt)
-              IconButton(
-                key: Key('site-open-app-${site.name}'),
-                tooltip: 'Open app',
-                onPressed: () => openApp(context, url, site.name),
-                icon: const Icon(Icons.open_in_new, size: 20, color: t.accent),
-              ),
             Tooltip(
               message: 'New chat in ${site.name}',
               child: Material(

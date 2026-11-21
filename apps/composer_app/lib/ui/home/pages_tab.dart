@@ -1,4 +1,3 @@
-import 'package:composer_protocol/composer_protocol.dart';
 import 'package:flutter/material.dart';
 
 import '../../state/actions.dart';
@@ -79,7 +78,7 @@ class _PagesTabState extends State<PagesTab> {
               for (final page in status.recent.take(6))
                 _Row(
                   title: _title(page.url),
-                  detail: '${page.url.replaceFirst('site://', '')} · ${page.by == ChangedBy.app ? 'app' : 'agent'}',
+                  detail: '${page.url.replaceFirst('site://', '')} · agent',
                   onTap: () => openPage(context, widget.url, page.url),
                 ),
             ]),
@@ -90,20 +89,9 @@ class _PagesTabState extends State<PagesTab> {
               _Row(
                 key: Key('site-${site.name}'),
                 title: site.title,
-                badge: site.appBuilt ? 'app' : null,
                 detail: (site.description ?? '').isNotEmpty ? site.description! : 'site://${site.name}',
-                onTap: () => site.appBuilt ? openApp(context, widget.url, site.name) : openPage(context, widget.url, 'site://${site.name}'),
-                trailing: site.appBuilt
-                    ? TextButton(
-                        key: Key('pages-${site.name}'),
-                        style: TextButton.styleFrom(foregroundColor: t.muted, visualDensity: VisualDensity.compact),
-                        onPressed: () => openPage(context, widget.url, 'site://${site.name}'),
-                        child: const Text('pages'),
-                      )
-                    : Text(
-                        site.hasUi ? 'app not built' : '${site.pages}',
-                        style: mono(size: 11, color: t.faint),
-                      ),
+                onTap: () => openPage(context, widget.url, 'site://${site.name}'),
+                trailing: Text('${site.pages}', style: mono(size: 11, color: t.faint)),
               ),
           ]),
         ],
@@ -133,13 +121,12 @@ class _Group extends StatelessWidget {
 }
 
 class _Row extends StatelessWidget {
-  const _Row({super.key, required this.title, required this.detail, required this.onTap, this.trailing, this.badge});
+  const _Row({super.key, required this.title, required this.detail, required this.onTap, this.trailing});
 
   final String title;
   final String detail;
   final VoidCallback onTap;
   final Widget? trailing;
-  final String? badge;
 
   @override
   Widget build(BuildContext context) => InkWell(
@@ -149,17 +136,7 @@ class _Row extends StatelessWidget {
           child: Row(children: [
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Row(children: [
-                  Flexible(child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14))),
-                  if (badge != null) ...[
-                    const SizedBox(width: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 5),
-                      decoration: BoxDecoration(border: Border.all(color: t.accent.withValues(alpha: 0.4)), borderRadius: BorderRadius.circular(t.radiusSm)),
-                      child: Text(badge!, style: mono(size: 10.5, color: t.accent)),
-                    ),
-                  ],
-                ]),
+                Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14)),
                 const SizedBox(height: 1),
                 Text(detail, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: t.muted)),
               ]),

@@ -2,7 +2,7 @@
 
 import 'chat_items.dart';
 
-/// Tool calls and thoughts between messages become one `StepsRow`; workers' reports a `WorkerRow`.
+/// Tool calls and thoughts between messages become one `StepsRow`.
 List<ChatRow> chatRows(List<ChatItem> items) {
   final rows = <ChatRow>[];
   var steps = <ChatItem>[];
@@ -18,7 +18,7 @@ List<ChatRow> chatRows(List<ChatItem> items) {
       continue;
     }
     flush();
-    rows.add(item is UserItem ? (workerReport(item) ?? ItemRow(item)) : ItemRow(item));
+    rows.add(ItemRow(item));
   }
   flush();
   return rows;
@@ -30,7 +30,7 @@ List<ChatRow> chatRows(List<ChatItem> items) {
 int pendingRowIndex(List<ChatItem> items, {required bool thinking}) =>
     chatRows([...items, if (thinking) const ThinkingItem(''), const TextItem('')]).length - 1;
 
-/// `read 2 pages, wrote 0001.md, started a worker`: what the steps did, in the order first done.
+/// `read 2 pages, wrote 0001.md`: what the steps did, in the order first done.
 String stepsSummary(List<ChatItem> steps) {
   final tools = steps.whereType<ToolItem>().toList();
   // Only thoughts: the start of the last one.
@@ -52,11 +52,8 @@ String stepsSummary(List<ChatItem> steps) {
         'list_sites' => 'listed the sites',
         'write' => files(t, 'wrote'),
         'edit' => files(t, 'edited'),
-        'spawn_worker' => 'started ${t.length == 1 ? 'a worker' : '${t.length} workers'}',
         'run' => t.length == 1 ? 'ran ${t.single.summary.split(' › ').last}' : 'ran ${t.length} recipes',
         'actions' => 'looked at actions',
-        'set_project' => 'set the project',
-        'finish' => 'finished',
         // Claude Code's.
         'Read' => 'read ${_count(t.length, 'file')}',
         'Edit' || 'MultiEdit' || 'Write' => t.length == 1 ? 'edited ${_file(t.single.summary)}' : 'edited ${t.length} files',
@@ -73,19 +70,8 @@ String stepsSummary(List<ChatItem> steps) {
 
 String _count(int n, String noun) => '$n $noun${n == 1 ? '' : 's'}';
 
-/// `site://orchestration/tickets/0001.md` → `0001.md`.
+/// `site://plans/tickets/0001.md` → `0001.md`.
 String _file(String summary) => summary.split('/').where((s) => s.isNotEmpty).lastOrNull ?? summary;
-
-final _report = RegExp(r'^\[worker #(\S+) finished ticket (\S+): (\w+)\]\s*(.*?)(?:\s*Its Result is in (site://\S+?)\.?(?:\s.*)?)?\s*$', dotAll: true);
-
-/// A finished worker's message to its orchestrator, if `item` is one.
-WorkerRow? workerReport(UserItem item) {
-  if (!(item.source?.startsWith('worker') ?? false)) return null;
-  final m = _report.firstMatch(item.text);
-  if (m == null) return null;
-  final branch = RegExp(r'on branch `([^`]+)`').firstMatch(item.text)?[1];
-  return WorkerRow(worker: m[1]!, ticket: m[2]!, status: m[3]!, summary: m[4]!.trim(), result: m[5], branch: branch);
-}
 
 /// Tool calls made since the last message you sent: "step 6" of the turn under way.
 int stepsSinceLastMessage(List<ChatItem> items) {

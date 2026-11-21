@@ -62,21 +62,6 @@ final class FetchHistory extends AppEffect {
   final int? before;
 }
 
-/// `desk.get`: the session's desk; the reply comes back as `DeskLoaded`.
-final class FetchDesk extends AppEffect {
-  const FetchDesk(this.url, this.session);
-  final String url;
-  final String session;
-}
-
-/// A `ticket.*` command; the reply comes back as `TicketReplied`.
-final class TicketCommand extends AppEffect {
-  const TicketCommand(this.url, this.ticket, this.command);
-  final String url;
-  final String ticket;
-  final ClientCommand command;
-}
-
 /// `session.create`, then open it.
 final class CreateSession extends AppEffect {
   const CreateSession(this.url, this.agent, {this.project, this.site});
@@ -109,7 +94,6 @@ final class Notify extends AppEffect {
     this.session,
     this.approval,
     this.page,
-    this.app,
   });
   final String key;
   final String title;
@@ -122,11 +106,8 @@ final class Notify extends AppEffect {
   /// An approval request id: the notification gets Approve / Deny.
   final String? approval;
 
-  /// A page to open when there is no session (a reminder).
+  /// A page to open when there is no session.
   final String? page;
-
-  /// A site whose app to open instead.
-  final String? app;
 }
 
 final class CancelNotification extends AppEffect {
@@ -146,7 +127,7 @@ final class FetchPage extends AppEffect {
   final String page;
 }
 
-/// The sites, agents and projects (`SitesLoaded`, `AgentsLoaded`, `ProjectsLoaded`).
+/// The sites and agents (`SitesLoaded`, `AgentsLoaded`).
 final class FetchCatalog extends AppEffect {
   const FetchCatalog(this.url);
   final String url;
@@ -166,11 +147,4 @@ final class UploadAttachment extends AppEffect {
   final String session;
   final int id;
   final PickedFile file;
-}
-
-/// `GET /api/projects?q=` (`ProjectsFound`).
-final class SearchProjects extends AppEffect {
-  const SearchProjects(this.url, this.query);
-  final String url;
-  final String query;
 }

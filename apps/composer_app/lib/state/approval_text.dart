@@ -9,23 +9,19 @@ String approvalHeadline(ServerMessageApprovalRequest a) => switch (a.kind ?? App
 /// The question above it.
 String approvalQuestion(ServerMessageApprovalRequest a) => switch (a.kind ?? ApprovalKind.recipe) {
       ApprovalKind.recipe => 'Run recipe?',
-      ApprovalKind.merge => 'Merge?',
       ApprovalKind.tool => 'Allow tool?',
       ApprovalKind.mcp => 'Allow MCP tool?',
-      ApprovalKind.publish => 'Publish to the library?',
     };
 
 /// What approving does.
 String approvalNote(ServerMessageApprovalRequest a) => switch (a.kind ?? ApprovalKind.recipe) {
       ApprovalKind.recipe => 'Once approved, this recipe runs without asking until it changes.',
-      ApprovalKind.merge => "Merges into the project's checked-out branch, then removes the ticket's worktree and branch.",
       ApprovalKind.tool => a.rule == null
           ? 'Claude Code wants a tool outside its allowlist.'
           : 'Always allows ${a.rule} in this project from now on.',
       ApprovalKind.mcp => a.rule == null
           ? "A call to an MCP server's tool."
           : 'Always allows ${a.rule} from now on, for any agent that lists it.',
-      ApprovalKind.publish => 'Every workspace can install or update from it then. Asked every time.',
     };
 
 /// Whether `always` is an answer to it.

@@ -119,42 +119,6 @@ final class ViewScrolled extends AppAction {
   final bool atBottom;
 }
 
-/// The open chat's desk (a reply to `desk.get`, or a `desk.changed` event).
-final class DeskLoaded extends AppAction {
-  const DeskLoaded(this.url, this.session, this.desk);
-  final String url;
-  final String session;
-  final Desk desk;
-}
-
-/// Put a tab on the open chat's desk (an equal one is focused, not doubled).
-final class DeskTabOpened extends AppAction {
-  const DeskTabOpened(this.url, this.tab, {this.focus = true});
-  final String url;
-  final DeskTab tab;
-  final bool focus;
-}
-
-/// Close a tab of the open chat's desk.
-final class DeskTabClosed extends AppAction {
-  const DeskTabClosed(this.url, this.tab);
-  final String url;
-  final String tab;
-}
-
-/// Show a tab of the open chat's desk.
-final class DeskTabFocused extends AppAction {
-  const DeskTabFocused(this.url, this.tab);
-  final String url;
-  final String tab;
-}
-
-/// Drop the selection chip: the next message goes without it.
-final class SelectionCleared extends AppAction {
-  const SelectionCleared(this.url);
-  final String url;
-}
-
 /// Leave the chat (detach).
 final class SessionClosed extends AppAction {
   const SessionClosed(this.url);
@@ -162,7 +126,7 @@ final class SessionClosed extends AppAction {
 }
 
 final class NewSessionRequested extends AppAction {
-  const NewSessionRequested(this.url, {this.agent = 'orchestrator', this.project, this.site});
+  const NewSessionRequested(this.url, {this.agent = 'default', this.project, this.site});
   final String url;
   final String agent;
 
@@ -184,13 +148,6 @@ final class DraftChanged extends AppAction {
   const DraftChanged(this.url, {required this.drafting});
   final String url;
   final bool drafting;
-}
-
-/// Set the open session's project (a name in the projects directory), or unset it (null).
-final class ProjectChosen extends AppAction {
-  const ProjectChosen(this.url, this.project);
-  final String url;
-  final String? project;
 }
 
 /// Files picked to attach to the open chat's message; each starts uploading.
@@ -239,84 +196,6 @@ final class ModelChosen extends AppAction {
   const ModelChosen(this.url, this.model);
   final String url;
   final String? model;
-}
-
-/// Ask which external harnesses a project allows and has on (for the chat menu).
-final class HarnessesRequested extends AppAction {
-  const HarnessesRequested(this.url, this.project);
-  final String url;
-  final String project;
-}
-
-/// Open (or refresh) a ticket's review: its changes against the project's branch.
-final class ReviewRequested extends AppAction {
-  const ReviewRequested(this.url, this.ticket);
-  final String url;
-  final String ticket;
-}
-
-/// Merge a ticket's branch into the project's checked-out branch.
-final class TicketMergeRequested extends AppAction {
-  const TicketMergeRequested(this.url, this.ticket);
-  final String url;
-  final String ticket;
-}
-
-/// Throw a ticket's branch and worktree away.
-final class TicketDiscardRequested extends AppAction {
-  const TicketDiscardRequested(this.url, this.ticket);
-  final String url;
-  final String ticket;
-}
-
-/// A comment on a diff line, kept as a draft until the comments are sent.
-final class DiffCommentAdded extends AppAction {
-  const DiffCommentAdded(this.url, this.ticket, this.comment);
-  final String url;
-  final String ticket;
-  final DiffComment comment;
-}
-
-/// A draft comment's message changed.
-final class DiffCommentEdited extends AppAction {
-  const DiffCommentEdited(this.url, this.ticket, this.index, this.message);
-  final String url;
-  final String ticket;
-  final int index;
-  final String message;
-}
-
-/// A draft comment dropped.
-final class DiffCommentRemoved extends AppAction {
-  const DiffCommentRemoved(this.url, this.ticket, this.index);
-  final String url;
-  final String ticket;
-  final int index;
-}
-
-/// Append the drafts to the ticket page (`ticket.comment`).
-final class DiffCommentsSent extends AppAction {
-  const DiffCommentsSent(this.url, this.ticket);
-  final String url;
-  final String ticket;
-}
-
-/// The answer to a ticket command: its result, or why it failed.
-final class TicketReplied extends AppAction {
-  const TicketReplied(this.url, this.ticket, {this.result, this.error});
-  final String url;
-  final String ticket;
-  final CommandResult? result;
-  final String? error;
-}
-
-/// Turn an external harness (`claude-code`) on or off for a project.
-final class HarnessToggled extends AppAction {
-  const HarnessToggled(this.url, this.project, this.entry, this.on);
-  final String url;
-  final String project;
-  final String entry;
-  final bool on;
 }
 
 /// Compact the open session: save memory, then summarize older messages.
@@ -412,13 +291,6 @@ final class FollowToggled extends AppAction {
   final String url;
 }
 
-/// Show a site's micro app in the reader.
-final class AppRequested extends AppAction {
-  const AppRequested(this.url, this.site);
-  final String url;
-  final String site;
-}
-
 /// Close the reader (desktop pane).
 final class ReaderClosed extends AppAction {
   const ReaderClosed(this.url);
@@ -437,35 +309,7 @@ final class AgentsLoaded extends AppAction {
   final List<AgentSummary> agents;
 }
 
-final class ProjectsLoaded extends AppAction {
-  const ProjectsLoaded(this.url, this.projects);
-  final String url;
-  final List<ProjectSummary> projects;
-}
-
-/// Search the projects (empty: the full list).
-final class ProjectSearchChanged extends AppAction {
-  const ProjectSearchChanged(this.url, this.query);
-  final String url;
-  final String query;
-}
-
-final class ProjectsFound extends AppAction {
-  const ProjectsFound(this.url, this.query, this.hits, {this.error});
-  final String url;
-  final String query;
-  final List<ProjectSummary> hits;
-  final String? error;
-}
-
-/// Ask what is going on in a project (its folder, or a name); the reply fills `overviews`.
-final class ProjectOverviewRequested extends AppAction {
-  const ProjectOverviewRequested(this.url, this.project);
-  final String url;
-  final String project;
-}
-
-/// Fetch the sites, agents and projects again (the project counts change).
+/// Fetch the sites and agents again.
 final class CatalogRequested extends AppAction {
   const CatalogRequested(this.url);
   final String url;

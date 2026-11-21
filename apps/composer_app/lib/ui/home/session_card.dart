@@ -8,10 +8,9 @@ import '../format.dart';
 import 'activity_dot.dart';
 import 'site_tag.dart';
 
-/// A session in the Inbox: agent, state, last message, its project, and for an
-/// orchestrator the workers it runs, one line each.
+/// A session in the Inbox: agent, state, last message, its project and site.
 class SessionCard extends StatelessWidget {
-  const SessionCard({super.key, required this.status, required this.session, required this.onTap, this.unread = false, this.onWorker});
+  const SessionCard({super.key, required this.status, required this.session, required this.onTap, this.unread = false});
 
   final ServerStatus status;
   final SessionInfo session;
@@ -20,14 +19,10 @@ class SessionCard extends StatelessWidget {
   /// Finished something you haven't seen.
   final bool unread;
 
-  /// A worker line was tapped; null: the card's tap.
-  final void Function(SessionInfo worker)? onWorker;
-
   @override
   Widget build(BuildContext context) {
     final activity = status.activity(session);
-    final workers = session.parent == null ? status.sessions.where((s) => s.parent == session.id).toList() : const <SessionInfo>[];
-    final right = isBusy(activity) || const {'done', 'failed', 'paused', 'stuck'}.contains(activity)
+    final right = isBusy(activity)
         ? (activity == 'approval' ? 'needs approval' : activity)
         : (unread ? 'new · ${ago(session.updated)}' : ago(session.updated));
     final project = session.project?.split('/').last;
@@ -55,80 +50,17 @@ class SessionCard extends StatelessWidget {
             ]),
             if (session.preview != null) ...[
               const SizedBox(height: 3),
-              Text(_preview(session.preview!), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13, color: t.muted)),
+              Text(session.preview!, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13, color: t.muted)),
             ],
-            if (workers.isNotEmpty)
-              Container(
-                margin: const EdgeInsets.only(top: 8, left: 3),
-                padding: const EdgeInsets.only(left: 12),
-                decoration: const BoxDecoration(border: Border(left: BorderSide(color: t.borderStrong))),
-                child: _workerList([
-                  for (final w in workers)
-                    InkWell(
-                      key: Key('worker-line-${w.id}'),
-                      onTap: onWorker == null ? null : () => onWorker!(w),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 2),
-                        child: Row(children: [
-                        ActivityDot(status.activity(w)),
-                        const SizedBox(width: 8),
-                        Text(w.ticket ?? '#${w.id}', style: mono(size: 12, color: t.text)),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            _workerLine(w),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 12, color: t.muted),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(status.activity(w), style: mono(size: 11, color: activityColor(status.activity(w)))),
-                        ]),
-                      ),
-                    ),
-                ]),
-              ),
-            if (session.parent == null) ...[
-              const SizedBox(height: 7),
-              Row(children: [
-                _Chip(project ?? 'no project'),
-                if (session.site != null) ...[const SizedBox(width: 6), SiteTag(session.site!, key: Key('site-tag-${session.id}'))],
-              ]),
-            ],
+            const SizedBox(height: 7),
+            Row(children: [
+              _Chip(project ?? 'no project'),
+              if (session.site != null) ...[const SizedBox(width: 6), SiteTag(session.site!, key: Key('site-tag-${session.id}'))],
+            ]),
           ]),
         ),
       ),
     );
-  }
-
-  /// Workers shown before the list scrolls.
-  static const _maxWorkers = 5;
-  static const _workerHeight = 22.0;
-
-  /// The worker lines; past [_maxWorkers] they scroll inside the card.
-  static Widget _workerList(List<Widget> lines) {
-    if (lines.length <= _maxWorkers) return Column(children: lines);
-    return SizedBox(
-      height: _maxWorkers * _workerHeight,
-      child: Scrollbar(
-        child: ListView(padding: EdgeInsets.zero, itemExtent: _workerHeight, children: lines),
-      ),
-    );
-  }
-
-  /// `[worker #96a1 finished ticket 0001: done]` (the report as the server writes it) →
-  /// `Worker #96a1 finished ticket 0001: done`.
-  static String _preview(String preview) {
-    final report = RegExp(r'^\[worker (#\S+ finished ticket \S+: \w+)\]').firstMatch(preview);
-    return report == null ? preview : 'Worker ${report[1]}';
-  }
-
-  /// `ticket 0001: Note the release steps` → `Note the release steps`.
-  static String _workerLine(SessionInfo w) {
-    final preview = w.preview ?? '';
-    final prefix = 'ticket ${w.ticket}: ';
-    return preview.startsWith(prefix) ? preview.substring(prefix.length) : preview;
   }
 }
 

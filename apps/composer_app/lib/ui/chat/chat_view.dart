@@ -17,11 +17,8 @@ import 'approval_card.dart';
 import 'chat_item_view.dart';
 import 'new_content_pill.dart';
 import 'steps_view.dart';
-import 'worker_card.dart';
 import 'message_composer.dart';
 import 'older_messages.dart';
-import 'selection_chip.dart';
-import 'orchestration_bar.dart';
 
 /// A session's chat: transcript (newest first or last, see [chatNewestFirst]; it follows the
 /// stream), its approvals, and the composer.
@@ -138,7 +135,7 @@ class _ChatViewState extends State<ChatView> {
 
     // Built newest first: the list sticks to the newest line in either direction. Keys keep each
     // row's state (an expanded tool row) on its row as new ones arrive.
-    // A turn's steps fold into one row; workers' reports become cards.
+    // A turn's steps fold into one row.
     final chatRowsList = chatRows(chat.items);
     final rows = <(Key, Widget)>[
       for (final approval in approvals.toList().reversed)
@@ -153,7 +150,6 @@ class _ChatViewState extends State<ChatView> {
           switch (row) {
             ItemRow(:final item) => ChatItemView(item, url: widget.url),
             StepsRow() => StepsView(row: row, url: widget.url),
-            WorkerRow() => WorkerCard(row: row, url: widget.url),
           },
         ),
       if (chat.more) (const ValueKey('older'), OlderMessages(url: widget.url, session: chat.session, loading: chat.loadingOlder)),
@@ -161,7 +157,6 @@ class _ChatViewState extends State<ChatView> {
     final keys = {for (final (i, (key, _)) in rows.indexed) key: i};
 
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      OrchestrationBar(url: widget.url, status: widget.status, session: chat.session),
       Expanded(
         child: rows.isEmpty
             ? Center(child: Text(chat.loaded && chat.lastSeq == 0 ? 'Say something to start.' : '', style: const TextStyle(color: t.faint)))
@@ -199,7 +194,6 @@ class _ChatViewState extends State<ChatView> {
                   ),
               ]),
       ),
-      if (chat.selection case final selection?) SelectionChip(url: widget.url, selection: selection),
       MessageComposer(key: ValueKey('composer-${widget.url}-${chat.session}'), url: widget.url, busy: busy, showStop: !widget.stopInHeader),
     ]);
   }

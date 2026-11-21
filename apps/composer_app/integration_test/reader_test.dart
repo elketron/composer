@@ -1,8 +1,7 @@
-// The reader: a site from the Pages tab, a micro app, and following the agent when it opens a
-// page. Run on the emulator by scripts/phone-e2e.sh; the orchestration site's app must be built.
+// The reader: a site from the Pages tab, and following the agent when it opens a page. Run on
+// the emulator by scripts/phone-e2e.sh.
 
 import 'package:composer_app/ui/chat/activity_line.dart';
-import 'package:composer_app/ui/pages/app_view.dart';
 import 'package:composer_app/ui/pages/page_body.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -24,7 +23,7 @@ Finder pageTitled(String title) => find.descendant(
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('pages, an app, and following the agent', (tester) async {
+  testWidgets('pages, and following the agent', (tester) async {
     await startPaired(tester);
 
     // A site from the Pages tab opens in the reader.
@@ -34,15 +33,6 @@ void main() {
     await pumpUntil(tester, pageTitled('Memory'));
     await settle(tester, seconds: 2);
     // The reader's own Back is the page history; leave the route with the system back.
-    await tester.binding.handlePopRoute();
-    await tester.pumpAndSettle();
-
-    // A site with a built app opens the app.
-    final orchestration = find.byKey(const Key('site-orchestration'));
-    await tester.dragUntilVisible(orchestration, find.byKey(const PageStorageKey('pages')), const Offset(0, -200));
-    await tester.tap(orchestration);
-    await pumpUntil(tester, find.byType(AppView));
-    await settle(tester, seconds: 5);
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
 

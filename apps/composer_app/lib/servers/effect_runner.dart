@@ -65,7 +65,6 @@ class EffectRunner {
         if (server != null) {
           fetchSites(url, server.token).then((sites) => dispatch(SitesLoaded(url, sites)), onError: (_) {});
           fetchAgents(url, server.token).then((agents) => dispatch(AgentsLoaded(url, agents)), onError: (_) {});
-          fetchProjects(url, server.token).then((projects) => dispatch(ProjectsLoaded(url, projects)), onError: (_) {});
         }
       case UploadAttachment(:final url, :final session, :final id, :final file):
         final server = _connections[url]?.server;
@@ -84,14 +83,6 @@ class EffectRunner {
           (attachment) => dispatch(UploadFinished(url, id, attachment: attachment)),
           onError: (Object e) => dispatch(UploadFinished(url, id, error: e is ServerError ? e.message : '$e')),
         );
-      case SearchProjects(:final url, :final query):
-        final server = _connections[url]?.server;
-        if (server != null) {
-          fetchProjects(url, server.token, query: query).then(
-            (hits) => dispatch(ProjectsFound(url, query, hits)),
-            onError: (Object e) => dispatch(ProjectsFound(url, query, const [], error: describeError(e))),
-          );
-        }
       case SearchPages(:final url, :final query):
         final server = _connections[url]?.server;
         if (server != null) {
@@ -100,10 +91,6 @@ class EffectRunner {
             onError: (Object e) => dispatch(SearchLoaded(url, query, const [], error: describeError(e))),
           );
         }
-      case FetchDesk(:final url, :final session):
-        _request(url, ClientCommandDeskGet(session: session), dispatch).then((result) {
-          if (result is CommandResultDesk) dispatch(DeskLoaded(url, session, result.desk));
-        });
       case FetchHistory(:final url, :final session, :final before):
         final connection = _connections[url];
         // MEASURE(0053) harness: debug only, so a shipped app prints nothing on the normal path.
@@ -126,16 +113,6 @@ class EffectRunner {
           },
           onError: (Object e) { if (kDebugMode) debugPrint('MEASURE history-error $session: $e'); dispatch(HistoryLoaded(url, session, before, null)); },
         );
-      case TicketCommand(:final url, :final ticket, :final command):
-        final connection = _connections[url];
-        if (connection == null) {
-          dispatch(TicketReplied(url, ticket, error: 'not connected'));
-          return;
-        }
-        connection.request(command).then(
-              (result) => dispatch(TicketReplied(url, ticket, result: result)),
-              onError: (Object e) => dispatch(TicketReplied(url, ticket, error: describeError(e))),
-            );
       case CreateSession(:final url, :final agent, :final project, :final site):
         _request(url, ClientCommandSessionCreate(agent: agent, project: project), dispatch).then((result) {
           if (result is! CommandResultSession) return;

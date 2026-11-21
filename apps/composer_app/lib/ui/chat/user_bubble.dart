@@ -6,7 +6,7 @@ import '../../theme/tokens.dart' as t;
 import '../store_scope.dart';
 import 'attachment_view.dart';
 
-/// Your message (or an app's, or a worker's report), on the right with the tinted background.
+/// Your message (or one from elsewhere), on the right with the tinted background.
 class UserBubble extends StatelessWidget {
   const UserBubble(this.item, {super.key, required this.url});
 

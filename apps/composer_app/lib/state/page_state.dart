@@ -2,7 +2,7 @@ import 'package:composer_protocol/composer_protocol.dart';
 
 const _keep = Object();
 
-/// A server's page reader: the page shown (or a site's micro app), history, follow-agent.
+/// A server's page reader: the page shown history, follow-agent.
 class PageState {
   const PageState({
     this.page,
@@ -11,7 +11,6 @@ class PageState {
     this.back = const [],
     this.forward = const [],
     this.follow = true,
-    this.appSite,
   });
 
   final PageResponse? page;
@@ -25,10 +24,7 @@ class PageState {
   /// Open what the agent opens (in the attached session).
   final bool follow;
 
-  /// Showing this site's micro app instead of the page.
-  final String? appSite;
-
-  bool get isOpen => page != null || loading != null || error != null || appSite != null;
+  bool get isOpen => page != null || loading != null || error != null;
 
   PageState copyWith({
     Object? page = _keep,
@@ -37,7 +33,6 @@ class PageState {
     List<String>? back,
     List<String>? forward,
     bool? follow,
-    Object? appSite = _keep,
   }) =>
       PageState(
         page: identical(page, _keep) ? this.page : page as PageResponse?,
@@ -46,6 +41,5 @@ class PageState {
         back: back ?? this.back,
         forward: forward ?? this.forward,
         follow: follow ?? this.follow,
-        appSite: identical(appSite, _keep) ? this.appSite : appSite as String?,
       );
 }

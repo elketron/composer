@@ -71,9 +71,6 @@ ChatState _done(ChatState chat, ChatMessage message) => switch (message.role) {
     };
 
 String? _source(MessageSource? source) => switch (source) {
-      MessageSourceApp(:final site) => '$site app',
-      MessageSourceWorker(:final session) => 'worker #$session',
-      MessageSourceReminder() => 'reminder',
       MessageSourceWatch() => 'watch',
       _ => null,
     };

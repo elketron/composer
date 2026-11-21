@@ -18,11 +18,11 @@ import 'package:flutter_test/flutter_test.dart';
 
 const home = ServerEntry(url: 'https://home.ts.net', name: 'home', token: 't1');
 
-SiteSummary site(String name, {String? app, List<String> mcp = const []}) =>
-    SiteSummary(name: name, title: name.toUpperCase(), hasJustfile: false, hasUi: false, app: app, mcp: mcp);
+SiteSummary site(String name, {List<String> mcp = const []}) =>
+    SiteSummary(name: name, title: name.toUpperCase(), hasJustfile: false, pages: 0, mcp: mcp);
 
 SessionInfo session(String id, {String? site, TurnState state = TurnState.idle, String? parent}) =>
-    SessionInfo(id: id, agent: 'orchestrator', site: site, parent: parent, state: state, lastSeq: 0, updated: '2026-11-10T10:0$id');
+    SessionInfo(id: id, agent: 'default', site: site, parent: parent, state: state, lastSeq: 0, updated: '2026-11-10T10:0$id');
 
 ServerInfo info({String? viewer}) => ServerInfo(name: 'pc', version: '0.1', model: 'qwen', slots: 1, viewer: viewer);
 
@@ -33,37 +33,35 @@ AppState loaded() => reduce(AppState.initial, const ServersLoaded([home])).$1;
 
 void main() {
   group('sites', () {
-    test('SiteSummary JSON from /api/sites: app and mcp may be absent', () {
-      final with_ = SiteSummary.fromJson({'name': '3d', 'title': '3D', 'has_justfile': false, 'has_ui': false, 'app': 'blender', 'mcp': ['a', 'b']});
-      final without = SiteSummary.fromJson({'name': 'p', 'title': 'P', 'has_justfile': false, 'has_ui': false});
+    test('SiteSummary JSON from /api/sites: mcp may be absent', () {
+      final with_ = SiteSummary.fromJson({'name': '3d', 'title': '3D', 'has_justfile': false, 'pages': 2, 'mcp': ['a', 'b']});
+      final without = SiteSummary.fromJson({'name': 'p', 'title': 'P', 'has_justfile': false, 'pages': 0});
       expect([with_, without].map((s) => s.name), ['3d', 'p']);
+      expect(with_.mcp, ['a', 'b']);
       expect(without.mcp, isEmpty);
-      expect(without.app, isNull);
     });
 
     test('the status lists the sites from the loaded sites, and counts sessions in each', () {
       var s = loaded();
-      s = reduce(s, SitesLoaded(home.url, [site('3d', app: 'blender'), site('plain'), site('docs', mcp: ['x'])])).$1;
+      s = reduce(s, SitesLoaded(home.url, [site('3d'), site('plain'), site('docs', mcp: ['x'])])).$1;
       s = reduce(s, ServerEvent(home.url, ServerMessageSessionUpdated(session: session('1', site: '3d')))).$1;
       s = reduce(s, ServerEvent(home.url, ServerMessageSessionUpdated(session: session('2', site: '3d')))).$1;
       s = reduce(s, ServerEvent(home.url, ServerMessageSessionUpdated(session: session('3')))).$1;
-      s = reduce(s, ServerEvent(home.url, ServerMessageSessionUpdated(session: session('4', site: '3d', parent: '1')))).$1;
       final status = s.statusOf(home.url);
       expect(status.sites.map((s) => s.name), ['3d', 'plain', 'docs']);
-      expect(status.sessionsIn('3d').map((x) => x.id).toSet(), {'1', '2'}, reason: 'workers count with their orchestrator');
+      expect(status.sessionsIn('3d').map((x) => x.id).toSet(), {'1', '2'});
       expect(status.sessionsIn('docs'), isEmpty);
     });
   });
 
-  group('the live view is shown only for a site with an application on a server with a viewer', () {
-    final blender = site('3d', app: 'blender');
-    test('all three conditions', () {
-      expect(liveViewApp(info: info(viewer: '/view'), site: blender), 'blender');
+  group('the live view is shown for a session in a site on a server with a viewer', () {
+    final blender = site('3d');
+    test('both conditions', () {
+      expect(liveViewApp(info: info(viewer: '/view'), site: blender), '3d');
       expect(liveViewApp(info: info(), site: blender), isNull, reason: 'no viewer on this server');
       expect(liveViewApp(info: info(viewer: ''), site: blender), isNull);
       expect(liveViewApp(info: null, site: blender), isNull);
       expect(liveViewApp(info: info(viewer: '/view'), site: null), isNull, reason: 'no site');
-      expect(liveViewApp(info: info(viewer: '/view'), site: site('docs', mcp: ['x'])), isNull, reason: 'MCP only: no application to show');
     });
 
     test('through the status: the session\'s site decides', () {
@@ -71,15 +69,15 @@ void main() {
       s = reduce(s, InfoReceived(home.url, info(viewer: '/view'))).$1;
       s = reduce(s, SitesLoaded(home.url, [blender, site('docs', mcp: ['x'])])).$1;
       final status = s.statusOf(home.url);
-      expect(status.liveViewOf(session('1', site: '3d')), 'blender');
-      expect(status.liveViewOf(session('1', site: 'docs')), isNull);
+      expect(status.liveViewOf(session('1', site: '3d')), '3d');
+      expect(status.liveViewOf(session('1', site: 'docs')), 'docs');
       expect(status.liveViewOf(session('1')), isNull);
       expect(status.liveViewOf(session('1', site: 'unknown')), isNull);
       expect(status.liveViewOf(null), isNull);
     });
 
-    test('the address is the workspace URL, the viewer path and the bare page, never the token', () {
-      expect(liveViewUrl('https://h.ts.net/w/default', '/view'), 'https://h.ts.net/w/default/view?bare=1');
+    test('the address is the server URL, the viewer path and the bare page, never the token', () {
+      expect(liveViewUrl('https://h.ts.net', '/view'), 'https://h.ts.net/view?bare=1');
       expect(liveViewUrl('http://10.0.2.2:7420', 'view'), 'http://10.0.2.2:7420/view?bare=1');
     });
   });
@@ -111,7 +109,7 @@ void main() {
 
     test('the reply\'s sentence is a notice, an error too (the effect runner dispatches them)', () {
       var s = loaded();
-      s = reduce(s, const NoticeShown('Entered 3d (3D). Started the blender application.')).$1;
+      s = reduce(s, const NoticeShown('Entered 3d (3D).')).$1;
       expect(s.notice?.text, contains('Entered 3d'));
       s = reduce(s, CommandFailed(home.url, 'no such site: nope')).$1;
       expect(s.notice?.text, 'no such site: nope');
@@ -129,7 +127,7 @@ void main() {
 
     test('a new chat in a site carries the site to the effect', () {
       final create = reduce(loaded(), NewSessionRequested(home.url, project: 'game', site: '3d')).$2.single as CreateSession;
-      expect((create.agent, create.project, create.site), ('orchestrator', 'game', '3d'));
+      expect((create.agent, create.project, create.site), ('default', 'game', '3d'));
       expect((reduce(loaded(), NewSessionRequested(home.url)).$2.single as CreateSession).site, isNull);
     });
   });

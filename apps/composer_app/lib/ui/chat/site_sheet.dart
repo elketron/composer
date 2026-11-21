@@ -82,10 +82,7 @@ class SiteSheet extends StatelessWidget {
                 row(
                   site.name,
                   title: site.title,
-                  detail: [
-                    if ((site.app ?? '').isNotEmpty) 'app ${site.app}',
-                    if (site.mcp.isNotEmpty) 'mcp ${site.mcp.join(', ')}',
-                  ].join(' · '),
+                  detail: site.mcp.isEmpty ? '' : 'mcp ${site.mcp.join(', ')}',
                   on: site.name == current,
                   key: Key('site-pick-${site.name}'),
                 ),

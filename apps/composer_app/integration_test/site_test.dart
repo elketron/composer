@@ -1,7 +1,7 @@
 // Sites on the phone: switch a session into the demo site from the chip, see its live view
 // appear, resize it with the handle, leave and see it go; the Sites tab lists the site and
 // starts a chat in it. Run on the emulator by scripts/phone-e2e.sh against a server with a `demo`
-// site (`app: demoapp`), `[applications.demoapp]` and a `[viewer]` pointing at a running wayai.
+// site and a `[viewer]` pointing at a running wayai (a site's `app:` no longer starts anything).
 // SHOT_PAUSE=<seconds> stops at the interesting screens (see support.dart's `shot`).
 
 import 'package:composer_app/ui/chat/live_view.dart';
@@ -53,7 +53,7 @@ void main() {
     // Its application's live view appears, on the bare viewer page, and loads.
     await pumpUntil(tester, find.byKey(const Key('live-view')), seconds: 30);
     await pumpUntil(tester, find.byType(LiveView));
-    expect(find.text('demoapp · live'), findsOneWidget);
+    expect(find.text('demo · live'), findsOneWidget);
     await settle(tester, seconds: 6);
     expect(find.byKey(const Key('live-view-error')), findsNothing);
     final view = find.byKey(const Key('live-view'));
@@ -66,7 +66,7 @@ void main() {
     expect(store.state.liveFrame, isNotNull, reason: 'the bare page reported the size of the screen');
     expect(height(), closeTo(tester.getSize(view).width / store.state.liveFrame!.aspect, 0.5));
     final medium = height();
-    expect(find.descendant(of: view, matching: find.text('demoapp · live')), findsNothing);
+    expect(find.descendant(of: view, matching: find.text('demo · live')), findsNothing);
     expect(find.descendant(of: find.byKey(const Key('live-view-handle')), matching: find.text('view only')), findsOneWidget);
     await shot(tester, 'session-live-medium');
 
@@ -106,11 +106,10 @@ void main() {
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
 
-    // The Sites tab: the demo site, its application, the session in it.
+    // The Sites tab: the demo site, the session in it.
     await tester.tap(find.byKey(const Key('tab-sites')));
     await pumpUntil(tester, find.byKey(const Key('site-demo')));
     await shot(tester, 'sites-tab');
-    expect(find.text('demoapp'), findsOneWidget);
     // The server may hold sessions from earlier runs: count against what is there now.
     final before = sessionsInDemo(tester);
     expect(before, greaterThanOrEqualTo(1), reason: 'the session just put in it');
