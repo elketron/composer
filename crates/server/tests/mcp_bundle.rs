@@ -87,11 +87,13 @@ async fn a_bundle_is_an_mcp_server() {
     std::fs::write(mcps.join("junk.mcpb"), "not a zip").unwrap();
     let config = dir.path().join("config.toml");
     let mut text = std::fs::read_to_string(&config).unwrap_or_default();
-    text.push_str("\n[mcp.demo]\nallow = [\"greet\"]\nsites = [\"bundled\"]\n[mcp.demo.config]\ngreeting = \"hello\"\n");
+    text.push_str(
+        "\n[mcp.needy]\n[mcp.demo]\nallow = [\"greet\"]\n[mcp.demo.config]\ngreeting = \"hello\"\n",
+    );
     std::fs::write(&config, text).unwrap();
     server.reload_config().unwrap();
 
-    let mut listed = server.mcp().list().await;
+    let mut listed = server.mcp().list(&[]).await;
     listed.sort_by(|a, b| a.name.cmp(&b.name));
     let names: Vec<_> = listed.iter().map(|s| s.name.as_str()).collect();
     assert_eq!(names, ["demo", "needy"], "the junk file is skipped");
@@ -106,10 +108,11 @@ async fn a_bundle_is_an_mcp_server() {
     );
     assert!(dir.path().join("state/mcps/demo/server.py").exists());
 
-    // Called in a turn of a session in a site that names it; `allow` runs it without asking.
+    // `config.toml` names it, so it is in every session: called in a turn; `allow` runs it
+    // without asking.
     std::fs::create_dir_all(server.home.sites().join("bundled")).unwrap();
     let url = composer_core::SiteUrl::new("bundled", "index.md").unwrap();
-    let page = "---\ntitle: bundled\nmcp: [demo]\n---\nYou use tools.\n";
+    let page = "---\ntitle: bundled\n---\nYou use tools.\n";
     server.write_page(&url, page, ChangedBy::External).unwrap();
     let mut socket = connect(addr, &server.token).await;
     send(
@@ -253,6 +256,10 @@ async fn a_bundles_server_starts_in_its_code_and_writes_its_run_folder() {
     zip.start_file("server.py", options).unwrap();
     zip.write_all(POKING_SERVER.as_bytes()).unwrap();
     zip.finish().unwrap();
+    let config = dir.path().join("config.toml");
+    let mut text = std::fs::read_to_string(&config).unwrap_or_default();
+    text.push_str("\n[mcp.poke]\nallow = [\"poke\"]\n");
+    std::fs::write(&config, text).unwrap();
     server.reload_config().unwrap();
 
     let code = dir.path().join("state/mcps/poke");
@@ -268,11 +275,15 @@ async fn a_bundles_server_starts_in_its_code_and_writes_its_run_folder() {
     assert!(!listing(&code).is_empty());
     assert!(run.is_dir(), "its writable folder is made with the config");
 
-    let result = server
-        .mcp()
-        .call_internal("poke", "poke", json!({}))
-        .await
+    let session = server
+        .sessions
+        .create(composer_protocol::RunKind::Agentic, None, None)
         .unwrap();
+    let context = composer_server::tools::ToolContext::for_session(&server, session.id()).unwrap();
+    let result = server
+        .tools
+        .call_value(&context, "poke__poke", json!({}))
+        .await;
     assert!(!result.is_error, "{}", result.text);
     let said: Value = serde_json::from_str(&result.text).unwrap();
     assert_eq!(said["cwd is the code"], true, "{said}");

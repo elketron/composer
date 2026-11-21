@@ -110,7 +110,7 @@ impl Connection {
                         Ok(context) => Ok(CommandResult::Tools {
                             tools: server
                                 .tools
-                                .infos_for(&server.mcp(), context.kind, context.site.as_deref())
+                                .infos_for(&server, context.kind, context.site.as_deref())
                                 .await,
                         }),
                         Err(message) => Err(message),
@@ -130,7 +130,8 @@ impl Connection {
             ClientCommand::McpList => {
                 let (connection, server) = (self.clone(), server.clone());
                 tokio::spawn(async move {
-                    let servers = server.mcp().list().await;
+                    let sites = server.site_mcp.all();
+                    let servers = server.mcp().list(&sites).await;
                     connection.reply(id, Ok(CommandResult::McpServers { servers }));
                 });
                 None
@@ -192,6 +193,21 @@ impl Connection {
                 server.hub.send(ServerMessage::SessionUpdated {
                     session: session.info(),
                 });
+                // Started in a site: its `mcp.toml` is asked about and its servers started as
+                // when the site is set; the reply does not wait for that.
+                if let Some(site) = session.info().site {
+                    let (server, session) = (server.clone(), session.clone());
+                    tokio::spawn(async move {
+                        let sink = server.sink(&session);
+                        let cancel = tokio_util::sync::CancellationToken::new();
+                        let note = crate::site_mcp::enter(&server, &*sink, &site, &cancel).await;
+                        if note.approved {
+                            server.hub.send(ServerMessage::ToolsChanged {
+                                session: session.id().to_string(),
+                            });
+                        }
+                    });
+                }
                 Ok(CommandResult::Session {
                     session: session.info(),
                 })
@@ -401,7 +417,9 @@ async fn set_site(
     site: Option<String>,
 ) -> Result<String, String> {
     let session = server.sessions.get(session).map_err(|e| e.to_string())?;
-    crate::agent::set_site(server, &*server.sink(&session), site.as_deref())
+    // The user's own switch: an approval it asks for waits as long as they take.
+    let cancel = tokio_util::sync::CancellationToken::new();
+    crate::agent::set_site(server, &*server.sink(&session), site.as_deref(), &cancel)
         .await
         .map(|set| set.text())
 }

@@ -623,16 +623,23 @@ async fn a_non_loopback_upstream_is_no_viewer() {
 async fn the_sites_listing_includes_optional_mcp_servers() {
     let (dir, server, _p, addr) = start(vec![]).await;
     let sites = dir.path().join("sites");
-    for (name, index) in [
+    for (name, mcp_toml) in [
         (
             "flow",
-            "---\ntitle: Flow\nmcp: [blender, comfy]\n---\n# Flow\n",
+            "[servers.blender]\nbundle = \"blender\"\n[servers.comfy]\nurl = \"http://127.0.0.1:1/mcp\"\n",
         ),
-        ("mcponly", "---\ntitle: M\nmcp: wayai\n---\n# M\n"),
-        ("plain", "---\ntitle: Plain\n---\n# Plain\n"),
+        (
+            "mcponly",
+            "[servers.wayai]\nurl = \"http://127.0.0.1:2/mcp\"\n",
+        ),
+        ("plain", ""),
     ] {
         std::fs::create_dir_all(sites.join(name)).unwrap();
+        let index = format!("---\ntitle: {name}\n---\n# {name}\n");
         std::fs::write(sites.join(name).join("index.md"), index).unwrap();
+        if !mcp_toml.is_empty() {
+            std::fs::write(sites.join(name).join("mcp.toml"), mcp_toml).unwrap();
+        }
     }
     let listing: Vec<SiteSummary> = client()
         .get(format!("http://{addr}/api/sites"))

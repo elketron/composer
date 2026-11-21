@@ -14,11 +14,12 @@ pub async fn run_mcp(home: Home, options: McpOptions) -> Result<()> {
     let link = ServerLink::open(&options.server_url, &token, &options.session)
         .await
         .map_err(ServerError::Invalid)?;
-    let server = Arc::new(McpServer::new(link.clone()));
-
-    // Requests are handled concurrently (a tool may wait for an approval); replies are written
-    // one line at a time.
+    // Requests are handled concurrently (a tool may wait for an approval); replies and
+    // notifications are written one line at a time.
     let (tx, mut rx) = mpsc::unbounded_channel::<String>();
+    let server = Arc::new(McpServer::new(link.clone(), tx.clone()));
+    let following = server.clone();
+    let follower = tokio::spawn(async move { following.follow_changes().await });
     let writer = tokio::spawn(async move {
         let mut stdout = tokio::io::stdout();
         while let Some(line) = rx.recv().await {
@@ -51,7 +52,9 @@ pub async fn run_mcp(home: Home, options: McpOptions) -> Result<()> {
             }
         }
     }
+    follower.abort();
     drop(tx);
+    drop(server);
     let _ = writer.await;
     Ok(())
 }

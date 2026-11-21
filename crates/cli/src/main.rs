@@ -71,8 +71,8 @@ enum Command {
     },
     /// Forget the remote server; use the local one again.
     Logout,
-    /// Serve a session's tools over MCP on stdin/stdout (needs a running server).
-    // rewrite: phase 3: composer's one MCP server, not tied to a session.
+    /// Serve composer's tools for a session over MCP on stdin/stdout, for any harness (needs a
+    /// running server). The list follows the session's site.
     #[command(hide = true)]
     Mcp {
         #[arg(long)]

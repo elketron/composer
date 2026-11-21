@@ -21,9 +21,9 @@ and adds its tools from the next turn; leaving returns.
 
 **If you need a verb that isn't in your base set, enter the site that owns it.**
 
-Any site can be entered with `:site <name>` or `set_site`. A site may also name an application
-with `app:` or server tools with `mcp:`; neither is required. Leaving drops the site's context and
-tools while keeping the conversation.
+Any site can be entered with `:site <name>` or `set_site`. A site may also bring MCP servers in
+its `mcp.toml` (`[servers.<name>]`); their tools join yours once the user approved the file.
+Leaving drops the site's context and tools while keeping the conversation.
 
 ## Addresses
 

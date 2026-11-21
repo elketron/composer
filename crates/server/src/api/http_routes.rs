@@ -10,7 +10,6 @@ use composer_protocol::http::{
     PageResponse, ProjectDiff, PutPageRequest, PutPageResponse, SearchHit, ServerInfo, SiteSummary,
 };
 
-use crate::agent::Site;
 use crate::api::{ApiError, Credential};
 use crate::server::Server;
 
@@ -51,10 +50,12 @@ pub async fn sites(State(server): State<Arc<Server>>) -> Result<Json<Vec<SiteSum
         sites
             .into_iter()
             .map(|s| {
-                // A site may declare `mcp:` in its index.
-                let site = Site::load(&server.web, &s.name).ok();
+                // The servers its `mcp.toml` declares, approved or not.
+                let mcp = crate::site_mcp::load(&server.web, &s.name)
+                    .map(|file| file.servers.into_iter().map(|s| s.name).collect())
+                    .unwrap_or_default();
                 SiteSummary {
-                    mcp: site.map(|site| site.mcp).unwrap_or_default(),
+                    mcp,
                     pages: pages.get(s.name.as_str()).copied().unwrap_or(0),
                     name: s.name,
                     title: s.title,

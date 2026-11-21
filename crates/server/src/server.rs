@@ -38,8 +38,10 @@ pub struct Server {
     pub hub: EventHub,
     pub sessions: SessionManager,
     pub tools: ToolRegistry,
-    /// MCP servers from `config.toml`, their tools for the agents that list them.
+    /// The MCP servers: `config.toml`'s and the sites', pooled.
     mcp: RwLock<Arc<McpServers>>,
+    /// The sites whose approved `mcp.toml` servers are in use.
+    pub site_mcp: crate::site_mcp::ActiveSites,
     pub approvals: Approvals,
     pub pending_approvals: PendingApprovals,
     /// Required on every request (header or `?token=`).
@@ -99,6 +101,7 @@ impl Server {
                     .collect(),
                 home.sites(),
             ))),
+            site_mcp: crate::site_mcp::ActiveSites::default(),
             approvals: Approvals::load(&home.approvals_file())?,
             pending_approvals: PendingApprovals::default(),
             web_sessions: crate::api::WebSessions::default(),
@@ -123,7 +126,7 @@ impl Server {
         self.config.read().expect("config lock").clone()
     }
 
-    /// The MCP servers of the current config.
+    /// The MCP servers of the current config (and of the sites in use).
     pub fn mcp(&self) -> Arc<McpServers> {
         self.mcp.read().expect("mcp lock").clone()
     }
@@ -153,6 +156,7 @@ impl Server {
         if current.mcp != next.mcp {
             let mut mcp = self.mcp.write().expect("mcp lock");
             *mcp = Arc::new(mcp.reconfigured(&next.mcp));
+            self.site_mcp.clear();
         }
         crate::viewer_upstream::ViewerUpstream::warn_if_refused(&next);
         *current = Arc::new(next);

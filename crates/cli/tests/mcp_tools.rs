@@ -1,5 +1,6 @@
 //! `composer mcp` serves a session's tools over stdio: an MCP client lists them and calls one,
-//! and the tool runs in that session on the server.
+//! the tool runs in that session on the server, and setting the session's site tells the client
+//! its list changed.
 
 mod support;
 
@@ -147,6 +148,34 @@ async fn a_client_uses_a_sessions_tools_through_mcp() {
     assert!(!failed, "{home_page}");
     let (output, failed) = mcp.call("open", json!({ "url": "site://nope" })).await;
     assert!(failed, "{output}");
+
+    // Setting the session's site changes its tools: the client is told, unasked.
+    assert_eq!(init["result"]["capabilities"]["tools"]["listChanged"], true);
+    send(
+        &mut socket,
+        2,
+        ClientCommand::SiteSet {
+            session: session.id.clone(),
+            site: Some("home".into()),
+        },
+    )
+    .await;
+    let note = tokio::time::timeout(Duration::from_secs(10), mcp.stdout.next_line())
+        .await
+        .expect("a notification")
+        .unwrap()
+        .expect("a line");
+    let note: Value = serde_json::from_str(&note).unwrap();
+    assert_eq!(note["method"], "notifications/tools/list_changed");
+    let list = mcp.request("tools/list", json!({})).await;
+    assert!(
+        list["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|t| t["name"] == "new_site"),
+        "home's own tool: {list}"
+    );
 
     // The client exiting closes stdin; the tool server stops with it.
     drop(mcp);

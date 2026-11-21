@@ -19,6 +19,8 @@ type Reply = oneshot::Sender<Result<CommandResult, String>>;
 pub struct ServerLink {
     tx: mpsc::UnboundedSender<(ClientCommand, Reply)>,
     closed: Arc<Notify>,
+    /// Notified when the server says the session's tools changed (`tools.changed`).
+    changed: Arc<Notify>,
     session: String,
 }
 
@@ -35,8 +37,11 @@ impl ServerLink {
         let (mut sink, mut stream) = socket.split();
         let (tx, mut rx) = mpsc::unbounded_channel::<(ClientCommand, Reply)>();
         let closed = Arc::new(Notify::new());
+        let changed = Arc::new(Notify::new());
 
         let on_close = closed.clone();
+        let on_change = changed.clone();
+        let own = session.to_string();
         tokio::spawn(async move {
             let mut next_id = 0u64;
             let mut waiting: HashMap<u64, Reply> = HashMap::new();
@@ -65,6 +70,9 @@ impl ServerLink {
                                     let _ = reply.send(Err(message));
                                 }
                             }
+                            Ok(ServerMessage::ToolsChanged { session }) if session == own => {
+                                on_change.notify_one();
+                            }
                             _ => {}
                         }
                     }
@@ -80,6 +88,7 @@ impl ServerLink {
         Ok(Arc::new(Self {
             tx,
             closed,
+            changed,
             session: session.to_string(),
         }))
     }
@@ -130,5 +139,9 @@ impl ToolSource for ServerLink {
             }),
             other => Err(format!("unexpected reply to tool.call: {other:?}")),
         }
+    }
+
+    async fn changed(&self) {
+        self.changed.notified().await;
     }
 }
