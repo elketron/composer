@@ -194,7 +194,7 @@ fn empty_stage(frame: &mut Frame, area: Rect, state: &AppState) {
     frame.render_widget(block, area);
     frame.render_widget(
         Paragraph::new(Line::from(Span::styled(
-            "nothing open \u{b7} \u{b7}p a page \u{b7} gd this project's changes \u{b7} the agent's\n  pages and anything it puts on the stage appear here",
+            "nothing open \u{b7} \u{b7}p a page \u{b7} gd the changes of the site's folder \u{b7} the agent's\n  pages and anything it puts on the stage appear here",
             theme::faint(),
         ))),
         inner,

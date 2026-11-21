@@ -249,7 +249,7 @@ impl App {
                 _ = tick.tick() => {
                     ticks += 1;
                     dirty |= self.state.ui.flash.is_some();
-                    // The project changes outside our view too (you, in nvim): keep the changes view live.
+                    // The folder changes outside our view too (you, in nvim): keep the changes view live.
                     if self.state.changes_open() && ticks.is_multiple_of(2) {
                         self.dispatcher.dispatch(Action::RefreshChanges);
                     }

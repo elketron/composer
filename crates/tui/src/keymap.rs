@@ -120,7 +120,7 @@ impl Keymap {
             (
                 vec![key('g'), key('d')],
                 Action::ToggleChanges,
-                "changes of the active project (git)",
+                "changes of the site's folder (git)",
             ),
             (
                 vec![key('t')],

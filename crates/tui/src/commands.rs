@@ -58,7 +58,7 @@ pub const COMMANDS: [(&str, &str); 14] = [
     (":open <url>", "open a page, e.g. :open memory/user"),
     (
         ":site [site]",
-        "enter a site for this session (its page and tools); no name leaves it",
+        "set the site of this session (set_site: its page, tools and folder); no name leaves it",
     ),
     (":compact", "save memory, then summarize older messages now"),
     (":follow", "toggle following the agent's pages (F)"),

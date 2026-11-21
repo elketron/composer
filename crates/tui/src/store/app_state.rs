@@ -10,8 +10,8 @@ use crate::store::types::{
     PickerTarget, Startup,
 };
 use crate::store::{
-    ApprovalStore, AttachmentStore, ConnectionStore, DeskStore, PageStore, PickerStore,
-    ProjectStore, SessionStore, UiStore,
+    ApprovalStore, AttachmentStore, ChangesStore, ConnectionStore, DeskStore, PageStore,
+    PickerStore, SessionStore, UiStore,
 };
 
 /// Messages a session opens with, and fetches each time you scroll up to the oldest.
@@ -29,7 +29,7 @@ pub struct AppState {
     pub ui: UiStore,
     pub picker: PickerStore,
     pub approvals: ApprovalStore,
-    pub project: ProjectStore,
+    pub changes: ChangesStore,
     pub catalog: Catalog,
     /// Files attached to the message being written.
     pub attachments: AttachmentStore,
@@ -47,7 +47,7 @@ impl AppState {
             ui: UiStore::new(),
             picker: PickerStore::new(),
             approvals: ApprovalStore::default(),
-            project: ProjectStore::default(),
+            changes: ChangesStore::default(),
             catalog: Catalog::default(),
             attachments: AttachmentStore::default(),
             default_kind: startup.kind,
@@ -308,20 +308,20 @@ impl AppState {
             }
             Action::RefreshChanges => self.refresh_changes(),
             Action::DiffSemantic => {
-                self.project.toggle_semantic();
+                self.changes.toggle_semantic();
                 vec![]
             }
             Action::DiffLoaded(diff) => {
-                self.project.loaded(diff);
+                self.changes.loaded(diff);
                 vec![]
             }
             Action::DiffFailed(error) => {
-                self.project.failed(error);
+                self.changes.failed(error);
                 vec![]
             }
             Action::OpenFileAt { path, line } => {
                 // The diff names the folder it is of.
-                match self.project.diff.as_ref().map(|d| d.path.clone()) {
+                match self.changes.diff.as_ref().map(|d| d.path.clone()) {
                     Some(folder) => vec![Effect::OpenFile {
                         path: format!("{folder}/{path}"),
                         line,
@@ -425,8 +425,8 @@ impl AppState {
 
     fn refresh_changes(&mut self) -> Vec<Effect> {
         match self.session.current.clone() {
-            Some(session) if self.changes_open() && !self.project.loading => {
-                self.project.loading = true;
+            Some(session) if self.changes_open() && !self.changes.loading => {
+                self.changes.loading = true;
                 vec![Effect::FetchDiff(session)]
             }
             _ => vec![],
@@ -516,9 +516,9 @@ impl AppState {
             }
             Some(StageTab::Changes { .. }) => {
                 self.page.hide();
-                if self.project.diff.is_none()
-                    && self.project.error.is_none()
-                    && !self.project.loading
+                if self.changes.diff.is_none()
+                    && self.changes.error.is_none()
+                    && !self.changes.loading
                 {
                     self.refresh_changes()
                 } else {
@@ -926,7 +926,7 @@ impl AppState {
             }
             other => {
                 let current = self.session.apply(&other);
-                // The agent may have changed project files: refresh an open changes view.
+                // The agent may have changed files in the folder: refresh an open changes view.
                 let changed = matches!(
                     other,
                     ServerMessage::ToolResult { .. } | ServerMessage::TurnDone { .. }

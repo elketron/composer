@@ -2,7 +2,7 @@
 //!
 //! The desk is the server's: the same one the desktop and the phone render, and the one the
 //! agent's `show_page` lands on. The TUI reads it and draws the tabs a terminal can draw — a
-//! page, a project's changes. `Terminal` and `LiveView` tabs are kept exactly as received: never
+//! page, a site's folder's changes. `Terminal` and `LiveView` tabs are kept exactly as received: never
 //! shown, never written back.
 
 use composer_core::SiteUrl;

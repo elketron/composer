@@ -56,7 +56,7 @@ pub enum Action {
     McpServers,
     /// `:reload`: the server reads config.toml again.
     ReloadConfig,
-    /// Narrow the session picker to a project (a name or folder); `None`: all.
+    /// Narrow the session picker to the sessions in a site; `None`: all.
     Scope(Option<String>),
 
     // ---- stage tabs (the session's desk) ----
@@ -77,14 +77,14 @@ pub enum Action {
     SetSite(Option<String>),
     ReloadPage,
 
-    // ---- changes view (active project) ----
+    // ---- changes view (the folder of the session's site) ----
     ToggleChanges,
     RefreshChanges,
     DiffLoaded(composer_protocol::http::ProjectDiff),
     DiffFailed(String),
     /// Semantic (difft) diff or the text diff in the changes view.
     DiffSemantic,
-    /// Open a project file in the editor at a line.
+    /// Open a file of the folder in the editor at a line.
     OpenFileAt {
         path: String,
         line: u32,

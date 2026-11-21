@@ -14,7 +14,7 @@ use crate::store::AppState;
 use crate::store::types::{DiffKind, Pane};
 use crate::theme;
 
-/// Git changes of the active project (`gd`): changed files, then the diff with a
+/// Git changes of the folder of the session's site (`gd`): changed files, then the diff with a
 /// cursor; `Enter` opens the file in the editor at the cursor's line.
 pub struct ChangesView {
     /// Cursor, as an index into the diff lines.
@@ -37,11 +37,11 @@ impl ChangesView {
 
 impl Component for ChangesView {
     fn handle_key(&mut self, key: KeyEvent, state: &AppState) -> Vec<Action> {
-        let count = state.project.lines.len();
+        let count = state.changes.lines.len();
         let page = self.height.get().max(2) / 2;
         let g = std::mem::take(&mut self.pending_g);
         match (key.code, key.modifiers) {
-            (KeyCode::Char('v'), _) if state.project.has_semantic() => {
+            (KeyCode::Char('v'), _) if state.changes.has_semantic() => {
                 return vec![Action::DiffSemantic];
             }
             (KeyCode::Char('j') | KeyCode::Down, _) => self.cursor += 1,
@@ -56,7 +56,7 @@ impl Component for ChangesView {
             // Next / previous file.
             (KeyCode::Char('}'), _) => {
                 if let Some(i) = state
-                    .project
+                    .changes
                     .lines
                     .iter()
                     .skip(self.cursor + 1)
@@ -66,7 +66,7 @@ impl Component for ChangesView {
                 }
             }
             (KeyCode::Char('{'), _) => {
-                if let Some(i) = state.project.lines[..self.cursor.min(count)]
+                if let Some(i) = state.changes.lines[..self.cursor.min(count)]
                     .iter()
                     .rposition(|l| l.kind == DiffKind::File)
                 {
@@ -74,7 +74,7 @@ impl Component for ChangesView {
                 }
             }
             (KeyCode::Enter, _) => {
-                if let Some(line) = state.project.lines.get(self.cursor)
+                if let Some(line) = state.changes.lines.get(self.cursor)
                     && let Some(file) = &line.file
                 {
                     return vec![Action::OpenFileAt {
@@ -91,10 +91,10 @@ impl Component for ChangesView {
     }
 
     fn render(&self, frame: &mut Frame, area: Rect, state: &AppState) {
-        let project = &state.project;
+        let changes = &state.changes;
         let sep = || Span::styled(" · ", theme::faint());
         let mut title = vec![Span::raw(" "), Span::styled("changes", theme::text())];
-        if let Some(diff) = &project.diff {
+        if let Some(diff) = &changes.diff {
             title.push(sep());
             title.push(Span::styled(short_path(&diff.path), theme::muted()));
             if let Some(branch) = &diff.branch {
@@ -130,14 +130,14 @@ impl Component for ChangesView {
         };
         let width = inner.width as usize;
 
-        // The diff shown is the session's project's diff. A changes tab that names another
-        // project (a desk carried over from another session) has nothing of its own to show.
+        // The diff shown is the folder of the session's site. A changes tab that names another
+        // site (a desk carried over from another session) has nothing of its own to show.
         if let Some(other) = state.changes_elsewhere() {
             frame.render_widget(
                 Paragraph::new(Span::styled(
                     format!(
                         "nothing to show: this tab is the changes of `{other}`, and this 
-  session's project is another one"
+  session is in another site"
                     ),
                     theme::faint(),
                 )),
@@ -146,7 +146,7 @@ impl Component for ChangesView {
             return;
         }
 
-        let message = match (&project.diff, &project.error) {
+        let message = match (&changes.diff, &changes.error) {
             (_, Some(error)) => Some(Span::styled(error.clone(), Style::new().fg(theme::ERR))),
             (None, None) => Some(Span::styled("loading…", theme::faint())),
             (Some(diff), None) if diff.files.is_empty() => Some(Span::styled(
@@ -159,7 +159,7 @@ impl Component for ChangesView {
             frame.render_widget(Paragraph::new(message), inner);
             return;
         }
-        let Some(diff) = &project.diff else { return };
+        let Some(diff) = &changes.diff else { return };
 
         // Changed files, then the diff (the cursor moves through the diff).
         let mut header: Vec<Line> = Vec::new();
@@ -199,7 +199,7 @@ impl Component for ChangesView {
         self.scroll.set(scroll);
 
         let mut lines: Vec<Line> = header.into_iter().take(header_height).collect();
-        for (i, line) in project
+        for (i, line) in changes
             .lines
             .iter()
             .enumerate()
@@ -273,7 +273,7 @@ mod tests {
 
     fn state_with_diff() -> AppState {
         let mut state = AppState::new(Startup::default(), 160_000);
-        state.project.loaded(ProjectDiff {
+        state.changes.loaded(ProjectDiff {
             path: "/wt".into(),
             branch: None,
             files: vec![ChangedFile {
@@ -292,9 +292,9 @@ mod tests {
     fn v_switches_to_the_text_diff() {
         let mut state = state_with_diff();
         let mut view = ChangesView::new();
-        assert!(state.project.lines.iter().all(|l| l.kind != DiffKind::Hunk));
+        assert!(state.changes.lines.iter().all(|l| l.kind != DiffKind::Hunk));
         let actions = press(&mut view, &mut state, "v");
         assert_eq!(actions, [Action::DiffSemantic]);
-        assert!(state.project.lines.iter().any(|l| l.kind == DiffKind::Hunk));
+        assert!(state.changes.lines.iter().any(|l| l.kind == DiffKind::Hunk));
     }
 }

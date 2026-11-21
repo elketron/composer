@@ -12,9 +12,9 @@ pub enum Effect {
     LoadSites,
     /// Sites and every page, for completing `:` commands.
     LoadCatalog,
-    /// Fetch the active project's git changes for a session.
+    /// Fetch the git changes of the folder of a session's site.
     FetchDiff(String),
-    /// Suspend the TUI and open a project file in the editor at a line. Run by the app loop.
+    /// Suspend the TUI and open a file of the folder in the editor at a line. Run by the app loop.
     OpenFile {
         path: String,
         line: u32,

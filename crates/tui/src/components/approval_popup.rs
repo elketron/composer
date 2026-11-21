@@ -122,7 +122,7 @@ impl Component for ApprovalPopup {
                 )
             }
             ApprovalKind::Tool => match &approval.rule {
-                Some(rule) => format!("a always: allow {rule} in this project from now on"),
+                Some(rule) => format!("a always: allow {rule} in this folder from now on"),
                 None => "outside its allowlist".to_string(),
             },
             ApprovalKind::Mcp => match &approval.rule {

@@ -195,7 +195,7 @@ pub enum DiffKind {
     Note,
 }
 
-/// One displayed diff line, with where it points in the project (for opening the editor).
+/// One displayed diff line, with where it points in the folder (for opening the editor).
 #[derive(Debug, Clone, PartialEq)]
 pub struct DiffLine {
     pub kind: DiffKind,

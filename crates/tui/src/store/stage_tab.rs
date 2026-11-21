@@ -11,7 +11,7 @@ pub enum StageTab {
         url: String,
         unseen: bool,
     },
-    /// A project's changes.
+    /// The changes of a site's folder.
     Changes {
         id: String,
         site: String,

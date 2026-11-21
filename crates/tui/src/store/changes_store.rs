@@ -3,10 +3,10 @@ use composer_protocol::http::ProjectDiff;
 use crate::diff_parse::view_lines;
 use crate::store::types::DiffLine;
 
-/// The changes view: git changes of the active project. Whether one is on the stage is a tab
+/// The changes view: git changes of the folder of the session's site. Whether one is on the stage is a tab
 /// on the desk, not a flag here.
 #[derive(Debug, Default)]
-pub struct ProjectStore {
+pub struct ChangesStore {
     pub diff: Option<ProjectDiff>,
     /// What the view shows: the semantic diff where the server sent one (unless `plain`), else
     /// the text diff.
@@ -17,7 +17,7 @@ pub struct ProjectStore {
     pub loading: bool,
 }
 
-impl ProjectStore {
+impl ChangesStore {
     pub fn loaded(&mut self, diff: ProjectDiff) {
         self.loading = false;
         self.error = None;

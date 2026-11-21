@@ -63,7 +63,7 @@ pub fn view_text(name: &str, text: &str) -> Action {
     }
 }
 
-/// Opens a project file in `$EDITOR` at `line` (`+line` works for vi, vim, nvim, helix, ...).
+/// Opens a file in `$EDITOR` at `line` (`+line` works for vi, vim, nvim, helix, ...).
 pub fn open_file(path: &str, line: u32) -> Action {
     if !std::path::Path::new(path).is_file() {
         return Action::Flash(format!("{path} is not on this machine"), FlashLevel::Warn);

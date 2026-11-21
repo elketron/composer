@@ -50,7 +50,7 @@ const PLACES: [(&str, &[(&str, &str)]); 7] = [
                 "space p, a link, :open",
                 "a page opens as a tab; the same page again is the same tab",
             ),
-            ("gd", "this project's changes, as a tab"),
+            ("gd", "the changes of the site's folder, as a tab"),
             ("click", "pick a tab in the bar"),
             (
                 "shift-tab",
@@ -107,7 +107,7 @@ const PLACES: [(&str, &[(&str, &str)]); 7] = [
         "Approvals (recipes, terminal input, MCP tools)",
         &[
             ("y", "approve (a recipe: this version of it)"),
-            ("a", "a tool: always allow its rule in this project"),
+            ("a", "a tool: always allow its rule in this folder"),
             ("n", "deny (the agent is told to ask you why)"),
             ("e", "read all of it in $EDITOR"),
             ("ctrl-c", "cancel the agent's turn"),
