@@ -55,9 +55,10 @@ impl Tool for RunTool {
             return Err(format!("`{}` is a private helper recipe", recipe.name));
         }
         check_args(&recipe, &args.args, false)?;
+        let session = context.session()?;
         ensure_approved(
             server,
-            &context.session,
+            &session,
             &site,
             &justfile,
             &recipe,
@@ -67,7 +68,7 @@ impl Tool for RunTool {
         .await
         .map_err(|refusal| refusal.message().to_string())?;
 
-        let env = RecipeEnv::new(server, &site, Some(&context.session));
+        let env = RecipeEnv::new(server, &site, Some(&session));
         let timeout = Duration::from_secs(server.config().agent.recipe_timeout_secs);
         let output = run_recipe(
             &justfile,

@@ -140,7 +140,7 @@ impl TuiPage {
         let cwd = self.resolve_cwd(context, page)?;
         let id = context.server.terminals.open_tui(
             &context.server,
-            &context.session,
+            &context.session()?,
             &self.command,
             &cwd,
             self.columns,

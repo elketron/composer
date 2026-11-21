@@ -1,7 +1,6 @@
 use std::path::Path;
 
 use composer_core::{Index, SiteUrl, Web};
-use composer_protocol::SessionInfo;
 
 use crate::agent::RunSettings;
 
@@ -14,13 +13,11 @@ pub fn system_prompt(
     settings: &RunSettings,
     workspace: &Web,
     index: &Index,
-    session: &SessionInfo,
+    site: Option<&str>,
+    id: &str,
 ) -> String {
     let mut sections = vec![settings.prompt.clone()];
-    let site = session
-        .site
-        .as_deref()
-        .and_then(|name| crate::agent::Site::load(workspace, name).ok());
+    let site = site.and_then(|name| crate::agent::Site::load(workspace, name).ok());
     if let Some(site) = &site {
         sections.push(format!(
             "<page url=\"site://{}/\">\n{}\n</page>",
@@ -57,7 +54,6 @@ pub fn system_prompt(
             composer_protocol::RunKind::Agentic => "agentic",
         },
         date = chrono::Local::now().format("%Y-%m-%d %A"),
-        id = session.id,
     ));
 
     let mut memory = Vec::new();

@@ -36,7 +36,7 @@ impl Tool for WatchTool {
     async fn call(&self, context: &ToolContext, args: Value) -> Result<String, String> {
         let args: WatchArgs = serde_json::from_value(args).map_err(|e| e.to_string())?;
         let server = &context.server;
-        let session = context.session.id();
+        let session = context.run.id();
         let Some(raw) = args.pattern else {
             let watches = server.watches.for_session(session);
             if watches.is_empty() {

@@ -1,21 +1,17 @@
-//! The agent loop: user messages in, model calls and tool calls until the model stops.
+//! A session's turns: user messages in, a run of the session's kind on them, until its inbox is
+//! empty.
 
 use std::sync::Arc;
 
-use composer_protocol::{ChatMessage, MessageSource, Role, ServerMessage, ToolCall, TurnState};
-use tokio_util::sync::CancellationToken;
+use composer_protocol::{ChatMessage, MessageSource, ServerMessage, TurnState};
 
-use crate::agent::{RunSettings, system_prompt};
+use crate::agent::RunSettings;
 use crate::attachments::{ForModel, for_model};
-use crate::provider::{ModelMessage, ModelRequest, ModelToolCall};
+use crate::provider::ModelMessage;
 use crate::server::Server;
-use crate::session::Session;
 use crate::session::compaction::compact;
-use crate::session::model_call::{
-    model_step_continuing, parse_args, prepare_history, store_images, thinking_budget, tool_step,
-};
-use crate::session::turn_budget::TurnBudget;
-use crate::tools::ToolContext;
+use crate::session::run::system_message;
+use crate::session::{Session, run};
 
 /// Delivers a user-side message. Starts a turn, or queues it behind the running one.
 pub fn submit(server: &Arc<Server>, session: &Arc<Session>, message: ChatMessage) {
@@ -51,7 +47,8 @@ async fn drive(server: Arc<Server>, session: Arc<Session>) {
             seq,
         });
         let cancel = session.new_turn_token(Some(started));
-        let outcome = run_turn(&server, &session, &cancel).await;
+        let settings = RunSettings::for_session(&session.info());
+        let outcome = run(&server, &settings, server.sink(&session), &cancel).await;
         if let Err(error) = &outcome {
             tracing::warn!("session {id}: {error}");
             let message = system_message(format!("Turn stopped: {error}"));
@@ -121,116 +118,6 @@ fn accept_user_message(server: &Arc<Server>, session: &Arc<Session>, message: Ch
     session.update_info(&server.hub, |info| info.preview = Some(preview));
 }
 
-/// How a turn that used up its tokens (or steps) ends: "Turn stopped: reached the turn limit (…)".
-pub const TURN_LIMIT: &str = "reached the turn limit";
-
-/// Model call → tools → model call ... until the model answers without tool calls.
-/// Before each call, a context over the threshold is compacted first.
-async fn run_turn(
-    server: &Arc<Server>,
-    session: &Arc<Session>,
-    cancel: &CancellationToken,
-) -> Result<(), String> {
-    let settings = RunSettings::for_session(&session.info());
-    let site = session
-        .info()
-        .site
-        .as_deref()
-        .and_then(|name| crate::agent::Site::load(&server.web, name).ok())
-        .map(Arc::new);
-    let tools = server
-        .tools
-        .specs_with_mcp(server, settings.kind, site.as_deref())
-        .await;
-    let context = ToolContext {
-        server: server.clone(),
-        session: session.clone(),
-        kind: settings.kind,
-        only: None,
-        site: site.clone(),
-        cancel: cancel.clone(),
-    };
-
-    let (turn_tokens, max_steps) = {
-        let config = server.config();
-        (config.agent.turn_tokens, config.agent.max_steps)
-    };
-    let mut budget = TurnBudget::new(turn_tokens);
-    let mut steps = 0;
-    loop {
-        if budget.exceeded() {
-            return Err(format!(
-                "{TURN_LIMIT} ({} of {turn_tokens} tokens in one turn)",
-                budget.used()
-            ));
-        }
-        if max_steps > 0 && steps >= max_steps {
-            return Err(format!(
-                "{TURN_LIMIT} ({max_steps} model calls in one turn)"
-            ));
-        }
-        steps += 1;
-        if session.info().context_tokens >= server.config().agent.compaction_threshold {
-            compact(server, session, cancel, true).await?;
-        }
-        // The prompt is rebuilt every step: memory or the site may have changed.
-        let mut messages = vec![ModelMessage::System {
-            content: system_prompt(
-                &settings,
-                &server.web,
-                &server.index.read().expect("index lock"),
-                &session.info(),
-            ),
-        }];
-        messages.extend(prepare_history(
-            server,
-            session.history(),
-            thinking_budget(server),
-        ));
-        let request = ModelRequest {
-            messages,
-            tools: tools.clone(),
-            model: settings.model.clone(),
-            reasoning_effort: settings.reasoning.clone(),
-        };
-        let step = model_step_continuing(server, session, request, cancel, true).await?;
-        let written: String = step
-            .tool_calls
-            .iter()
-            .map(|c| c.arguments.as_str())
-            .chain([step.content.as_str(), step.thinking.as_str()])
-            .collect();
-        budget.model_call(step.usage.as_ref(), &written);
-        if let Some(usage) = step.usage {
-            session.update_info(&server.hub, |info| {
-                info.context_tokens = usage.prompt_tokens + usage.completion_tokens
-            });
-        }
-        record_assistant(
-            server,
-            session,
-            step.content,
-            step.thinking,
-            &step.tool_calls,
-        )?;
-        if step.cancelled || cancel.is_cancelled() || step.tool_calls.is_empty() {
-            return Ok(());
-        }
-        for call in &step.tool_calls {
-            let result = tool_step(server, &context, call).await;
-            budget.tool_results(&result.text);
-            let images = store_images(server, session, &call.name, &result.images);
-            session
-                .push_history(ModelMessage::Tool {
-                    call_id: call.id.clone(),
-                    content: result.text,
-                    images,
-                })
-                .map_err(|e| e.to_string())?;
-        }
-    }
-}
-
 /// Compacts an idle session now (`:compact`). Errors if a turn is running.
 pub fn compact_now(server: &Arc<Server>, session: &Arc<Session>) -> Result<(), String> {
     if !session.try_start() {
@@ -261,61 +148,5 @@ async fn compact_started(server: &Arc<Server>, session: &Arc<Session>) {
     // Messages that arrived meanwhile start their turn now.
     if session.stop_running() {
         tokio::spawn(drive(server.clone(), session.clone()));
-    }
-}
-
-fn record_assistant(
-    server: &Arc<Server>,
-    session: &Arc<Session>,
-    content: String,
-    thinking: String,
-    tool_calls: &[ModelToolCall],
-) -> Result<(), String> {
-    if content.is_empty() && tool_calls.is_empty() && thinking.is_empty() {
-        return Ok(());
-    }
-    let thinking = (!thinking.is_empty()).then_some(thinking);
-    session
-        .push_history(ModelMessage::Assistant {
-            content: content.clone(),
-            thinking: thinking.clone(),
-            tool_calls: tool_calls.to_vec(),
-        })
-        .map_err(|e| e.to_string())?;
-    let message = ChatMessage {
-        role: Role::Assistant,
-        content,
-        thinking,
-        tool_calls: tool_calls
-            .iter()
-            .map(|c| ToolCall {
-                call_id: c.id.clone(),
-                name: c.name.clone(),
-                args: parse_args(&c.arguments),
-            })
-            .collect(),
-        pages: vec![],
-        images: vec![],
-        attachments: vec![],
-        source: None,
-    };
-    session.emit(&server.hub, |seq| ServerMessage::MessageDone {
-        session: session.id().to_string(),
-        seq,
-        message,
-    });
-    Ok(())
-}
-
-pub(crate) fn system_message(content: String) -> ChatMessage {
-    ChatMessage {
-        role: Role::System,
-        content,
-        thinking: None,
-        tool_calls: vec![],
-        pages: vec![],
-        images: vec![],
-        attachments: vec![],
-        source: Some(MessageSource::Server),
     }
 }

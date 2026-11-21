@@ -1,5 +1,5 @@
 //! One model call (holding a slot while it streams) and one tool call, as used by
-//! turns and by compaction.
+//! runs and by compaction.
 
 use std::sync::Arc;
 
@@ -11,7 +11,7 @@ use tokio_util::sync::CancellationToken;
 use crate::attachments::{ATTACHMENT_SCHEME, attachment_data_url};
 use crate::provider::{CallError, ModelEvent, ModelMessage, ModelRequest, ModelToolCall};
 use crate::server::Server;
-use crate::session::{Session, StepOutput};
+use crate::session::{RunSink, Session, StepOutput};
 use crate::tools::{CallResult, ToolContext, text_result};
 
 /// Why a model call gave no step to go on with.
@@ -57,22 +57,21 @@ impl From<StepError> for String {
 /// A reply with no text, thinking or tool call is an error, not a quiet end of the turn.
 pub async fn model_step(
     server: &Arc<Server>,
-    session: &Arc<Session>,
+    sink: &dyn RunSink,
     mut request: ModelRequest,
     cancel: &CancellationToken,
     live: bool,
 ) -> Result<StepOutput, StepError> {
     if server.slots.is_full() {
-        session.update_info(&server.hub, |info| info.state = TurnState::Waiting);
+        sink.set_state(TurnState::Waiting);
     }
     let slot = tokio::select! {
         slot = server.slots.acquire() => slot.map_err(StepError::Refused)?,
         _ = cancel.cancelled() => return Ok(StepOutput { cancelled: true, ..StepOutput::default() }),
     };
-    session.update_info(&server.hub, |info| info.state = TurnState::Running);
+    sink.set_state(TurnState::Running);
 
-    let id = session.id().to_string();
-    request.model = request.model.or(session.info().model);
+    let id = sink.id().to_string();
     request.reasoning_effort = request
         .reasoning_effort
         .or_else(|| reasoning_effort(server));
@@ -100,21 +99,23 @@ pub async fn model_step(
             Some(Ok(ModelEvent::Thinking(text))) => {
                 out.thinking.push_str(&text);
                 if live {
-                    session.emit(&server.hub, |seq| ServerMessage::ThinkingDelta {
-                        session: id.clone(),
+                    let id = id.clone();
+                    sink.emit(Box::new(move |seq| ServerMessage::ThinkingDelta {
+                        session: id,
                         seq,
                         text,
-                    });
+                    }));
                 }
             }
             Some(Ok(ModelEvent::Content(text))) => {
                 out.content.push_str(&text);
                 if live {
-                    session.emit(&server.hub, |seq| ServerMessage::MessageDelta {
-                        session: id.clone(),
+                    let id = id.clone();
+                    sink.emit(Box::new(move |seq| ServerMessage::MessageDelta {
+                        session: id,
                         seq,
                         text,
-                    });
+                    }));
                 }
             }
             Some(Ok(ModelEvent::Finished {
@@ -155,25 +156,26 @@ const AUTO_CONTINUES: u32 = 2;
 /// just continues.
 pub async fn model_step_continuing(
     server: &Arc<Server>,
-    session: &Arc<Session>,
+    sink: &dyn RunSink,
     request: ModelRequest,
     cancel: &CancellationToken,
     live: bool,
 ) -> Result<StepOutput, StepError> {
     let mut retries = 0;
     loop {
-        match model_step(server, session, request.clone(), cancel, live).await {
+        match model_step(server, sink, request.clone(), cancel, live).await {
             Err(error) if error.may_pass_on_retry() && retries < AUTO_CONTINUES => {
                 retries += 1;
-                tracing::warn!("session {}: {error}; continuing", session.id());
-                let message = crate::session::turn::system_message(format!(
+                tracing::warn!("run {}: {error}; continuing", sink.id());
+                let message = crate::session::run::system_message(format!(
                     "{error}; continuing by itself ({retries} of {AUTO_CONTINUES})"
                 ));
-                session.emit(&server.hub, |seq| ServerMessage::MessageDone {
-                    session: session.id().to_string(),
+                let id = sink.id().to_string();
+                sink.emit(Box::new(move |seq| ServerMessage::MessageDone {
+                    session: id,
                     seq,
                     message,
-                });
+                }));
             }
             outcome => return outcome,
         }
@@ -186,28 +188,31 @@ pub async fn tool_step(
     context: &ToolContext,
     call: &ModelToolCall,
 ) -> CallResult {
-    let session = &context.session;
-    let id = session.id().to_string();
+    let sink = &context.run;
+    let id = sink.id().to_string();
     let result = if context.cancel.is_cancelled() {
         text_result("cancelled by the user".to_string(), true)
     } else {
-        session.emit(&server.hub, |seq| ServerMessage::ToolCallStarted {
-            session: id.clone(),
+        let (id, call_id, name) = (id.clone(), call.id.clone(), call.name.clone());
+        let args = parse_args(&call.arguments);
+        sink.emit(Box::new(move |seq| ServerMessage::ToolCallStarted {
+            session: id,
             seq,
-            call_id: call.id.clone(),
-            name: call.name.clone(),
-            args: parse_args(&call.arguments),
+            call_id,
+            name,
+            args,
             parent: None,
-        });
+        }));
         server.tools.call(context, call).await
     };
-    session.emit(&server.hub, |seq| ServerMessage::ToolResult {
-        session: id.clone(),
+    let (call_id, text, is_error) = (call.id.clone(), result.text.clone(), result.is_error);
+    sink.emit(Box::new(move |seq| ServerMessage::ToolResult {
+        session: id,
         seq,
-        call_id: call.id.clone(),
-        result: result.text.clone(),
-        is_error: result.is_error,
-    });
+        call_id,
+        result: text,
+        is_error,
+    }));
     result
 }
 
@@ -279,7 +284,11 @@ pub fn prepare_history(
             ModelMessage::User { images, .. } | ModelMessage::Tool { images, .. } => {
                 *images = images
                     .iter()
-                    .filter_map(|url| data_url(server, url))
+                    .filter_map(|url| match url.starts_with("data:") {
+                        // A run that is not stored keeps its images as they came.
+                        true => Some(url.clone()),
+                        false => data_url(server, url),
+                    })
                     .collect();
             }
             _ => {}

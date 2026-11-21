@@ -38,7 +38,7 @@ async fn a_site_brings_its_page_and_tools() {
             .map(Arc::new);
         ToolContext {
             server: server.clone(),
-            session: session.clone(),
+            run: server.sink(&session),
             kind: RunKind::Agentic,
             only: None,
             site,
@@ -86,7 +86,13 @@ async fn a_site_brings_its_page_and_tools() {
     // The prompt has the site's page and tools in place of Home.
     let prompt = {
         let index = server.index.read().unwrap();
-        system_prompt(&settings, &server.web, &index, &session.info())
+        system_prompt(
+            &settings,
+            &server.web,
+            &index,
+            session.info().site.as_deref(),
+            session.id(),
+        )
     };
     assert!(prompt.contains("Entered the lab."), "{prompt}");
     assert!(prompt.contains("its tools are: new_site"), "{prompt}");
@@ -170,7 +176,7 @@ async fn a_runs_kind_decides_its_tools() {
         .unwrap();
     let context = ToolContext {
         server: server.clone(),
-        session,
+        run: server.sink(&session),
         kind: RunKind::Workflow,
         only: None,
         site: None,

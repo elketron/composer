@@ -401,7 +401,7 @@ async fn set_site(
     site: Option<String>,
 ) -> Result<String, String> {
     let session = server.sessions.get(session).map_err(|e| e.to_string())?;
-    crate::agent::set_site(server, &session, site.as_deref())
+    crate::agent::set_site(server, &*server.sink(&session), site.as_deref())
         .await
         .map(|set| set.text())
 }

@@ -51,7 +51,7 @@ async fn a_tui_page_starts_in_the_sites_folder() {
         .unwrap();
     let context = ToolContext {
         server: server.clone(),
-        session: session.clone(),
+        run: server.sink(&session),
         kind: composer_protocol::RunKind::Agentic,
         only: None,
         site: Some(std::sync::Arc::new(

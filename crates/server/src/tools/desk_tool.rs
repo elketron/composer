@@ -46,7 +46,7 @@ impl Tool for DeskTool {
             let tab = put(context, DeskTab::LiveView)?;
             return Ok(format!("{tab} (the live view) is on the stage"));
         }
-        let desk = context.session.desk();
+        let desk = context.session()?.desk();
         if let Some(tab) = args["point"].as_str() {
             if !desk.tabs.iter().any(|t| t.id == tab) {
                 return Err(format!(

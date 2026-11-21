@@ -54,7 +54,7 @@ impl Tool for TerminalSendTool {
             let rule = format!("Bash({}:*)", text.trim());
             let decision = server
                 .ask_approval(
-                    &context.session,
+                    &*context.session()?,
                     ApprovalKind::Tool,
                     format!("Type into terminal {}", terminal.id),
                     text.clone(),

@@ -229,6 +229,14 @@ impl Server {
         self.listen_addr.get().copied()
     }
 
+    /// `session` as a run's sink.
+    pub fn sink(&self, session: &Arc<Session>) -> Arc<dyn crate::session::RunSink> {
+        Arc::new(crate::session::SessionSink::new(
+            session.clone(),
+            self.hub.clone(),
+        ))
+    }
+
     /// The folder of the site `session` is in (`folder:`), when it names one that exists.
     pub fn session_folder(&self, session: &SessionInfo) -> Option<PathBuf> {
         let site = crate::agent::Site::load(&self.web, session.site.as_deref()?).ok()?;

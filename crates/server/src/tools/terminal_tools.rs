@@ -17,6 +17,6 @@ pub(crate) fn terminal(
 ) -> Result<std::sync::Arc<Terminal>, String> {
     let id = args["id"].as_str().unwrap_or_default();
     let terminal = context.server.terminals.find(id)?;
-    owned(&terminal, &context.session)?;
+    owned(&terminal, &*context.session()?)?;
     Ok(terminal)
 }

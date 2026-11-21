@@ -73,15 +73,15 @@ impl Tool for OpenTool {
             }
         };
 
-        let session = context.session.id().to_string();
+        let session = context.run.id().to_string();
         let canonical = page.url.to_string();
         context
-            .session
-            .emit(&server.hub, |seq| ServerMessage::AgentNavigated {
+            .run
+            .emit(Box::new(move |seq| ServerMessage::AgentNavigated {
                 session,
                 seq,
                 url: canonical,
-            });
+            }));
 
         // A TUI page is a capability, not just text: opening it starts its program on the
         // session's desk. Its control adapter (the `hunk` tool) is how the agent drives it.

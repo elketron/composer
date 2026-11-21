@@ -150,7 +150,7 @@ async fn a_sessions_terminal_runs_in_the_folder_of_its_site() {
     assert!(String::from_utf8_lossy(&bytes).contains("sum-42"));
     let context = ToolContext {
         server: server.clone(),
-        session: session.clone(),
+        run: server.sink(&session),
         kind: composer_protocol::RunKind::Agentic,
         only: None,
         site: None,
@@ -168,7 +168,7 @@ async fn a_sessions_terminal_runs_in_the_folder_of_its_site() {
         .create(composer_protocol::RunKind::Agentic, None, None)
         .unwrap();
     let elsewhere = ToolContext {
-        session: other,
+        run: server.sink(&other),
         ..context.clone()
     };
     for (tool, args) in [

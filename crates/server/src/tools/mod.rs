@@ -5,6 +5,7 @@ mod arg_repair;
 mod args;
 mod desk_tool;
 mod edit_tool;
+mod finish_tool;
 mod list_sites_tool;
 mod markdown_sections;
 mod new_site_tool;

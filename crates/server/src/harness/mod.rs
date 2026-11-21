@@ -1,6 +1,6 @@
 //! What runs outside composer's own agent loop: child processes in their own process group (and
 //! systemd scope), shell-command approval policy, and the user's "always" rules.
-// rewrite: phase 2/3: the base for the ACP harness and background processes.
+// rewrite: phase 3: the base for the ACP harness and background processes.
 
 mod child_process;
 mod command_policy;

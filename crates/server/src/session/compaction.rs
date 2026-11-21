@@ -9,11 +9,11 @@ use tokio_util::sync::CancellationToken;
 use crate::agent::{RunSettings, system_prompt};
 use crate::provider::{ModelMessage, ModelRequest};
 use crate::server::Server;
-use crate::session::Session;
 use crate::session::model_call::{
     StepError, estimate_tokens, model_step, model_step_continuing, prepare_history,
     thinking_budget, tool_step,
 };
+use crate::session::{RunSink, Session};
 use crate::tools::ToolContext;
 
 /// Tools the agent may use while saving memory.
@@ -52,17 +52,20 @@ pub async fn compact(
         return Ok(0);
     }
     let older = prepare_history(server, history[..cut].to_vec(), thinking_budget(server));
-    let settings = RunSettings::for_session(&session.info());
+    let info = session.info();
+    let settings = RunSettings::for_session(&info);
+    let sink = server.sink(session);
     let system = ModelMessage::System {
         content: system_prompt(
             &settings,
             &server.web,
             &server.index.read().expect("index lock"),
-            &session.info(),
+            info.site.as_deref(),
+            &info.id,
         ),
     };
 
-    save_memory(server, session, &system, &older, cancel).await?;
+    save_memory(server, &sink, &settings, &system, &older, cancel).await?;
     if cancel.is_cancelled() {
         return Ok(0);
     }
@@ -75,12 +78,12 @@ pub async fn compact(
     });
     let summary = model_step_continuing(
         server,
-        session,
+        &*sink,
         ModelRequest {
             messages,
             tools: vec![],
-            model: None,
-            reasoning_effort: None,
+            model: settings.model.clone(),
+            reasoning_effort: settings.reasoning.clone(),
         },
         cancel,
         false,
@@ -158,7 +161,8 @@ fn turn_cut(history: &[ModelMessage], keep: u32) -> usize {
 /// The memory pass: a short tool loop with only the page tools, not added to history.
 async fn save_memory(
     server: &Arc<Server>,
-    session: &Arc<Session>,
+    sink: &Arc<dyn RunSink>,
+    settings: &RunSettings,
     system: &ModelMessage,
     older: &[ModelMessage],
     cancel: &CancellationToken,
@@ -168,7 +172,7 @@ async fn save_memory(
         .specs_for(RunKind::Agentic, None, Some(&MEMORY_TOOLS));
     let context = ToolContext {
         server: server.clone(),
-        session: session.clone(),
+        run: sink.clone(),
         kind: RunKind::Agentic,
         only: Some(&MEMORY_TOOLS),
         site: None,
@@ -184,12 +188,12 @@ async fn save_memory(
     for _ in 0..MEMORY_STEPS {
         let step = match model_step(
             server,
-            session,
+            &**sink,
             ModelRequest {
                 messages: messages.clone(),
                 tools: tools.clone(),
-                model: None,
-                reasoning_effort: None,
+                model: settings.model.clone(),
+                reasoning_effort: settings.reasoning.clone(),
             },
             cancel,
             false,

@@ -340,7 +340,7 @@ async fn run(server: &Arc<Server>, recipe: &str, args: &[&str]) -> CallResult {
         .unwrap();
     let context = ToolContext {
         server: server.clone(),
-        session,
+        run: server.sink(&session),
         kind: composer_protocol::RunKind::Agentic,
         only: None,
         site: None,
@@ -477,7 +477,7 @@ async fn the_sh_escape_hatch_takes_one_command_with_quotes_and_newlines() {
         .unwrap();
     let context = ToolContext {
         server: server.clone(),
-        session,
+        run: server.sink(&session),
         kind: composer_protocol::RunKind::Agentic,
         only: None,
         site: None,

@@ -11,6 +11,7 @@ use crate::tools::actions_tool::ActionsTool;
 use crate::tools::arg_repair::RepairedArgs;
 use crate::tools::desk_tool::DeskTool;
 use crate::tools::edit_tool::EditTool;
+use crate::tools::finish_tool::FinishTool;
 use crate::tools::list_sites_tool::ListSitesTool;
 use crate::tools::new_site_tool::NewSiteTool;
 use crate::tools::open_tool::OpenTool;
@@ -48,6 +49,7 @@ impl ToolRegistry {
                 Arc::new(WriteTool),
                 Arc::new(EditTool),
                 Arc::new(SetSiteTool),
+                Arc::new(FinishTool),
                 Arc::new(ActionsTool),
                 Arc::new(RunTool),
                 Arc::new(NewSiteTool),
@@ -173,7 +175,7 @@ impl ToolRegistry {
         // Its own writes don't wake its watches.
         WRITER
             .scope(
-                context.session.id().to_string(),
+                context.run.id().to_string(),
                 tool.call_result(context, args),
             )
             .await

@@ -58,7 +58,7 @@ async fn the_agent_puts_things_on_the_stage() {
     .await;
     let context = ToolContext {
         server: server.clone(),
-        session: session.clone(),
+        run: server.sink(&session),
         kind: composer_protocol::RunKind::Agentic,
         only: None,
         site: Some(std::sync::Arc::new(
@@ -135,7 +135,7 @@ async fn the_agent_puts_the_live_view_on_the_stage_when_there_is_one() {
             .unwrap();
         let context = ToolContext {
             server: server.clone(),
-            session: session.clone(),
+            run: server.sink(&session),
             kind: composer_protocol::RunKind::Agentic,
             only: None,
             site: None,

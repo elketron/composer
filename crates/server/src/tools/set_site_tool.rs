@@ -32,7 +32,7 @@ impl Tool for SetSiteTool {
 
     async fn call(&self, context: &ToolContext, args: Value) -> Result<String, String> {
         let site = args["site"].as_str();
-        let set = set_site(&context.server, &context.session, site).await?;
+        let set = set_site(&context.server, &*context.run, site).await?;
         Ok(match set {
             SiteSet::Entered(_) => format!("{} It applies from your next turn.", set.text()),
             _ => set.text(),

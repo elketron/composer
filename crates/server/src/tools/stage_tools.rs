@@ -10,7 +10,7 @@ use crate::tools::ToolContext;
 /// Opens `tab` on the session's desk for the agent (unfocused, unseen) and tells its clients.
 pub(crate) fn put(context: &ToolContext, tab: DeskTab) -> Result<String, String> {
     let mut opened = String::new();
-    let desk = context.session.change_desk(|desk| {
+    let desk = context.session()?.change_desk(|desk| {
         opened = desk.open(tab, false, DeskBy::Agent)?;
         Ok(())
     })?;
@@ -20,7 +20,7 @@ pub(crate) fn put(context: &ToolContext, tab: DeskTab) -> Result<String, String>
 
 pub(crate) fn point(context: &ToolContext, desk: Desk, tab: &str) {
     context.server.hub.send(ServerMessage::DeskChanged {
-        session: context.session.id().to_string(),
+        session: context.run.id().to_string(),
         desk,
         by: DeskBy::Agent,
         opened: Some(tab.to_string()),

@@ -33,7 +33,7 @@ async fn a_folder_lists_and_a_page_shows_its_hash() {
         .unwrap();
     let context = ToolContext {
         server: server.clone(),
-        session,
+        run: server.sink(&session),
         kind: composer_protocol::RunKind::Agentic,
         only: None,
         site: None,

@@ -105,7 +105,7 @@ fn context(
         .map(Arc::new);
     ToolContext {
         server: server.clone(),
-        session: session.clone(),
+        run: server.sink(session),
         kind,
         only: None,
         site,
@@ -116,10 +116,13 @@ fn context(
 /// Puts the session in `name`.
 async fn enter(
     server: &Arc<Server>,
-    session: &composer_server::session::Session,
+    session: &Arc<composer_server::session::Session>,
     name: &str,
 ) -> Entered {
-    match set_site(server, session, Some(name)).await.unwrap() {
+    match set_site(server, &*server.sink(session), Some(name))
+        .await
+        .unwrap()
+    {
         SiteSet::Entered(entered) => entered,
         other => panic!("{other:?}"),
     }
@@ -215,7 +218,9 @@ async fn a_site_grants_mcp_tools_while_the_session_is_in_it() {
     // Leaving too.
     enter(&server, &session, "lab").await;
     assert_eq!(
-        set_site(&server, &session, None).await.unwrap(),
+        set_site(&server, &*server.sink(&session), None)
+            .await
+            .unwrap(),
         SiteSet::Left("lab".into())
     );
     let after = context(&server, &session, RunKind::Agentic);
@@ -285,7 +290,9 @@ async fn a_page_cannot_grant_a_server_its_config_does_not_list_the_site_for() {
     );
 
     // The agent enters: its tool result says the same.
-    set_site(&server, &session, None).await.unwrap();
+    set_site(&server, &*server.sink(&session), None)
+        .await
+        .unwrap();
     let result = server
         .tools
         .call_value(
