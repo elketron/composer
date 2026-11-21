@@ -124,7 +124,7 @@ void main() {
     await pumpUntil(tester, find.byKey(const Key('site-demo')));
     expect(sessionsInDemo(tester), before + 1);
 
-    // The Inbox shows each session's site beside its project.
+    // The Inbox shows each session's site.
     await tester.tap(find.byKey(const Key('tab-inbox')));
     await tester.pumpAndSettle();
     expect(find.text('demo'), findsWidgets);

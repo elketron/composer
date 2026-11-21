@@ -9,7 +9,7 @@ const _keep = Object();
 
 /// What the app knows about a server right now (not persisted).
 class ServerStatus {
-  const ServerStatus({this.link = LinkState.connecting, this.error, this.retryAt, this.info, this.sessions = const [], this.approvals = const [], this.chat, this.page = const PageState(), this.sites = const [], this.agents = const [], this.unread = const {}, this.recent = const [], this.search = const PageSearch(), this.slotsUsed = 0, this.reader, this.models});
+  const ServerStatus({this.link = LinkState.connecting, this.error, this.retryAt, this.info, this.sessions = const [], this.approvals = const [], this.chat, this.page = const PageState(), this.sites = const [], this.unread = const {}, this.recent = const [], this.search = const PageSearch(), this.slotsUsed = 0, this.reader, this.models});
 
   static const initial = ServerStatus();
 
@@ -36,9 +36,6 @@ class ServerStatus {
 
   /// From `/api/sites`, for the site list.
   final List<SiteSummary> sites;
-
-  /// From `/api/agents`, for the New chat sheet.
-  final List<AgentSummary> agents;
 
   /// Sessions that finished a turn since you last looked at them.
   final Set<String> unread;
@@ -86,7 +83,6 @@ class ServerStatus {
     Object? chat = _keep,
     PageState? page,
     List<SiteSummary>? sites,
-    List<AgentSummary>? agents,
     Set<String>? unread,
     List<RecentPage>? recent,
     PageSearch? search,
@@ -104,7 +100,6 @@ class ServerStatus {
         chat: identical(chat, _keep) ? this.chat : chat as ChatState?,
         page: page ?? this.page,
         sites: sites ?? this.sites,
-        agents: agents ?? this.agents,
         unread: unread ?? this.unread,
         recent: recent ?? this.recent,
         search: search ?? this.search,

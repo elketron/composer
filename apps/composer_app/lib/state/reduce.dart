@@ -9,6 +9,7 @@ import 'chat_state.dart';
 import 'effects.dart';
 import 'live_view_size.dart';
 import 'page_state.dart';
+import 'run_kind.dart';
 import 'site_url.dart';
 import 'server_entry.dart';
 import 'server_status.dart';
@@ -54,8 +55,7 @@ import 'types.dart';
         _historyLoaded(s, url, session, before, events, more),
       SessionClosed(:final url) => _close(s, url),
       ViewScrolled(:final url, :final session, :final atBottom) => (_scrolled(s, url, session, atBottom), const []),
-      NewSessionRequested(:final url, :final agent, :final project, :final site) =>
-        (s, [CreateSession(url, agent, project: project, site: site)]),
+      NewSessionRequested(:final url, :final kind, :final site) => (s, [CreateSession(url, kind, site: site)]),
       SiteChosen(:final url, :final site, :final session) => _siteChosen(s, url, site, session),
       PreferencesLoaded(:final liveViewSize) => (s.copyWith(liveViewSize: liveViewSize), const []),
       LiveViewResized(:final size) => _liveViewSized(s, size),
@@ -100,7 +100,6 @@ import 'types.dart';
           _updateStatus(s, url, (x) => x.search.query == query ? x.copyWith(search: PageSearch(query: query, hits: hits, error: error)) : x),
           const [],
         ),
-      AgentsLoaded(:final url, :final agents) => (_updateStatus(s, url, (x) => x.copyWith(agents: agents)), const []),
       // What it had seen: a turn that started since (a queued message) keeps going.
       CancelRequested(:final url) => _toChat(
           s,
@@ -415,7 +414,7 @@ AppState _withUpload(AppState s, String url, int id, Upload Function(Upload uplo
         [
           Notify(
             key: 'turn:${session.id}',
-            title: '${session.agent} #${session.id} finished',
+            title: '${runKindLabel(session.kind)} #${session.id} finished',
             body: session.preview ?? 'on $server',
             url: url,
             session: session.id,

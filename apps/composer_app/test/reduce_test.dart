@@ -13,7 +13,7 @@ const work = ServerEntry(url: 'https://work.ts.net', name: 'work', token: 't2');
 const info = ServerInfo(name: 'home-pc', version: '0.1.0', model: 'qwen', slots: 2);
 
 SessionInfo session(String id, String updated) =>
-    SessionInfo(id: id, agent: 'default', state: TurnState.idle, lastSeq: 0, updated: updated);
+    SessionInfo(id: id, state: TurnState.idle, lastSeq: 0, updated: updated);
 
 AppState loaded(List<ServerEntry> servers) => reduce(AppState.initial, ServersLoaded(servers)).$1;
 
@@ -291,7 +291,7 @@ void main() {
     test('follows the agent in the open session, live events only, unless turned off', () {
       final sessions = ServerEvent(
         home.url,
-        ServerMessageOk(id: 1, result: CommandResultSessions(sessions: [SessionInfo(id: 'a', agent: 'default', state: TurnState.idle, lastSeq: 5, updated: '')])),
+        ServerMessageOk(id: 1, result: CommandResultSessions(sessions: [SessionInfo(id: 'a', state: TurnState.idle, lastSeq: 5, updated: '')])),
       );
       var state = reduce(loaded([home]), sessions).$1;
       state = withChat(state, 'a');
@@ -345,7 +345,7 @@ void main() {
     ServerMessageApprovalRequest approval(String id) => ServerMessageApprovalRequest(
           request: id, session: 'a', site: 'tools', recipe: 'greet', args: const ['bob'], body: 'b', hash: 'h');
     SessionInfo info(String id, TurnState state) =>
-        SessionInfo(id: id, agent: 'default', state: state, lastSeq: 1, updated: '', preview: 'hi');
+        SessionInfo(id: id, state: state, lastSeq: 1, updated: '', preview: 'hi');
     AppState withSessions(AppState s, List<SessionInfo> sessions) =>
         reduce(s, ServerEvent(home.url, ServerMessageOk(id: 1, result: CommandResultSessions(sessions: sessions)))).$1;
     AppState background(AppState s) => reduce(s, const ForegroundChanged(false)).$1;
@@ -392,8 +392,8 @@ void main() {
       expect(reduce(state, done).$2.whereType<Notify>(), isEmpty);
     });
 
-    test('the phone home: unread work, recent pages, search, new chats with a project', () {
-      SessionInfo s(String id, TurnState state) => SessionInfo(id: id, agent: 'default', state: state, lastSeq: 0, updated: '');
+    test('the phone home: unread work, recent pages, search, new chats of a kind', () {
+      SessionInfo s(String id, TurnState state) => SessionInfo(id: id, state: state, lastSeq: 0, updated: '');
       var state = withSessions(loaded([home]), [s('a', TurnState.running), s('b', TurnState.running)]);
       state = withChat(state, 'b');
       ServerEvent idle(String id) => ServerEvent(home.url, ServerMessageSessionUpdated(session: s(id, TurnState.idle)));
@@ -416,8 +416,9 @@ void main() {
       expect(reduce(next, SearchLoaded(home.url, 'type:ticket', const [hit])).$1.statusOf(home.url).search.hits, isNull, reason: 'stale');
       expect(reduce(next, SearchLoaded(home.url, 'type:plan', const [hit])).$1.statusOf(home.url).search.hits, [hit]);
 
-      final create = reduce(state, NewSessionRequested(home.url, project: 'composer')).$2.single as CreateSession;
-      expect((create.agent, create.project), ('default', 'composer'));
+      final create = reduce(state, NewSessionRequested(home.url, kind: RunKind.workflow)).$2.single as CreateSession;
+      expect(create.kind, RunKind.workflow);
+      expect((reduce(state, NewSessionRequested(home.url)).$2.single as CreateSession).kind, RunKind.agentic);
       expect(reduce(state, const TabSelected(PhoneTab.pages)).$1.tab, PhoneTab.pages);
     });
 

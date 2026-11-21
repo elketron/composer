@@ -5,10 +5,10 @@ import 'package:flutter/material.dart';
 
 import '../../state/actions.dart';
 import '../../state/sites.dart';
-import '../../state/workspace.dart';
+import '../../state/server_mark.dart';
 import '../../theme/tokens.dart' as t;
 import '../store_scope.dart';
-import '../workspace_mark.dart';
+import '../server_badge.dart';
 import 'chat_menu.dart';
 import 'chat_title.dart';
 import 'chat_view.dart';
@@ -74,7 +74,7 @@ class _ChatPageState extends State<ChatPage> {
     final chat = status.chat;
     final session = chat == null ? null : status.session(chat.session);
     final running = session != null && (session.state != TurnState.idle);
-    final workspace = Workspace.of(url, info: status.info, entry: store.state.serverFor(url));
+    final mark = ServerMark.of(url, info: status.info, entry: store.state.serverFor(url));
     final token = store.state.serverFor(url)?.token;
     final viewer = viewerPath(status.info);
     final app = status.liveViewOf(session);
@@ -134,7 +134,7 @@ class _ChatPageState extends State<ChatPage> {
       );
       final chatColumn = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         header,
-        WorkspaceStrip(workspace: workspace),
+        ServerStrip(mark: mark),
         Expanded(child: chatView),
       ]);
       return Scaffold(
@@ -177,7 +177,7 @@ class _ChatPageState extends State<ChatPage> {
         leadingWidth: 48,
         title: title,
         actions: actions,
-        bottom: PreferredSize(preferredSize: const Size.fromHeight(2), child: WorkspaceStrip(workspace: workspace)),
+        bottom: PreferredSize(preferredSize: const Size.fromHeight(2), child: ServerStrip(mark: mark)),
       ),
       body: LayoutBuilder(
         builder: (context, box) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-import '../../state/workspace.dart';
+import '../../state/server_mark.dart';
 import '../store_scope.dart';
-import '../workspace_mark.dart';
+import '../server_badge.dart';
 import 'reader.dart';
 
 /// The reader as its own screen (phones).
@@ -15,11 +15,11 @@ class ReaderScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final store = StoreScope.of(context);
     final status = store.state.statusOf(url);
-    final workspace = Workspace.of(url, info: status.info, entry: store.state.serverFor(url));
+    final mark = ServerMark.of(url, info: status.info, entry: store.state.serverFor(url));
     return Scaffold(
       body: SafeArea(
         child: Column(children: [
-          WorkspaceStrip(workspace: workspace),
+          ServerStrip(mark: mark),
           Expanded(child: Reader(url: url, status: status, onClose: () => Navigator.of(context).maybePop())),
         ]),
       ),

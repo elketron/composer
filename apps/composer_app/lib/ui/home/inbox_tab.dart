@@ -2,6 +2,7 @@ import 'package:composer_protocol/composer_protocol.dart';
 import 'package:flutter/material.dart';
 
 import '../../state/inbox.dart';
+import '../../state/run_kind.dart';
 import '../../state/server_status.dart';
 import '../../theme/composer_theme.dart';
 import '../../theme/tokens.dart' as t;
@@ -49,7 +50,7 @@ class InboxTab extends StatelessWidget {
                   child: ApprovalTile(
                     url: url,
                     approval: a,
-                    agent: status.session(a.session)?.agent,
+                    kind: switch (status.session(a.session)) { final s? => runKindLabel(s.kind), null => null },
                   ),
                 ),
               for (final s in unread) card(s),

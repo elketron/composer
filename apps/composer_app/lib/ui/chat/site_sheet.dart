@@ -7,7 +7,7 @@ import '../store_scope.dart';
 
 /// Opens the site picker for the open chat.
 void showSiteSheet(BuildContext context, String url) {
-  // The workspace's sites may have changed since the catalog was fetched.
+  // The server's sites may have changed since the catalog was fetched.
   StoreScope.read(context).dispatch(CatalogRequested(url));
   showModalBottomSheet<void>(
     context: context,
@@ -17,7 +17,7 @@ void showSiteSheet(BuildContext context, String url) {
   );
 }
 
-/// The workspace's sites, the current one marked, and a way to leave it. Choosing one sends
+/// The server's sites, the current one marked, and a way to leave it. Choosing one sends
 /// `site.set` for the open chat; the reply's sentence comes back as a notice.
 class SiteSheet extends StatelessWidget {
   const SiteSheet({super.key, required this.url});
@@ -74,7 +74,7 @@ class SiteSheet extends StatelessWidget {
                   key: const Key('site-sheet-empty'),
                   padding: const EdgeInsets.fromLTRB(14, 8, 14, 16),
                   child: Text(
-                    'No sites in this workspace.',
+                    'No sites in this server.',
                     style: const TextStyle(fontSize: 13, color: t.faint),
                   ),
                 ),

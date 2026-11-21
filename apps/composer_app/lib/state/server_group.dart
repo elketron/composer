@@ -1,16 +1,15 @@
 import 'server_entry.dart';
 
-/// The paired workspaces of one host: a phone pairs a workspace at a time, so what it lists are
-/// workspaces; they are grouped by the machine that serves them.
-class WorkspaceGroup {
-  const WorkspaceGroup(this.host, this.entries);
+/// The paired servers of one host (`host` or `host:port`), grouped by the machine that serves them.
+class ServerGroup {
+  const ServerGroup(this.host, this.entries);
 
   /// `host` or `host:port`.
   final String host;
   final List<ServerEntry> entries;
 
   /// By host, in the order the hosts first appear among [servers].
-  static List<WorkspaceGroup> group(List<ServerEntry> servers) {
+  static List<ServerGroup> group(List<ServerEntry> servers) {
     final order = <String>[];
     final byHost = <String, List<ServerEntry>>{};
     for (final server in servers) {
@@ -18,7 +17,7 @@ class WorkspaceGroup {
       if (!byHost.containsKey(host)) order.add(host);
       (byHost[host] ??= []).add(server);
     }
-    return [for (final host in order) WorkspaceGroup(host, byHost[host]!)];
+    return [for (final host in order) ServerGroup(host, byHost[host]!)];
   }
 
   static String hostOf(String url) {

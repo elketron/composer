@@ -4,7 +4,7 @@ import '../../state/inbox.dart';
 import '../../state/server_entry.dart';
 import '../../state/server_status.dart';
 import '../../state/types.dart';
-import '../../state/workspace.dart';
+import '../../state/server_mark.dart';
 import '../../theme/composer_theme.dart';
 import '../../theme/tokens.dart' as t;
 import '../approval_bar.dart';
@@ -12,7 +12,7 @@ import '../server_list.dart';
 import '../server_list_footer.dart';
 import '../status_dot.dart';
 import '../store_scope.dart';
-import '../workspace_mark.dart';
+import '../server_badge.dart';
 import 'inbox_tab.dart';
 import 'pages_tab.dart';
 import 'phone_tabs.dart';
@@ -30,7 +30,7 @@ class PhoneHome extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = StoreScope.of(context).state;
     final tab = state.tab;
-    final workspace = Workspace.of(server.url, info: status.info, entry: server);
+    final mark = ServerMark.of(server.url, info: status.info, entry: server);
     // Tells same-named servers apart: `my-pc` on `tail1234` (a tailnet's name; not for IPs).
     final host = Uri.parse(server.url).host.split('.');
     final where = host.length > 2 && RegExp('[a-z]').hasMatch(host.first) ? host[1] : '';
@@ -42,9 +42,9 @@ class PhoneHome extends StatelessWidget {
           style: TextButton.styleFrom(foregroundColor: t.text),
           onPressed: () => _openSwitcher(context),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
-            WorkspaceMark(
-              key: const Key('active-workspace'),
-              workspace: workspace,
+            ServerBadge(
+              key: const Key('active-server'),
+              mark: mark,
               dotSize: 10,
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
             ),
@@ -58,7 +58,7 @@ class PhoneHome extends StatelessWidget {
             const Icon(Icons.expand_more, size: 18, color: t.muted),
           ]),
         ),
-        bottom: PreferredSize(preferredSize: const Size.fromHeight(2), child: WorkspaceStrip(workspace: workspace)),
+        bottom: PreferredSize(preferredSize: const Size.fromHeight(2), child: ServerStrip(mark: mark)),
       ),
       body: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         // Approvals are answered in the Inbox itself; elsewhere the bar points at them.

@@ -1,6 +1,7 @@
 import 'package:composer_protocol/composer_protocol.dart';
 import 'package:flutter/material.dart';
 
+import '../../state/run_kind.dart';
 import '../../state/server_status.dart';
 import '../../theme/composer_theme.dart';
 import '../../theme/tokens.dart' as t;
@@ -8,7 +9,7 @@ import '../format.dart';
 import 'activity_dot.dart';
 import 'site_tag.dart';
 
-/// A session in the Inbox: agent, state, last message, its project and site.
+/// A session in the Inbox: its run kind, state, last message and site.
 class SessionCard extends StatelessWidget {
   const SessionCard({super.key, required this.status, required this.session, required this.onTap, this.unread = false});
 
@@ -25,7 +26,6 @@ class SessionCard extends StatelessWidget {
     final right = isBusy(activity)
         ? (activity == 'approval' ? 'needs approval' : activity)
         : (unread ? 'new · ${ago(session.updated)}' : ago(session.updated));
-    final project = session.project?.split('/').last;
     return Material(
       color: t.surface,
       shape: RoundedRectangleBorder(
@@ -42,7 +42,7 @@ class SessionCard extends StatelessWidget {
             Row(children: [
               ActivityDot(activity),
               const SizedBox(width: 8),
-              Text(session.agent, style: mono(size: 13, color: t.text, weight: FontWeight.w500)),
+              Text(runKindLabel(session.kind), style: mono(size: 13, color: t.text, weight: FontWeight.w500)),
               const SizedBox(width: 8),
               Text('#${session.id}', style: mono(size: 11, color: t.faint)),
               const Spacer(),
@@ -54,8 +54,7 @@ class SessionCard extends StatelessWidget {
             ],
             const SizedBox(height: 7),
             Row(children: [
-              _Chip(project ?? 'no project'),
-              if (session.site != null) ...[const SizedBox(width: 6), SiteTag(session.site!, key: Key('site-tag-${session.id}'))],
+              if (session.site != null) SiteTag(session.site!, key: Key('site-tag-${session.id}')) else const _Chip('no site'),
             ]),
           ]),
         ),

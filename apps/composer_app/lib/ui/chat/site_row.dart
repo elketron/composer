@@ -1,11 +1,12 @@
 import 'package:composer_protocol/composer_protocol.dart';
 import 'package:flutter/material.dart';
 
+import '../../state/run_kind.dart';
 import '../../state/server_status.dart';
 import '../../theme/tokens.dart' as t;
 import 'site_sheet.dart';
 
-/// Under the header: the session's site as a chip (tap: the site sheet), its project, and
+/// Under the header: the session's site as a chip (tap: the site sheet), its run kind, and
 /// its model at the right.
 class SiteRow extends StatelessWidget {
   const SiteRow({super.key, required this.url, required this.status, required this.session, this.compact = false});
@@ -14,13 +15,12 @@ class SiteRow extends StatelessWidget {
   final ServerStatus status;
   final SessionInfo? session;
 
-  /// Only the chip, for the landscape header row (the project and model are in the menu and the sheet).
+  /// Only the chip, for the landscape header row (the run kind is in the title, the model in the sheet).
   final bool compact;
 
   @override
   Widget build(BuildContext context) {
     final site = session?.site;
-    final project = session?.project?.split('/').last;
     final model = session?.model ?? status.info?.model;
     final chipColor = site == null ? t.muted : t.accent;
     // The touch target is 44px both ways; the chip drawn in it is 32 high.
@@ -67,7 +67,7 @@ class SiteRow extends StatelessWidget {
       child: Row(children: [
         chip,
         const SizedBox(width: 8),
-        Expanded(child: Text(project ?? 'no project', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: t.muted))),
+        Expanded(child: Text(session == null ? '' : runKindLabel(session!.kind), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: t.muted))),
         if (model != null) ...[
           const SizedBox(width: 8),
           ConstrainedBox(

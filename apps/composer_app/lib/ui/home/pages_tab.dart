@@ -8,7 +8,7 @@ import '../pages/page_navigation.dart';
 import '../store_scope.dart';
 import 'section_label.dart';
 
-/// The workspace: search (the agents' query syntax), what agents and apps changed lately,
+/// The server's pages: search (the agents' query syntax), what agents and apps changed lately,
 /// and the sites. A site with a built app opens the app; its pages are one tap to the side.
 class PagesTab extends StatefulWidget {
   const PagesTab({super.key, required this.url, required this.status});

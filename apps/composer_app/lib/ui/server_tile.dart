@@ -3,13 +3,13 @@ import 'package:flutter/material.dart';
 import '../state/server_entry.dart';
 import '../state/server_status.dart';
 import '../state/types.dart';
-import '../state/workspace.dart';
+import '../state/server_mark.dart';
 import '../theme/composer_theme.dart';
 import '../theme/tokens.dart' as t;
 import 'format.dart';
 import 'status_dot.dart';
 
-/// A workspace in the switcher: its colour and name, link state, and its address (or why it is
+/// A server in the switcher: its colour and name, link state, and its address (or why it is
 /// offline).
 class ServerTile extends StatelessWidget {
   const ServerTile({super.key, required this.server, required this.status, required this.selected, required this.onTap});
@@ -21,7 +21,7 @@ class ServerTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final workspace = Workspace.of(server.url, info: status.info, entry: server);
+    final mark = ServerMark.of(server.url, info: status.info, entry: server);
     final detail = switch (status.link) {
       LinkState.offline => status.error ?? 'offline',
       // The address tells same-named servers apart.
@@ -36,37 +36,24 @@ class ServerTile extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           decoration: BoxDecoration(
-            border: Border(left: BorderSide(color: selected ? workspace.color.color : Colors.transparent, width: 3)),
+            border: Border(left: BorderSide(color: selected ? mark.color.color : Colors.transparent, width: 3)),
             borderRadius: BorderRadius.circular(t.radius),
           ),
           child: Row(children: [
             Container(
               width: 10,
               height: 10,
-              decoration: BoxDecoration(color: workspace.color.color, shape: BoxShape.circle),
+              decoration: BoxDecoration(color: mark.color.color, shape: BoxShape.circle),
             ),
             const SizedBox(width: 10),
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Row(children: [
-                  Flexible(
-                    child: Text(
-                      workspace.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Flexible(
-                    child: Text(
-                      server.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 12, color: t.muted),
-                    ),
-                  ),
-                ]),
+                Text(
+                  mark.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                ),
                 const SizedBox(height: 2),
                 Row(children: [
                   StatusDot(status.link),

@@ -126,15 +126,12 @@ final class SessionClosed extends AppAction {
 }
 
 final class NewSessionRequested extends AppAction {
-  const NewSessionRequested(this.url, {this.agent = 'default', this.project, this.site});
+  const NewSessionRequested(this.url, {this.kind = RunKind.agentic, this.site});
   final String url;
-  final String agent;
+  final RunKind kind;
 
-  /// A site to enter once the session exists; null for none.
+  /// The site it starts in; null for none.
   final String? site;
-
-  /// A name in the projects directory, or a path; null for none.
-  final String? project;
 }
 
 final class MessageSubmitted extends AppAction {
@@ -303,13 +300,7 @@ final class SitesLoaded extends AppAction {
   final List<SiteSummary> sites;
 }
 
-final class AgentsLoaded extends AppAction {
-  const AgentsLoaded(this.url, this.agents);
-  final String url;
-  final List<AgentSummary> agents;
-}
-
-/// Fetch the sites and agents again.
+/// Fetch the sites again.
 final class CatalogRequested extends AppAction {
   const CatalogRequested(this.url);
   final String url;

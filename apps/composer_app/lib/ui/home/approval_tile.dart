@@ -9,13 +9,13 @@ import '../store_scope.dart';
 
 /// An approval waiting for you, answered in place; what it is about is one tap away.
 class ApprovalTile extends StatelessWidget {
-  const ApprovalTile({super.key, required this.url, required this.approval, this.agent});
+  const ApprovalTile({super.key, required this.url, required this.approval, this.kind});
 
   final String url;
   final ServerMessageApprovalRequest approval;
 
-  /// The asking session's agent.
-  final String? agent;
+  /// The asking session's run kind, as shown (`agentic`).
+  final String? kind;
 
   @override
   Widget build(BuildContext context) {
@@ -35,7 +35,7 @@ class ApprovalTile extends StatelessWidget {
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Text.rich(TextSpan(style: const TextStyle(fontSize: 12, color: t.muted), children: [
-          TextSpan(text: agent ?? 'a session'),
+          TextSpan(text: kind ?? 'a session'),
           TextSpan(text: ' #${approval.session}', style: mono(size: 11, color: t.faint)),
           TextSpan(text: asks),
         ])),

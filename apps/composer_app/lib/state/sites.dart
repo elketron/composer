@@ -2,14 +2,14 @@
 
 import 'package:composer_protocol/composer_protocol.dart';
 
-/// Where the live view of the application is on this server, from `/api/info`: a path to append to the workspace
+/// Where the live view of the application is on this server, from `/api/info`: a path to append to the server's
 /// URL, or null: no live view here.
 String? viewerPath(ServerInfo? info) {
   final path = info?.viewer;
   return path == null || path.isEmpty ? null : path;
 }
 
-/// The address of the live view: the workspace URL, the viewer's path and the bare page. No token:
+/// The address of the live view: the server's URL, the viewer's path and the bare page. No token:
 /// the webview authenticates with a browser session in its cookie (`setWebSessionCookie`).
 String liveViewUrl(String workspaceUrl, String viewer) {
   final path = viewer.startsWith('/') ? viewer : '/$viewer';
@@ -17,9 +17,7 @@ String liveViewUrl(String workspaceUrl, String viewer) {
 }
 
 /// What the live view is labelled with for a session in [site]: the server has a viewer and the
-/// session is in a site. Null: no live view.
-// rewrite: phase 2 — a site's `app:` is ignored now, so entering a site no longer starts an
-// application; the live view shows whatever the viewer has in front, labelled with the site.
+/// session is in a site. Null: no live view. The view shows whatever the viewer has in front.
 String? liveViewApp({required ServerInfo? info, required SiteSummary? site}) {
   if (viewerPath(info) == null || site == null) return null;
   return site.name;

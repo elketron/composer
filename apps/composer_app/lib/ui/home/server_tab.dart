@@ -4,14 +4,14 @@ import '../../state/actions.dart';
 import '../../state/server_entry.dart';
 import '../../state/server_status.dart';
 import '../../state/types.dart';
-import '../../state/workspace.dart';
+import '../../state/server_mark.dart';
 import '../../theme/composer_theme.dart';
 import '../../theme/tokens.dart' as t;
 import '../add_server_page.dart';
 import '../format.dart';
 import '../status_dot.dart';
 import '../store_scope.dart';
-import '../workspace_mark.dart';
+import '../server_badge.dart';
 import 'section_label.dart';
 
 /// Connections, out of the way of daily use: this server, the others, adding and removing.
@@ -26,7 +26,7 @@ class ServerTab extends StatelessWidget {
     final store = StoreScope.of(context);
     final state = store.state;
     final info = status.info;
-    final workspace = Workspace.of(server.url, info: info, entry: server);
+    final mark = ServerMark.of(server.url, info: info, entry: server);
     final offline = status.link == LinkState.offline;
     Widget kv(String key, String value) => Padding(
           padding: const EdgeInsets.only(top: 6),
@@ -36,7 +36,7 @@ class ServerTab extends StatelessWidget {
           ]),
         );
     return ListView(padding: const EdgeInsets.fromLTRB(14, 0, 14, 24), children: [
-      const SectionLabel('This workspace'),
+      const SectionLabel('This server'),
       Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(color: t.surface, border: Border.all(color: t.border), borderRadius: BorderRadius.circular(t.radius)),
@@ -44,11 +44,11 @@ class ServerTab extends StatelessWidget {
           Row(children: [
             StatusDot(status.link),
             const SizedBox(width: 8),
-            WorkspaceMark(workspace: workspace, dotSize: 9, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+            ServerBadge(mark: mark, dotSize: 9, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                offline && status.error != null ? status.error! : '${server.name} · ${linkLabel(status.link)}',
+                offline && status.error != null ? status.error! : linkLabel(status.link),
                 maxLines: 2,
                 style: TextStyle(fontSize: 12, color: offline ? t.err : t.muted),
               ),
@@ -62,11 +62,10 @@ class ServerTab extends StatelessWidget {
             kv('model', info.model),
             kv('slots', '${status.slotsUsed} of ${info.slots} in use'),
             kv('version', 'composer ${info.version}'),
-            if ((info.projectsDir ?? '').isNotEmpty) kv('projects', info.projectsDir!),
           ],
         ]),
       ),
-      const SectionLabel('Workspaces'),
+      const SectionLabel('Servers'),
       Container(
         decoration: BoxDecoration(color: t.surface, border: Border.all(color: t.border), borderRadius: BorderRadius.circular(t.radius)),
         child: Column(children: [
@@ -81,8 +80,8 @@ class ServerTab extends StatelessWidget {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      WorkspaceMark(
-                        workspace: Workspace.of(other.url, info: state.statusOf(other.url).info, entry: other),
+                      ServerBadge(
+                        mark: ServerMark.of(other.url, info: state.statusOf(other.url).info, entry: other),
                         dotSize: 8,
                         style: const TextStyle(fontSize: 14),
                       ),
@@ -109,13 +108,13 @@ class ServerTab extends StatelessWidget {
         style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(42)),
         onPressed: () => AddServerPage.open(context),
         icon: const Icon(Icons.add, size: 18),
-        label: const Text('Add a workspace'),
+        label: const Text('Add a server'),
       ),
       const SizedBox(height: 4),
       TextButton(
         style: TextButton.styleFrom(foregroundColor: t.err),
         onPressed: () => _confirmRemove(context),
-        child: Text('Remove ${workspace.name} from this device'),
+        child: Text('Remove ${mark.name} from this device'),
       ),
     ]);
   }

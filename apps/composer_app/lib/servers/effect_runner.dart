@@ -64,7 +64,6 @@ class EffectRunner {
         final server = _connections[url]?.server;
         if (server != null) {
           fetchSites(url, server.token).then((sites) => dispatch(SitesLoaded(url, sites)), onError: (_) {});
-          fetchAgents(url, server.token).then((agents) => dispatch(AgentsLoaded(url, agents)), onError: (_) {});
         }
       case UploadAttachment(:final url, :final session, :final id, :final file):
         final server = _connections[url]?.server;
@@ -113,11 +112,9 @@ class EffectRunner {
           },
           onError: (Object e) { if (kDebugMode) debugPrint('MEASURE history-error $session: $e'); dispatch(HistoryLoaded(url, session, before, null)); },
         );
-      case CreateSession(:final url, :final agent, :final project, :final site):
-        _request(url, ClientCommandSessionCreate(agent: agent, project: project), dispatch).then((result) {
-          if (result is! CommandResultSession) return;
-          dispatch(SessionOpened(url, result.session.id));
-          if (site != null) dispatch(SiteChosen(url, site, session: result.session.id));
+      case CreateSession(:final url, :final kind, :final site):
+        _request(url, ClientCommandSessionCreate(kind: kind, site: site), dispatch).then((result) {
+          if (result is CommandResultSession) dispatch(SessionOpened(url, result.session.id));
         });
     }
   }

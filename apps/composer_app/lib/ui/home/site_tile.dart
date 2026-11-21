@@ -1,6 +1,7 @@
 import 'package:composer_protocol/composer_protocol.dart';
 import 'package:flutter/material.dart';
 
+import '../../state/run_kind.dart';
 import '../../state/server_status.dart';
 import '../../theme/composer_theme.dart';
 import '../../theme/tokens.dart' as t;
@@ -70,7 +71,7 @@ class SiteTile extends StatelessWidget {
               child: Row(children: [
                 ActivityDot(status.activity(s)),
                 const SizedBox(width: 8),
-                Text(s.agent, style: mono(size: 12, color: t.text)),
+                Text(runKindLabel(s.kind), style: mono(size: 12, color: t.text)),
                 const SizedBox(width: 6),
                 Text('#${s.id}', style: mono(size: 11, color: t.faint)),
                 const SizedBox(width: 8),

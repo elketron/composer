@@ -3,11 +3,11 @@ import 'package:flutter/material.dart';
 import '../../state/actions.dart';
 import '../../state/page_state.dart';
 import '../../state/server_status.dart';
-import '../../state/workspace.dart';
+import '../../state/server_mark.dart';
 import '../../theme/composer_theme.dart';
 import '../../theme/tokens.dart' as t;
 import '../store_scope.dart';
-import '../workspace_mark.dart';
+import '../server_badge.dart';
 
 /// Back, forward, the URL, follow-agent, close.
 class ReaderToolbar extends StatelessWidget {
@@ -22,7 +22,7 @@ class ReaderToolbar extends StatelessWidget {
     final store = StoreScope.read(context);
     final PageState p = status.page;
     final shown = p.page?.url ?? p.loading ?? '';
-    final workspace = Workspace.of(url, info: status.info);
+    final mark = ServerMark.of(url, info: status.info);
     Widget button(IconData icon, String tip, VoidCallback? onPressed, {Color? color, Key? key}) => IconButton(
           key: key,
           tooltip: tip,
@@ -38,9 +38,9 @@ class ReaderToolbar extends StatelessWidget {
         button(Icons.arrow_back, 'Back', p.back.isEmpty ? null : () => store.dispatch(PageBack(url))),
         button(Icons.arrow_forward, 'Forward', p.forward.isEmpty ? null : () => store.dispatch(PageForward(url))),
         const SizedBox(width: 4),
-        WorkspaceMark(
-          key: const Key('active-workspace'),
-          workspace: workspace,
+        ServerBadge(
+          key: const Key('active-server'),
+          mark: mark,
           dotSize: 7,
           style: mono(size: 11, color: t.muted),
         ),

@@ -38,7 +38,6 @@ ServerMessage replied(int seq, String text, {String? thinking}) =>
 ServerMessage turn(String state, int seq) => ServerMessageSessionUpdated(
   session: SessionInfo(
     id: 'a',
-    agent: 'default',
     state: TurnState.values.byName(state),
     lastSeq: seq,
     updated: '2026-10-27',

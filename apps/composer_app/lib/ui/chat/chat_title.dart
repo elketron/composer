@@ -2,12 +2,13 @@ import 'package:composer_protocol/composer_protocol.dart';
 import 'package:flutter/material.dart';
 
 import '../../state/chat_rows.dart';
+import '../../state/run_kind.dart';
 import '../../state/server_status.dart';
 import '../../state/sites.dart';
 import '../../theme/tokens.dart' as t;
 import '../home/activity_dot.dart';
 
-/// The session's agent, and its state line with the session id.
+/// The session's run kind, and its state line with the session id.
 class ChatTitle extends StatelessWidget {
   const ChatTitle({super.key, required this.status, required this.session});
 
@@ -20,7 +21,7 @@ class ChatTitle extends StatelessWidget {
     final activity = session == null ? 'idle' : status.activity(session!);
     return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text(
-        session?.agent ?? 'new chat',
+        session == null ? 'new chat' : runKindLabel(session!.kind),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),

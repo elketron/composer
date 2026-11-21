@@ -8,7 +8,7 @@ import '../store_scope.dart';
 import 'section_label.dart';
 import 'site_tile.dart';
 
-/// All workspace sites, their sessions, and a way to start a chat in one.
+/// All the server's sites, their sessions, and a way to start a chat in one.
 class SitesTab extends StatefulWidget {
   const SitesTab({super.key, required this.url, required this.status});
 
@@ -37,7 +37,7 @@ class _SitesTabState extends State<SitesTab> {
         child: Padding(
           key: const Key('sites-empty'),
           padding: const EdgeInsets.all(32),
-          child: const Text('No sites in this workspace.', textAlign: TextAlign.center, style: TextStyle(color: t.faint, height: 1.5)),
+          child: const Text('No sites in this server.', textAlign: TextAlign.center, style: TextStyle(color: t.faint, height: 1.5)),
         ),
       );
     }

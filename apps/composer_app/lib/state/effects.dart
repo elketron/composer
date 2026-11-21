@@ -64,12 +64,11 @@ final class FetchHistory extends AppEffect {
 
 /// `session.create`, then open it.
 final class CreateSession extends AppEffect {
-  const CreateSession(this.url, this.agent, {this.project, this.site});
+  const CreateSession(this.url, this.kind, {this.site});
   final String url;
-  final String agent;
-  final String? project;
+  final RunKind kind;
 
-  /// A site to enter (`site.set`) once the session exists.
+  /// The site it starts in.
   final String? site;
 }
 
@@ -127,7 +126,7 @@ final class FetchPage extends AppEffect {
   final String page;
 }
 
-/// The sites and agents (`SitesLoaded`, `AgentsLoaded`).
+/// The sites (`SitesLoaded`).
 final class FetchCatalog extends AppEffect {
   const FetchCatalog(this.url);
   final String url;
