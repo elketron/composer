@@ -22,6 +22,9 @@ pub struct ServerInfo {
     /// Older servers leave it out.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub viewer: Option<String>,
+    /// The outside agents (`[acp.<name>]` in config.toml) an agentic session may run on.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub harnesses: Vec<String>,
 }
 
 /// `GET /api/sites`

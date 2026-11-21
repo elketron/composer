@@ -886,6 +886,7 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
             model: "m".into(),
             slots: 2,
             viewer: Some("/view".into()),
+            harnesses: vec!["claude".into()],
         }),
         serde_json::to_value(SiteSummary {
             name: "memory".into(),

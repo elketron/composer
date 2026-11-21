@@ -4,7 +4,10 @@
     "version": "0.1.0",
     "model": "m",
     "slots": 2,
-    "viewer": "/view"
+    "viewer": "/view",
+    "harnesses": [
+      "claude"
+    ]
   },
   {
     "name": "memory",

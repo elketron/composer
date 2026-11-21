@@ -1800,6 +1800,7 @@ class ServerInfo {
     required this.model,
     required this.slots,
     this.viewer,
+    this.harnesses = const [],
   });
 
   /// `server.name` from config.toml, else the hostname.
@@ -1819,12 +1820,16 @@ class ServerInfo {
   /// Older servers leave it out.
   final String? viewer;
 
+  /// The outside agents (`[acp.<name>]` in config.toml) an agentic session may run on.
+  final List<String> harnesses;
+
   factory ServerInfo.fromJson(Map<String, Object?> json) => ServerInfo(
         name: json['name'] as String,
         version: json['version'] as String,
         model: json['model'] as String,
         slots: (json['slots'] as num).toInt(),
         viewer: json['viewer'] == null ? null : json['viewer'] as String,
+        harnesses: json['harnesses'] == null ? const [] : (json['harnesses'] as List).map((e) => e as String).toList(),
       );
 
   Map<String, Object?> toJson() => {
@@ -1833,6 +1838,7 @@ class ServerInfo {
         'model': model,
         'slots': slots,
         if (viewer != null) 'viewer': viewer,
+        if (harnesses.isNotEmpty) 'harnesses': harnesses,
       };
 }
 
