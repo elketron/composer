@@ -27,7 +27,7 @@ impl Tool for DeskTool {
             "properties": {
                 "changes": { "type": "boolean", "description": "put the project's changes on the stage" },
                 "live": { "type": "boolean", "description": "put the live view of the application on the stage" },
-                "point": { "type": "string", "description": "a tab id to show, e.g. app:cad@game" }
+                "point": { "type": "string", "description": "a tab id to show, e.g. page:site://plans/x.md" }
             }
         })
     }
@@ -35,7 +35,7 @@ impl Tool for DeskTool {
     async fn call(&self, context: &ToolContext, args: Value) -> Result<String, String> {
         if args["changes"].as_bool().unwrap_or(false) {
             let project = session_project(context)
-                .ok_or("this session has no project: set one first (`set_project`)")?;
+                .ok_or("this session has no project (it is set when the session starts)")?;
             let tab = put(context, DeskTab::Changes { project })?;
             return Ok(format!("{tab} is on the stage"));
         }

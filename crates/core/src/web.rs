@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
 use crate::error::{CoreError, Result};
-use crate::mounts::{MountMode, Mounts};
+use crate::mounts::Mounts;
 use crate::page::Page;
 use crate::site_url::SiteUrl;
 use crate::types::SiteInfo;
@@ -46,22 +46,6 @@ impl Web {
     }
 
     /// Whether the web may read, list, write or watch `path` (its own address for it).
-    /// Refuse mounts whose target `refuse` says no to (another workspace's project).
-    pub fn set_mount_guard(&self, refuse: crate::MountGuard) {
-        self.mounts.set_guard(refuse);
-    }
-
-    /// A work's `project/` link: reads resolve through it; writes follow `mode`.
-    pub fn set_project_mount(&self, link: &Path, target: &Path, mode: MountMode) {
-        self.mounts
-            .set_project(link.to_path_buf(), target.to_path_buf(), mode);
-    }
-
-    /// The live mode of the work `project/` link.
-    pub fn project_mode(&self, link: &Path) -> Option<MountMode> {
-        self.mounts.project_mode(link)
-    }
-
     pub fn allows(&self, path: &Path) -> bool {
         self.mounts.allows(path)
     }
@@ -94,8 +78,6 @@ impl Web {
                 title,
                 has_index: dir.join("index.md").is_file(),
                 has_justfile: dir.join("justfile").is_file(),
-                has_ui: dir.join("ui").is_dir(),
-                app_built: dir.join("ui/dist/index.html").is_file(),
                 description,
                 name,
             });
@@ -142,7 +124,7 @@ impl Web {
             }
             Err(e) => return Err(e),
         };
-        self.mounts.check_write(&path)?;
+        self.mounts.check(&path)?;
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).map_err(|e| io(parent, e))?;
         }
@@ -166,8 +148,6 @@ impl Web {
     /// root (scoped mounts); a mount pointing elsewhere contributes no pages. Without an
     /// allowed list, walks do not descend into symlinks, as before the feature.
     pub fn all_pages(&self) -> impl Iterator<Item = PathBuf> + '_ {
-        /// Build output inside a project mount: a site's own `build/` is still pages.
-        const BUILD: [&str; 5] = ["target", "dist", "build", "out", "vendor"];
         let follow = self.mounts.follows_links();
         WalkDir::new(&self.root)
             .min_depth(1)
@@ -175,11 +155,8 @@ impl Web {
             .into_iter()
             .filter_entry(|e| {
                 let name = e.file_name().to_string_lossy();
-                let build = BUILD.contains(&name.as_ref())
-                    && e.path().ancestors().any(|p| self.mounts.is_project(p));
                 !(name.starts_with('.')
                     || name == "node_modules"
-                    || build
                     || (e.depth() == 2 && name == "ui" && e.file_type().is_dir()))
                     && self.allows(e.path())
             })

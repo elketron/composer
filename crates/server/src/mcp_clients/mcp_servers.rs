@@ -23,7 +23,7 @@ pub struct McpServers {
     configs: BTreeMap<String, McpServerConfig>,
     /// Shared with the next config's `McpServers` while the server's config is unchanged.
     slots: BTreeMap<String, Arc<tokio::sync::Mutex<Slot>>>,
-    /// The workspace's environment ([`crate::WorkspaceHome::env`]): set for every stdio server it
+    /// The workspace's environment ([`crate::Home::env`]): set for every stdio server it
     /// starts, and what `${COMPOSER_WORKSPACE}` in a config expands to.
     workspace: BTreeMap<String, String>,
     /// The workspace's sites: where a stdio server without a `cwd` starts.
@@ -287,19 +287,15 @@ impl McpServers {
                 &context.cancel,
             )
             .await;
-        match decision.map(|answer| (answer.decision, answer.reason)) {
-            Some((ApprovalDecision::Approve, _)) => Ok(()),
-            Some((ApprovalDecision::Always, _)) => {
+        match decision {
+            Some(ApprovalDecision::Approve) => Ok(()),
+            Some(ApprovalDecision::Always) => {
                 if let Err(e) = server_ref.tool_rules.add(&rules_key, name) {
                     tracing::warn!("saving the rule for {name}: {e}");
                 }
                 Ok(())
             }
-            Some((ApprovalDecision::Deny, Some(reason))) => Err(format!(
-                "Your orchestrator denied `{name}`: {reason}. Don't try to get around it: do \
-                 without, or say what you needed it for."
-            )),
-            Some((ApprovalDecision::Deny, None)) => Err(format!(
+            Some(ApprovalDecision::Deny) => Err(format!(
                 "The user denied `{name}`. Don't try to get around it: do without, or say what \
                  you needed it for."
             )),

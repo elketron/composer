@@ -17,20 +17,6 @@ pub struct Recipe {
     /// the raw argument into the shell. The safe forms are `"$1"` with positional arguments, or
     /// an exported parameter (`$name`).
     pub interpolates_parameters: bool,
-    /// Marked `[metadata('app')]`: an approval given for agents also counts for apps.
-    pub app_visible: bool,
-}
-
-/// Who runs a recipe. Approvals don't carry over between them: an agent's `run` is watched in a
-/// session and limited by its tools, while an app's HTTP call only needs the token.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum Caller {
-    /// The `run` tool. Entries written before callers existed are this.
-    #[default]
-    Agent,
-    /// `POST /api/actions/<site>/<recipe>`.
-    App,
 }
 
 /// One approved recipe version (`state/approvals.json`).
@@ -39,8 +25,9 @@ pub struct Approval {
     pub site: String,
     pub recipe: String,
     pub hash: String,
-    #[serde(default)]
-    pub caller: Caller,
+    /// Set (`app`) on approvals given to apps before they were removed: never counted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub caller: Option<String>,
     pub approved_at: String,
 }
 
@@ -53,18 +40,10 @@ pub struct RunOutput {
     pub timed_out: bool,
 }
 
-/// How an approval was answered. `reason`: its orchestrator decided a worker's approval instead
-/// of the user, and why; such an answer holds for this one request.
-#[derive(Debug, Clone, PartialEq)]
-pub struct ApprovalAnswer {
-    pub decision: composer_protocol::ApprovalDecision,
-    pub reason: Option<String>,
-}
-
 /// Why a recipe was not approved to run.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Refusal {
-    /// Denied by the user or an orchestrator, or the question was cancelled.
+    /// Denied by the user, or the question was cancelled.
     Denied(String),
     /// The justfile changed while the question was open.
     Changed(String),

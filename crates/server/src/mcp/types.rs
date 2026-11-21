@@ -4,12 +4,13 @@ use serde_json::Value;
 
 use crate::tools::CallResult;
 
-/// What the parent passes on the command line.
+/// What `composer mcp` is given on the command line.
 #[derive(Debug, Clone)]
 pub struct McpOptions {
-    /// The running worker session whose tools are offered.
+    /// The session whose tools are offered.
     pub session: String,
-    pub parent_url: String,
+    /// The running server's address (`http://127.0.0.1:7420`).
+    pub server_url: String,
 }
 
 /// Where the MCP server's tools come from.

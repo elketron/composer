@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use composer_protocol::{ClientCommand, CommandResult, Desk, DeskBy, DeskTab, ServerMessage};
-use composer_server::{Config, Server, WorkspaceHome};
+use composer_server::{Config, Home, Server};
 use support::*;
 
 async fn desk(socket: &mut Socket, id: u64, command: ClientCommand) -> Result<Desk, String> {
@@ -34,7 +34,7 @@ fn ids(desk: &Desk) -> Vec<&str> {
 #[tokio::test]
 async fn a_sessions_desk_comes_back_with_it() {
     let (dir, server, _provider, addr) = start(vec![]).await;
-    let session = server.sessions.create("orchestrator", None).unwrap();
+    let session = server.sessions.create("default", None).unwrap();
     let id = session.id().to_string();
     let mut attached = connect(addr, &server.token).await;
     send(
@@ -69,9 +69,8 @@ async fn a_sessions_desk_comes_back_with_it() {
         tab,
         focus: true,
     };
-    let cad = DeskTab::App {
-        site: "cad".into(),
-        project: Some("game".into()),
+    let cad = DeskTab::Changes {
+        project: "game".into(),
     };
     desk(&mut other, 3, open(cad.clone())).await.unwrap();
     desk(
@@ -85,8 +84,8 @@ async fn a_sessions_desk_comes_back_with_it() {
     .unwrap();
     // Again: focused, not doubled.
     let now = desk(&mut other, 5, open(cad)).await.unwrap();
-    assert_eq!(ids(&now), ["app:cad@game", "page:site://plans/x"]);
-    assert_eq!(now.active.as_deref(), Some("app:cad@game"));
+    assert_eq!(ids(&now), ["changes:game", "page:site://plans/x"]);
+    assert_eq!(now.active.as_deref(), Some("changes:game"));
     let moved = desk(
         &mut other,
         6,
@@ -98,7 +97,7 @@ async fn a_sessions_desk_comes_back_with_it() {
     )
     .await
     .unwrap();
-    assert_eq!(ids(&moved), ["page:site://plans/x", "app:cad@game"]);
+    assert_eq!(ids(&moved), ["page:site://plans/x", "changes:game"]);
 
     // The attached client heard every change, by the user.
     let mut heard = 0;
@@ -141,7 +140,7 @@ async fn a_sessions_desk_comes_back_with_it() {
 
     // After a restart: the same desk.
     let again = Server::new(
-        WorkspaceHome::new(dir.path()),
+        Home::new(dir.path()),
         Config::defaults(),
         Arc::new(MockProvider::new(vec![])),
     )
@@ -160,7 +159,7 @@ async fn the_live_view_opens_by_hand_only_with_a_viewer() {
     let (_dir, server, _provider, addr) = start(vec![]).await;
     let id = server
         .sessions
-        .create("orchestrator", None)
+        .create("default", None)
         .unwrap()
         .id()
         .to_string();
@@ -175,7 +174,7 @@ async fn the_live_view_opens_by_hand_only_with_a_viewer() {
     let (_dir, server, _provider, addr) = start_with(config, vec![]).await;
     let id = server
         .sessions
-        .create("orchestrator", None)
+        .create("default", None)
         .unwrap()
         .id()
         .to_string();

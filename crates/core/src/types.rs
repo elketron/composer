@@ -3,7 +3,7 @@
 use crate::frontmatter::Frontmatter;
 use crate::site_url::SiteUrl;
 
-/// A top-level folder in the workspace.
+/// A top-level folder of the web.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SiteInfo {
     pub name: String,
@@ -11,10 +11,6 @@ pub struct SiteInfo {
     pub title: String,
     pub has_index: bool,
     pub has_justfile: bool,
-    /// Has a `ui/` folder: an app, built or not.
-    pub has_ui: bool,
-    /// `ui/dist/index.html` exists: the app can be opened.
-    pub app_built: bool,
     /// From the site's `index.md` (`Page::description`).
     pub description: String,
 }

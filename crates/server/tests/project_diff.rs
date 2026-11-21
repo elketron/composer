@@ -105,7 +105,7 @@ async fn endpoint_uses_the_session_project() {
         &mut socket,
         1,
         ClientCommand::SessionCreate {
-            agent: "orchestrator".into(),
+            agent: "default".into(),
             project: None,
         },
     )
@@ -140,16 +140,24 @@ async fn endpoint_uses_the_session_project() {
     send(
         &mut socket,
         2,
-        ClientCommand::ProjectSet {
-            session: session.id.clone(),
-            path: Some(path),
+        ClientCommand::SessionCreate {
+            agent: "default".into(),
+            project: Some(path),
         },
     )
     .await;
-    until(&mut socket, |e| {
+    let reply = until(&mut socket, |e| {
         matches!(e, ServerMessage::Ok { id: 2, .. })
     })
     .await;
+    let Some(ServerMessage::Ok {
+        result: CommandResult::Session { session },
+        ..
+    }) = reply.last()
+    else {
+        panic!()
+    };
+    let url = format!("http://{addr}/api/sessions/{}/project/diff", session.id);
     let diff: serde_json::Value = client
         .get(&url)
         .bearer_auth(&server.token)

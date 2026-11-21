@@ -34,7 +34,7 @@ async fn wrapped_and_leaked_arguments_reach_the_tool_repaired() {
         &mut socket,
         1,
         ClientCommand::SessionCreate {
-            agent: "orchestrator".into(),
+            agent: "default".into(),
             project: None,
         },
     )

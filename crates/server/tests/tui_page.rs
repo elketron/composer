@@ -43,12 +43,12 @@ async fn a_tui_page_starts_in_the_project() {
 
     let session = server
         .sessions
-        .create("orchestrator", Some(project.display().to_string()))
+        .create("default", Some(project.display().to_string()))
         .unwrap();
     let context = ToolContext {
         server: server.clone(),
         session: session.clone(),
-        agent: std::sync::Arc::new(AgentDefinition::load(&server.web, "orchestrator").unwrap()),
+        agent: std::sync::Arc::new(AgentDefinition::load(&server.web, "default").unwrap()),
         site: None,
         cancel: CancellationToken::new(),
     };
@@ -113,12 +113,12 @@ async fn a_run_tui_page_starts_in_its_runs_project() {
 
     let session = server
         .sessions
-        .create("orchestrator", Some(project.display().to_string()))
+        .create("default", Some(project.display().to_string()))
         .unwrap();
     let context = ToolContext {
         server: server.clone(),
         session: session.clone(),
-        agent: std::sync::Arc::new(AgentDefinition::load(&server.web, "orchestrator").unwrap()),
+        agent: std::sync::Arc::new(AgentDefinition::load(&server.web, "default").unwrap()),
         site: None,
         cancel: CancellationToken::new(),
     };

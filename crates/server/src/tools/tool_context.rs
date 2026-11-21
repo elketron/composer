@@ -20,6 +20,26 @@ pub struct ToolContext {
 }
 
 impl ToolContext {
+    /// A context for running tools in `session` from outside a turn (the MCP bridge's
+    /// `tool.call`): its agent and site as they are now, never cancelled.
+    pub fn for_session(server: &Arc<Server>, session: &str) -> Result<Self, String> {
+        let session = server.sessions.get(session).map_err(|e| e.to_string())?;
+        let info = session.info();
+        let agent = AgentDefinition::load(&server.web, &info.agent).map_err(|e| e.to_string())?;
+        let site = info
+            .site
+            .as_deref()
+            .and_then(|name| Site::load(&server.web, name).ok())
+            .map(Arc::new);
+        Ok(Self {
+            server: server.clone(),
+            session,
+            agent: Arc::new(agent),
+            site,
+            cancel: CancellationToken::new(),
+        })
+    }
+
     /// Parses a URL from the model. Forgiving: `memory/user` means `site://memory/user`.
     pub fn url(&self, raw: &str) -> Result<SiteUrl, String> {
         let raw = raw.trim();

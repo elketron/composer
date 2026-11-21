@@ -3,138 +3,32 @@ use std::path::Path;
 
 use include_dir::{Dir, include_dir};
 
-use crate::actions::{Approvals, Caller, Justfile};
+use crate::actions::{Approvals, Justfile};
 use crate::config::Config;
 use crate::error::{Result, ServerError};
 use crate::home::Home;
-use crate::library::{Library, SiteName, WorkspaceLibrary};
-use crate::stock_root::StockRoot;
-use crate::workspace_home::WorkspaceHome;
-use crate::workspace_name::WorkspaceName;
 
 static SEED: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/../../seed/sites");
 
-/// What a new workspace's `config.toml` says: everything comes from the global config.
-const WORKSPACE_CONFIG: &str = "\
-# This workspace's settings. Everything in the home's global/config.toml applies here; set a key
-# in this file to override it for this workspace only (tables merge key by key).
-# Usually per workspace: [projects], [mcp.<name>], [[launcher]], [claude_code].
-";
-
-/// The stock folders this binary carries: (name under the root and `state/seed/`, contents).
-pub(crate) fn stock() -> [(&'static str, &'static Dir<'static>); 1] {
-    [("sites", &SEED)]
-}
-
-/// Creates the composer home: global config, the site library and templates, server state, and
-/// the `default` workspace if there is no workspace yet. Never overwrites existing files.
-/// Returns the paths it created.
+/// Creates the composer home: its config, the stock sites, state folders and token. Never
+/// overwrites existing files: the stock is seeded once, never merged later. Recipes of newly
+/// created stock justfiles are pre-approved (needs `just`; otherwise they are approved on first
+/// use). Returns the paths it created.
 pub async fn init_home(home: &Home) -> Result<Vec<String>> {
     let mut created = Vec::new();
-    for dir in [home.global(), home.state(), home.workspaces_dir()] {
+    for dir in [home.sites(), home.sessions()] {
         fs::create_dir_all(&dir).map_err(|e| ServerError::io(&dir, e))?;
     }
-    write_new(&home.global_config_file(), Config::TEMPLATE, &mut created)?;
-    write_new(&home.master_token_file(), &new_token(), &mut created)?;
-    install(&StockRoot::library(home), &mut created)?;
-    // The library is a git repo from the start; its first commit is the stock it came with.
-    Library::of(home)
-        .record(&stock_message())
-        .map_err(ServerError::Invalid)?;
-    if home.workspace_names()?.is_empty() {
-        let default = home.workspace(&WorkspaceName::default_workspace());
-        created.extend(init_workspace(&default).await?);
-    }
+    copy_seed(&SEED, &home.sites(), &mut created)?;
+    write_new(&home.config_file(), Config::TEMPLATE, &mut created)?;
+    write_new(&home.token_file(), &new_token(), &mut created)?;
+    approve_recipes_in(&Approvals::load(&home.approvals_file())?, &created).await?;
     Ok(created)
 }
 
-/// Creates a workspace: its copy of the stock sites, its config, state folders and token. Never
-/// overwrites existing files. Recipes of newly created stock justfiles are pre-approved (needs
-/// `just`; otherwise they are approved on first use). A standalone workspace (its own home, as
-/// in tests) also gets the templates and the full config template.
-pub async fn init_workspace(workspace: &WorkspaceHome) -> Result<Vec<String>> {
-    let mut created = Vec::new();
-    for dir in [workspace.sites(), workspace.sessions()] {
-        fs::create_dir_all(&dir).map_err(|e| ServerError::io(&dir, e))?;
-    }
-    let stock = StockRoot::workspace(workspace);
-    // In a home with a library, a new workspace installs its stock sites from there (and so
-    // updates them from there). Standalone workspaces, and homes whose library isn't a repo yet,
-    // get them from the binary as before.
-    match from_library(workspace)? {
-        Some(library) => install_stock_from(&library, workspace, &mut created).await?,
-        None => install(&stock, &mut created)?,
-    }
-    let config = if workspace.is_standalone() {
-        Config::TEMPLATE
-    } else {
-        WORKSPACE_CONFIG
-    };
-    write_new(&workspace.config_file(), config, &mut created)?;
-    write_new(&workspace.token_file(), &new_token(), &mut created)?;
-    if let Some(approvals) = stock.approvals() {
-        approve_seed_recipes(approvals, &created).await?;
-    }
-    Ok(created)
-}
-
-/// The names of the binary's stock sites (`agents`, `home`, ...).
-pub(crate) fn stock_site_names() -> Vec<String> {
-    SEED.dirs()
-        .filter_map(|d| d.path().file_name()?.to_str().map(str::to_string))
-        .collect()
-}
-
-/// The binary's stock version of `rel` (`orchestration/justfile`), if it has one.
-pub(crate) fn stock_file(rel: &Path) -> Option<&'static [u8]> {
-    SEED.get_file(rel).map(|f| f.contents())
-}
-
-/// The library commit message for this binary's stock.
-pub(crate) fn stock_message() -> String {
-    format!("stock: composer {}", env!("CARGO_PKG_VERSION"))
-}
-
-/// The library a new workspace installs from, if it has one with commits.
-fn from_library(workspace: &WorkspaceHome) -> Result<Option<WorkspaceLibrary>> {
-    let Ok(library) = WorkspaceLibrary::of(workspace) else {
-        return Ok(None);
-    };
-    let head = library.library().head().map_err(ServerError::Invalid)?;
-    Ok(head.map(|_| library))
-}
-
-/// Installs the stock sites the workspace doesn't have yet from the library, and records the
-/// workspace as installing from it (even when it had them all).
-async fn install_stock_from(
-    library: &WorkspaceLibrary,
-    workspace: &WorkspaceHome,
-    created: &mut Vec<String>,
-) -> Result<()> {
-    for name in stock_site_names() {
-        let site = SiteName::new(&name).map_err(ServerError::Invalid)?;
-        if workspace.sites().join(&name).exists() {
-            continue;
-        }
-        let approvals = library.approvals().map_err(ServerError::Invalid)?;
-        library
-            .install(&site, None, &approvals)
-            .await
-            .map_err(ServerError::Invalid)?;
-        created.push(workspace.sites().join(&name).display().to_string());
-    }
-    if !workspace.library_file().exists() {
-        library
-            .installed()
-            .and_then(|installed| installed.save())
-            .map_err(ServerError::Invalid)?;
-    }
-    Ok(())
-}
-
-/// Reads the workspace's token, creating it if needed.
-pub fn local_token(workspace: &WorkspaceHome) -> Result<String> {
-    read_or_create_token(&workspace.token_file())
+/// Reads the home's token, creating it if needed.
+pub fn local_token(home: &Home) -> Result<String> {
+    read_or_create_token(&home.token_file())
 }
 
 /// Reads a token file, creating it (and its folder) with a new token if it doesn't exist.
@@ -147,14 +41,8 @@ pub(crate) fn read_or_create_token(path: &Path) -> Result<String> {
         .map_err(|e| ServerError::io(path, e))
 }
 
-/// Pre-approves the recipes of the stock justfiles among `paths` (as `init` and `update` install
-/// them), for agents and apps.
-pub(crate) async fn approve_seed_recipes(approvals: &Path, created: &[String]) -> Result<()> {
-    approve_recipes_in(&Approvals::load(approvals)?, created).await
-}
-
-/// The same, into approvals already loaded (a running server's own).
-pub(crate) async fn approve_recipes_in(approvals: &Approvals, created: &[String]) -> Result<()> {
+/// Pre-approves the recipes of the stock justfiles among `created`.
+async fn approve_recipes_in(approvals: &Approvals, created: &[String]) -> Result<()> {
     for path in created.iter().filter(|p| p.ends_with("/justfile")) {
         let Some(site_dir) = Path::new(path).parent() else {
             continue;
@@ -166,42 +54,23 @@ pub(crate) async fn approve_recipes_in(approvals: &Approvals, created: &[String]
             continue;
         };
         for recipe in justfile.recipes() {
-            let hash = justfile.hash(&recipe.name);
-            approvals.approve(site, &recipe.name, &hash, Caller::Agent)?;
-            approvals.approve(site, &recipe.name, &hash, Caller::App)?;
+            approvals.approve(site, &recipe.name, &justfile.hash(&recipe.name))?;
         }
     }
     Ok(())
 }
 
-/// Installs every stock tree of `stock` that isn't there yet.
-fn install(stock: &StockRoot, created: &mut Vec<String>) -> Result<()> {
-    for (name, dir) in stock.trees() {
-        copy_seed(dir, stock, name, created)?;
-    }
-    Ok(())
-}
-
-/// Writes the files that don't exist yet, recording each as the base for `update`.
-fn copy_seed(
-    dir: &Dir<'_>,
-    stock: &StockRoot,
-    name: &str,
-    created: &mut Vec<String>,
-) -> Result<()> {
+/// Writes the files of `dir` that don't exist under `root` yet.
+fn copy_seed(dir: &Dir<'_>, root: &Path, created: &mut Vec<String>) -> Result<()> {
     for file in dir.files() {
-        let dest = stock.root().join(name).join(file.path());
+        let dest = root.join(file.path());
         if !dest.exists() {
             write_creating_dirs(&dest, file.contents())?;
-            write_creating_dirs(
-                &stock.seed_base().join(name).join(file.path()),
-                file.contents(),
-            )?;
             created.push(dest.display().to_string());
         }
     }
     for sub in dir.dirs() {
-        copy_seed(sub, stock, name, created)?;
+        copy_seed(sub, root, created)?;
     }
     Ok(())
 }

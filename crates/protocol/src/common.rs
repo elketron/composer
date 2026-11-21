@@ -19,14 +19,9 @@ pub struct SessionInfo {
     /// The site the agent entered (`enter_site`), if any.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub site: Option<String>,
-    /// Set for worker sessions.
-    pub ticket: Option<String>,
-    /// The session that spawned this one (orchestrator of a worker).
+    /// The session that spawned this one.
+    // rewrite: phase 2: set when a session spawns a run.
     pub parent: Option<SessionId>,
-    /// A worker's last state: kept after it ends, so a client connecting later still sees
-    /// `done` or `failed`. None for other sessions (and from older servers).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub worker: Option<WorkerState>,
     pub state: TurnState,
     /// Last seq written to the transcript.
     pub last_seq: Seq,
@@ -73,19 +68,7 @@ pub enum Role {
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum MessageSource {
     Tui,
-    /// A micro app; `site` is the app's site.
-    App {
-        site: String,
-    },
-    /// A worker finished; sent to its orchestrator.
-    Worker {
-        session: SessionId,
-    },
     Server,
-    /// A reminder page came due.
-    Reminder {
-        url: Url,
-    },
     /// Files the session watches (the `watch` tool) changed; `pattern` is what it watched.
     Watch {
         pattern: String,
@@ -153,18 +136,6 @@ pub struct ModelInfo {
     pub context: Option<u32>,
 }
 
-/// An external harness (or one of its models) for a project: allowed by config.toml, and
-/// turned on or off at runtime.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-pub struct HarnessSwitch {
-    /// `claude-code`, or `claude-code:<model>`.
-    pub entry: String,
-    pub allowed: bool,
-    pub on: bool,
-}
-
 /// A tool an agent may call: what the model (or an external harness) sees.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
@@ -194,13 +165,9 @@ pub enum ApprovalDecision {
 pub enum ApprovalKind {
     #[default]
     Recipe,
-    Merge,
     Tool,
     /// A call to an MCP server's tool (`rule`: the tool, for `always`; it holds everywhere).
     Mcp,
-    /// Publishing a workspace site to the library (the only write that leaves a workspace).
-    /// Asked every time: `always` counts as one yes and is never remembered.
-    Publish,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -219,22 +186,6 @@ pub enum PageChangeKind {
 #[serde(rename_all = "snake_case")]
 pub enum ChangedBy {
     Agent,
-    App,
     /// Changed on disk by something else (nvim, git, ...).
     External,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-#[serde(rename_all = "snake_case")]
-pub enum WorkerState {
-    Starting,
-    Running,
-    Done,
-    Failed,
-    /// Stopped before finishing, to be resumed later (a usage limit was hit).
-    Paused,
-    /// Reached its turn limit (tokens, or Claude Code's turns) without finishing; waits for its orchestrator to continue or stop it.
-    Stuck,
 }

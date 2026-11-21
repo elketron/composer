@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::common::{ApprovalDecision, Attachment, Seq, SessionId, Url, WorkerState};
+use crate::common::{ApprovalDecision, Attachment, Seq, SessionId, Url};
 
 /// A command from a client. The server answers with `ok` or `error` carrying the same `id`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -60,11 +60,6 @@ pub enum ClientCommand {
         attachments: Vec<Attachment>,
     },
 
-    /// Removes the session's selection chip: the next message goes without it (ticket 0175;
-    /// otherwise the next user message carries it). The reply is `done`.
-    #[serde(rename = "selection.clear")]
-    SelectionClear { session: SessionId },
-
     /// Compact the session now: save memory, then summarize older messages.
     #[serde(rename = "session.compact")]
     SessionCompact { session: SessionId },
@@ -79,18 +74,10 @@ pub enum ClientCommand {
         seen: Option<Seq>,
     },
 
-    #[serde(rename = "project.set")]
-    ProjectSet {
-        session: SessionId,
-        path: Option<String>,
-    },
-
-    /// Enters the site `site` (its page, tools and application) for a session, or
-    /// leaves the current one with `None`. A running turn goes on as it was; the change applies
-    /// from the session's next turn. The session's new state arrives as `session.updated`; the
-    /// reply is `note`: what happened, the site's application included (started, already
-    /// running, or skipped and why). An error when the site does not exist or needs a project
-    /// the session has none for.
+    /// Enters the site `site` (its page and tools) for a session, or leaves the current one with
+    /// `None`. A running turn goes on as it was; the change applies from the session's next turn.
+    /// The session's new state arrives as `session.updated`; the reply is `note`: what happened.
+    /// An error when the site does not exist.
     #[serde(rename = "site.set")]
     SiteSet {
         session: SessionId,
@@ -107,41 +94,6 @@ pub enum ClientCommand {
         session: SessionId,
         model: Option<String>,
     },
-
-    /// The external harnesses of a project (a folder, `~/x`, or a name in the projects dir).
-    #[serde(rename = "harness.list")]
-    HarnessList { project: String },
-
-    /// Turns a harness (`claude-code`) or one of its models (`claude-code:opus`) on or off for a
-    /// project. Off stops its running tickets there; on lets the ones it stopped go on.
-    #[serde(rename = "harness.set")]
-    HarnessSet {
-        project: String,
-        entry: String,
-        on: bool,
-    },
-
-    /// A desktop window says hello (ticket 0177): it gets an id, and the server starts the TUI for
-    /// it (`composer --window <id>`) in a terminal of its own, shown in the chat column. The reply
-    /// is `window`; the TUI's output comes as `terminal.output` with this `window`.
-    #[serde(rename = "window.hello")]
-    WindowHello {
-        #[serde(default = "default_cols")]
-        cols: u16,
-        #[serde(default = "default_rows")]
-        rows: u16,
-    },
-
-    /// The window's TUI shows this session now (the TUI sends it): the window's stage follows
-    /// (`window.changed` to the window). The reply is `done`.
-    #[serde(rename = "window.session")]
-    WindowSession { window: String, session: SessionId },
-
-    /// The window's own TUI joins its window (ticket 0185): its connection then gets the
-    /// window's events too, so a session the desktop picks (`window.session`) reaches it. The
-    /// reply is `done`.
-    #[serde(rename = "window.join")]
-    WindowJoin { window: String },
 
     /// Opens a terminal for a session (ticket 0176): a shell, in the
     /// session's project (or the sites); a tab on its desk. With the `id` of one that ended (idle),
@@ -208,133 +160,15 @@ pub enum ClientCommand {
         to: usize,
     },
 
-    /// Opens a project (its name, or its folder) for this client: the first open in the workspace
-    /// starts its file watch and runs its apps' `on_open` recipes; the reply is `project_opened`.
-    /// Opening it again from the same client does nothing; a dropped connection closes it.
-    #[serde(rename = "project.open")]
-    ProjectOpen { project: String },
-
-    /// Closes a project this client opened; the last close stops its watch. The reply is `done`.
-    #[serde(rename = "project.close")]
-    ProjectClose { project: String },
-
-    /// The projects open in the workspace, with how many clients have each; the reply is
-    /// `open_projects`.
-    #[serde(rename = "projects.open")]
-    ProjectsOpen,
-
-    /// What is going on in a project (a name in the projects directory, or a path); the reply is
-    /// `project`.
-    #[serde(rename = "project.overview")]
-    ProjectOverview { project: String },
-
-    /// The apps of a project (by name), or of the workspace's Home without one; the reply is
-    /// `apps`.
-    #[serde(rename = "apps.list")]
-    AppsList {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        project: Option<String>,
-    },
-
-    /// Opens an app: on a project (by name), or on Home without one; the reply is `app_opened`
-    /// (the URL to load, with its token or one-time code in it once).
-    #[serde(rename = "app.open")]
-    AppOpen {
-        site: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        project: Option<String>,
-        /// The session it is opened from: the one its messages go to.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        session: Option<String>,
-    },
-
-    /// Rebuilds the workspace's apps built with an older sdk (or not built; `all`: every one) with
-    /// their `ui-build`. Without `yes` the reply shows what would run; with it,
-    /// it runs (the user's command is the approval). The reply is `note`.
-    #[serde(rename = "apps.rebuild")]
-    AppsRebuild {
-        #[serde(default)]
-        all: bool,
-        #[serde(default)]
-        yes: bool,
-    },
-
-    /// Allows a project-local app (`<project>/.composer/apps/<app>`) as it is now: it is served
-    /// and its recipes run until its `index.md` or `justfile` changes. The reply is `note`.
-    #[serde(rename = "app.allow")]
-    AppAllow { project: String, app: String },
-
-    /// Copies a project-local app into the workspace's sites (refused when a site has its name);
-    /// the workspace's copy wins from then on. The reply is `note`.
-    #[serde(rename = "app.promote")]
-    AppPromote { project: String, app: String },
-
     /// The MCP servers in `config.toml`, connecting those that are on (so it is also a test of
     /// them); the reply is `mcp_servers`.
     #[serde(rename = "mcp.list")]
     McpList,
 
-    /// The library's sites and this workspace's copies of them; the reply is `library`.
-    #[serde(rename = "library.list")]
-    LibraryList,
-
-    /// Copies library site `site` into this workspace (as `name`, default the same); the reply is
-    /// `library_installed`. Refused when the workspace has a site of that name.
-    #[serde(rename = "library.install")]
-    LibraryInstall {
-        site: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        name: Option<String>,
-    },
-
-    /// Brings this workspace's installed sites up to the library (three-way per file; conflicts
-    /// are left in `state/updates/`); with `dry_run`, only says what would change. The reply is
-    /// `library_updated`.
-    #[serde(rename = "library.update")]
-    LibraryUpdate {
-        #[serde(default)]
-        dry_run: bool,
-    },
-
-    /// Publishes this workspace's site `site` to the library (as `name`, default the same).
-    /// Without `approved`, nothing is written: the reply is `library_publish_plan`, what it would
-    /// do. With `approved` (that plan's `digest`), it publishes, but only if the site is still
-    /// exactly what the plan showed; the reply is `library_published`.
-    #[serde(rename = "library.publish")]
-    LibraryPublish {
-        site: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        name: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        approved: Option<String>,
-    },
-
     /// Reads `config.toml` again now (the server also does when the file changes); the reply is
     /// `config_reloaded`. A file that doesn't parse is an error and the running config stays.
     #[serde(rename = "config.reload")]
     ConfigReload,
-
-    /// A ticket's changes against the branch it would be merged into; the reply is `changes`.
-    #[serde(rename = "ticket.changes")]
-    TicketChanges { ticket: String },
-
-    /// Appends review comments to the ticket page under `## Comments` (one `- file:start:end — message`
-    /// line each); the reply is `comments`: every comment line the ticket has now. An empty
-    /// list only reads them.
-    #[serde(rename = "ticket.comment")]
-    TicketComment {
-        ticket: String,
-        comments: Vec<crate::http::DiffComment>,
-    },
-
-    /// Merges a ticket's branch into the project's checked-out branch and removes its
-    /// worktree; the reply is `merged`.
-    #[serde(rename = "ticket.merge")]
-    TicketMerge { ticket: String },
-
-    /// Removes a ticket's worktree and branch without merging.
-    #[serde(rename = "ticket.discard")]
-    TicketDiscard { ticket: String },
 
     #[serde(rename = "approval.respond")]
     ApprovalRespond {
@@ -346,50 +180,12 @@ pub enum ClientCommand {
     #[serde(rename = "subscribe")]
     Subscribe { urls: Vec<String> },
 
-    // ---- from worker processes to their parent server ----
-    /// This connection is the worker process running `session`.
-    #[serde(rename = "worker.hello")]
-    WorkerHello { session: SessionId },
-
-    /// An event of the worker's session; the parent re-sequences and broadcasts it.
-    #[serde(rename = "worker.event")]
-    WorkerEvent {
-        event: Box<crate::server::ServerMessage>,
-    },
-
-    /// Waits for a model slot; the reply is `slot_granted`. Held until released or disconnect.
-    #[serde(rename = "slot.acquire")]
-    SlotAcquire,
-
-    #[serde(rename = "slot.release")]
-    SlotRelease { grant: u64 },
-
-    /// Asks the user (through the parent's clients) to approve a recipe version.
-    #[serde(rename = "approval.ask")]
-    ApprovalAsk {
-        site: String,
-        recipe: String,
-        args: Vec<String>,
-        body: String,
-        hash: String,
-    },
-
-    /// The worker is done with its ticket.
-    #[serde(rename = "worker.finish")]
-    WorkerFinish { state: WorkerState, summary: String },
-
-    /// The worker reached its turn limit without finishing: `summary` says what it was doing.
-    /// The reply (`worker_go_on`) comes when its orchestrator continues it; an error when it is
-    /// stopped instead, or when nobody can decide.
-    #[serde(rename = "worker.stuck")]
-    WorkerStuck { summary: String },
-
-    // ---- from harness tool servers (`composer mcp`) ----
-    /// The tools a running worker's agent may call; the reply is `tools`.
+    // ---- from the MCP bridge (`composer mcp`) ----
+    /// The tools a session's agent may call; the reply is `tools`.
     #[serde(rename = "tool.list")]
     ToolList { session: SessionId },
 
-    /// Runs one of them in the running worker's session; the reply is `tool_output`.
+    /// Runs one of them in the session; the reply is `tool_output`.
     #[serde(rename = "tool.call")]
     ToolCall {
         session: SessionId,

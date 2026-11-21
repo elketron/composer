@@ -27,7 +27,7 @@ async fn session(socket: &mut Socket) -> String {
         socket,
         1,
         ClientCommand::SessionCreate {
-            agent: "orchestrator".into(),
+            agent: "default".into(),
             project: None,
         },
     )
@@ -247,7 +247,7 @@ async fn prompt_names_the_agent_and_lists_memory_pages() {
         panic!()
     };
     assert!(
-        content.contains("you are the `orchestrator` agent (site://agents/orchestrator.md)"),
+        content.contains("you are the `default` agent (site://agents/default.md)"),
         "{content}"
     );
     assert!(

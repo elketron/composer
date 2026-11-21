@@ -11,10 +11,8 @@ use crate::terminals::Scrollback;
 /// PTY, its recent output, and when someone last used it.
 pub struct Terminal {
     pub id: String,
-    /// The session it belongs to (empty for a window's TUI).
+    /// The session it belongs to.
     pub session: String,
-    /// A desktop window's TUI (ticket 0177): its output goes to that window only.
-    pub window: Option<String>,
     pub cwd: PathBuf,
     pub(crate) master: Mutex<Box<dyn MasterPty + Send>>,
     pub(crate) writer: Mutex<Box<dyn Write + Send>>,

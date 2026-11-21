@@ -43,8 +43,7 @@ async fn phone_pairs_through_the_page_and_stays_signed_in() {
         .send()
         .await
         .unwrap();
-    assert_eq!(paired.status(), 303);
-    assert_eq!(paired.headers()["location"], "/chat/");
+    assert_eq!(paired.status(), 200);
     let cookie = paired.headers()["set-cookie"].to_str().unwrap().to_string();
     assert!(
         cookie.contains("Secure") && cookie.contains("HttpOnly") && cookie.contains("Max-Age="),

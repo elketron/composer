@@ -1,4 +1,4 @@
-//! What the app lists: agents, projects, and sites with their descriptions.
+//! What the app lists: agents, and sites with their descriptions.
 
 mod support;
 
@@ -6,13 +6,8 @@ use composer_server::Config;
 use support::*;
 
 #[tokio::test]
-async fn agents_projects_and_sites() {
+async fn agents_and_sites() {
     let projects = tempfile::tempdir().unwrap();
-    for name in ["older", ".hidden", "newer"] {
-        std::fs::create_dir(projects.path().join(name)).unwrap();
-        std::thread::sleep(std::time::Duration::from_millis(20));
-    }
-    std::fs::write(projects.path().join("file.txt"), "").unwrap();
     let mut config = Config::defaults();
     config.projects.dir = projects.path().display().to_string();
     let (_dir, server, _p, addr) = start_with(config, vec![]).await;
@@ -45,25 +40,8 @@ async fn agents_projects_and_sites() {
             .cloned()
             .unwrap()
     };
-    assert_eq!(agent("orchestrator")["worker"], false);
-    assert_eq!(
-        agent("worker")["worker"],
-        true,
-        "the worker page is the one spawn_worker runs"
-    );
-
-    let listed: Vec<String> = get("/api/projects")
-        .await
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|p| p["name"].as_str().unwrap().to_string())
-        .collect();
-    assert_eq!(
-        listed,
-        ["newer", "older"],
-        "newest first, folders only, no hidden"
-    );
+    // The built-in agent, without a page.
+    assert_eq!(agent("default")["title"], "Composer");
 
     let sites = get("/api/sites").await;
     let memory = sites

@@ -18,7 +18,7 @@ async fn one_turn(scripts: Vec<Vec<ModelEvent>>) -> (Vec<ServerMessage>, usize) 
         &mut socket,
         1,
         ClientCommand::SessionCreate {
-            agent: "orchestrator".into(),
+            agent: "default".into(),
             project: None,
         },
     )

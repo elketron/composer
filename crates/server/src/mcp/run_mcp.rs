@@ -4,21 +4,17 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::mpsc;
 
 use crate::error::{Result, ServerError};
+use crate::home::Home;
 use crate::init::local_token;
-use crate::mcp::{McpOptions, McpServer, RemoteTools};
-use crate::worker::ParentLink;
-use crate::workspace_home::WorkspaceHome;
+use crate::mcp::{McpOptions, McpServer, ServerLink};
 
 /// Serves MCP on stdin/stdout until stdin closes (the harness exits) or the server goes away.
-pub async fn run_mcp(home: WorkspaceHome, options: McpOptions) -> Result<()> {
+pub async fn run_mcp(home: Home, options: McpOptions) -> Result<()> {
     let token = local_token(&home)?;
-    let link = ParentLink::open(&options.parent_url, &token)
+    let link = ServerLink::open(&options.server_url, &token, &options.session)
         .await
         .map_err(ServerError::Invalid)?;
-    let server = Arc::new(McpServer::new(Arc::new(RemoteTools {
-        link: link.clone(),
-        session: options.session,
-    })));
+    let server = Arc::new(McpServer::new(link.clone()));
 
     // Requests are handled concurrently (a tool may wait for an approval); replies are written
     // one line at a time.

@@ -16,7 +16,7 @@ pub use error::{CoreError, Result};
 pub use frontmatter::Frontmatter;
 pub use index::Index;
 pub use link::{Link, LinkTarget, extract_links, resolve_link};
-pub use mounts::{MountGuard, MountMode, Mounts};
+pub use mounts::Mounts;
 pub use page::Page;
 pub use path_inside::path_inside;
 pub use query::Query;

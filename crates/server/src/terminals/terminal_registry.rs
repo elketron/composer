@@ -112,67 +112,8 @@ impl Terminals {
         Ok(id)
     }
 
-    /// Starts the TUI for desktop window `window` in a terminal of its own (ticket 0177): a
-    /// client, with the workspace's token, not an agent. Its id.
-    pub fn open_window(
-        &self,
-        server: &Arc<Server>,
-        window: &str,
-        cols: u16,
-        rows: u16,
-    ) -> Result<String, String> {
-        let id = format!("t{:08x}", rand::random::<u32>());
-        let pair = native_pty_system()
-            .openpty(size(cols, rows))
-            .map_err(|e| format!("a terminal: {e}"))?;
-        let mut command = CommandBuilder::new(&server.worker_exe);
-        command.args([
-            "--workspace",
-            server.home.name().as_str(),
-            "--window",
-            window,
-        ]);
-        command.env("COMPOSER_HOME", server.home.home_root());
-        command.env("TERM", "xterm-256color");
-        command.env("COLORTERM", "truecolor");
-        command.cwd(server.home.root());
-        let child = pair
-            .slave
-            .spawn_command(command)
-            .map_err(|e| format!("starting the TUI: {e}"))?;
-        drop(pair.slave);
-        let writer = pair.master.take_writer().map_err(|e| e.to_string())?;
-        let cap = server.config().terminals.scrollback_kb * 1024;
-        let terminal = Arc::new(Terminal {
-            id: id.clone(),
-            session: String::new(),
-            window: Some(window.to_string()),
-            cwd: server.home.root().to_path_buf(),
-            master: Mutex::new(pair.master),
-            writer: Mutex::new(writer),
-            child: Mutex::new(child),
-            scrollback: Mutex::new(Scrollback::new(cap)),
-            last_used: Mutex::new(Instant::now()),
-        });
-        self.open
-            .lock()
-            .expect("terminals lock")
-            .insert(id.clone(), terminal.clone());
-        read_into(server, terminal);
-        Ok(id)
-    }
-
     pub fn get(&self, id: &str) -> Option<Arc<Terminal>> {
         self.open.lock().expect("terminals lock").get(id).cloned()
-    }
-
-    /// Whether window `window`'s TUI is running.
-    pub fn has_window(&self, window: &str) -> bool {
-        self.open
-            .lock()
-            .expect("terminals lock")
-            .values()
-            .any(|t| t.window.as_deref() == Some(window))
     }
 
     /// The terminal `id`, or what to do when there is none.
@@ -199,10 +140,9 @@ impl Terminals {
     pub fn reap(&self, server: &Server, idle: Duration) -> Vec<String> {
         let stale: Vec<Arc<Terminal>> = {
             let mut open = self.open.lock().expect("terminals lock");
-            // A window's TUI lives as long as its window, not by use.
             let ids: Vec<String> = open
                 .values()
-                .filter(|t| t.window.is_none() && t.idle_for() >= idle)
+                .filter(|t| t.idle_for() >= idle)
                 .map(|t| t.id.clone())
                 .collect();
             ids.iter().filter_map(|id| open.remove(id)).collect()
@@ -260,7 +200,7 @@ fn place(server: &Server, session: &Session) -> PathBuf {
     session
         .info()
         .project
-        .and_then(|p| server.see_project(&p).ok())
+        .and_then(|p| server.project_folder(&p).ok())
         .map(PathBuf::from)
         .unwrap_or_else(|| server.home.sites())
 }
@@ -292,7 +232,6 @@ fn spawn(
     Ok(Arc::new(Terminal {
         id: id.to_string(),
         session: session.id().to_string(),
-        window: None,
         cwd: cwd.to_path_buf(),
         master: Mutex::new(pair.master),
         writer: Mutex::new(writer),
@@ -302,7 +241,7 @@ fn spawn(
     }))
 }
 
-/// A `type: tui` page's program: the user's live view, the same trust as a desktop window. The agent uses the program's control adapter, not this terminal.
+/// A `type: tui` page's program: the user's live view. The agent uses the program's control adapter, not this terminal.
 #[allow(
     clippy::too_many_arguments,
     reason = "a TUI page's program is the user's client, not an agent shell; the page's control \
@@ -336,7 +275,6 @@ fn spawn_tui(
     Ok(Arc::new(Terminal {
         id: id.to_string(),
         session: session.id().to_string(),
-        window: None,
         cwd: cwd.to_path_buf(),
         master: Mutex::new(pair.master),
         writer: Mutex::new(writer),
@@ -374,7 +312,6 @@ fn read_into(server: &Arc<Server>, terminal: Arc<Terminal>) {
                 session: terminal.session.clone(),
                 terminal: terminal.id.clone(),
                 data: base64::engine::general_purpose::STANDARD.encode(&buffer[..n]),
-                window: terminal.window.clone(),
             });
         }
         if let Some(server) = server.upgrade()
@@ -389,7 +326,6 @@ fn exited(server: &Server, terminal: &Terminal) {
     server.hub.send(ServerMessage::TerminalExited {
         session: terminal.session.clone(),
         terminal: terminal.id.clone(),
-        window: terminal.window.clone(),
     });
 }
 

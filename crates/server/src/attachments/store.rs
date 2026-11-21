@@ -5,7 +5,7 @@ use composer_protocol::Attachment;
 use crate::attachments::{AttachmentFolder, AttachmentKind, classify, prepare_image};
 use crate::config_sections::AttachmentsConfig;
 use crate::hash::content_hash;
-use crate::workspace_home::WorkspaceHome;
+use crate::home::Home;
 
 /// A file name that is safe to store: no folders, only `A-Z a-z 0-9 . _ -`, no leading dot,
 /// at most 80 characters. Empty becomes `file`.
@@ -46,7 +46,7 @@ pub fn sanitize_name(name: &str) -> String {
 /// Stores an upload for `session`: checked (size, type), images made safe (see
 /// [`prepare_image`]), named `<hash>-<name>`. The same content uploaded again is stored once.
 pub fn save(
-    home: &WorkspaceHome,
+    home: &Home,
     config: &AttachmentsConfig,
     session: &str,
     name: &str,
@@ -93,7 +93,7 @@ pub fn save(
 /// A client's reference to an attachment of `session`: the stored file it names (which must be
 /// in that session's folder), described from the file itself. Returns it with its path.
 pub fn resolve(
-    home: &WorkspaceHome,
+    home: &Home,
     session: &str,
     reference: &Attachment,
 ) -> Result<(Attachment, PathBuf), String> {
@@ -159,7 +159,7 @@ mod tests {
     #[test]
     fn saves_once_and_resolves_only_its_own() {
         let tmp = tempfile::tempdir().unwrap();
-        let home = WorkspaceHome::new(tmp.path());
+        let home = Home::new(tmp.path());
         let saved = save(&home, &config(), "s1", "../notes.md", b"# notes").unwrap();
         assert!(saved.file.ends_with("-notes.md"));
         assert_eq!((saved.mime.as_str(), saved.size), ("text/markdown", 7));
@@ -200,7 +200,7 @@ mod tests {
     #[test]
     fn long_upload_names_can_be_resolved() {
         let tmp = tempfile::tempdir().unwrap();
-        let home = WorkspaceHome::new(tmp.path());
+        let home = Home::new(tmp.path());
         // The stored name adds a 12-character hash and a dash to the upload's name.
         for len in [67, 68, 80, 120] {
             let name = format!("{}.txt", "a".repeat(len - 4));
@@ -215,7 +215,7 @@ mod tests {
     #[test]
     fn refuses_what_it_does_not_take() {
         let tmp = tempfile::tempdir().unwrap();
-        let home = WorkspaceHome::new(tmp.path());
+        let home = Home::new(tmp.path());
         let small = AttachmentsConfig {
             max_mb: 1,
             ..config()

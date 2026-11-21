@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use serde_json::{Value, json};
 
-use crate::actions::{Caller, Justfile};
+use crate::actions::Justfile;
 use crate::tools::args::ActionsArgs;
 use crate::tools::{Tool, ToolContext};
 
@@ -22,7 +22,7 @@ impl Tool for ActionsTool {
     fn parameters(&self) -> Value {
         json!({
             "type": "object",
-            "properties": { "site": { "type": "string", "description": "site name, e.g. orchestration; default: the site you are in" } }
+            "properties": { "site": { "type": "string", "description": "site name, e.g. icm; default: the site you are in" } }
         })
     }
 
@@ -58,7 +58,6 @@ impl Tool for ActionsTool {
                 &site,
                 &recipe.name,
                 &justfile.hash(&recipe.name),
-                Caller::Agent,
             );
             let mut line = format!("- {}", recipe.name);
             for parameter in &recipe.parameters {

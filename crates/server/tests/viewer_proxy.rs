@@ -1,10 +1,9 @@
-//! wayai's viewer through composer (`<workspace>/view`): proxied to a fake upstream on loopback,
-//! behind the workspace's token, view only. The fake serves a page, a WebSocket of binary frames
+//! wayai's viewer through composer (`/view`): proxied to a fake upstream on loopback, behind
+//! the token, view only. The fake serves a page, a WebSocket of binary frames
 //! that records everything it receives, and an annotations endpoint that records its posts.
 
 mod support;
 
-use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -16,8 +15,7 @@ use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use composer_protocol::http::{ServerInfo, SiteSummary};
-use composer_server::apps::AppGrant;
-use composer_server::{Config, Home, Host, Server, WorkspaceName, init_home, init_workspace};
+use composer_server::{Config, Server};
 use futures::{SinkExt, StreamExt};
 use reqwest::Client;
 use support::*;
@@ -458,7 +456,7 @@ async fn the_upstream_closing_closes_the_client() {
 }
 
 #[tokio::test]
-async fn only_the_workspaces_credentials_open_it() {
+async fn only_its_credentials_open_it() {
     let (upstream, _seen) = fake_viewer().await;
     let (dir, server, _p, addr) = start_with(viewer_config(upstream), vec![]).await;
     let base = format!("http://{addr}");
@@ -477,35 +475,6 @@ async fn only_the_workspaces_credentials_open_it() {
     }
     assert!(
         tokio_tungstenite::connect_async(format!("ws://{addr}/view/ws"))
-            .await
-            .is_err()
-    );
-
-    // An app's own token opens nothing here, however it is presented.
-    let app = server.app_tokens.mint(AppGrant {
-        project: None,
-        site: "cad".into(),
-        local: None,
-        session: None,
-    });
-    for request in [
-        client().get(format!("{base}/view")).bearer_auth(&app),
-        client().get(format!("{base}/view?token={app}")),
-        client().get(format!("{base}/view")).header(
-            header::COOKIE,
-            format!("composer_token_{}={app}", addr.port()),
-        ),
-        client()
-            .get(format!("{base}/view"))
-            .header(header::COOKIE, format!("composer_app={app}")),
-        client()
-            .post(format!("{base}/view/annotations"))
-            .bearer_auth(&app),
-    ] {
-        assert_eq!(request.send().await.unwrap().status(), 404);
-    }
-    assert!(
-        tokio_tungstenite::connect_async(format!("ws://{addr}/view/ws?token={app}"))
             .await
             .is_err()
     );
@@ -567,76 +536,6 @@ async fn only_the_workspaces_credentials_open_it() {
     let mut ws = socket(addr, "/view/ws", device).await;
     assert!(matches!(ws.next().await, Some(Ok(Message::Binary(_)))));
     drop(dir);
-}
-
-#[tokio::test]
-async fn another_workspaces_credentials_do_not_open_it() {
-    let (upstream, _seen) = fake_viewer().await;
-    let dir = tempfile::tempdir().unwrap();
-    let home = Home::new(dir.path().join("home"));
-    init_home(&home).await.unwrap();
-    init_workspace(&home.workspace(&WorkspaceName::new("b").unwrap()))
-        .await
-        .unwrap();
-    let mut servers = BTreeMap::new();
-    for name in home.workspace_names().unwrap() {
-        let workspace = home.workspace(&name);
-        let mut config = workspace.load_config().unwrap();
-        config.viewer.url = format!("http://{upstream}/view");
-        let provider = Arc::new(MockProvider::new(vec![]));
-        servers.insert(name, Server::new(workspace, config, provider).unwrap());
-    }
-    let host = Arc::new(Host::new(home, servers).unwrap());
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-    let serving = host.clone();
-    tokio::spawn(async move { serving.serve(listener).await });
-    let get = |name: &str| {
-        host.workspace(&WorkspaceName::new(name).unwrap())
-            .unwrap()
-            .clone()
-    };
-    let (a, b) = (get("default"), get("b"));
-    for _ in 0..200 {
-        if a.parent_url().is_some() && b.parent_url().is_some() {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(10)).await;
-    }
-    let status = |path: String, token: String| async move {
-        client()
-            .get(format!("http://{addr}{path}"))
-            .bearer_auth(token)
-            .send()
-            .await
-            .unwrap()
-            .status()
-    };
-    for (own, other, name) in [(&a, &b, "default"), (&b, &a, "b")] {
-        let view = format!("/w/{name}/view");
-        assert_eq!(status(view.clone(), own.token.clone()).await, 200);
-        assert_eq!(status(view.clone(), other.token.clone()).await, 404);
-        assert_eq!(
-            status(format!("{view}/text/1"), other.token.clone()).await,
-            404
-        );
-        // A device paired to the other workspace.
-        let code = other.devices.create_code("phone").unwrap();
-        let device = other
-            .devices
-            .redeem(&code, Some("phone"))
-            .unwrap()
-            .unwrap()
-            .1;
-        assert_eq!(status(view.clone(), device).await, 404);
-        // And a workspace's own socket opens only with its own token.
-        let refused =
-            tokio_tungstenite::connect_async(format!("ws://{addr}{view}/ws?token={}", other.token))
-                .await;
-        assert!(refused.is_err());
-        let mut ws = socket(addr, &format!("{view}/ws"), &own.token).await;
-        assert!(matches!(ws.next().await, Some(Ok(Message::Binary(_)))));
-    }
 }
 
 #[tokio::test]
@@ -721,13 +620,13 @@ async fn a_non_loopback_upstream_is_no_viewer() {
 }
 
 #[tokio::test]
-async fn the_sites_listing_includes_optional_applications_and_mcp_servers() {
+async fn the_sites_listing_includes_optional_mcp_servers() {
     let (dir, server, _p, addr) = start(vec![]).await;
     let sites = dir.path().join("sites");
     for (name, index) in [
         (
             "flow",
-            "---\ntitle: Flow\napp: blender\nmcp: [blender, comfy]\n---\n# Flow\n",
+            "---\ntitle: Flow\nmcp: [blender, comfy]\n---\n# Flow\n",
         ),
         ("mcponly", "---\ntitle: M\nmcp: wayai\n---\n# M\n"),
         ("plain", "---\ntitle: Plain\n---\n# Plain\n"),
@@ -745,13 +644,10 @@ async fn the_sites_listing_includes_optional_applications_and_mcp_servers() {
         .await
         .unwrap();
     let site = |name: &str| listing.iter().find(|s| s.name == name).unwrap();
-    assert_eq!(site("flow").app.as_deref(), Some("blender"));
     assert_eq!(site("flow").mcp, ["blender", "comfy"]);
-    assert_eq!(site("mcponly").app, None);
     assert_eq!(site("mcponly").mcp, ["wayai"]);
-    assert_eq!(site("plain").app, None);
     assert!(site("plain").mcp.is_empty());
-    // A plain site's JSON has neither key.
+    // A plain site's JSON has no `mcp` key.
     let raw: serde_json::Value = client()
         .get(format!("http://{addr}/api/sites"))
         .bearer_auth(&server.token)
@@ -767,7 +663,7 @@ async fn the_sites_listing_includes_optional_applications_and_mcp_servers() {
         .iter()
         .find(|s| s["name"] == "plain")
         .unwrap();
-    assert!(plain.get("app").is_none() && plain.get("mcp").is_none());
+    assert!(plain.get("mcp").is_none());
 }
 
 /// `GET target` exactly as written (no client-side URL normalization), with a bearer token: the

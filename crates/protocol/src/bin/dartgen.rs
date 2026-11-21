@@ -12,10 +12,8 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use composer_protocol::http::{
-    ActionSummary, AgentSummary, AppInfo, AppList, AppMessage, AppOpened, ChangedFile, DiffComment,
-    OpenProject, PageExcerpt, PageResponse, ProjectDiff, ProjectInfo, ProjectOverview,
-    ProjectSummary, PutPageRequest, PutPageResponse, RunActionRequest, RunActionResponse,
-    SearchHit, ServerInfo, SiteSummary, TicketBranchSummary, TicketReview, WebSession,
+    AgentSummary, AppMessage, ChangedFile, PageResponse, ProjectDiff, PutPageRequest,
+    PutPageResponse, SearchHit, ServerInfo, SiteSummary, WebSession,
 };
 use composer_protocol::*;
 use serde_json::{Map, Value, json};
@@ -71,20 +69,9 @@ fn definitions() -> Map<String, Value> {
     let _ = generator.subschema_for::<SearchHit>();
     let _ = generator.subschema_for::<AppMessage>();
     let _ = generator.subschema_for::<ProjectDiff>();
-    let _ = generator.subschema_for::<ProjectOverview>();
     let _ = generator.subschema_for::<ChangedFile>();
-    let _ = generator.subschema_for::<DiffComment>();
     let _ = generator.subschema_for::<AgentSummary>();
-    let _ = generator.subschema_for::<ProjectSummary>();
-    let _ = generator.subschema_for::<ActionSummary>();
-    let _ = generator.subschema_for::<RunActionRequest>();
-    let _ = generator.subschema_for::<RunActionResponse>();
     // Phase 4: apps on projects (0162-0168).
-    let _ = generator.subschema_for::<AppList>();
-    let _ = generator.subschema_for::<AppInfo>();
-    let _ = generator.subschema_for::<AppOpened>();
-    let _ = generator.subschema_for::<ProjectInfo>();
-    let _ = generator.subschema_for::<OpenProject>();
     let _ = generator.subschema_for::<WebSession>();
     let defs = generator.take_definitions(true);
     defs.into_iter().collect()
@@ -563,12 +550,10 @@ fn variant_name(parent: &str, value: &str) -> String {
 fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
     let info = SessionInfo {
         id: "a3f1".into(),
-        agent: "orchestrator".into(),
+        agent: "default".into(),
         project: Some("/home/me/project".into()),
-        site: Some("orchestration".into()),
-        ticket: None,
+        site: Some("plans".into()),
         parent: None,
-        worker: Some(WorkerState::Done),
         state: TurnState::AwaitingApproval,
         last_seq: 42,
         context_tokens: 1200,
@@ -593,9 +578,7 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
             mime: "text/markdown".into(),
             size: 120,
         }],
-        source: Some(MessageSource::App {
-            site: "design".into(),
-        }),
+        source: Some(MessageSource::Tui),
     };
     let s = || "a3f1".to_string();
     let server = vec![
@@ -616,34 +599,12 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
             },
         },
         ServerMessage::Ok {
-            id: 4,
-            result: CommandResult::SlotGranted { grant: 7 },
-        },
-        ServerMessage::Ok {
-            id: 5,
-            result: CommandResult::Approval {
-                approved: true,
-                reason: None,
-            },
-        },
-        ServerMessage::Ok {
             id: 50,
             result: CommandResult::Tools {
                 tools: vec![ToolInfo {
                     name: "open".into(),
                     description: "Open a page".into(),
                     parameters: json!({ "type": "object" }),
-                }],
-            },
-        },
-        ServerMessage::Ok {
-            id: 52,
-            result: CommandResult::Harnesses {
-                project: "/home/me/project".into(),
-                harnesses: vec![HarnessSwitch {
-                    entry: "claude-code".into(),
-                    allowed: true,
-                    on: false,
                 }],
             },
         },
@@ -663,18 +624,6 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
                         context: None,
                     },
                 ],
-            },
-        },
-        ServerMessage::Ok {
-            id: 52,
-            result: CommandResult::Merged {
-                commit: "abc1234".into(),
-            },
-        },
-        ServerMessage::Ok {
-            id: 152,
-            result: CommandResult::Comments {
-                lines: vec!["- a.rs:3 — rename this".into()],
             },
         },
         ServerMessage::Ok {
@@ -711,9 +660,7 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
         ServerMessage::TurnQueued {
             session: s(),
             seq: 2,
-            source: MessageSource::Worker {
-                session: "b2c3".into(),
-            },
+            source: MessageSource::Server,
         },
         ServerMessage::TurnDone {
             session: s(),
@@ -806,37 +753,10 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
             kind: PageChangeKind::Modified,
             by: ChangedBy::External,
         },
-        ServerMessage::WorkerStatus {
-            worker: "w1".into(),
-            ticket: "0001".into(),
-            parent: s(),
-            state: WorkerState::Done,
-        },
         ServerMessage::Slots {
             used: 1,
             total: 2,
             waiting: 0,
-        },
-        ServerMessage::ReminderDue {
-            url: "site://calendar/reminders/call.md".into(),
-            title: "Call".into(),
-            due: "2026-10-19 20:00".into(),
-            late: false,
-            session: None,
-        },
-        ServerMessage::ReminderDue {
-            url: "site://calendar/reminders/review.md".into(),
-            title: "Review".into(),
-            due: "2026-10-19 08:00".into(),
-            late: true,
-            session: Some(s()),
-        },
-        ServerMessage::TurnQueued {
-            session: s(),
-            seq: 4,
-            source: MessageSource::Reminder {
-                url: "site://calendar/reminders/review.md".into(),
-            },
         },
         ServerMessage::TurnQueued {
             session: s(),
@@ -848,7 +768,7 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
     ];
     let commands = vec![
         ClientCommand::SessionCreate {
-            agent: "orchestrator".into(),
+            agent: "default".into(),
             project: None,
         },
         ClientCommand::SessionList,
@@ -879,10 +799,6 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
             session: s(),
             seen: Some(3),
         },
-        ClientCommand::ProjectSet {
-            session: s(),
-            path: Some("/p".into()),
-        },
         ClientCommand::SiteSet {
             session: s(),
             site: Some("3d".into()),
@@ -899,60 +815,10 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
             request: "r2".into(),
             decision: ApprovalDecision::Always,
         },
-        ClientCommand::TicketChanges {
-            ticket: "0007".into(),
-        },
-        ClientCommand::TicketComment {
-            ticket: "0007".into(),
-            comments: vec![DiffComment {
-                file: "a.rs".into(),
-                start: 3,
-                end: 5,
-                message: "rename this".into(),
-                quote: Some("let x = 1;".into()),
-            }],
-        },
-        ClientCommand::ProjectOverview {
-            project: "game".into(),
-        },
-        ClientCommand::TicketMerge {
-            ticket: "0007".into(),
-        },
-        ClientCommand::TicketDiscard {
-            ticket: "0007".into(),
-        },
         ClientCommand::Subscribe {
             urls: vec!["*".into()],
         },
-        ClientCommand::WorkerHello { session: s() },
-        ClientCommand::WorkerEvent {
-            event: Box::new(ServerMessage::TurnStarted {
-                session: s(),
-                seq: 1,
-            }),
-        },
-        ClientCommand::SlotAcquire,
-        ClientCommand::SlotRelease { grant: 7 },
-        ClientCommand::ApprovalAsk {
-            site: "t".into(),
-            recipe: "r".into(),
-            args: vec![],
-            body: "b".into(),
-            hash: "h".into(),
-        },
-        ClientCommand::WorkerFinish {
-            state: WorkerState::Failed,
-            summary: "why".into(),
-        },
         ClientCommand::ToolList { session: s() },
-        ClientCommand::HarnessList {
-            project: "composer".into(),
-        },
-        ClientCommand::HarnessSet {
-            project: "composer".into(),
-            entry: "claude-code".into(),
-            on: false,
-        },
         ClientCommand::ToolCall {
             session: s(),
             name: "open".into(),
@@ -977,19 +843,14 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
             model: "m".into(),
             slots: 2,
             projects_dir: "~/Projects".into(),
-            workspace: "default".into(),
-            workspace_color: "#3f9c6b".into(),
             viewer: Some("/view".into()),
         }),
         serde_json::to_value(SiteSummary {
             name: "memory".into(),
             title: "Memory".into(),
             has_justfile: false,
-            has_ui: true,
-            app_built: false,
             description: "what agents know".into(),
             pages: 12,
-            app: Some("blender".into()),
             mcp: vec!["blender".into()],
         }),
         serde_json::to_value(PageResponse {
@@ -1012,73 +873,11 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
                 semantic: Some("a.rs --- Rust\n1 fn a() {}\n".into()),
             }],
             diff: "+x".into(),
-            ticket: Some(TicketReview {
-                ticket: "0007".into(),
-                branch: "ticket/0007".into(),
-                target: Some("main".into()),
-                ahead: 2,
-                commits: vec!["abc1234 Add a".into()],
-                uncommitted: true,
-                conflicts: vec![],
-            }),
         }),
         serde_json::to_value(AgentSummary {
             name: "coder".into(),
             title: "Coder".into(),
             description: "writes code".into(),
-            worker: true,
-        }),
-        serde_json::to_value(ProjectSummary {
-            name: "composer".into(),
-            path: "~/Projects/composer".into(),
-            modified: "2026-10-20T07:00:00+02:00".into(),
-            folder: "/home/me/Projects/composer".into(),
-            sessions: 2,
-            running: 1,
-            waiting: 0,
-            last_used: Some("2026-10-21T09:00:00+00:00".into()),
-            page: Some("site://projects/composer.md".into()),
-        }),
-        serde_json::to_value(ProjectOverview {
-            name: "game".into(),
-            page: Some("site://projects/game.md".into()),
-            path: "~/Projects/game".into(),
-            folder: "/home/me/Projects/game".into(),
-            branch: Some("main".into()),
-            uncommitted: 3,
-            sites: vec![],
-            branches: vec![TicketBranchSummary {
-                ticket: "0028".into(),
-                title: "Controller remapping".into(),
-                branch: "ticket/0028".into(),
-                status: Some("done".into()),
-                commits: 2,
-            }],
-            memory: Some(PageExcerpt {
-                url: "site://memory/projects/game.md".into(),
-                excerpt: "Godot 4.4, C#.".into(),
-            }),
-            harnesses: vec![HarnessSwitch {
-                entry: "claude-code".into(),
-                allowed: true,
-                on: true,
-            }],
-            tool_rules: 2,
-        }),
-        serde_json::to_value(ActionSummary {
-            name: "greet".into(),
-            doc: Some("Greets someone.".into()),
-            parameters: vec!["name".into()],
-            approved: true,
-        }),
-        serde_json::to_value(RunActionRequest {
-            args: vec!["world".into()],
-            session: Some("a3f1".into()),
-        }),
-        serde_json::to_value(RunActionResponse {
-            status: "ok".into(),
-            exit_code: Some(0),
-            output: "hi world\n".into(),
         }),
     ]
     .into_iter()

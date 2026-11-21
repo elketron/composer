@@ -8,19 +8,13 @@ use serde::{Deserialize, Serialize};
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum DeskTab {
-    /// An app: on a project (by name), or on Home (`None`).
-    App {
-        site: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        project: Option<String>,
-    },
     /// A page (`site://...`).
     Page { url: String },
     /// A server-owned terminal.
     Terminal { id: String },
-    /// A project's changes (its ticket branches, its diff).
+    /// A project's changes (its diff).
     Changes { project: String },
-    /// The workspace's live view of its application (wayai's viewer, proxied at `<workspace>/view`).
+    /// The live view of the user's application (wayai's viewer, proxied at `/view`).
     /// It names no site or project; one per desk (id `live`). Wire form: `{"kind":"live_view"}`.
     LiveView,
 }
@@ -30,7 +24,7 @@ pub enum DeskTab {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct DeskEntry {
-    /// `app:cad@game`, `app:calendar`, `page:site://x`, `terminal:<id>`, `changes:<project>`, `live`.
+    /// `page:site://x`, `terminal:<id>`, `changes:<project>`, `live`.
     pub id: String,
     pub tab: DeskTab,
     /// Opened by the agent and not looked at yet (a badge, for a client not following it).
@@ -73,25 +67,4 @@ pub struct Desk {
 pub enum DeskBy {
     User,
     Agent,
-}
-
-/// What the user points at in an app (ticket 0175): the hunk, the part, the ticket. It reaches the
-/// chat as a chip and the next message as context.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-pub struct Selection {
-    /// The app (its site) it was selected in.
-    pub app: String,
-    /// What the chip says: "ticket 0042", "hunk 3 of src/main.rs".
-    pub label: String,
-    /// The selected text, if any.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub text: Option<String>,
-    /// A page or file it is about (`site://...`, a path in the project).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub url: Option<String>,
-    /// Anything else the app wants the agent to have (small JSON).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub data: Option<serde_json::Value>,
 }

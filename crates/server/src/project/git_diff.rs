@@ -145,7 +145,6 @@ async fn diff(path: &Path, base: Option<&str>, structural: bool) -> Result<Proje
         branch,
         files,
         diff,
-        ticket: None,
     })
 }
 

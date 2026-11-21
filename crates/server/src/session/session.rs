@@ -28,10 +28,6 @@ pub struct Session {
     open_approvals: Mutex<OpenApprovals>,
     /// Held while the desk (`desk.json`) is read, changed and written.
     desk_lock: Mutex<()>,
-    /// What the user points at in one of its apps (the chip): goes with the next user message.
-    selection: Mutex<Option<composer_protocol::Selection>>,
-    /// What its apps reported since the last turn: the agent sees it at the next one.
-    notes: Mutex<Vec<String>>,
 }
 
 /// The turn a Stop is for.
@@ -83,31 +79,7 @@ impl Session {
                 after: TurnState::Idle,
             }),
             desk_lock: Mutex::new(()),
-            selection: Mutex::new(None),
-            notes: Mutex::new(Vec::new()),
         }))
-    }
-
-    /// The current selection (the chip).
-    pub fn selection(&self) -> Option<composer_protocol::Selection> {
-        self.selection.lock().expect("selection lock").clone()
-    }
-
-    /// Sets (or clears) the selection; `true` when it changed.
-    pub fn set_selection(&self, selection: Option<composer_protocol::Selection>) -> bool {
-        let mut current = self.selection.lock().expect("selection lock");
-        let changed = *current != selection;
-        *current = selection;
-        changed
-    }
-
-    /// Notes from its apps (events) for the agent's next turn.
-    pub fn add_note(&self, note: String) {
-        self.notes.lock().expect("notes lock").push(note);
-    }
-
-    pub fn take_notes(&self) -> Vec<String> {
-        std::mem::take(&mut *self.notes.lock().expect("notes lock"))
     }
 
     /// Its desk (`desk.json`); empty (the project home) when it has none yet.
@@ -171,7 +143,7 @@ impl Session {
     pub fn approval_opened(&self, hub: &EventHub) {
         let mut open = self.open_approvals.lock().expect("approvals lock");
         match self.info().state {
-            // Asked of the parent while its worker process already waits: back to work after.
+            // Asked while the session already waits on another answer: back to work after.
             TurnState::AwaitingApproval if open.count == 0 => open.after = TurnState::Running,
             TurnState::AwaitingApproval => {}
             state => open.after = state,
@@ -181,8 +153,8 @@ impl Session {
     }
 
     /// An approval request closed. The last one puts back what the session was doing (an idle
-    /// orchestrator stays idle), unless a turn started or ended meanwhile (an app's request isn't
-    /// part of a turn): the state that turn set is the right one.
+    /// session stays idle), unless a turn started or ended meanwhile (a request from outside a turn
+    /// is not part of one): the state that turn set is the right one.
     pub fn approval_closed(&self, hub: &EventHub) {
         let mut open = self.open_approvals.lock().expect("approvals lock");
         open.count -= 1;

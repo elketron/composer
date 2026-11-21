@@ -109,7 +109,7 @@ async fn a_bundle_is_an_mcp_server() {
     // Called through an agent's turn; `allow` runs it without asking.
     let url = composer_core::SiteUrl::new("agents", "bundled.md").unwrap();
     let page = "---\ntitle: bundled\ntype: agent\ntools: [open, demo__*]\n---\nYou use tools.\n";
-    server.write_page(&url, page, ChangedBy::App).unwrap();
+    server.write_page(&url, page, ChangedBy::External).unwrap();
     let mut socket = connect(addr, &server.token).await;
     send(
         &mut socket,

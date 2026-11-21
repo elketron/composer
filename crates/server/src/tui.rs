@@ -86,9 +86,8 @@ impl TuiPage {
         let raw = self.cwd.trim();
         let path = match raw {
             "project" => {
-                // A page inside a work (`<work>/review.md`) or an ICM run
-                // (`works/<ticket>/review.md`) runs in that folder's `project/`
-                // (the worktree while a stage runs); a site-level page uses the session's.
+                // A page inside a work (`<work>/review.md`) runs in that folder's `project/`;
+                // a site-level page uses the session's.
                 if let Some(parent) = Path::new(page.url.path()).parent()
                     && !parent.as_os_str().is_empty()
                 {
@@ -103,7 +102,7 @@ impl TuiPage {
                     .session
                     .info()
                     .project
-                    .and_then(|project| context.server.see_project(&project).ok())
+                    .and_then(|project| context.server.project_folder(&project).ok())
                     .map(PathBuf::from)
                     .ok_or_else(|| {
                         "this TUI runs in the project, and no project is active; set one, or open it from a work"
@@ -132,25 +131,23 @@ impl TuiPage {
         let path = path
             .canonicalize()
             .map_err(|e| format!("{}: {e}", path.display()))?;
-        // A page may run in the site, the workspace, the session's project, or one of its
-        // worktrees; not in some other folder the page names.
+        // A page may run in the site, the home, or the session's project; not in some other
+        // folder the page names.
         let site = site.canonicalize().unwrap_or(site);
         let project = context
             .session
             .info()
             .project
-            .and_then(|project| context.server.see_project(&project).ok())
+            .and_then(|project| context.server.project_folder(&project).ok())
             .map(PathBuf::from);
-        let worktrees = context.server.home.root().join("state/worktrees");
         let allowed = path.starts_with(&site)
             || path.as_path() == context.server.home.root()
             || project
                 .as_ref()
-                .is_some_and(|project| path.starts_with(project))
-            || path.starts_with(&worktrees);
+                .is_some_and(|project| path.starts_with(project));
         if !allowed {
             return Err(format!(
-                "{} is outside this workspace; a TUI page runs in the site, the project, or a worktree",
+                "{} is outside composer's home; a TUI page runs in the site or the project",
                 path.display()
             ));
         }

@@ -51,9 +51,7 @@ impl SessionManager {
             agent: agent.to_string(),
             project,
             site: None,
-            ticket: None,
             parent: None,
-            worker: None,
             state: TurnState::Idle,
             last_seq: 0,
             context_tokens: 0,
@@ -64,15 +62,6 @@ impl SessionManager {
         let folder = SessionFolder::of(&self.dir, &id).map_err(ServerError::Invalid)?;
         let session = Session::create(folder.path(), info)?;
         sessions.insert(id, session.clone());
-        Ok(session)
-    }
-
-    /// Creates a session with a given id and info (a worker mirrors its parent's session id).
-    pub fn create_with_info(&self, info: SessionInfo) -> Result<Arc<Session>> {
-        let mut sessions = self.sessions.write().expect("sessions lock");
-        let folder = SessionFolder::of(&self.dir, &info.id).map_err(ServerError::Invalid)?;
-        let session = Session::create(folder.path(), info)?;
-        sessions.insert(session.id().to_string(), session.clone());
         Ok(session)
     }
 

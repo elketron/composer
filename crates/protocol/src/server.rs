@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::common::{
-    ApprovalKind, ChangedBy, ChatMessage, HarnessSwitch, MessageSource, ModelInfo, PageChangeKind,
-    Seq, SessionId, SessionInfo, ToolInfo, Url, WorkerState,
+    ApprovalKind, ChangedBy, ChatMessage, MessageSource, ModelInfo, PageChangeKind, Seq, SessionId,
+    SessionInfo, ToolInfo, Url,
 };
 
 /// Everything the server sends over `/ws`.
@@ -142,51 +142,18 @@ pub enum ServerMessage {
         by: ChangedBy,
     },
 
-    #[serde(rename = "worker.status")]
-    WorkerStatus {
-        worker: SessionId,
-        ticket: String,
-        parent: SessionId,
-        state: WorkerState,
-    },
-
     /// A terminal's output (base64 bytes), to the session's clients.
     #[serde(rename = "terminal.output")]
     TerminalOutput {
         session: SessionId,
         terminal: String,
         data: String,
-        /// A window's TUI terminal: to that window only.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        window: Option<String>,
     },
     /// A terminal ended (its shell exited, it was closed, or it was idle too long).
     #[serde(rename = "terminal.exited")]
     TerminalExited {
         session: SessionId,
         terminal: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        window: Option<String>,
-    },
-    /// The window's TUI shows another session: the stage shows its desk (to the window only).
-    #[serde(rename = "window.changed")]
-    WindowChanged { window: String, session: SessionId },
-    /// What the user points at in an app of the session changed (`None`: nothing): the chip.
-    #[serde(rename = "selection.changed")]
-    SelectionChanged {
-        session: SessionId,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        selection: Option<crate::Selection>,
-    },
-    /// Something happened in an app of the session (a gate flipped, approve clicked); the agent
-    /// sees it on its next turn.
-    #[serde(rename = "app.event")]
-    AppEvent {
-        session: SessionId,
-        app: String,
-        kind: String,
-        #[serde(default)]
-        detail: serde_json::Value,
     },
     /// A session's desk changed (`by` the user or the agent): to the clients attached to it.
     #[serde(rename = "desk.changed")]
@@ -199,33 +166,6 @@ pub enum ServerMessage {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         opened: Option<String>,
     },
-    /// Files changed in an open project (paths relative to it, a settled burst at a time; at most
-    /// 200). To the clients that opened it and its apps' sockets.
-    #[serde(rename = "project.changed")]
-    ProjectChanged { project: String, paths: Vec<String> },
-    /// An app's `on_open` recipe ran when its project was first opened: `ok`, `failed`,
-    /// `timed out`, or `needs approval` (it didn't run).
-    #[serde(rename = "on_open.ran")]
-    OnOpenRan {
-        project: String,
-        app: String,
-        recipe: String,
-        status: String,
-        output: String,
-    },
-    /// A reminder page (`type: reminder`) came due. Sent once per reminder, to every client.
-    #[serde(rename = "reminder.due")]
-    ReminderDue {
-        url: Url,
-        title: String,
-        /// When it was due, local time: `2026-10-19 20:00`.
-        due: String,
-        /// Delivered well after it was due (the server was off).
-        late: bool,
-        /// The session it was posted to: its own, or a new one. None if that failed.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        session: Option<SessionId>,
-    },
 
     /// `config.toml` changed and the server read it again. `error`: it doesn't parse, and the
     /// server keeps running with the config it had.
@@ -236,7 +176,7 @@ pub enum ServerMessage {
         error: Option<String>,
     },
 
-    /// Model slot usage, shared by all sessions and workers.
+    /// Model slot usage, shared by all sessions.
     #[serde(rename = "slots")]
     Slots { used: u32, total: u32, waiting: u32 },
 }
@@ -247,11 +187,7 @@ pub enum ServerMessage {
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum CommandResult {
     Done,
-    /// `app.open`.
-    AppOpened {
-        opened: crate::http::AppOpened,
-    },
-    /// Done, with what the user should know (`app.allow`, `app.promote`).
+    /// Done, with what the user should know (`site.set`).
     Note {
         text: String,
     },
@@ -260,22 +196,6 @@ pub enum CommandResult {
     },
     Sessions {
         sessions: Vec<SessionInfo>,
-    },
-    SlotGranted {
-        grant: u64,
-    },
-    Approval {
-        approved: bool,
-        /// The orchestrator decided, not the user: why (a worker's approval). It isn't remembered.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        reason: Option<String>,
-    },
-    /// Go on after the turn limit, with the orchestrator's `message`; `compact`: compact the
-    /// session first.
-    WorkerGoOn {
-        message: String,
-        #[serde(default)]
-        compact: bool,
     },
     Tools {
         tools: Vec<ToolInfo>,
@@ -287,40 +207,18 @@ pub enum CommandResult {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         images: Vec<String>,
     },
-    Harnesses {
-        project: String,
-        harnesses: Vec<HarnessSwitch>,
-    },
     /// `model.list`: what the provider lists, and the model sessions use unless set.
     Models {
         default_model: String,
         models: Vec<ModelInfo>,
-    },
-    Changes {
-        changes: crate::http::ProjectDiff,
-    },
-    Merged {
-        commit: String,
-    },
-    /// `ticket.comment`: the comment lines on the ticket page, as written.
-    Comments {
-        lines: Vec<String>,
     },
     /// `session.history`'s events, oldest first; `more`: older ones remain.
     History {
         events: Vec<ServerMessage>,
         more: bool,
     },
-    Project {
-        overview: crate::http::ProjectOverview,
-    },
     McpServers {
         servers: Vec<crate::http::McpServerInfo>,
-    },
-    /// `window.hello`: the window's id and the terminal its TUI runs in.
-    Window {
-        window: String,
-        terminal: String,
     },
     /// `terminal.open` / `terminal.read`: the terminal and its scrollback (base64).
     Terminal {
@@ -330,47 +228,6 @@ pub enum CommandResult {
     /// `desk.*`: the session's desk now.
     Desk {
         desk: crate::Desk,
-    },
-    /// `apps.list`.
-    Apps {
-        list: crate::http::AppList,
-    },
-    /// `project.open`: its name, and whether this was the first open (watch started, `on_open`
-    /// running).
-    ProjectOpened {
-        project: String,
-        first: bool,
-    },
-    /// `projects.open`.
-    OpenProjects {
-        projects: Vec<crate::http::OpenProject>,
-    },
-    /// `library.list`.
-    Library {
-        sites: Vec<crate::http::LibrarySiteInfo>,
-    },
-    /// `library.install`: the site as installed, from which library site and commit (12 digits),
-    /// how many files; `has_ui`: build it with its `ui-build` action.
-    LibraryInstalled {
-        site: String,
-        from: String,
-        commit: String,
-        files: usize,
-        has_ui: bool,
-    },
-    /// `library.update`: the files that changed (or would, for a dry run).
-    LibraryUpdated {
-        changes: Vec<crate::http::LibraryChange>,
-    },
-    /// `library.publish` without `approved`: what publishing would do.
-    LibraryPublishPlan {
-        plan: crate::http::LibraryPublishPlan,
-    },
-    /// `library.publish` with `approved`: the library site and its new commit (12 digits).
-    LibraryPublished {
-        site: String,
-        name: String,
-        commit: String,
     },
     ConfigReloaded {
         /// False: the file says what the server already runs with.

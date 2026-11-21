@@ -1,8 +1,6 @@
 use composer_core::SiteUrl;
 use composer_protocol::{Desk, DeskBy, DeskEntry, DeskTab};
 
-use crate::apps::ProjectName;
-
 /// A session's desk with what can be done to it (plan phase 5, ticket 0173). A tab's id comes
 /// from what it shows, so opening the same thing again focuses it instead of doubling it.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -24,13 +22,6 @@ impl SessionDesk {
     /// The id of a tab showing `tab`; refused when it names nothing a tab can show.
     pub fn key(tab: &DeskTab) -> Result<String, String> {
         Ok(match tab {
-            DeskTab::App { site, project } => {
-                SiteUrl::new(site, "").map_err(|_| format!("`{site}` isn't a site name"))?;
-                match project {
-                    Some(project) => format!("app:{site}@{}", ProjectName::new(project)?),
-                    None => format!("app:{site}"),
-                }
-            }
             DeskTab::Page { url } => {
                 let url = url.trim();
                 let path = url.strip_prefix("site://").unwrap_or(url);
@@ -48,7 +39,7 @@ impl SessionDesk {
                 }
                 format!("terminal:{id}")
             }
-            DeskTab::Changes { project } => format!("changes:{}", ProjectName::new(project)?),
+            DeskTab::Changes { project } => format!("changes:{}", project_name(project)?),
             DeskTab::LiveView => "live".to_string(),
         })
     }
@@ -112,14 +103,29 @@ impl SessionDesk {
     }
 }
 
+/// `project` as a changes tab names it: a folder name (no `/`, not starting with `.`).
+fn project_name(project: &str) -> Result<&str, String> {
+    let ok = !project.is_empty()
+        && !project.starts_with('.')
+        && project.len() <= 100
+        && !project
+            .chars()
+            .any(|c| c == '/' || c == '\\' || c.is_control());
+    match ok {
+        true => Ok(project),
+        false => Err(format!(
+            "`{project}` isn't a project name: a folder name (no `/`, not starting with `.`)"
+        )),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn app(site: &str, project: Option<&str>) -> DeskTab {
-        DeskTab::App {
-            site: site.into(),
-            project: project.map(str::to_string),
+    fn changes(project: &str) -> DeskTab {
+        DeskTab::Changes {
+            project: project.into(),
         }
     }
 
@@ -144,10 +150,10 @@ mod tests {
             };
             assert_eq!(entry.page_url(), Some("site://plans/x"), "{written:?}");
         }
-        let app = app("cad", None);
+        let tab = changes("game");
         let entry = DeskEntry {
-            id: SessionDesk::key(&app).unwrap(),
-            tab: app,
+            id: SessionDesk::key(&tab).unwrap(),
+            tab,
             unseen: false,
         };
         assert_eq!(entry.page_url(), None, "not a page");
@@ -160,10 +166,8 @@ mod tests {
     #[test]
     fn open_focus_close_move() {
         let mut desk = SessionDesk::default();
-        let cad = desk
-            .open(app("cad", Some("game")), true, DeskBy::User)
-            .unwrap();
-        assert_eq!(cad, "app:cad@game");
+        let cad = desk.open(changes("game"), true, DeskBy::User).unwrap();
+        assert_eq!(cad, "changes:game");
         let page = desk
             .open(
                 DeskTab::Page {
@@ -174,9 +178,8 @@ mod tests {
             )
             .unwrap();
         assert_eq!(page, "page:site://plans/x");
-        // The same app again: focused, not doubled.
-        desk.open(app("cad", Some("game")), true, DeskBy::User)
-            .unwrap();
+        // The same tab again: focused, not doubled.
+        desk.open(changes("game"), true, DeskBy::User).unwrap();
         assert_eq!(ids(&desk), [cad.clone(), page.clone()]);
         assert_eq!(desk.desk().active.as_deref(), Some(cad.as_str()));
         // The agent's unfocused open is unseen until shown.
@@ -194,7 +197,7 @@ mod tests {
         desk.close(&page).unwrap();
         desk.close(&cad).unwrap();
         assert_eq!(desk.desk(), &Desk::default());
-        assert!(desk.close("app:nope").unwrap_err().contains("no tab"));
+        assert!(desk.close("changes:nope").unwrap_err().contains("no tab"));
     }
 
     #[test]
@@ -221,16 +224,11 @@ mod tests {
     #[test]
     fn tabs_name_real_things() {
         for bad in [
-            app("../x", None),
-            app("cad", Some("a/b")),
+            changes("a/b"),
             DeskTab::Terminal { id: "../x".into() },
-            DeskTab::Changes { project: "".into() },
+            changes(""),
         ] {
             assert!(SessionDesk::key(&bad).is_err(), "{bad:?}");
         }
-        assert_eq!(
-            SessionDesk::key(&app("calendar", None)).unwrap(),
-            "app:calendar"
-        );
     }
 }

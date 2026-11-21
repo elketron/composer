@@ -36,57 +36,6 @@ pub fn append_table_row(text: &str, heading: &str, row: &str) -> Option<String> 
     Some(insert(text, last + 1, &[row.to_string()]))
 }
 
-/// Adds `- <item>` after the section's last list item, or as its first one.
-/// `None` if there is no such section.
-pub fn append_list_item(text: &str, heading: &str, item: &str) -> Option<String> {
-    let lines: Vec<&str> = text.lines().collect();
-    let (start, end) = section(&lines, heading)?;
-    let item = format!("- {item}");
-    match (start..end).rev().find(|&i| lines[i].starts_with("- ")) {
-        Some(last) => Some(insert(text, last + 1, &[item])),
-        None => {
-            // Right after the section's text, keeping a blank line before the next heading.
-            let mut at = end;
-            while at > start && lines[at - 1].trim().is_empty() {
-                at -= 1;
-            }
-            let mut new = vec![String::new(), item];
-            if end < lines.len() {
-                new.push(String::new());
-            }
-            if at == start {
-                new.remove(0);
-                if lines.get(start).is_some_and(|l| l.trim().is_empty()) {
-                    at += 1;
-                } else {
-                    new.insert(0, String::new());
-                }
-            }
-            Some(insert(text, at, &new))
-        }
-    }
-}
-
-/// Adds a whole section (`## <heading>` and `body`) before `## <before>`, or at the end.
-pub fn add_section(text: &str, heading: &str, body: &str, before: &str) -> String {
-    let lines: Vec<&str> = text.lines().collect();
-    let mut new = vec![format!("## {heading}"), String::new()];
-    new.extend(body.trim_end().lines().map(str::to_string));
-    match section(&lines, before) {
-        Some((start, _)) => {
-            new.push(String::new());
-            insert(text, start - 1, &new)
-        }
-        None => {
-            let mut out = text.trim_end().to_string();
-            out.push_str("\n\n");
-            out.push_str(&new.join("\n"));
-            out.push('\n');
-            out
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -108,34 +57,5 @@ mod tests {
             append_table_row(PAGE, "Sites", "| x |").is_none(),
             "no such section"
         );
-    }
-
-    #[test]
-    fn items_go_after_the_last_item() {
-        let out = append_list_item(PAGE, "Pages", "[b](projects/b.md)").unwrap();
-        assert!(
-            out.ends_with("- [a](projects/a.md)\n- [b](projects/b.md)\n"),
-            "{out}"
-        );
-        let empty = "# Site\n\n## Pages\n\n## Rules\n\n- x\n";
-        assert_eq!(
-            append_list_item(empty, "Pages", "[p](p.md)").unwrap(),
-            "# Site\n\n## Pages\n\n- [p](p.md)\n\n## Rules\n\n- x\n"
-        );
-        assert_eq!(
-            append_list_item("# Site\n\n## Pages\n", "Pages", "[p](p.md)").unwrap(),
-            "# Site\n\n## Pages\n\n- [p](p.md)\n"
-        );
-    }
-
-    #[test]
-    fn sections_go_before_another() {
-        let out = add_section(PAGE, "Projects", "| a |\n|---|", "Pages");
-        assert!(
-            out.contains("Text after.\n\n## Projects\n\n| a |\n|---|\n\n## Pages\n"),
-            "{out}"
-        );
-        let out = add_section("# X\n", "Projects", "body", "Pages");
-        assert_eq!(out, "# X\n\n## Projects\n\nbody\n");
     }
 }

@@ -4,6 +4,11 @@ use serde_json::Value;
 use crate::agent::SiteAccess;
 use crate::error::{Result, ServerError};
 
+/// The built-in agent's system prompt.
+const BUILTIN_PROMPT: &str = "You are composer's agent. You work with the user in their web of \
+pages (sites, `site://`) and in their projects. Open and search pages before you answer from \
+memory; write what lasts (decisions, facts about the user) into their pages. Keep answers short.";
+
 /// An agent page: frontmatter configures it, the body is its system prompt.
 #[derive(Debug, Clone)]
 pub struct AgentDefinition {
@@ -12,8 +17,6 @@ pub struct AgentDefinition {
     /// Tool names from `tools:`; `None` means every available tool.
     pub tools: Option<Vec<String>>,
     pub sites: SiteAccess,
-    /// `role:`; `worker` marks an agent `spawn_worker` can start.
-    pub role: Option<String>,
     pub title: String,
     /// `description:`, one line for lists (else the title).
     pub description: String,
@@ -33,9 +36,11 @@ impl AgentDefinition {
             return Err(ServerError::AgentNotFound(name.to_string()));
         }
         let url = SiteUrl::new("agents", name)?;
-        let page = workspace
-            .read_page(&url)
-            .map_err(|_| ServerError::AgentNotFound(name.to_string()))?;
+        let page = match workspace.read_page(&url) {
+            Ok(page) => page,
+            Err(_) if name == crate::agent::DEFAULT_AGENT => return Ok(Self::builtin()),
+            Err(_) => return Err(ServerError::AgentNotFound(name.to_string())),
+        };
         let tools = page
             .frontmatter
             .get("tools")
@@ -52,11 +57,6 @@ impl AgentDefinition {
             url: page.url.clone(),
             tools,
             sites: SiteAccess::from_frontmatter(page.frontmatter.get("sites")),
-            role: page
-                .frontmatter
-                .get_str("role")
-                .map(|r| r.trim().to_lowercase())
-                .filter(|r| !r.is_empty()),
             title: page.title(),
             description: page
                 .frontmatter
@@ -73,13 +73,23 @@ impl AgentDefinition {
         })
     }
 
-    /// A page with `role: worker`: the [`WORKER`](crate::agent::WORKER) agent `spawn_worker` runs
-    /// (in the server's worker mode), left out of the agents a person starts a session with.
-    pub fn is_worker(&self) -> bool {
-        self.role.as_deref() == Some("worker")
+    /// The built-in [`DEFAULT_AGENT`](crate::agent::DEFAULT_AGENT): every tool, every site.
+    // rewrite: phase 2: agent definitions become run settings.
+    pub fn builtin() -> Self {
+        Self {
+            name: crate::agent::DEFAULT_AGENT.to_string(),
+            url: SiteUrl::new("agents", &format!("{}.md", crate::agent::DEFAULT_AGENT))
+                .expect("a valid url"),
+            tools: None,
+            sites: SiteAccess::All,
+            title: "Composer".into(),
+            description: "works with you in your web of pages and your projects".into(),
+            prompt: BUILTIN_PROMPT.into(),
+            reasoning: None,
+        }
     }
 
-    /// Every agent in `site://agents` (`type: agent` pages), by name.
+    /// The built-in agent, then every agent in `site://agents` (`type: agent` pages), by name.
     pub fn all(workspace: &Web, index: &Index) -> Vec<Self> {
         let mut names: Vec<String> = index
             .entries()
@@ -90,10 +100,14 @@ impl AgentDefinition {
             })
             .collect();
         names.sort();
-        names
+        let mut agents: Vec<Self> = names
             .iter()
             .filter_map(|name| Self::load(workspace, name).ok())
-            .collect()
+            .collect();
+        if !agents.iter().any(|a| a.name == crate::agent::DEFAULT_AGENT) {
+            agents.insert(0, Self::builtin());
+        }
+        agents
     }
 
     pub fn allows_tool(&self, tool: &str) -> bool {

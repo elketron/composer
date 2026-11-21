@@ -6,8 +6,8 @@ use axum::extract::{Extension, Path, Query, State};
 use axum::http::StatusCode;
 use composer_core::SiteUrl;
 use composer_protocol::http::{
-    AgentSummary, AppMessage, PageResponse, ProjectDiff, ProjectSummary, PutPageRequest,
-    PutPageResponse, SearchHit, ServerInfo, SiteSummary,
+    AgentSummary, AppMessage, PageResponse, ProjectDiff, PutPageRequest, PutPageResponse,
+    SearchHit, ServerInfo, SiteSummary,
 };
 use composer_protocol::{ChangedBy, ChatMessage, MessageSource, Role};
 
@@ -15,12 +15,10 @@ use crate::agent::{AgentDefinition, Site};
 use crate::api::{ApiError, Credential};
 use crate::server::Server;
 use crate::session::submit;
-use crate::worker::ticket::TicketId;
 
 /// `POST /api/web-session`: a new browser session of the caller's kind (a device gets a device's
-/// session, the local token the local user's), for a client that sets the workspace's cookie in
-/// its own webview (the desktop's panes, the phone's live view). An app's token is no workspace
-/// credential: it never gets here.
+/// session, the local token the local user's), for a client that sets the cookie in its own
+/// webview (the desktop's panes, the phone's live view).
 pub async fn web_session(
     State(server): State<Arc<Server>>,
     Extension(credential): Extension<Credential>,
@@ -28,23 +26,19 @@ pub async fn web_session(
     Json(composer_protocol::http::WebSession {
         cookie_name: crate::api::auth::cookie_name(&server),
         value: server.web_sessions.mint(credential),
-        path: format!("{}/", server.route_base()),
+        path: "/".into(),
     })
 }
 
 /// `GET /api/info`: what this server is.
 pub async fn info(State(server): State<Arc<Server>>) -> Json<ServerInfo> {
     let config = server.config();
-    let workspace = server.home.name().to_string();
-    let color = composer_protocol::WorkspaceColor::for_workspace(&workspace, &config.desktop.color);
     Json(ServerInfo {
         name: server.name(),
         version: env!("CARGO_PKG_VERSION").to_string(),
         model: server.provider.model().to_string(),
         slots: config.agent.slots,
         projects_dir: config.projects.dir.clone(),
-        workspace,
-        workspace_color: color.to_hex(),
         viewer: crate::api::viewer_proxy::viewer_path(&server),
     })
 }
@@ -55,123 +49,12 @@ pub async fn agents(State(server): State<Arc<Server>>) -> Json<Vec<AgentSummary>
         AgentDefinition::all(&server.web, &index)
             .into_iter()
             .map(|a| AgentSummary {
-                worker: a.is_worker(),
                 name: a.name,
                 title: a.title,
                 description: a.description,
             })
             .collect(),
     )
-}
-
-/// `GET /api/projects?q=&limit=`: the projects matching `q` (folders in the projects directory and
-/// any a session works in), the ones with something going on first.
-pub async fn projects(
-    State(server): State<Arc<Server>>,
-    Query(params): Query<HashMap<String, String>>,
-) -> Json<Vec<ProjectSummary>> {
-    let query = params.get("q").map(String::as_str).unwrap_or("");
-    let mut projects = crate::project::project_list(&server, query);
-    if let Some(limit) = params.get("limit").and_then(|l| l.parse().ok()) {
-        projects.truncate(limit);
-    }
-    Json(projects)
-}
-
-/// `GET /api/apps`: the workspace's Home (its global and both-scope apps).
-pub async fn home_apps(
-    State(server): State<Arc<Server>>,
-) -> Json<composer_protocol::http::AppList> {
-    let list = tokio::task::spawn_blocking(move || crate::apps::home_apps(&server)).await;
-    Json(list.expect("listing apps doesn't panic"))
-}
-
-/// `GET /api/projects/<name>/home`: the project home's tiles.
-pub async fn project_home(
-    State(server): State<Arc<Server>>,
-    axum::extract::Path(name): axum::extract::Path<String>,
-) -> Result<Json<composer_protocol::http::AppList>, ApiError> {
-    tokio::task::spawn_blocking(move || crate::apps::project_home(&server, &name))
-        .await
-        .expect("listing tiles doesn't panic")
-        .map(Json)
-        .map_err(|e| ApiError(axum::http::StatusCode::NOT_FOUND, e))
-}
-
-/// `POST /api/projects/<name>/apps/<site>/open`: a token for `site`'s app on the project (it must
-/// be attached), and the URL that loads it.
-pub async fn open_app(
-    State(server): State<Arc<Server>>,
-    axum::extract::Path((name, site)): axum::extract::Path<(String, String)>,
-    Query(params): Query<HashMap<String, String>>,
-    Extension(credential): Extension<Credential>,
-) -> Result<Json<composer_protocol::http::AppOpened>, ApiError> {
-    let session = params.get("session").cloned();
-    opened(server, site, Some(name), session, credential).await
-}
-
-/// `POST /api/apps/<site>/open`: a Home app's URL (its token, or a client app's one-time code).
-pub async fn open_home_app(
-    State(server): State<Arc<Server>>,
-    axum::extract::Path(site): axum::extract::Path<String>,
-    Query(params): Query<HashMap<String, String>>,
-    Extension(credential): Extension<Credential>,
-) -> Result<Json<composer_protocol::http::AppOpened>, ApiError> {
-    opened(
-        server,
-        site,
-        None,
-        params.get("session").cloned(),
-        credential,
-    )
-    .await
-}
-
-/// Both open routes take `?session=<id>`: the session the app is opened from. `credential` is
-/// the caller's: what a client app's one-time code will stand for.
-async fn opened(
-    server: Arc<Server>,
-    site: String,
-    project: Option<String>,
-    session: Option<String>,
-    credential: Credential,
-) -> Result<Json<composer_protocol::http::AppOpened>, ApiError> {
-    tokio::task::spawn_blocking(move || {
-        crate::apps::open_app(
-            &server,
-            &site,
-            project.as_deref(),
-            session.as_deref(),
-            &credential,
-        )
-    })
-    .await
-    .expect("opening an app doesn't panic")
-    .map(Json)
-    .map_err(|e| ApiError(axum::http::StatusCode::NOT_FOUND, e))
-}
-
-/// `DELETE /api/projects/<name>/apps/<site>/tokens`: revokes every token `site`'s app was opened
-/// with on the project; how many.
-pub async fn revoke_app(
-    State(server): State<Arc<Server>>,
-    axum::extract::Path((name, site)): axum::extract::Path<(String, String)>,
-) -> Result<Json<usize>, ApiError> {
-    let project = crate::apps::ProjectName::new(&name)
-        .map_err(|e| ApiError(axum::http::StatusCode::BAD_REQUEST, e))?;
-    Ok(Json(server.app_tokens.revoke(&project, &site)))
-}
-
-/// `GET /api/projects/<name>/apps`: the apps attached to a project.
-pub async fn project_apps(
-    State(server): State<Arc<Server>>,
-    axum::extract::Path(name): axum::extract::Path<String>,
-) -> Result<Json<composer_protocol::http::AppList>, ApiError> {
-    let list = tokio::task::spawn_blocking(move || crate::apps::project_apps(&server, &name))
-        .await
-        .expect("listing apps doesn't panic");
-    list.map(Json)
-        .map_err(|e| ApiError(axum::http::StatusCode::NOT_FOUND, e))
 }
 
 pub async fn sites(State(server): State<Arc<Server>>) -> Result<Json<Vec<SiteSummary>>, ApiError> {
@@ -185,17 +68,14 @@ pub async fn sites(State(server): State<Arc<Server>>) -> Result<Json<Vec<SiteSum
         sites
             .into_iter()
             .map(|s| {
-                // A site may declare `app:` / `mcp:` in its index.
+                // A site may declare `mcp:` in its index.
                 let site = Site::load(&server.web, &s.name).ok();
                 SiteSummary {
-                    app: site.as_ref().and_then(|site| site.app.clone()),
                     mcp: site.map(|site| site.mcp).unwrap_or_default(),
                     pages: pages.get(s.name.as_str()).copied().unwrap_or(0),
                     name: s.name,
                     title: s.title,
                     has_justfile: s.has_justfile,
-                    has_ui: s.has_ui,
-                    app_built: s.app_built,
                     description: s.description,
                 }
             })
@@ -255,7 +135,8 @@ pub async fn put_page(
     write(&server, SiteUrl::new(&site, &path)?, body)
 }
 
-/// A micro app pushing a message into a session.
+/// A message pushed into a session over HTTP.
+// rewrite: phase 3: becomes the webhook (waits for the answer, stores only when asked).
 pub async fn post_message(
     State(server): State<Arc<Server>>,
     Path(id): Path<String>,
@@ -270,9 +151,7 @@ pub async fn post_message(
         pages: body.pages,
         images: body.images,
         attachments: vec![],
-        source: Some(MessageSource::App {
-            site: body.site.unwrap_or_else(|| "unknown".into()),
-        }),
+        source: Some(MessageSource::Server),
     };
     submit(&server, &session, message);
     Ok(StatusCode::ACCEPTED)
@@ -314,7 +193,7 @@ pub(crate) fn write(
             ));
         }
     }
-    let (written, _) = server.write_page(&url, &body.content, ChangedBy::App)?;
+    let (written, _) = server.write_page(&url, &body.content, ChangedBy::External)?;
     Ok(Json(PutPageResponse {
         url: written.to_string(),
         hash: crate::content_hash(body.content.as_bytes()),
@@ -327,25 +206,14 @@ pub async fn project_diff(
     Path(id): Path<String>,
 ) -> Result<Json<ProjectDiff>, ApiError> {
     let session = server.sessions.get(&id)?;
-    // A ticket's worker: its changes against the project's branch, while it still has them.
-    if let Some(ticket) = session.info().ticket.and_then(|t| TicketId::parse(&t).ok())
-        && (server.home.worktrees().join(ticket.as_str()).exists()
-            || crate::worker::ticket_closed(&server, &ticket).is_some())
-    {
-        let diff = crate::worker::ticket_changes(&server, &ticket, None)
-            .await
-            .map_err(|e| ApiError(StatusCode::UNPROCESSABLE_ENTITY, e))?;
-        return Ok(Json(diff));
-    }
     let Some(project) = session.info().project else {
         return Err(ApiError(
             StatusCode::NOT_FOUND,
             "no active project; set one with :project <path>".into(),
         ));
     };
-    // Checked again: a session from before ownership may sit in another workspace's project.
     let project = server
-        .see_project(&project)
+        .project_folder(&project)
         .map_err(|e| ApiError(StatusCode::FORBIDDEN, e))?;
     let diff = crate::project::project_diff(std::path::Path::new(&project), None)
         .await

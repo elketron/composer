@@ -1,7 +1,6 @@
-//! Agent → stage (ticket 0174): `show_app`, `show_page` and `desk` put tabs on the session's desk
-//! for the agent: unseen, the shown tab unchanged, `desk.changed` naming what it opened, so a
-//! following client shows it and another badges it. An app must be one of the project's. The
-//! project home lists its apps' tiles from their data.
+//! Agent → stage (ticket 0174): `show_page` and `desk` put tabs on the session's desk for the
+//! agent: unseen, the shown tab unchanged, `desk.changed` naming what it opened, so a following
+//! client shows it and another badges it.
 
 mod support;
 
@@ -31,20 +30,11 @@ async fn the_agent_puts_things_on_the_stage() {
     config.projects.dir = root.display().to_string();
     let (dir, server, _provider, addr) = start_with(config, vec![]).await;
     let sites = dir.path().join("sites");
-    write(
-        &sites.join("cad/index.md"),
-        "---\ntitle: CAD\napp:\n  scope: project\n  when: [\"files:*.FCStd\"]\n  tile: true\n---\n# CAD\n",
-    );
-    write(&sites.join("cal/index.md"), "---\ntitle: Cal\n---\n# Cal\n");
-    std::fs::create_dir_all(sites.join("cal/ui")).unwrap();
-    write(
-        &sites.join("other/index.md"),
-        "---\ntitle: Other\napp:\n  scope: project\n---\n# Other\n",
-    );
+    write(&sites.join("cad/index.md"), "---\ntitle: CAD\n---\n# CAD\n");
     server
         .write_page(
             &SiteUrl::new("agents", "stager.md").unwrap(),
-            "---\ntitle: stager\ntype: agent\nname: stager\ntools: [show_app, show_page, desk]\nsites: all\n---\nShows.\n",
+            "---\ntitle: stager\ntype: agent\nname: stager\ntools: [show_page, desk]\nsites: all\n---\nShows.\n",
             ChangedBy::External,
         )
         .unwrap();
@@ -79,11 +69,11 @@ async fn the_agent_puts_things_on_the_stage() {
         async move { server.tools.call_value(context, name, args).await }
     };
 
-    let shown = tool("show_app", json!({ "site": "cad" })).await;
+    let page = tool("show_page", json!({ "url": "site://cad" })).await;
     assert!(
-        !shown.is_error && shown.text.contains("app:cad@game"),
+        !page.is_error && page.text.contains("page:site://cad"),
         "{}",
-        shown.text
+        page.text
     );
     // Unseen, and the shown tab didn't move; the client is told what was opened.
     let desk = session.desk();
@@ -96,23 +86,13 @@ async fn the_agent_puts_things_on_the_stage() {
             break (by, opened);
         }
     };
-    assert_eq!(event, (DeskBy::Agent, Some("app:cad@game".to_string())));
+    assert_eq!(event, (DeskBy::Agent, Some("page:site://cad".to_string())));
 
-    let refused = tool("show_app", json!({ "site": "other" })).await;
-    assert!(
-        refused.is_error && refused.text.contains("isn't one of project `game`'s apps"),
-        "{}",
-        refused.text
-    );
-    let home = tool("show_app", json!({ "site": "cal", "home": true })).await;
-    assert!(home.text.contains("app:cal"), "{}", home.text);
-    let page = tool("show_page", json!({ "url": "site://cad" })).await;
-    assert!(page.text.contains("page:site://cad"), "{}", page.text);
     let changes = tool("desk", json!({ "changes": true })).await;
     assert!(changes.text.contains("changes:game"), "{}", changes.text);
     let listed = tool("desk", json!({})).await;
     assert!(
-        listed.text.contains("app:cad@game (not looked at yet)"),
+        listed.text.contains("page:site://cad (not looked at yet)"),
         "{}",
         listed.text
     );
@@ -123,7 +103,7 @@ async fn the_agent_puts_things_on_the_stage() {
         2,
         ClientCommand::DeskFocus {
             session: id.clone(),
-            tab: "app:cad@game".into(),
+            tab: "page:site://cad".into(),
         },
     )
     .await;
@@ -133,29 +113,12 @@ async fn the_agent_puts_things_on_the_stage() {
     .await;
     let listed = tool("desk", json!({})).await;
     assert!(
-        listed.text.contains("app:cad@game (shown)"),
+        listed.text.contains("page:site://cad (shown)"),
         "{}",
         listed.text
     );
-    let pointed = tool("desk", json!({ "point": "page:site://cad" })).await;
+    let pointed = tool("desk", json!({ "point": "changes:game" })).await;
     assert!(!pointed.is_error, "{}", pointed.text);
-
-    // The project home: the app's tile from its data for the project.
-    write(
-        &dir.path().join("state/projects/game/cad/tile.md"),
-        "2 parts changed\n",
-    );
-    let response: Value = reqwest::Client::new()
-        .get(format!("http://{addr}/api/projects/game/home"))
-        .bearer_auth(&server.token)
-        .send()
-        .await
-        .unwrap()
-        .json()
-        .await
-        .unwrap();
-    assert_eq!(response["apps"][0]["site"], "cad");
-    assert_eq!(response["apps"][0]["tile_text"], "2 parts changed");
 }
 
 #[tokio::test]

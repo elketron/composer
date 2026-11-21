@@ -81,11 +81,9 @@ fn shown(view: Result<Response, ApiError>) -> Response {
 }
 
 async fn render_changes(server: &Server, project: &str) -> Result<Response, ApiError> {
-    let (name, folder) = crate::apps::find_project_by(server, project)
-        .map_err(|e| ApiError(StatusCode::NOT_FOUND, e))?;
     let folder = server
-        .see_project(&folder.to_string_lossy())
-        .map_err(|e| ApiError(StatusCode::FORBIDDEN, e))?;
+        .project_folder(project)
+        .map_err(|e| ApiError(StatusCode::NOT_FOUND, e))?;
     let diff = crate::project::project_diff_plain(std::path::Path::new(&folder), None)
         .await
         .map_err(|e| ApiError(StatusCode::UNPROCESSABLE_ENTITY, e))?;
@@ -122,7 +120,7 @@ async fn render_changes(server: &Server, project: &str) -> Result<Response, ApiE
         }
         out.push_str("</pre>");
     }
-    let title = format!("changes · {}", name.as_str());
+    let title = format!("changes · {project}");
     Ok(document(&title, Some(&title), &out))
 }
 

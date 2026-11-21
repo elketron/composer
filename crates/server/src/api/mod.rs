@@ -1,10 +1,6 @@
 //! The WS/HTTP API. Every route requires a token, except pairing.
 
-mod action_routes;
 mod api_error;
-mod app_api;
-mod app_commands;
-mod app_routes;
 mod attachment_routes;
 mod auth;
 mod connection;
@@ -13,14 +9,10 @@ mod event_scope;
 mod frame_queue;
 pub(crate) mod glob;
 mod http_routes;
-mod launcher_routes;
-mod library_commands;
-mod once_codes;
 mod pair_routes;
 mod view_routes;
 pub(crate) mod viewer_proxy;
 mod web_sessions;
-mod worker_commands;
 mod ws_routes;
 
 use std::sync::Arc;
@@ -31,10 +23,8 @@ use axum::middleware;
 use axum::routing::{get, post};
 
 pub use api_error::ApiError;
-pub use app_api::{APP_PREFIX, SANDBOX, encode_segment};
 pub use connection::Connection;
 pub use credential::Credential;
-pub use once_codes::OnceCodes;
 pub use web_sessions::WebSessions;
 
 use crate::server::Server;
@@ -46,22 +36,6 @@ pub fn router(server: Arc<Server>) -> Router {
         .route("/api/web-session", post(http_routes::web_session))
         .route("/api/sites", get(http_routes::sites))
         .route("/api/agents", get(http_routes::agents))
-        .route("/api/projects", get(http_routes::projects))
-        .route("/api/apps", get(http_routes::home_apps))
-        .route(
-            "/api/apps/{site}/open",
-            axum::routing::post(http_routes::open_home_app),
-        )
-        .route("/api/projects/{name}/apps", get(http_routes::project_apps))
-        .route("/api/projects/{name}/home", get(http_routes::project_home))
-        .route(
-            "/api/projects/{name}/apps/{site}/open",
-            axum::routing::post(http_routes::open_app),
-        )
-        .route(
-            "/api/projects/{name}/apps/{site}/tokens",
-            axum::routing::delete(http_routes::revoke_app),
-        )
         .route("/api/search", get(http_routes::search))
         .route(
             "/api/pages/{site}",
@@ -91,14 +65,6 @@ pub fn router(server: Arc<Server>) -> Router {
             "/api/sessions/{id}/project/diff",
             get(http_routes::project_diff),
         )
-        .route("/api/actions/{site}", get(action_routes::list))
-        .route("/api/actions/{site}/{recipe}", post(action_routes::run))
-        .route("/api/launcher", get(launcher_routes::list))
-        .route("/api/launcher/{name}", post(launcher_routes::launch))
-        .route(
-            "/api/files/{site}/{*path}",
-            get(app_routes::get_file).put(app_routes::put_file),
-        )
         // wayai's live view, proxied view-only. Its fixed paths come before the page views'
         // `/view/{site}`, which they would otherwise match.
         .merge(viewer_proxy::router())
@@ -106,16 +72,10 @@ pub fn router(server: Arc<Server>) -> Router {
         .route("/view/changes/{project}", get(view_routes::changes))
         .route("/view/{site}", get(view_routes::site_index))
         .route("/view/{site}/{*path}", get(view_routes::page))
-        // Built micro apps; routes with a fixed first segment (/api, /ws) take precedence.
-        .route("/{site}", get(app_routes::app_redirect))
-        .route("/{site}/", get(app_routes::app_index))
-        .route("/{site}/{*path}", get(app_routes::app_file))
         .layer(middleware::from_fn_with_state(
             server.clone(),
             auth::require_token,
         ))
-        // A project app's routes: its own token, never the workspace's.
-        .merge(app_api::router(server.clone()))
         // Pairing needs no token: the one-time code is the credential.
         .merge(
             Router::new()

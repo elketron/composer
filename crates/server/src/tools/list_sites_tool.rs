@@ -12,7 +12,7 @@ impl Tool for ListSitesTool {
     }
 
     fn description(&self) -> &'static str {
-        "List all sites with their titles, and whether they have actions (a justfile) or an app."
+        "List all sites with their titles, and whether they have actions (a justfile)."
     }
 
     fn parameters(&self) -> Value {
@@ -28,11 +28,6 @@ impl Tool for ListSitesTool {
                 let mut line = format!("- site://{} — {}", s.name, s.title);
                 if s.has_justfile {
                     line.push_str(" [actions]");
-                }
-                if s.app_built {
-                    line.push_str(" [app]");
-                } else if s.has_ui {
-                    line.push_str(" [app, not built: run its ui-build action]");
                 }
                 if !s.has_index {
                     line.push_str(" [no index.md]");

@@ -103,7 +103,7 @@ async fn a_watching_session_hears_when_files_land() {
         &mut socket,
         1,
         ClientCommand::SessionCreate {
-            agent: "orchestrator".into(),
+            agent: "default".into(),
             project: None,
         },
     )
@@ -210,7 +210,7 @@ async fn a_steady_trickle_of_changes_is_still_delivered() {
         &mut socket,
         1,
         ClientCommand::SessionCreate {
-            agent: "orchestrator".into(),
+            agent: "default".into(),
             project: None,
         },
     )
@@ -265,7 +265,7 @@ async fn a_steady_trickle_of_changes_is_still_delivered() {
                 .write_file(
                     &url,
                     format!("{{\"step\": {n}}}").as_bytes(),
-                    ChangedBy::App,
+                    ChangedBy::External,
                 )
                 .unwrap();
             tokio::time::sleep(Duration::from_millis(150)).await;

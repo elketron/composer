@@ -1,34 +1,20 @@
 //! The agent's tools: browsing and editing the web of pages.
 
 mod actions_tool;
-mod answer_approval_tool;
 mod arg_repair;
 mod args;
-mod continue_worker_tool;
 mod desk_tool;
 mod edit_tool;
 mod enter_site_tool;
-mod finish_tool;
-mod hunk_tool;
 mod leave_site_tool;
 mod list_sites_tool;
 mod markdown_sections;
-mod merge_ticket_tool;
-mod new_app_tool;
-mod new_project_tool;
 mod new_site_tool;
 mod open_tool;
-mod publish_site_tool;
 mod run_tool;
-pub(crate) mod scaffold;
 mod search_tool;
-mod selection_tool;
-mod set_project_tool;
-mod show_app_tool;
 mod show_page_tool;
-mod spawn_worker_tool;
 mod stage_tools;
-mod stop_worker_tool;
 mod terminal_read_tool;
 mod terminal_send_tool;
 mod terminal_tools;
@@ -40,8 +26,7 @@ mod write_tool;
 use async_trait::async_trait;
 use serde_json::Value;
 
-pub(crate) use new_site_tool::add_to_home;
-pub(crate) use set_project_tool::{expand_home, resolve_project, tilde};
+pub(crate) use crate::project::{expand_home, tilde};
 pub use tool_context::ToolContext;
 pub use tool_registry::ToolRegistry;
 

@@ -1,4 +1,4 @@
-//! Tools that create things outside existing sites: `new_site` and `new_project`.
+//! Tools that create things outside existing sites: `new_site`.
 
 mod support;
 
@@ -33,7 +33,7 @@ async fn run_tools(
         &mut socket,
         1,
         ClientCommand::SessionCreate {
-            agent: "orchestrator".into(),
+            agent: "default".into(),
             project: None,
         },
     )
@@ -100,8 +100,7 @@ async fn new_site_writes_a_homepage_and_lists_it_on_home() {
                 "write",
                 json!({ "url": "site://calendar/justfile", "content": "hello:\n    echo hi\n" }),
             ),
-            tool_call("e", "new_app", json!({ "site": "calendar" })),
-            tool_call("f", "list_sites", json!({})),
+            tool_call("e", "list_sites", json!({})),
         ],
     )
     .await;
@@ -118,13 +117,13 @@ async fn new_site_writes_a_homepage_and_lists_it_on_home() {
     }
     let home = std::fs::read_to_string(sites.join("home/index.md")).unwrap();
     assert!(
-        home.contains("| [agents](site://agents) |")
+        home.contains("| [memory](site://memory) |")
             && home.contains("\n| [calendar](site://calendar) | reminders / due dates |\n"),
         "{home}"
     );
 
     assert!(
-        !results[0].1 && results[0].0.contains("listed it on WorkspaceHome"),
+        !results[0].1 && results[0].0.contains("listed it on Home"),
         "{:?}",
         results[0]
     );
@@ -135,122 +134,16 @@ async fn new_site_writes_a_homepage_and_lists_it_on_home() {
     );
     assert!(results[2].1, "{:?}", results[2]);
     assert!(!sites.join("escape").exists() && !dir.path().join("escape").exists());
-    // It takes actions and an app right away.
+    // It takes actions right away.
     assert!(
         sites.join("calendar/justfile").is_file(),
         "a justfile, not justfile.md"
     );
-    assert!(!results[4].1, "{:?}", results[4]);
     assert!(
-        results[5]
+        results[4]
             .0
-            .contains("site://calendar — Calendar [actions] [app, not built"),
+            .contains("site://calendar — Calendar [actions]"),
         "{}",
-        results[5].0
+        results[4].0
     );
-}
-
-#[tokio::test]
-async fn new_project_makes_the_folder_and_registers_it() {
-    let projects = tempfile::tempdir().unwrap();
-    let mut config = Config::defaults();
-    config.projects.dir = projects.path().display().to_string();
-    let template = |site: &str| json!({ "name": "lamp", "about": "a desk lamp", "template": site });
-    let (dir, results) = run_tools(
-        config,
-        "projects",
-        vec![
-            tool_call("a", "new_project", json!({ "name": "notes", "about": "plain | notes" })),
-            tool_call("b", "new_project", json!({ "name": "notes", "about": "again" })),
-            tool_call("c", "new_project", json!({ "name": "../out", "about": "no" })),
-            // The memory page exists but the folder does not: still refused.
-            tool_call(
-                "d0",
-                "write",
-                json!({ "url": "site://memory/projects/taken.md", "content": "# taken\n" }),
-            ),
-            tool_call("d", "new_project", json!({ "name": "taken", "about": "no" })),
-            tool_call("e", "new_project", template("memory")),
-            tool_call(
-                "f",
-                "write",
-                json!({ "url": "site://plans/templates/project/BRIEF.md", "content": "# __PROJECT__ brief\n" }),
-            ),
-            tool_call("g", "new_project", template("plans")),
-        ],
-    )
-    .await;
-    let failed: Vec<bool> = results.iter().map(|r| r.1).collect();
-    assert_eq!(
-        failed,
-        [false, true, true, false, true, true, false, false],
-        "{results:?}"
-    );
-    assert!(results[1].0.contains("already exists"), "{}", results[1].0);
-    assert!(
-        results[5].0.contains("no templates/project/"),
-        "{}",
-        results[5].0
-    );
-    assert!(
-        results[0].0.contains("listed it in the projects index")
-            && results[0].0.contains("linked it from memory")
-            && results[0].0.contains("now this session's active project"),
-        "{}",
-        results[0].0
-    );
-
-    assert_eq!(
-        std::fs::read_to_string(projects.path().join("notes/README.md")).unwrap(),
-        "# notes\n\nplain / notes\n"
-    );
-    assert_eq!(
-        std::fs::read_to_string(projects.path().join("lamp/BRIEF.md")).unwrap(),
-        "# lamp brief\n"
-    );
-    assert!(results[4].0.contains("already exists"), "{}", results[4].0);
-    assert!(!projects.path().join("taken").exists());
-    assert!(!projects.path().parent().unwrap().join("out").exists());
-
-    let page = std::fs::read_to_string(dir.path().join("sites/projects/lamp.md")).unwrap();
-    assert!(
-        page.contains("type: project\n") && page.contains("sites: [plans]\n"),
-        "{page}"
-    );
-    assert!(
-        page.contains(&format!("root: {}/lamp\n", projects.path().display())),
-        "{page}"
-    );
-    let index = std::fs::read_to_string(dir.path().join("sites/memory/index.md")).unwrap();
-    assert!(
-        index.contains("## Projects registry\n\n| project | path | status | what it is |"),
-        "{index}"
-    );
-    assert!(
-        index.contains("| [notes](site://projects/notes) | `"),
-        "{index}"
-    );
-    assert!(
-        index.contains("| active | plain / notes |\n| [lamp](site://projects/lamp)"),
-        "{index}"
-    );
-    assert!(
-        index.contains("- [notes](site://projects/notes)\n- [lamp](site://projects/lamp)\n"),
-        "{index}"
-    );
-    let registry = index.find("## Projects registry").unwrap();
-    assert!(registry < index.find("## Pages").unwrap(), "{index}");
-
-    let projects_index =
-        std::fs::read_to_string(dir.path().join("sites/projects/index.md")).unwrap();
-    assert!(
-        projects_index.contains("| [notes](notes.md) |"),
-        "{projects_index}"
-    );
-    assert!(
-        projects_index.contains("| [lamp](lamp.md) |"),
-        "{projects_index}"
-    );
-    let home = std::fs::read_to_string(dir.path().join("sites/home/index.md")).unwrap();
-    assert!(home.contains("| [projects](site://projects) |"), "{home}");
 }

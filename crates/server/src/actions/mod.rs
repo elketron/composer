@@ -18,4 +18,4 @@ pub use justfile::Justfile;
 pub use pending_approvals::PendingApprovals;
 pub use recipe_env::RecipeEnv;
 pub use run::run_recipe;
-pub use types::{Approval, ApprovalAnswer, Caller, Recipe, Refusal, RunOutput};
+pub use types::{Approval, Recipe, Refusal, RunOutput};

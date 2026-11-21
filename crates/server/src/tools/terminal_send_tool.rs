@@ -62,17 +62,16 @@ impl Tool for TerminalSendTool {
                     &context.cancel,
                 )
                 .await;
-            match decision.map(|answer| (answer.decision, answer.reason)) {
-                Some((ApprovalDecision::Approve, _)) => {}
-                Some((ApprovalDecision::Always, _)) => {
+            match decision {
+                Some(ApprovalDecision::Approve) => {}
+                Some(ApprovalDecision::Always) => {
                     if let Err(e) = server.tool_rules.add(&key, &rule) {
                         tracing::warn!("saving the rule {rule}: {e}");
                     }
                 }
-                Some((ApprovalDecision::Deny, reason)) => {
+                Some(ApprovalDecision::Deny) => {
                     return Err(format!(
-                        "The user didn't let you type `{text}`{}. Don't try to get around it.",
-                        reason.map(|r| format!(": {r}")).unwrap_or_default()
+                        "The user didn't let you type `{text}`. Don't try to get around it."
                     ));
                 }
                 None => return Err("cancelled".into()),

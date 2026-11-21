@@ -8,9 +8,8 @@ use crate::tools::text_result;
 /// Used when the client doesn't say which protocol version it speaks.
 const PROTOCOL_VERSION: &str = "2025-06-18";
 
-const INSTRUCTIONS: &str = "Composer's tools for the ticket you are working on. Pages are \
-addressed as site://<site>/<page>; your ticket is a page in site://orchestration/tickets. \
-Before you stop, write the ticket's Result section and call finish(done|failed, summary).";
+const INSTRUCTIONS: &str = "Composer's tools for one of its sessions. Pages are addressed as \
+site://<site>/<page>; `list_sites` shows the sites and `open site://home` explains the web.";
 
 /// The JSON-RPC side of MCP: `initialize`, `tools/list`, `tools/call` and `ping`.
 pub struct McpServer {

@@ -143,7 +143,7 @@ async fn a_sessions_terminal_runs_in_its_project() {
     let context = ToolContext {
         server: server.clone(),
         session: session.clone(),
-        agent: Arc::new(AgentDefinition::load(&server.web, "worker").unwrap()),
+        agent: Arc::new(AgentDefinition::load(&server.web, "default").unwrap()),
         site: None,
         cancel: CancellationToken::new(),
     };
@@ -154,7 +154,7 @@ async fn a_sessions_terminal_runs_in_its_project() {
     assert!(read.text.contains("sum-42"), "{}", read.text);
 
     // Another session's agent can't read or type into it.
-    let other = server.sessions.create("orchestrator", None).unwrap();
+    let other = server.sessions.create("default", None).unwrap();
     let elsewhere = ToolContext {
         session: other,
         ..context.clone()

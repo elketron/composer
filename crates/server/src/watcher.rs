@@ -59,11 +59,8 @@ pub fn watch(server: &Arc<Server>) -> Result<notify::RecommendedWatcher> {
         .map_err(|e| ServerError::Invalid(format!("watching {}: {e}", root.display())))?;
 
     // Their folders, not the files: saving by rename replaces the file the watch would be on.
-    // The workspace's config and the global one it sits on top of both reload the config.
-    let config_files = [server.home.config_file(), server.home.global_config_file()];
-    let mut folders: Vec<&std::path::Path> =
-        config_files.iter().filter_map(|f| f.parent()).collect();
-    folders.dedup();
+    let config_files = [server.home.config_file()];
+    let folders: Vec<&std::path::Path> = config_files.iter().filter_map(|f| f.parent()).collect();
     for folder in folders.into_iter().filter(|f| f.is_dir()) {
         watcher
             .watch(folder, RecursiveMode::NonRecursive)

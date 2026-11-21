@@ -35,22 +35,11 @@ fn lists_sites() {
     let (_dir, ws) = seed();
     let sites = ws.sites().unwrap();
     let names: Vec<_> = sites.iter().map(|s| s.name.as_str()).collect();
-    assert_eq!(
-        names,
-        [
-            "agents",
-            "chat",
-            "home",
-            "icm",
-            "memory",
-            "orchestration",
-            "plans",
-            "projects"
-        ]
-    );
-    let orch = sites.iter().find(|s| s.name == "orchestration").unwrap();
-    assert!(orch.has_justfile && orch.has_index && orch.has_ui);
-    assert_eq!(orch.title, "Orchestration");
+    for name in ["home", "icm", "memory", "plans", "projects"] {
+        assert!(names.contains(&name), "{name} in {names:?}");
+    }
+    let icm = sites.iter().find(|s| s.name == "icm").unwrap();
+    assert!(icm.has_justfile && icm.has_index);
     let projects = sites.iter().find(|s| s.name == "projects").unwrap();
     assert!(projects.has_index);
     assert_eq!(projects.title, "Projects");
@@ -99,15 +88,12 @@ fn index_search_and_backlinks() {
     let index = Index::build(&ws).unwrap();
     assert!(index.len() >= 10, "indexed {} pages", index.len());
 
-    let agents: Vec<_> = index
-        .search(&Query::parse("type:agent"))
+    let user: Vec<_> = index
+        .search(&Query::parse("site:memory kind:user"))
         .into_iter()
         .map(|h| h.url.to_string())
         .collect();
-    assert_eq!(
-        agents,
-        ["site://agents/orchestrator.md", "site://agents/worker.md"]
-    );
+    assert_eq!(user, ["site://memory/user.md"]);
 
     let hits = index.search(&Query::parse("site:memory feedback"));
     assert_eq!(hits[0].url.to_string(), "site://memory/index.md");
@@ -122,10 +108,10 @@ fn index_search_and_backlinks() {
         "{backlinks:?}"
     );
 
-    // the orchestrator's ticket template is a page too, but the ui folder would not be
+    // a template is a page too
     assert!(
         index
-            .get(&url("site://orchestration/templates/ticket.md"))
+            .get(&url("site://plans/_templates/ticket.md"))
             .is_some()
     );
 }
@@ -173,10 +159,4 @@ fn skips_ui_and_hidden_folders() {
         .map(|h| h.url.to_string())
         .collect();
     assert_eq!(design, ["site://design/index.md"]);
-    assert!(
-        ws.sites()
-            .unwrap()
-            .iter()
-            .any(|s| s.name == "design" && s.has_ui)
-    );
 }

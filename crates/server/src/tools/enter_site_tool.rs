@@ -21,7 +21,7 @@ impl Tool for EnterSiteTool {
         json!({
             "type": "object",
             "properties": {
-                "site": { "type": "string", "description": "a site name, e.g. orchestration" }
+                "site": { "type": "string", "description": "a site name, e.g. plans" }
             },
             "required": ["site"]
         })
@@ -31,10 +31,7 @@ impl Tool for EnterSiteTool {
         let site = args["site"].as_str().unwrap_or_default();
         let entered =
             enter_site_as_agent(&context.server, &context.session, &context.agent, site).await?;
-        let mut notes = entered.notes();
-        if entered.live_view {
-            notes.push_str(" Its live view is a tab on the user's stage.");
-        }
+        let notes = entered.notes();
         Ok(format!(
             "entered site://{} ({}). Its index, tools and MCP servers apply from your next turn; \
              `leave_site` returns. {notes}",

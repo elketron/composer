@@ -14,7 +14,7 @@ async fn create_session(socket: &mut Socket) -> String {
         socket,
         1,
         ClientCommand::SessionCreate {
-            agent: "orchestrator".into(),
+            agent: "default".into(),
             project: None,
         },
     )
@@ -143,7 +143,8 @@ async fn turn_with_tool_call() {
         panic!("no system prompt")
     };
     assert!(
-        content.contains("You coordinate work.") && content.contains("<page url=\"site://home\">")
+        content.contains("You are composer's agent.")
+            && content.contains("<page url=\"site://home\">")
     );
     assert!(
         requests[1]
@@ -400,7 +401,7 @@ async fn http_pages_auth_and_conflicts() {
     assert!(
         sites
             .iter()
-            .any(|s| s["name"] == "orchestration" && s["has_justfile"] == true)
+            .any(|s| s["name"] == "icm" && s["has_justfile"] == true)
     );
 }
 
@@ -611,7 +612,7 @@ async fn open_shows_an_image_to_the_model() {
         &mut socket,
         1,
         ClientCommand::SessionCreate {
-            agent: "orchestrator".into(),
+            agent: "default".into(),
             project: Some(project.path().display().to_string()),
         },
     )
@@ -680,10 +681,10 @@ async fn an_agents_reasoning_goes_with_its_requests() {
     let page = "---\ntitle: Thinker\ntype: agent\nreasoning: Medium\n---\nYou think a little.\n";
     let url = composer_core::SiteUrl::new("agents", "thinker.md").unwrap();
     server
-        .write_page(&url, page, composer_protocol::ChangedBy::App)
+        .write_page(&url, page, composer_protocol::ChangedBy::External)
         .unwrap();
     let mut socket = connect(addr, &server.token).await;
-    for (id, agent) in [(1, "thinker"), (10, "orchestrator")] {
+    for (id, agent) in [(1, "thinker"), (10, "default")] {
         send(
             &mut socket,
             id,

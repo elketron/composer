@@ -1,7 +1,6 @@
 //! Agent definitions (`site://agents/<name>`) and system prompt assembly.
 
 mod agent_definition;
-mod app_launch;
 mod entered;
 mod prompt;
 mod site;
@@ -10,11 +9,9 @@ mod site_switch;
 
 pub use agent_definition::AgentDefinition;
 
-/// The agent the user talks to: a session started without naming an agent runs it.
-pub const ORCHESTRATOR: &str = "orchestrator";
-/// The agent a ticket is run on (`spawn_worker`); its page says `role: worker`.
-pub const WORKER: &str = "worker";
-pub use app_launch::AppLaunch;
+/// The agent a session started without naming one runs: `site://agents/default.md`, else the
+/// built-in one ([`AgentDefinition::builtin`]).
+pub const DEFAULT_AGENT: &str = "default";
 pub use entered::Entered;
 pub use prompt::system_prompt;
 pub use site::Site;

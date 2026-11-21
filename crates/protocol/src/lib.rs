@@ -1,21 +1,19 @@
-//! Messages between the composer server and its clients (TUI, micro apps, workers).
+//! Messages between the composer server and its clients (TUI, desktop, phone, the MCP bridge).
 //!
 //! WebSocket `/ws`: clients send [`ClientRequest`]s, the server sends [`ServerMessage`]s.
 //! Every message is JSON with a `type` field, e.g. `{"type":"session.attach", ...}`.
 //! HTTP bodies are in [`http`].
 //!
 //! With the `ts` feature, `cargo test -p composer-protocol --features ts` writes
-//! TypeScript definitions to `crates/protocol/bindings/` for the app sdk.
+//! TypeScript definitions to `crates/protocol/bindings/`.
 
 mod client;
 mod common;
 mod desk;
 pub mod http;
 mod server;
-pub mod workspace;
 
 pub use client::{ClientCommand, ClientRequest};
 pub use common::*;
-pub use desk::{Desk, DeskBy, DeskEntry, DeskTab, Selection};
+pub use desk::{Desk, DeskBy, DeskEntry, DeskTab};
 pub use server::{CommandResult, ServerMessage};
-pub use workspace::WorkspaceColor;

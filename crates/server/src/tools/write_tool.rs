@@ -2,15 +2,10 @@ use async_trait::async_trait;
 use composer_protocol::ChangedBy;
 use serde_json::{Value, json};
 
-use crate::reminders::claim_reminder;
 use crate::tools::args::WriteArgs;
 use crate::tools::{Tool, ToolContext};
 
 pub struct WriteTool;
-
-/// Said when a reminder page is claimed for the writing session.
-pub(crate) const CLAIMED: &str =
-    " (a reminder: `session:` set to this session, where it will be posted when due)";
 
 #[async_trait]
 impl Tool for WriteTool {
@@ -39,21 +34,13 @@ impl Tool for WriteTool {
         let args: WriteArgs = serde_json::from_value(args).map_err(|e| e.to_string())?;
         let url = context.url(&args.url)?;
         context.check_write(&url)?;
-        // Claim on create only: a replace writes the content as given, so a reminder
-        // left with a blank `session:` on purpose stays unclaimed.
-        let created = context.server.web.read_page(&url).is_err();
-        let claimed = created
-            .then(|| claim_reminder(&args.content, context.session.id()))
-            .flatten();
-        let content = claimed.as_deref().unwrap_or(&args.content);
         let (written, created) = context
             .server
-            .write_page(&url, content, ChangedBy::Agent)
+            .write_page(&url, &args.content, ChangedBy::Agent)
             .map_err(|e| e.to_string())?;
         Ok(format!(
-            "{} {written}{}",
-            if created { "created" } else { "replaced" },
-            if claimed.is_some() { CLAIMED } else { "" }
+            "{} {written}",
+            if created { "created" } else { "replaced" }
         ))
     }
 }

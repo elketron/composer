@@ -37,7 +37,7 @@ async fn a_second_stop_leaves_the_queued_turn_it_had_not_seen() {
         &mut socket,
         1,
         ClientCommand::SessionCreate {
-            agent: "orchestrator".into(),
+            agent: "default".into(),
             project: None,
         },
     )

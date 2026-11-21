@@ -282,7 +282,7 @@ async fn http(State(server): State<Arc<Server>>, request: Request) -> Response {
                 .flatten()?
                 .local_path(l)
         })
-        && let Ok(value) = HeaderValue::from_str(&format!("{}{path}", server.route_base()))
+        && let Ok(value) = HeaderValue::from_str(&path)
     {
         response.headers_mut().insert(header::LOCATION, value);
     }

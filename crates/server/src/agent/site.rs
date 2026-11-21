@@ -15,12 +15,8 @@ pub struct Site {
     /// server's tools come with the site only where `[mcp.<server>] sites` in `config.toml` lists
     /// this site ([`crate::mcp_clients::McpServers::allows`]).
     pub mcp: Vec<String>,
-    /// `app:`: the name of an `[applications.<name>]` entry of `config.toml`, started on entering.
-    pub app: Option<String>,
     /// `project: required`: no entering without an active project.
     pub needs_project: bool,
-    /// `project_mode:`: the default for this site's works (`read`, `write`, `worktree`).
-    pub project_mode: Option<String>,
     /// The site's `index.md` body, put in the prompt after the agent's.
     pub prompt: String,
 }
@@ -60,11 +56,6 @@ impl Site {
         .map(|server| server.trim().to_string())
         .filter(|server| !server.is_empty())
         .collect();
-        let app = page
-            .frontmatter
-            .get_str("app")
-            .map(|app| app.trim().to_string())
-            .filter(|app| !app.is_empty());
         let needs_project = page
             .frontmatter
             .get_str("project")
@@ -74,9 +65,7 @@ impl Site {
             title: page.title(),
             tools,
             mcp,
-            app,
             needs_project,
-            project_mode: page.frontmatter.get_str("project_mode"),
             prompt: page.body().trim().to_string(),
         })
     }
@@ -114,12 +103,5 @@ mod tests {
         );
         assert_eq!(site("mcp: blender\n").mcp, ["blender"]);
         assert!(site("").mcp.is_empty());
-    }
-
-    #[test]
-    fn app_names_a_config_entry() {
-        assert_eq!(site("app: blender\n").app.as_deref(), Some("blender"));
-        assert_eq!(site("app: \"\"\n").app, None);
-        assert_eq!(site("").app, None);
     }
 }

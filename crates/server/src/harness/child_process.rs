@@ -1,10 +1,9 @@
 use std::time::Duration;
 
-use async_trait::async_trait;
 use tokio::process::{Child, ChildStdout, Command};
 use tokio::sync::{Mutex, Notify};
 
-use crate::harness::{HarnessRun, WorkerScope};
+use crate::harness::WorkerScope;
 
 /// How long an interrupted process gets to exit before it is killed.
 const GRACE: Duration = Duration::from_secs(5);
@@ -76,9 +75,9 @@ pub fn signal_group(pid: u32, signal: libc::c_int) {
     }
 }
 
-#[async_trait]
-impl HarnessRun for ChildProcess {
-    async fn wait(&self) -> String {
+impl ChildProcess {
+    /// Resolves once the run has ended, with how it ended ("exit 0", "killed").
+    pub async fn wait(&self) -> String {
         let mut child = self.child.lock().await;
         let status = tokio::select! {
             status = child.wait() => status,
@@ -111,7 +110,8 @@ impl HarnessRun for ChildProcess {
         }
     }
 
-    fn interrupt(&self) {
+    /// Stops the run and everything it started.
+    pub fn interrupt(&self) {
         // Stored if `wait` isn't waiting yet.
         self.interrupt.notify_one();
     }

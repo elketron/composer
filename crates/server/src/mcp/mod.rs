@@ -1,15 +1,15 @@
-//! `composer mcp`: a stdio MCP server for external harnesses (Claude Code, …).
+//! `composer mcp`: a stdio MCP server offering a session's tools.
 //!
-//! It is started per ticket with the worker session fixed, connects to the running server
-//! with the local token, and offers that worker's tools: the same ones a native worker of
-//! its agent gets, run by the server in the worker's session (`tool.list` / `tool.call`).
+//! It connects to the running server with the local token and offers the tools the session's
+//! agent gets, run by the server in that session (`tool.list` / `tool.call`).
+// rewrite: phase 3: becomes composer's one MCP server, not tied to a session.
 
 mod mcp_server;
-mod remote_tools;
 mod run_mcp;
+mod server_link;
 mod types;
 
 pub use mcp_server::McpServer;
-pub use remote_tools::RemoteTools;
 pub use run_mcp::run_mcp;
+pub use server_link::ServerLink;
 pub use types::{McpOptions, ToolSource};

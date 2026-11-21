@@ -6,12 +6,12 @@ use std::sync::Arc;
 
 use axum::Json;
 use axum::extract::{Form, Query, State};
-use axum::http::{HeaderMap, StatusCode, header};
+use axum::http::{HeaderMap, StatusCode};
 use axum::response::{Html, IntoResponse, Response};
 use serde::Deserialize;
 use serde_json::json;
 
-use crate::api::auth::{Audience, cookie_name, is_https, origin_refused, set_cookie};
+use crate::api::auth::{cookie_name, is_https, origin_refused, set_cookie};
 use crate::server::Server;
 
 /// A paired browser stays signed in for a year (revoke with `composer devices revoke`).
@@ -24,56 +24,48 @@ pub struct PairForm {
     pub name: String,
 }
 
-/// `GET /pair?code=...` (under the workspace's routes): asks to confirm, so a link preview can't
-/// use up the code. The form posts to the relative `pair`, i.e. this workspace's.
+/// `GET /pair?code=...`: asks to confirm, so a link preview can't use up the code.
 pub async fn pair_page(
     State(server): State<Arc<Server>>,
     Query(params): Query<HashMap<String, String>>,
 ) -> Html<String> {
     let code = params.get("code").cloned().unwrap_or_default();
     let code = html_escape(&code);
-    let workspace = server.home.name().to_string();
-    let color = composer_protocol::WorkspaceColor::for_workspace(
-        &workspace,
-        &server.config().desktop.color,
-    );
     page(&format!(
-        "<h1><span style=\"display:inline-block;width:.65em;height:.65em;border-radius:50%;\
-         background:{};margin-right:.4em;vertical-align:baseline\"></span>Pair this device with \
-         <code>{}</code></h1>\
+        "<h1>Pair this device with <code>{}</code></h1>\
          <p>It gets its own token for composer. You can revoke it with <code>composer devices revoke</code>.</p>\
          <form method=\"post\" action=\"pair\">\
            <label>code<input name=\"code\" value=\"{code}\" autocomplete=\"off\" required></label>\
            <label>device name (optional)<input name=\"name\" placeholder=\"the name given to composer pair\"></label>\
            <button type=\"submit\">Pair</button>\
          </form>",
-        color.to_hex(),
-        html_escape(&workspace),
+        html_escape(&server.name()),
     ))
 }
 
-/// `POST /pair` (form): sets the device cookie and opens the chat app.
+/// `POST /pair` (form): sets the device cookie.
 pub async fn pair_submit(
     State(server): State<Arc<Server>>,
     headers: HeaderMap,
     Form(form): Form<PairForm>,
 ) -> Response {
-    if let Some(refused) = origin_refused(&headers, Audience::Workspace) {
+    if let Some(refused) = origin_refused(&headers) {
         return refused;
     }
     match server.devices.redeem(&form.code, Some(&form.name)) {
         Ok(Some((name, token))) => {
             tracing::info!("paired device `{name}`");
-            let chat = format!("{}/chat/", server.route_base());
-            let mut response =
-                (StatusCode::SEE_OTHER, [(header::LOCATION, chat.as_str())]).into_response();
+            let mut response = page(&format!(
+                "<h1>Paired</h1><p>This browser is signed in to composer as <code>{}</code>.</p>",
+                html_escape(&name)
+            ))
+            .into_response();
             set_cookie(
                 &mut response,
                 &cookie_name(&server),
                 &token,
                 is_https(&headers),
                 Some(DEVICE_COOKIE_SECONDS),
-                server.route_base(),
             );
             response
         }
@@ -92,7 +84,7 @@ pub async fn pair_api(
     headers: HeaderMap,
     Json(form): Json<PairForm>,
 ) -> Response {
-    if let Some(refused) = origin_refused(&headers, Audience::Workspace) {
+    if let Some(refused) = origin_refused(&headers) {
         return refused;
     }
     match server.devices.redeem(&form.code, Some(&form.name)) {

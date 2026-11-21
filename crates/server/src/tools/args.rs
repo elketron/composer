@@ -50,12 +50,6 @@ pub struct EditArgs {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct SetProjectArgs {
-    /// Empty or missing clears the active project.
-    pub path: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
 pub struct ActionsArgs {
     /// Default: the site the agent entered.
     pub site: Option<String>,
@@ -70,69 +64,12 @@ pub struct RunArgs {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct NewAppArgs {
-    pub site: String,
-}
-
-#[derive(Debug, Deserialize)]
 pub struct NewSiteArgs {
     pub name: String,
     /// Defaults to the name.
     pub title: Option<String>,
     /// One line: what the site is for.
     pub about: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct NewProjectArgs {
-    pub name: String,
-    /// One line: what the project is.
-    pub about: String,
-    /// A site whose `templates/project/` folder the project starts from.
-    pub template: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct SpawnWorkerArgs {
-    pub ticket: String,
-    #[serde(default)]
-    pub harness: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct MergeTicketArgs {
-    pub ticket: String,
-    /// Target branch; defaults to the ticket's `merge_into:` frontmatter, else the project's
-    /// checked-out branch.
-    #[serde(default)]
-    pub into: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct AnswerApprovalArgs {
-    pub ticket: String,
-    /// `approve`, `deny` or `ask_user`.
-    pub decision: String,
-    pub reason: String,
-    #[serde(default)]
-    pub request: Option<String>,
-}
-
-/// `continue_worker` and `stop_worker`.
-#[derive(Debug, Deserialize)]
-pub struct SteerWorkerArgs {
-    pub ticket: String,
-    pub message: String,
-    /// `continue_worker` only: compact the worker's session first.
-    #[serde(default, deserialize_with = "boolish")]
-    pub compact: bool,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct FinishArgs {
-    /// `done` or `failed`.
-    pub status: String,
-    pub summary: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -149,13 +86,6 @@ fn yes() -> bool {
     true
 }
 
-#[derive(Debug, Deserialize)]
-pub struct PublishSiteArgs {
-    pub site: String,
-    #[serde(default, rename = "as")]
-    pub name: Option<String>,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -163,13 +93,14 @@ mod tests {
     #[test]
     fn bools_from_models_are_forgiving() {
         let steer = |value: Value| {
-            serde_json::from_value::<SteerWorkerArgs>(serde_json::json!({
-                "ticket": "0001",
-                "message": "go on",
-                "compact": value,
+            serde_json::from_value::<EditArgs>(serde_json::json!({
+                "url": "site://a/b",
+                "old_text": "x",
+                "new_text": "y",
+                "replace_all": value,
             }))
             .unwrap()
-            .compact
+            .replace_all
         };
         assert!(steer(Value::Bool(true)));
         assert!(steer(Value::String("True".into())));

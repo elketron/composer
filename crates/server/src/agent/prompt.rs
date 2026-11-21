@@ -8,9 +8,6 @@ use crate::agent::AgentDefinition;
 /// Memory pages listed in the prompt, at most.
 const MEMORY_LIST_MAX: usize = 60;
 
-/// The worker agent in worker mode: the ticket and its site say how this kind of work is done.
-const WORKER_PROMPT: &str = "# Worker\n\nYou are working exactly one ticket. Do not ask questions: decide, act, and record why in the ticket. Open the ticket and every page in its Context; the site's index says how this kind of work is done. Stay in the ticket's project/ view. Check every \"Done when\" item, write the Result section, then call `finish(done, summary)` or `finish(failed, reason)`.";
-
 /// The system prompt: agent body → `site://home` → environment → relevant memory → the active
 /// project, which changes most often, last.
 pub fn system_prompt(
@@ -43,23 +40,13 @@ pub fn system_prompt(
                 site.mcp.join(", ")
             )
         };
-        let mode = site
-            .project_mode
-            .as_deref()
-            .map_or_else(String::new, |mode| {
-                format!(" Its works' project mode is `{mode}`.")
-            });
         sections.push(format!(
-            "# Site\n\nYou are in `site://{}` ({}); {tools}.{mode} `leave_site` returns to the \
+            "# Site\n\nYou are in `site://{}` ({}); {tools}. `leave_site` returns to the \
              base tools.",
             site.name, site.title
         ));
     } else if let Some(home) = page_body(workspace, "site://home") {
         sections.push(format!("<page url=\"site://home\">\n{home}\n</page>"));
-    }
-
-    if session.ticket.is_some() {
-        sections.push(WORKER_PROMPT.to_string());
     }
 
     sections.push(format!(
@@ -85,7 +72,7 @@ pub fn system_prompt(
     if !memory.is_empty() {
         sections.push(format!("# Memory\n\n{}", memory.join("\n\n")));
     }
-    // Last, as it changes most often (`set_project` mid-turn): the sections before it stay a
+    // Last, as it changes most often: the sections before it stay a
     // stable prefix for the provider's prompt cache.
     sections.push(active_project(workspace, session));
 
@@ -95,7 +82,7 @@ pub fn system_prompt(
 /// The active project and its page (`site://projects/<name>`, else `site://memory/projects/<name>`).
 fn active_project(workspace: &Web, session: &SessionInfo) -> String {
     let Some(project) = &session.project else {
-        return "# Active project\n\nNone (set one with `set_project`).".to_string();
+        return "# Active project\n\nNone.".to_string();
     };
     let mut section = format!(
         "# Active project\n\n{project}{}",

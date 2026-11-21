@@ -41,7 +41,7 @@ async fn a_page_created_by_write_is_searchable_immediately() {
     let url = SiteUrl::new("plans", "scratch-test2/x.md").unwrap();
     let text = "---\ntitle: Test\ntype: scratch-test2\n---\n# Test\n";
     let (written, created) = server
-        .write_file(&url, text.as_bytes(), ChangedBy::App)
+        .write_file(&url, text.as_bytes(), ChangedBy::External)
         .unwrap();
     assert!(created, "{url} should be new");
     assert!(
@@ -55,7 +55,7 @@ async fn a_page_created_by_write_is_searchable_immediately() {
         .write_file(
             &SiteUrl::new("plans", "scratch-test2/versions.json").unwrap(),
             b"[]",
-            ChangedBy::App,
+            ChangedBy::External,
         )
         .unwrap();
     assert!(
@@ -129,7 +129,7 @@ vec![
         &mut socket,
         1,
         ClientCommand::SessionCreate {
-            agent: "orchestrator".into(),
+            agent: "default".into(),
             project: None,
         },
     )

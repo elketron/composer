@@ -149,7 +149,7 @@ fn asked(events: &[ServerMessage]) -> bool {
 fn write_agent(server: &composer_server::Server, name: &str, tools: &str) {
     let url = composer_core::SiteUrl::new("agents", &format!("{name}.md")).unwrap();
     let page = format!("---\ntitle: {name}\ntype: agent\ntools: {tools}\n---\nYou use tools.\n");
-    server.write_page(&url, &page, ChangedBy::App).unwrap();
+    server.write_page(&url, &page, ChangedBy::External).unwrap();
 }
 
 #[tokio::test]

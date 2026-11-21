@@ -1,18 +1,16 @@
 use std::path::{Path, PathBuf};
 
-use crate::error::{Result, ServerError};
-use crate::workspace_home::WorkspaceHome;
-use crate::workspace_name::WorkspaceName;
+use crate::config::Config;
+use crate::error::Result;
+use crate::mcp_bundles::InstalledMcpBundles;
 
-/// The composer home folder (`~/.composer`, or `$COMPOSER_HOME`): what all workspaces share.
+/// The composer home folder (`~/.composer`, or `$COMPOSER_HOME`): one home, one web.
 ///
 /// ```text
-/// global/           config.toml (defaults every workspace starts from), user.md
-/// sites/            the library: site definitions workspaces install from
-/// templates/        app scaffold and sdk
-/// mcps/             `.mcpb` bundles: MCP servers shared by every workspace
-/// state/            server-only: stock bases for the library and templates
-/// workspaces/<n>/   each workspace (see WorkspaceHome)
+/// config.toml       the settings
+/// sites/            the web (agent-visible)
+/// mcps/             `.mcpb` bundles: putting a file there installs it
+/// state/            sessions, token, approvals, unpacked bundles (never agent-visible)
 /// ```
 #[derive(Debug, Clone)]
 pub struct Home {
@@ -20,13 +18,16 @@ pub struct Home {
 }
 
 impl Home {
+    /// Child processes (the MCP bridge) find their home through it.
+    pub const ENV_HOME: &'static str = "COMPOSER_HOME";
+
     pub fn new(root: impl Into<PathBuf>) -> Self {
         Self { root: root.into() }
     }
 
     /// `$COMPOSER_HOME`, else `~/.composer`.
     pub fn from_env() -> Self {
-        if let Some(dir) = std::env::var_os(WorkspaceHome::ENV_HOME) {
+        if let Some(dir) = std::env::var_os(Self::ENV_HOME) {
             return Self::new(dir);
         }
         let home = std::env::var_os("HOME")
@@ -35,86 +36,55 @@ impl Home {
         Self::new(home.join(".composer"))
     }
 
+    /// The environment that makes a child process open this same home.
+    pub fn env(&self) -> [(&'static str, String); 1] {
+        [(Self::ENV_HOME, self.root.display().to_string())]
+    }
+
     pub fn root(&self) -> &Path {
         &self.root
     }
 
-    pub fn global(&self) -> PathBuf {
-        self.root.join("global")
+    pub fn config_file(&self) -> PathBuf {
+        self.root.join("config.toml")
     }
 
-    pub fn global_config_file(&self) -> PathBuf {
-        self.global().join("config.toml")
+    /// The settings, with the installed MCP bundles' servers.
+    pub fn load_config(&self) -> Result<Config> {
+        let mut config = Config::load(&self.config_file())?;
+        InstalledMcpBundles::load(&self.mcps(), &self.mcps_state()).merge_into(&mut config.mcp);
+        Ok(config)
     }
 
-    /// The site library (`sites/`).
-    pub fn library(&self) -> PathBuf {
-        self.root.join("sites")
-    }
-
-    pub fn templates(&self) -> PathBuf {
-        self.root.join("templates")
-    }
-
-    /// The MCP bundles (`mcps/*.mcpb`): putting a file there installs it.
+    /// The MCP bundles (`mcps/*.mcpb`).
     pub fn mcps(&self) -> PathBuf {
         self.root.join("mcps")
+    }
+
+    /// Where the bundles are unpacked (`state/mcps/<server>/`).
+    pub fn mcps_state(&self) -> PathBuf {
+        self.state().join("mcps")
+    }
+
+    pub fn sites(&self) -> PathBuf {
+        self.root.join("sites")
     }
 
     pub fn state(&self) -> PathBuf {
         self.root.join("state")
     }
 
-    /// The master token (`state/token`): lists every workspace (`/api/workspaces`), opens none.
-    pub fn master_token_file(&self) -> PathBuf {
+    pub fn sessions(&self) -> PathBuf {
+        self.state().join("sessions")
+    }
+
+    /// Approved recipe versions.
+    pub fn approvals_file(&self) -> PathBuf {
+        self.state().join("approvals.json")
+    }
+
+    /// The client token (`state/token`). Devices get their own tokens (pairing).
+    pub fn token_file(&self) -> PathBuf {
         self.state().join("token")
-    }
-
-    /// Which workspace owns which project folder.
-    pub fn projects_file(&self) -> PathBuf {
-        self.state().join("projects.json")
-    }
-
-    pub fn workspaces_dir(&self) -> PathBuf {
-        self.root.join("workspaces")
-    }
-
-    /// The workspace `name` (whether or not it exists yet).
-    pub fn workspace(&self, name: &WorkspaceName) -> WorkspaceHome {
-        WorkspaceHome::in_home(
-            &self.root,
-            self.workspaces_dir().join(name.as_str()),
-            name.clone(),
-        )
-    }
-
-    /// The workspaces that exist, by name. Folders under `workspaces/` whose name isn't a valid
-    /// workspace name are skipped (with a warning), never opened.
-    pub fn workspace_names(&self) -> Result<Vec<WorkspaceName>> {
-        let dir = self.workspaces_dir();
-        let entries = match std::fs::read_dir(&dir) {
-            Ok(entries) => entries,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-            Err(e) => return Err(ServerError::io(&dir, e)),
-        };
-        let mut names = Vec::new();
-        for entry in entries.flatten() {
-            if !entry.path().is_dir() {
-                continue;
-            }
-            let file_name = entry.file_name();
-            match WorkspaceName::new(&file_name.to_string_lossy()) {
-                Ok(name) => names.push(name),
-                Err(e) => tracing::warn!("skipping {}: {e}", entry.path().display()),
-            }
-        }
-        names.sort();
-        Ok(names)
-    }
-
-    /// A home from before workspaces: `config.toml` and `sites/` at the root, no `workspaces/`.
-    /// `composer migrate` moves it into `workspaces/default/`.
-    pub fn is_single_workspace(&self) -> bool {
-        self.root.join("config.toml").is_file() && !self.workspaces_dir().exists()
     }
 }

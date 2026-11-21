@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
+use crate::home::Home;
 use crate::session::SessionFolder;
-use crate::workspace_home::WorkspaceHome;
 
 /// A session's attachments folder in one workspace: `state/sessions/<id>/attachments`.
 ///
@@ -15,7 +15,7 @@ pub struct AttachmentFolder {
 
 impl AttachmentFolder {
     /// `session`'s folder in `home`; refused unless `session` is a plain session id.
-    pub fn of(home: &WorkspaceHome, session: &str) -> Result<Self, String> {
+    pub fn of(home: &Home, session: &str) -> Result<Self, String> {
         let folder = SessionFolder::of(&home.sessions(), session)?;
         Ok(Self {
             session_dir: folder.path().to_path_buf(),
@@ -40,7 +40,7 @@ mod tests {
 
     #[test]
     fn only_a_plain_session_id_names_a_folder() {
-        let home = WorkspaceHome::new("/h");
+        let home = Home::new("/h");
         let folder = AttachmentFolder::of(&home, "a1b2-w_3").unwrap();
         assert_eq!(
             folder.path(),
