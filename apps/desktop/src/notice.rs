@@ -24,10 +24,13 @@ impl Notice {
                 title,
                 site,
                 recipe,
+                args,
                 ..
             } => {
                 let what = if recipe == crate::home_lists::MCP_FILE {
                     format!("Start {site}'s MCP servers")
+                } else if recipe == crate::home_lists::FOLDER {
+                    crate::home_lists::folder_use(site, args)
                 } else if title.is_empty() {
                     format!("{site} › {recipe}")
                 } else {
@@ -111,6 +114,14 @@ mod tests {
         assert_eq!(
             Notice::of(&approval, Some("a")).map(|n| n.body),
             Some("cad › export · #b".into())
+        );
+        let folder = message(serde_json::json!({
+            "type": "approval.request", "request": "r2", "session": "b", "title": "",
+            "site": "game", "recipe": "folder:", "args": ["/home/me/game"], "body": "", "hash": "h"
+        }));
+        assert_eq!(
+            Notice::of(&folder, Some("a")).map(|n| n.body),
+            Some("Let game work in /home/me/game · #b".into())
         );
         let other = message(serde_json::json!({"type": "turn.started", "session": "a", "seq": 2}));
         assert_eq!(Notice::of(&other, Some("a")), None);

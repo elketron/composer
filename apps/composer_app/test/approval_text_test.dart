@@ -14,6 +14,12 @@ void main() {
     expect(approvalQuestion(recipe('build')), 'Run recipe?');
   });
 
+  test("a site's folder: asks to let the site work there, naming the folder", () {
+    expect(approvalHeadline(recipe('folder:')), 'Let shop work in x');
+    expect(approvalQuestion(recipe('folder:')), 'Allow?');
+    expect(approvalNote(recipe('folder:')), contains('folder:'));
+  });
+
   test('a session label names its harness when it has one', () {
     const session = SessionInfo(id: 'a', state: TurnState.idle, lastSeq: 0, updated: '');
     expect(sessionLabel(session), 'agentic');

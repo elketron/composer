@@ -21,7 +21,7 @@ use composer_core::{LinkTarget, SiteUrl};
 
 use crate::chat_model::ChatModel;
 use crate::draft::{Draft, DraftKey, Mode};
-use crate::home_lists::{is_mcp_start, mcp_start};
+use crate::home_lists::{folder_use, is_folder, is_mcp_start, mcp_start};
 use crate::markdown;
 use crate::outgoing::Outgoing;
 use crate::prose::{head, thinking_preview};
@@ -802,13 +802,22 @@ impl ChatPane {
     fn approval(&self, approval: &Approval, cx: &mut Context<Self>) -> AnyElement {
         let what = match approval.kind {
             ApprovalKind::Recipe if is_mcp_start(approval) => mcp_start(&approval.site),
+            ApprovalKind::Recipe if is_folder(approval) => {
+                folder_use(&approval.site, &approval.args)
+            }
             ApprovalKind::Recipe => format!("run {} › {}", approval.site, approval.recipe),
             _ if !approval.title.is_empty() => approval.title.clone(),
             ApprovalKind::Tool | ApprovalKind::Mcp => "use a tool".into(),
         };
-        let args = approval.args.join(" ");
-        // A site's MCP servers: what they are (the body) shows from the start; the toggle flips it.
-        let open = self.opened.contains(&approval.request) != is_mcp_start(approval);
+        // A folder's one argument is in the line already.
+        let args = match is_folder(approval) {
+            true => String::new(),
+            false => approval.args.join(" "),
+        };
+        // A site's MCP servers or folder: what they are (the body) shows from the start; the
+        // toggle flips it.
+        let open = self.opened.contains(&approval.request)
+            != (is_mcp_start(approval) || is_folder(approval));
         let request = approval.request.clone();
         let answer = |decision: ApprovalDecision| {
             let request = approval.request.clone();

@@ -433,6 +433,9 @@ impl AppState {
                         ApprovalKind::Recipe if a.recipe == "mcp.toml" => {
                             format!("{}-mcp.toml", a.site)
                         }
+                        ApprovalKind::Recipe if a.recipe == "folder:" => {
+                            format!("{}-folder.txt", a.site)
+                        }
                         ApprovalKind::Recipe => format!("{}-{}.just", a.site, a.recipe),
                         ApprovalKind::Tool => format!("tool-{}.txt", a.request),
                         ApprovalKind::Mcp => format!("mcp-{}.json", a.request),

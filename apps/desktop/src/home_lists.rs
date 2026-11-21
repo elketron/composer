@@ -66,6 +66,9 @@ pub fn asked_line(approval: &Approval) -> String {
         ApprovalKind::Recipe if is_mcp_start(approval) => {
             format!("approve: {}", mcp_start(&approval.site))
         }
+        ApprovalKind::Recipe if is_folder(approval) => {
+            format!("approve: {}", folder_use(&approval.site, &approval.args))
+        }
         ApprovalKind::Recipe => format!("approve run {} › {}", approval.site, approval.recipe),
         _ if !approval.title.is_empty() => format!("approve {}", approval.title),
         ApprovalKind::Tool | ApprovalKind::Mcp => "approve a tool".into(),
@@ -84,6 +87,22 @@ pub fn mcp_start(site: &str) -> String {
 
 /// The file a site declares its MCP servers in; approving it starts them.
 pub const MCP_FILE: &str = "mcp.toml";
+
+/// What a site's `folder:` approval is asked under; its one argument is the folder.
+pub const FOLDER: &str = "folder:";
+
+/// The approval to let a site work in the folder its `folder:` names, not a recipe run.
+pub fn is_folder(approval: &Approval) -> bool {
+    approval.kind == ApprovalKind::Recipe && approval.recipe == FOLDER
+}
+
+/// What approving a site's `folder:` does: "Let <site> work in <path>".
+pub fn folder_use(site: &str, args: &[String]) -> String {
+    format!(
+        "Let {site} work in {}",
+        args.first().map(String::as_str).unwrap_or("its folder")
+    )
+}
 
 pub fn state_word(state: TurnState) -> &'static str {
     match state {
