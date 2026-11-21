@@ -2,7 +2,7 @@
   {
     "id": 1,
     "type": "session.create",
-    "agent": "orchestrator",
+    "agent": "default",
     "project": null
   },
   {
@@ -61,132 +61,42 @@
   },
   {
     "id": 11,
-    "type": "project.set",
-    "session": "a3f1",
-    "path": "/p"
-  },
-  {
-    "id": 12,
     "type": "site.set",
     "session": "a3f1",
     "site": "3d"
   },
   {
-    "id": 13,
+    "id": 12,
     "type": "site.set",
     "session": "a3f1",
     "site": null
   },
   {
-    "id": 14,
+    "id": 13,
     "type": "approval.respond",
     "request": "r1",
     "decision": "approve"
   },
   {
-    "id": 15,
+    "id": 14,
     "type": "approval.respond",
     "request": "r2",
     "decision": "always"
   },
   {
-    "id": 16,
-    "type": "ticket.changes",
-    "ticket": "0007"
-  },
-  {
-    "id": 17,
-    "type": "ticket.comment",
-    "ticket": "0007",
-    "comments": [
-      {
-        "file": "a.rs",
-        "start": 3,
-        "end": 5,
-        "message": "rename this",
-        "quote": "let x = 1;"
-      }
-    ]
-  },
-  {
-    "id": 18,
-    "type": "project.overview",
-    "project": "game"
-  },
-  {
-    "id": 19,
-    "type": "ticket.merge",
-    "ticket": "0007"
-  },
-  {
-    "id": 20,
-    "type": "ticket.discard",
-    "ticket": "0007"
-  },
-  {
-    "id": 21,
+    "id": 15,
     "type": "subscribe",
     "urls": [
       "*"
     ]
   },
   {
-    "id": 22,
-    "type": "worker.hello",
-    "session": "a3f1"
-  },
-  {
-    "id": 23,
-    "type": "worker.event",
-    "event": {
-      "type": "turn.started",
-      "session": "a3f1",
-      "seq": 1
-    }
-  },
-  {
-    "id": 24,
-    "type": "slot.acquire"
-  },
-  {
-    "id": 25,
-    "type": "slot.release",
-    "grant": 7
-  },
-  {
-    "id": 26,
-    "type": "approval.ask",
-    "site": "t",
-    "recipe": "r",
-    "args": [],
-    "body": "b",
-    "hash": "h"
-  },
-  {
-    "id": 27,
-    "type": "worker.finish",
-    "state": "failed",
-    "summary": "why"
-  },
-  {
-    "id": 28,
+    "id": 16,
     "type": "tool.list",
     "session": "a3f1"
   },
   {
-    "id": 29,
-    "type": "harness.list",
-    "project": "composer"
-  },
-  {
-    "id": 30,
-    "type": "harness.set",
-    "project": "composer",
-    "entry": "claude-code",
-    "on": false
-  },
-  {
-    "id": 31,
+    "id": 17,
     "type": "tool.call",
     "session": "a3f1",
     "name": "open",

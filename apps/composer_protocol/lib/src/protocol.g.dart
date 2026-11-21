@@ -2,47 +2,12 @@
 // Source of truth: crates/protocol (Rust).
 // ignore_for_file: annotate_overrides, prefer_const_constructors, unnecessary_this
 
-/// `GET /api/actions/{site}`: one public recipe in a site's action registry.
-class ActionSummary {
-  const ActionSummary({
-    required this.name,
-    this.doc,
-    required this.parameters,
-    required this.approved,
-  });
-
-  final String name;
-
-  final String? doc;
-
-  /// `name`, `name=default` or `*name`, as in `actions`.
-  final List<String> parameters;
-
-  /// Whether this version may run unasked; otherwise the caller's session is asked.
-  final bool approved;
-
-  factory ActionSummary.fromJson(Map<String, Object?> json) => ActionSummary(
-        name: json['name'] as String,
-        doc: json['doc'] == null ? null : json['doc'] as String,
-        parameters: (json['parameters'] as List).map((e) => e as String).toList(),
-        approved: json['approved'] as bool,
-      );
-
-  Map<String, Object?> toJson() => {
-        'name': name,
-        if (doc != null) 'doc': doc,
-        'parameters': parameters,
-        'approved': approved,
-      };
-}
-
 /// `GET /api/agents`: the agent definitions (`site://agents`).
 class AgentSummary {
   const AgentSummary({
     required this.name,
     required this.title,
     required this.description,
-    required this.worker,
   });
 
   final String name;
@@ -52,148 +17,26 @@ class AgentSummary {
   /// `description:`, else the title.
   final String description;
 
-  /// A worker page (`role: worker`): the agent `spawn_worker` runs, not one to start a chat with.
-  final bool worker;
-
   factory AgentSummary.fromJson(Map<String, Object?> json) => AgentSummary(
         name: json['name'] as String,
         title: json['title'] as String,
         description: json['description'] as String,
-        worker: json['worker'] as bool,
       );
 
   Map<String, Object?> toJson() => {
         'name': name,
         'title': title,
         'description': description,
-        'worker': worker,
       };
 }
 
-/// An app (a site with a `ui/` or an `app:` block) in a project's rail or on the workspace's Home:
-/// `GET /api/apps`, `GET /api/projects/<name>/apps`, ws `apps.list`.
-class AppInfo {
-  const AppInfo({
-    required this.site,
-    required this.label,
-    this.icon,
-    required this.scope,
-    required this.why,
-    this.tile = false,
-    this.opens = const [],
-    this.built = false,
-    this.local = false,
-    this.client = false,
-    this.outdated = false,
-    this.tileText,
-  });
-
-  final String site;
-
-  /// The rail label, else the site's title.
-  final String label;
-
-  final String? icon;
-
-  /// `project`, `global` or `both`.
-  final String scope;
-
-  /// `pinned`, `matched files:*.FCStd`, `home`.
-  final String why;
-
-  /// It contributes a tile to Home.
-  final bool tile;
-
-  /// File patterns it opens.
-  final List<String> opens;
-
-  /// `ui/dist/index.html` exists.
-  final bool built;
-
-  /// A project-local app (`<project>/.composer/apps/<site>`); `why` says whether it is allowed.
-  final bool local;
-
-  /// A client of the workspace (`[apps] clients`): opened with its full access.
-  final bool client;
-
-  /// Built with an older sdk: it shows nothing until rebuilt (`ui-build`, or `composer app
-  /// rebuild`).
-  final bool outdated;
-
-  /// On Home, for a `tile` app: its tile, the body of `site://<site>/tile.md` (which the app or
-  /// the agent keeps current).
-  final String? tileText;
-
-  factory AppInfo.fromJson(Map<String, Object?> json) => AppInfo(
-        site: json['site'] as String,
-        label: json['label'] as String,
-        icon: json['icon'] == null ? null : json['icon'] as String,
-        scope: json['scope'] as String,
-        why: json['why'] as String,
-        tile: json['tile'] == null ? false : json['tile'] as bool,
-        opens: json['opens'] == null ? const [] : (json['opens'] as List).map((e) => e as String).toList(),
-        built: json['built'] == null ? false : json['built'] as bool,
-        local: json['local'] == null ? false : json['local'] as bool,
-        client: json['client'] == null ? false : json['client'] as bool,
-        outdated: json['outdated'] == null ? false : json['outdated'] as bool,
-        tileText: json['tile_text'] == null ? null : json['tile_text'] as String,
-      );
-
-  Map<String, Object?> toJson() => {
-        'site': site,
-        'label': label,
-        if (icon != null) 'icon': icon,
-        'scope': scope,
-        'why': why,
-        'tile': tile,
-        if (opens.isNotEmpty) 'opens': opens,
-        'built': built,
-        'local': local,
-        'client': client,
-        'outdated': outdated,
-        if (tileText != null) 'tile_text': tileText,
-      };
-}
-
-/// A project's apps, or Home's; `errors` are sites whose `app:` block doesn't parse.
-class AppList {
-  const AppList({
-    this.project,
-    required this.apps,
-    this.errors = const [],
-  });
-
-  /// The project's name; `None` for Home.
-  final String? project;
-
-  final List<AppInfo> apps;
-
-  final List<String> errors;
-
-  factory AppList.fromJson(Map<String, Object?> json) => AppList(
-        project: json['project'] == null ? null : json['project'] as String,
-        apps: (json['apps'] as List).map((e) => AppInfo.fromJson(e as Map<String, Object?>)).toList(),
-        errors: json['errors'] == null ? const [] : (json['errors'] as List).map((e) => e as String).toList(),
-      );
-
-  Map<String, Object?> toJson() => {
-        if (project != null) 'project': project,
-        'apps': apps.map((e) => e.toJson()).toList(),
-        if (errors.isNotEmpty) 'errors': errors,
-      };
-}
-
-/// `POST /api/sessions/{id}/messages` — a micro app pushing a message to the agent.
+/// `POST /api/sessions/{id}/messages`: a message to the agent over HTTP.
 class AppMessage {
   const AppMessage({
-    this.site,
     required this.text,
     this.pages = const [],
     this.images = const [],
   });
-
-  /// The app's site, shown as the message source.
-  final String? site;
 
   final String text;
 
@@ -202,48 +45,15 @@ class AppMessage {
   final List<String> images;
 
   factory AppMessage.fromJson(Map<String, Object?> json) => AppMessage(
-        site: json['site'] == null ? null : json['site'] as String,
         text: json['text'] as String,
         pages: json['pages'] == null ? const [] : (json['pages'] as List).map((e) => e as String).toList(),
         images: json['images'] == null ? const [] : (json['images'] as List).map((e) => e as String).toList(),
       );
 
   Map<String, Object?> toJson() => {
-        if (site != null) 'site': site,
         'text': text,
         if (pages.isNotEmpty) 'pages': pages,
         if (images.isNotEmpty) 'images': images,
-      };
-}
-
-/// `POST /api/projects/<name>/apps/<site>/open`: where to load the app (`<base>/a/<token>/`: its
-/// token is in the path, and its API is under it), and the token itself for a client that calls
-/// the app's API directly.
-class AppOpened {
-  const AppOpened({
-    required this.url,
-    this.token,
-    this.project,
-  });
-
-  final String url;
-
-  /// The app's own token; `None` for a client app (its URL has a one-time code instead).
-  final String? token;
-
-  /// The project it was opened on, by its name; `None` on Home.
-  final String? project;
-
-  factory AppOpened.fromJson(Map<String, Object?> json) => AppOpened(
-        url: json['url'] as String,
-        token: json['token'] == null ? null : json['token'] as String,
-        project: json['project'] == null ? null : json['project'] as String,
-      );
-
-  Map<String, Object?> toJson() => {
-        'url': url,
-        if (token != null) 'token': token,
-        if (project != null) 'project': project,
       };
 }
 
@@ -264,13 +74,9 @@ enum ApprovalDecision {
 
 enum ApprovalKind {
   recipe('recipe'),
-  merge('merge'),
   tool('tool'),
   /// A call to an MCP server's tool (`rule`: the tool, for `always`; it holds everywhere).
-  mcp('mcp'),
-  /// Publishing a workspace site to the library (the only write that leaves a workspace).
-  /// Asked every time: `always` counts as one yes and is never remembered.
-  publish('publish');
+  mcp('mcp');
 
   const ApprovalKind(this.wire);
   final String wire;
@@ -318,7 +124,6 @@ class Attachment {
 
 enum ChangedBy {
   agent('agent'),
-  app('app'),
   /// Changed on disk by something else (nvim, git, ...).
   external('external');
 
@@ -436,18 +241,11 @@ sealed class ClientCommand {
         'session.history' => ClientCommandSessionHistory.fromJson(json),
         'session.detach' => ClientCommandSessionDetach.fromJson(json),
         'message.send' => ClientCommandMessageSend.fromJson(json),
-        'selection.clear' => ClientCommandSelectionClear.fromJson(json),
         'session.compact' => ClientCommandSessionCompact.fromJson(json),
         'turn.cancel' => ClientCommandTurnCancel.fromJson(json),
-        'project.set' => ClientCommandProjectSet.fromJson(json),
         'site.set' => ClientCommandSiteSet.fromJson(json),
         'model.list' => ClientCommandModelList.fromJson(json),
         'model.set' => ClientCommandModelSet.fromJson(json),
-        'harness.list' => ClientCommandHarnessList.fromJson(json),
-        'harness.set' => ClientCommandHarnessSet.fromJson(json),
-        'window.hello' => ClientCommandWindowHello.fromJson(json),
-        'window.session' => ClientCommandWindowSession.fromJson(json),
-        'window.join' => ClientCommandWindowJoin.fromJson(json),
         'terminal.open' => ClientCommandTerminalOpen.fromJson(json),
         'terminal.input' => ClientCommandTerminalInput.fromJson(json),
         'terminal.resize' => ClientCommandTerminalResize.fromJson(json),
@@ -458,34 +256,10 @@ sealed class ClientCommand {
         'desk.close' => ClientCommandDeskClose.fromJson(json),
         'desk.focus' => ClientCommandDeskFocus.fromJson(json),
         'desk.move' => ClientCommandDeskMove.fromJson(json),
-        'project.open' => ClientCommandProjectOpen.fromJson(json),
-        'project.close' => ClientCommandProjectClose.fromJson(json),
-        'projects.open' => ClientCommandProjectsOpen.fromJson(json),
-        'project.overview' => ClientCommandProjectOverview.fromJson(json),
-        'apps.list' => ClientCommandAppsList.fromJson(json),
-        'app.open' => ClientCommandAppOpen.fromJson(json),
-        'apps.rebuild' => ClientCommandAppsRebuild.fromJson(json),
-        'app.allow' => ClientCommandAppAllow.fromJson(json),
-        'app.promote' => ClientCommandAppPromote.fromJson(json),
         'mcp.list' => ClientCommandMcpList.fromJson(json),
-        'library.list' => ClientCommandLibraryList.fromJson(json),
-        'library.install' => ClientCommandLibraryInstall.fromJson(json),
-        'library.update' => ClientCommandLibraryUpdate.fromJson(json),
-        'library.publish' => ClientCommandLibraryPublish.fromJson(json),
         'config.reload' => ClientCommandConfigReload.fromJson(json),
-        'ticket.changes' => ClientCommandTicketChanges.fromJson(json),
-        'ticket.comment' => ClientCommandTicketComment.fromJson(json),
-        'ticket.merge' => ClientCommandTicketMerge.fromJson(json),
-        'ticket.discard' => ClientCommandTicketDiscard.fromJson(json),
         'approval.respond' => ClientCommandApprovalRespond.fromJson(json),
         'subscribe' => ClientCommandSubscribe.fromJson(json),
-        'worker.hello' => ClientCommandWorkerHello.fromJson(json),
-        'worker.event' => ClientCommandWorkerEvent.fromJson(json),
-        'slot.acquire' => ClientCommandSlotAcquire.fromJson(json),
-        'slot.release' => ClientCommandSlotRelease.fromJson(json),
-        'approval.ask' => ClientCommandApprovalAsk.fromJson(json),
-        'worker.finish' => ClientCommandWorkerFinish.fromJson(json),
-        'worker.stuck' => ClientCommandWorkerStuck.fromJson(json),
         'tool.list' => ClientCommandToolList.fromJson(json),
         'tool.call' => ClientCommandToolCall.fromJson(json),
         _ => ClientCommandUnknown(json),
@@ -636,25 +410,6 @@ final class ClientCommandMessageSend extends ClientCommand {
       };
 }
 
-/// Removes the session's selection chip: the next message goes without it (ticket 0175;
-/// otherwise the next user message carries it). The reply is `done`.
-final class ClientCommandSelectionClear extends ClientCommand {
-  const ClientCommandSelectionClear({
-    required this.session,
-  });
-
-  final String session;
-
-  factory ClientCommandSelectionClear.fromJson(Map<String, Object?> json) => ClientCommandSelectionClear(
-        session: json['session'] as String,
-      );
-
-  Map<String, Object?> toJson() => {
-        'type': 'selection.clear',
-        'session': session,
-      };
-}
-
 /// Compact the session now: save memory, then summarize older messages.
 final class ClientCommandSessionCompact extends ClientCommand {
   const ClientCommandSessionCompact({
@@ -699,34 +454,10 @@ final class ClientCommandTurnCancel extends ClientCommand {
       };
 }
 
-final class ClientCommandProjectSet extends ClientCommand {
-  const ClientCommandProjectSet({
-    required this.session,
-    this.path,
-  });
-
-  final String session;
-
-  final String? path;
-
-  factory ClientCommandProjectSet.fromJson(Map<String, Object?> json) => ClientCommandProjectSet(
-        session: json['session'] as String,
-        path: json['path'] == null ? null : json['path'] as String,
-      );
-
-  Map<String, Object?> toJson() => {
-        'type': 'project.set',
-        'session': session,
-        if (path != null) 'path': path,
-      };
-}
-
-/// Enters the site `site` (its page, tools and application) for a session, or
-/// leaves the current one with `None`. A running turn goes on as it was; the change applies
-/// from the session's next turn. The session's new state arrives as `session.updated`; the
-/// reply is `note`: what happened, the site's application included (started, already
-/// running, or skipped and why). An error when the site does not exist or needs a project
-/// the session has none for.
+/// Enters the site `site` (its page and tools) for a session, or leaves the current one with
+/// `None`. A running turn goes on as it was; the change applies from the session's next turn.
+/// The session's new state arrives as `session.updated`; the reply is `note`: what happened.
+/// An error when the site does not exist.
 final class ClientCommandSiteSet extends ClientCommand {
   const ClientCommandSiteSet({
     required this.session,
@@ -781,122 +512,6 @@ final class ClientCommandModelSet extends ClientCommand {
         'type': 'model.set',
         'session': session,
         if (model != null) 'model': model,
-      };
-}
-
-/// The external harnesses of a project (a folder, `~/x`, or a name in the projects dir).
-final class ClientCommandHarnessList extends ClientCommand {
-  const ClientCommandHarnessList({
-    required this.project,
-  });
-
-  final String project;
-
-  factory ClientCommandHarnessList.fromJson(Map<String, Object?> json) => ClientCommandHarnessList(
-        project: json['project'] as String,
-      );
-
-  Map<String, Object?> toJson() => {
-        'type': 'harness.list',
-        'project': project,
-      };
-}
-
-/// Turns a harness (`claude-code`) or one of its models (`claude-code:opus`) on or off for a
-/// project. Off stops its running tickets there; on lets the ones it stopped go on.
-final class ClientCommandHarnessSet extends ClientCommand {
-  const ClientCommandHarnessSet({
-    required this.project,
-    required this.entry,
-    required this.on,
-  });
-
-  final String project;
-
-  final String entry;
-
-  final bool on;
-
-  factory ClientCommandHarnessSet.fromJson(Map<String, Object?> json) => ClientCommandHarnessSet(
-        project: json['project'] as String,
-        entry: json['entry'] as String,
-        on: json['on'] as bool,
-      );
-
-  Map<String, Object?> toJson() => {
-        'type': 'harness.set',
-        'project': project,
-        'entry': entry,
-        'on': on,
-      };
-}
-
-/// A desktop window says hello (ticket 0177): it gets an id, and the server starts the TUI for
-/// it (`composer --window <id>`) in a terminal of its own, shown in the chat column. The reply
-/// is `window`; the TUI's output comes as `terminal.output` with this `window`.
-final class ClientCommandWindowHello extends ClientCommand {
-  const ClientCommandWindowHello({
-    this.cols = 0,
-    this.rows = 0,
-  });
-
-  final int cols;
-
-  final int rows;
-
-  factory ClientCommandWindowHello.fromJson(Map<String, Object?> json) => ClientCommandWindowHello(
-        cols: json['cols'] == null ? 0 : (json['cols'] as num).toInt(),
-        rows: json['rows'] == null ? 0 : (json['rows'] as num).toInt(),
-      );
-
-  Map<String, Object?> toJson() => {
-        'type': 'window.hello',
-        'cols': cols,
-        'rows': rows,
-      };
-}
-
-/// The window's TUI shows this session now (the TUI sends it): the window's stage follows
-/// (`window.changed` to the window). The reply is `done`.
-final class ClientCommandWindowSession extends ClientCommand {
-  const ClientCommandWindowSession({
-    required this.window,
-    required this.session,
-  });
-
-  final String window;
-
-  final String session;
-
-  factory ClientCommandWindowSession.fromJson(Map<String, Object?> json) => ClientCommandWindowSession(
-        window: json['window'] as String,
-        session: json['session'] as String,
-      );
-
-  Map<String, Object?> toJson() => {
-        'type': 'window.session',
-        'window': window,
-        'session': session,
-      };
-}
-
-/// The window's own TUI joins its window (ticket 0185): its connection then gets the
-/// window's events too, so a session the desktop picks (`window.session`) reaches it. The
-/// reply is `done`.
-final class ClientCommandWindowJoin extends ClientCommand {
-  const ClientCommandWindowJoin({
-    required this.window,
-  });
-
-  final String window;
-
-  factory ClientCommandWindowJoin.fromJson(Map<String, Object?> json) => ClientCommandWindowJoin(
-        window: json['window'] as String,
-      );
-
-  Map<String, Object?> toJson() => {
-        'type': 'window.join',
-        'window': window,
       };
 }
 
@@ -1144,198 +759,6 @@ final class ClientCommandDeskMove extends ClientCommand {
       };
 }
 
-/// Opens a project (its name, or its folder) for this client: the first open in the workspace
-/// starts its file watch and runs its apps' `on_open` recipes; the reply is `project_opened`.
-/// Opening it again from the same client does nothing; a dropped connection closes it.
-final class ClientCommandProjectOpen extends ClientCommand {
-  const ClientCommandProjectOpen({
-    required this.project,
-  });
-
-  final String project;
-
-  factory ClientCommandProjectOpen.fromJson(Map<String, Object?> json) => ClientCommandProjectOpen(
-        project: json['project'] as String,
-      );
-
-  Map<String, Object?> toJson() => {
-        'type': 'project.open',
-        'project': project,
-      };
-}
-
-/// Closes a project this client opened; the last close stops its watch. The reply is `done`.
-final class ClientCommandProjectClose extends ClientCommand {
-  const ClientCommandProjectClose({
-    required this.project,
-  });
-
-  final String project;
-
-  factory ClientCommandProjectClose.fromJson(Map<String, Object?> json) => ClientCommandProjectClose(
-        project: json['project'] as String,
-      );
-
-  Map<String, Object?> toJson() => {
-        'type': 'project.close',
-        'project': project,
-      };
-}
-
-/// The projects open in the workspace, with how many clients have each; the reply is
-/// `open_projects`.
-final class ClientCommandProjectsOpen extends ClientCommand {
-  const ClientCommandProjectsOpen();
-
-  factory ClientCommandProjectsOpen.fromJson(Map<String, Object?> json) => ClientCommandProjectsOpen(
-      );
-
-  Map<String, Object?> toJson() => {
-        'type': 'projects.open',
-      };
-}
-
-/// What is going on in a project (a name in the projects directory, or a path); the reply is
-/// `project`.
-final class ClientCommandProjectOverview extends ClientCommand {
-  const ClientCommandProjectOverview({
-    required this.project,
-  });
-
-  final String project;
-
-  factory ClientCommandProjectOverview.fromJson(Map<String, Object?> json) => ClientCommandProjectOverview(
-        project: json['project'] as String,
-      );
-
-  Map<String, Object?> toJson() => {
-        'type': 'project.overview',
-        'project': project,
-      };
-}
-
-/// The apps of a project (by name), or of the workspace's Home without one; the reply is
-/// `apps`.
-final class ClientCommandAppsList extends ClientCommand {
-  const ClientCommandAppsList({
-    this.project,
-  });
-
-  final String? project;
-
-  factory ClientCommandAppsList.fromJson(Map<String, Object?> json) => ClientCommandAppsList(
-        project: json['project'] == null ? null : json['project'] as String,
-      );
-
-  Map<String, Object?> toJson() => {
-        'type': 'apps.list',
-        if (project != null) 'project': project,
-      };
-}
-
-/// Opens an app: on a project (by name), or on Home without one; the reply is `app_opened`
-/// (the URL to load, with its token or one-time code in it once).
-final class ClientCommandAppOpen extends ClientCommand {
-  const ClientCommandAppOpen({
-    required this.site,
-    this.project,
-    this.session,
-  });
-
-  final String site;
-
-  final String? project;
-
-  /// The session it is opened from: the one its messages go to.
-  final String? session;
-
-  factory ClientCommandAppOpen.fromJson(Map<String, Object?> json) => ClientCommandAppOpen(
-        site: json['site'] as String,
-        project: json['project'] == null ? null : json['project'] as String,
-        session: json['session'] == null ? null : json['session'] as String,
-      );
-
-  Map<String, Object?> toJson() => {
-        'type': 'app.open',
-        'site': site,
-        if (project != null) 'project': project,
-        if (session != null) 'session': session,
-      };
-}
-
-/// Rebuilds the workspace's apps built with an older sdk (or not built; `all`: every one) with
-/// their `ui-build`. Without `yes` the reply shows what would run; with it,
-/// it runs (the user's command is the approval). The reply is `note`.
-final class ClientCommandAppsRebuild extends ClientCommand {
-  const ClientCommandAppsRebuild({
-    this.all = false,
-    this.yes = false,
-  });
-
-  final bool all;
-
-  final bool yes;
-
-  factory ClientCommandAppsRebuild.fromJson(Map<String, Object?> json) => ClientCommandAppsRebuild(
-        all: json['all'] == null ? false : json['all'] as bool,
-        yes: json['yes'] == null ? false : json['yes'] as bool,
-      );
-
-  Map<String, Object?> toJson() => {
-        'type': 'apps.rebuild',
-        'all': all,
-        'yes': yes,
-      };
-}
-
-/// Allows a project-local app (`<project>/.composer/apps/<app>`) as it is now: it is served
-/// and its recipes run until its `index.md` or `justfile` changes. The reply is `note`.
-final class ClientCommandAppAllow extends ClientCommand {
-  const ClientCommandAppAllow({
-    required this.project,
-    required this.app,
-  });
-
-  final String project;
-
-  final String app;
-
-  factory ClientCommandAppAllow.fromJson(Map<String, Object?> json) => ClientCommandAppAllow(
-        project: json['project'] as String,
-        app: json['app'] as String,
-      );
-
-  Map<String, Object?> toJson() => {
-        'type': 'app.allow',
-        'project': project,
-        'app': app,
-      };
-}
-
-/// Copies a project-local app into the workspace's sites (refused when a site has its name);
-/// the workspace's copy wins from then on. The reply is `note`.
-final class ClientCommandAppPromote extends ClientCommand {
-  const ClientCommandAppPromote({
-    required this.project,
-    required this.app,
-  });
-
-  final String project;
-
-  final String app;
-
-  factory ClientCommandAppPromote.fromJson(Map<String, Object?> json) => ClientCommandAppPromote(
-        project: json['project'] as String,
-        app: json['app'] as String,
-      );
-
-  Map<String, Object?> toJson() => {
-        'type': 'app.promote',
-        'project': project,
-        'app': app,
-      };
-}
-
 /// The MCP servers in `config.toml`, connecting those that are on (so it is also a test of
 /// them); the reply is `mcp_servers`.
 final class ClientCommandMcpList extends ClientCommand {
@@ -1349,93 +772,6 @@ final class ClientCommandMcpList extends ClientCommand {
       };
 }
 
-/// The library's sites and this workspace's copies of them; the reply is `library`.
-final class ClientCommandLibraryList extends ClientCommand {
-  const ClientCommandLibraryList();
-
-  factory ClientCommandLibraryList.fromJson(Map<String, Object?> json) => ClientCommandLibraryList(
-      );
-
-  Map<String, Object?> toJson() => {
-        'type': 'library.list',
-      };
-}
-
-/// Copies library site `site` into this workspace (as `name`, default the same); the reply is
-/// `library_installed`. Refused when the workspace has a site of that name.
-final class ClientCommandLibraryInstall extends ClientCommand {
-  const ClientCommandLibraryInstall({
-    required this.site,
-    this.name,
-  });
-
-  final String site;
-
-  final String? name;
-
-  factory ClientCommandLibraryInstall.fromJson(Map<String, Object?> json) => ClientCommandLibraryInstall(
-        site: json['site'] as String,
-        name: json['name'] == null ? null : json['name'] as String,
-      );
-
-  Map<String, Object?> toJson() => {
-        'type': 'library.install',
-        'site': site,
-        if (name != null) 'name': name,
-      };
-}
-
-/// Brings this workspace's installed sites up to the library (three-way per file; conflicts
-/// are left in `state/updates/`); with `dry_run`, only says what would change. The reply is
-/// `library_updated`.
-final class ClientCommandLibraryUpdate extends ClientCommand {
-  const ClientCommandLibraryUpdate({
-    this.dryRun = false,
-  });
-
-  final bool dryRun;
-
-  factory ClientCommandLibraryUpdate.fromJson(Map<String, Object?> json) => ClientCommandLibraryUpdate(
-        dryRun: json['dry_run'] == null ? false : json['dry_run'] as bool,
-      );
-
-  Map<String, Object?> toJson() => {
-        'type': 'library.update',
-        'dry_run': dryRun,
-      };
-}
-
-/// Publishes this workspace's site `site` to the library (as `name`, default the same).
-/// Without `approved`, nothing is written: the reply is `library_publish_plan`, what it would
-/// do. With `approved` (that plan's `digest`), it publishes, but only if the site is still
-/// exactly what the plan showed; the reply is `library_published`.
-final class ClientCommandLibraryPublish extends ClientCommand {
-  const ClientCommandLibraryPublish({
-    required this.site,
-    this.name,
-    this.approved,
-  });
-
-  final String site;
-
-  final String? name;
-
-  final String? approved;
-
-  factory ClientCommandLibraryPublish.fromJson(Map<String, Object?> json) => ClientCommandLibraryPublish(
-        site: json['site'] as String,
-        name: json['name'] == null ? null : json['name'] as String,
-        approved: json['approved'] == null ? null : json['approved'] as String,
-      );
-
-  Map<String, Object?> toJson() => {
-        'type': 'library.publish',
-        'site': site,
-        if (name != null) 'name': name,
-        if (approved != null) 'approved': approved,
-      };
-}
-
 /// Reads `config.toml` again now (the server also does when the file changes); the reply is
 /// `config_reloaded`. A file that doesn't parse is an error and the running config stays.
 final class ClientCommandConfigReload extends ClientCommand {
@@ -1446,86 +782,6 @@ final class ClientCommandConfigReload extends ClientCommand {
 
   Map<String, Object?> toJson() => {
         'type': 'config.reload',
-      };
-}
-
-/// A ticket's changes against the branch it would be merged into; the reply is `changes`.
-final class ClientCommandTicketChanges extends ClientCommand {
-  const ClientCommandTicketChanges({
-    required this.ticket,
-  });
-
-  final String ticket;
-
-  factory ClientCommandTicketChanges.fromJson(Map<String, Object?> json) => ClientCommandTicketChanges(
-        ticket: json['ticket'] as String,
-      );
-
-  Map<String, Object?> toJson() => {
-        'type': 'ticket.changes',
-        'ticket': ticket,
-      };
-}
-
-/// Appends review comments to the ticket page under `## Comments` (one `- file:start:end — message`
-/// line each); the reply is `comments`: every comment line the ticket has now. An empty
-/// list only reads them.
-final class ClientCommandTicketComment extends ClientCommand {
-  const ClientCommandTicketComment({
-    required this.ticket,
-    required this.comments,
-  });
-
-  final String ticket;
-
-  final List<DiffComment> comments;
-
-  factory ClientCommandTicketComment.fromJson(Map<String, Object?> json) => ClientCommandTicketComment(
-        ticket: json['ticket'] as String,
-        comments: (json['comments'] as List).map((e) => DiffComment.fromJson(e as Map<String, Object?>)).toList(),
-      );
-
-  Map<String, Object?> toJson() => {
-        'type': 'ticket.comment',
-        'ticket': ticket,
-        'comments': comments.map((e) => e.toJson()).toList(),
-      };
-}
-
-/// Merges a ticket's branch into the project's checked-out branch and removes its
-/// worktree; the reply is `merged`.
-final class ClientCommandTicketMerge extends ClientCommand {
-  const ClientCommandTicketMerge({
-    required this.ticket,
-  });
-
-  final String ticket;
-
-  factory ClientCommandTicketMerge.fromJson(Map<String, Object?> json) => ClientCommandTicketMerge(
-        ticket: json['ticket'] as String,
-      );
-
-  Map<String, Object?> toJson() => {
-        'type': 'ticket.merge',
-        'ticket': ticket,
-      };
-}
-
-/// Removes a ticket's worktree and branch without merging.
-final class ClientCommandTicketDiscard extends ClientCommand {
-  const ClientCommandTicketDiscard({
-    required this.ticket,
-  });
-
-  final String ticket;
-
-  factory ClientCommandTicketDiscard.fromJson(Map<String, Object?> json) => ClientCommandTicketDiscard(
-        ticket: json['ticket'] as String,
-      );
-
-  Map<String, Object?> toJson() => {
-        'type': 'ticket.discard',
-        'ticket': ticket,
       };
 }
 
@@ -1569,153 +825,7 @@ final class ClientCommandSubscribe extends ClientCommand {
       };
 }
 
-/// This connection is the worker process running `session`.
-final class ClientCommandWorkerHello extends ClientCommand {
-  const ClientCommandWorkerHello({
-    required this.session,
-  });
-
-  final String session;
-
-  factory ClientCommandWorkerHello.fromJson(Map<String, Object?> json) => ClientCommandWorkerHello(
-        session: json['session'] as String,
-      );
-
-  Map<String, Object?> toJson() => {
-        'type': 'worker.hello',
-        'session': session,
-      };
-}
-
-/// An event of the worker's session; the parent re-sequences and broadcasts it.
-final class ClientCommandWorkerEvent extends ClientCommand {
-  const ClientCommandWorkerEvent({
-    required this.event,
-  });
-
-  final ServerMessage event;
-
-  factory ClientCommandWorkerEvent.fromJson(Map<String, Object?> json) => ClientCommandWorkerEvent(
-        event: ServerMessage.fromJson(json['event'] as Map<String, Object?>),
-      );
-
-  Map<String, Object?> toJson() => {
-        'type': 'worker.event',
-        'event': event.toJson(),
-      };
-}
-
-/// Waits for a model slot; the reply is `slot_granted`. Held until released or disconnect.
-final class ClientCommandSlotAcquire extends ClientCommand {
-  const ClientCommandSlotAcquire();
-
-  factory ClientCommandSlotAcquire.fromJson(Map<String, Object?> json) => ClientCommandSlotAcquire(
-      );
-
-  Map<String, Object?> toJson() => {
-        'type': 'slot.acquire',
-      };
-}
-
-final class ClientCommandSlotRelease extends ClientCommand {
-  const ClientCommandSlotRelease({
-    required this.grant,
-  });
-
-  final int grant;
-
-  factory ClientCommandSlotRelease.fromJson(Map<String, Object?> json) => ClientCommandSlotRelease(
-        grant: (json['grant'] as num).toInt(),
-      );
-
-  Map<String, Object?> toJson() => {
-        'type': 'slot.release',
-        'grant': grant,
-      };
-}
-
-/// Asks the user (through the parent's clients) to approve a recipe version.
-final class ClientCommandApprovalAsk extends ClientCommand {
-  const ClientCommandApprovalAsk({
-    required this.site,
-    required this.recipe,
-    required this.args,
-    required this.body,
-    required this.hash,
-  });
-
-  final String site;
-
-  final String recipe;
-
-  final List<String> args;
-
-  final String body;
-
-  final String hash;
-
-  factory ClientCommandApprovalAsk.fromJson(Map<String, Object?> json) => ClientCommandApprovalAsk(
-        site: json['site'] as String,
-        recipe: json['recipe'] as String,
-        args: (json['args'] as List).map((e) => e as String).toList(),
-        body: json['body'] as String,
-        hash: json['hash'] as String,
-      );
-
-  Map<String, Object?> toJson() => {
-        'type': 'approval.ask',
-        'site': site,
-        'recipe': recipe,
-        'args': args,
-        'body': body,
-        'hash': hash,
-      };
-}
-
-/// The worker is done with its ticket.
-final class ClientCommandWorkerFinish extends ClientCommand {
-  const ClientCommandWorkerFinish({
-    required this.state,
-    required this.summary,
-  });
-
-  final WorkerState state;
-
-  final String summary;
-
-  factory ClientCommandWorkerFinish.fromJson(Map<String, Object?> json) => ClientCommandWorkerFinish(
-        state: WorkerState.fromJson(json['state']),
-        summary: json['summary'] as String,
-      );
-
-  Map<String, Object?> toJson() => {
-        'type': 'worker.finish',
-        'state': state.toJson(),
-        'summary': summary,
-      };
-}
-
-/// The worker reached its turn limit without finishing: `summary` says what it was doing.
-/// The reply (`worker_go_on`) comes when its orchestrator continues it; an error when it is
-/// stopped instead, or when nobody can decide.
-final class ClientCommandWorkerStuck extends ClientCommand {
-  const ClientCommandWorkerStuck({
-    required this.summary,
-  });
-
-  final String summary;
-
-  factory ClientCommandWorkerStuck.fromJson(Map<String, Object?> json) => ClientCommandWorkerStuck(
-        summary: json['summary'] as String,
-      );
-
-  Map<String, Object?> toJson() => {
-        'type': 'worker.stuck',
-        'summary': summary,
-      };
-}
-
-/// The tools a running worker's agent may call; the reply is `tools`.
+/// The tools a session's agent may call; the reply is `tools`.
 final class ClientCommandToolList extends ClientCommand {
   const ClientCommandToolList({
     required this.session,
@@ -1733,7 +843,7 @@ final class ClientCommandToolList extends ClientCommand {
       };
 }
 
-/// Runs one of them in the running worker's session; the reply is `tool_output`.
+/// Runs one of them in the session; the reply is `tool_output`.
 final class ClientCommandToolCall extends ClientCommand {
   const ClientCommandToolCall({
     required this.session,
@@ -1796,34 +906,16 @@ sealed class CommandResult {
 
   factory CommandResult.fromJson(Map<String, Object?> json) => switch (json['kind']) {
         'done' => CommandResultDone.fromJson(json),
-        'app_opened' => CommandResultAppOpened.fromJson(json),
         'note' => CommandResultNote.fromJson(json),
         'session' => CommandResultSession.fromJson(json),
         'sessions' => CommandResultSessions.fromJson(json),
-        'slot_granted' => CommandResultSlotGranted.fromJson(json),
-        'approval' => CommandResultApproval.fromJson(json),
-        'worker_go_on' => CommandResultWorkerGoOn.fromJson(json),
         'tools' => CommandResultTools.fromJson(json),
         'tool_output' => CommandResultToolOutput.fromJson(json),
-        'harnesses' => CommandResultHarnesses.fromJson(json),
         'models' => CommandResultModels.fromJson(json),
-        'changes' => CommandResultChanges.fromJson(json),
-        'merged' => CommandResultMerged.fromJson(json),
-        'comments' => CommandResultComments.fromJson(json),
         'history' => CommandResultHistory.fromJson(json),
-        'project' => CommandResultProject.fromJson(json),
         'mcp_servers' => CommandResultMcpServers.fromJson(json),
-        'window' => CommandResultWindow.fromJson(json),
         'terminal' => CommandResultTerminal.fromJson(json),
         'desk' => CommandResultDesk.fromJson(json),
-        'apps' => CommandResultApps.fromJson(json),
-        'project_opened' => CommandResultProjectOpened.fromJson(json),
-        'open_projects' => CommandResultOpenProjects.fromJson(json),
-        'library' => CommandResultLibrary.fromJson(json),
-        'library_installed' => CommandResultLibraryInstalled.fromJson(json),
-        'library_updated' => CommandResultLibraryUpdated.fromJson(json),
-        'library_publish_plan' => CommandResultLibraryPublishPlan.fromJson(json),
-        'library_published' => CommandResultLibraryPublished.fromJson(json),
         'config_reloaded' => CommandResultConfigReloaded.fromJson(json),
         _ => CommandResultUnknown(json),
       };
@@ -1842,25 +934,7 @@ final class CommandResultDone extends CommandResult {
       };
 }
 
-/// `app.open`.
-final class CommandResultAppOpened extends CommandResult {
-  const CommandResultAppOpened({
-    required this.opened,
-  });
-
-  final AppOpened opened;
-
-  factory CommandResultAppOpened.fromJson(Map<String, Object?> json) => CommandResultAppOpened(
-        opened: AppOpened.fromJson(json['opened'] as Map<String, Object?>),
-      );
-
-  Map<String, Object?> toJson() => {
-        'kind': 'app_opened',
-        'opened': opened.toJson(),
-      };
-}
-
-/// Done, with what the user should know (`app.allow`, `app.promote`).
+/// Done, with what the user should know (`site.set`).
 final class CommandResultNote extends CommandResult {
   const CommandResultNote({
     required this.text,
@@ -1912,70 +986,6 @@ final class CommandResultSessions extends CommandResult {
       };
 }
 
-final class CommandResultSlotGranted extends CommandResult {
-  const CommandResultSlotGranted({
-    required this.grant,
-  });
-
-  final int grant;
-
-  factory CommandResultSlotGranted.fromJson(Map<String, Object?> json) => CommandResultSlotGranted(
-        grant: (json['grant'] as num).toInt(),
-      );
-
-  Map<String, Object?> toJson() => {
-        'kind': 'slot_granted',
-        'grant': grant,
-      };
-}
-
-final class CommandResultApproval extends CommandResult {
-  const CommandResultApproval({
-    required this.approved,
-    this.reason,
-  });
-
-  final bool approved;
-
-  /// The orchestrator decided, not the user: why (a worker's approval). It isn't remembered.
-  final String? reason;
-
-  factory CommandResultApproval.fromJson(Map<String, Object?> json) => CommandResultApproval(
-        approved: json['approved'] as bool,
-        reason: json['reason'] == null ? null : json['reason'] as String,
-      );
-
-  Map<String, Object?> toJson() => {
-        'kind': 'approval',
-        'approved': approved,
-        if (reason != null) 'reason': reason,
-      };
-}
-
-/// Go on after the turn limit, with the orchestrator's `message`; `compact`: compact the
-/// session first.
-final class CommandResultWorkerGoOn extends CommandResult {
-  const CommandResultWorkerGoOn({
-    required this.message,
-    this.compact = false,
-  });
-
-  final String message;
-
-  final bool compact;
-
-  factory CommandResultWorkerGoOn.fromJson(Map<String, Object?> json) => CommandResultWorkerGoOn(
-        message: json['message'] as String,
-        compact: json['compact'] == null ? false : json['compact'] as bool,
-      );
-
-  Map<String, Object?> toJson() => {
-        'kind': 'worker_go_on',
-        'message': message,
-        'compact': compact,
-      };
-}
-
 final class CommandResultTools extends CommandResult {
   const CommandResultTools({
     required this.tools,
@@ -2021,28 +1031,6 @@ final class CommandResultToolOutput extends CommandResult {
       };
 }
 
-final class CommandResultHarnesses extends CommandResult {
-  const CommandResultHarnesses({
-    required this.project,
-    required this.harnesses,
-  });
-
-  final String project;
-
-  final List<HarnessSwitch> harnesses;
-
-  factory CommandResultHarnesses.fromJson(Map<String, Object?> json) => CommandResultHarnesses(
-        project: json['project'] as String,
-        harnesses: (json['harnesses'] as List).map((e) => HarnessSwitch.fromJson(e as Map<String, Object?>)).toList(),
-      );
-
-  Map<String, Object?> toJson() => {
-        'kind': 'harnesses',
-        'project': project,
-        'harnesses': harnesses.map((e) => e.toJson()).toList(),
-      };
-}
-
 /// `model.list`: what the provider lists, and the model sessions use unless set.
 final class CommandResultModels extends CommandResult {
   const CommandResultModels({
@@ -2063,58 +1051,6 @@ final class CommandResultModels extends CommandResult {
         'kind': 'models',
         'default_model': defaultModel,
         'models': models.map((e) => e.toJson()).toList(),
-      };
-}
-
-final class CommandResultChanges extends CommandResult {
-  const CommandResultChanges({
-    required this.changes,
-  });
-
-  final ProjectDiff changes;
-
-  factory CommandResultChanges.fromJson(Map<String, Object?> json) => CommandResultChanges(
-        changes: ProjectDiff.fromJson(json['changes'] as Map<String, Object?>),
-      );
-
-  Map<String, Object?> toJson() => {
-        'kind': 'changes',
-        'changes': changes.toJson(),
-      };
-}
-
-final class CommandResultMerged extends CommandResult {
-  const CommandResultMerged({
-    required this.commit,
-  });
-
-  final String commit;
-
-  factory CommandResultMerged.fromJson(Map<String, Object?> json) => CommandResultMerged(
-        commit: json['commit'] as String,
-      );
-
-  Map<String, Object?> toJson() => {
-        'kind': 'merged',
-        'commit': commit,
-      };
-}
-
-/// `ticket.comment`: the comment lines on the ticket page, as written.
-final class CommandResultComments extends CommandResult {
-  const CommandResultComments({
-    required this.lines,
-  });
-
-  final List<String> lines;
-
-  factory CommandResultComments.fromJson(Map<String, Object?> json) => CommandResultComments(
-        lines: (json['lines'] as List).map((e) => e as String).toList(),
-      );
-
-  Map<String, Object?> toJson() => {
-        'kind': 'comments',
-        'lines': lines,
       };
 }
 
@@ -2141,23 +1077,6 @@ final class CommandResultHistory extends CommandResult {
       };
 }
 
-final class CommandResultProject extends CommandResult {
-  const CommandResultProject({
-    required this.overview,
-  });
-
-  final ProjectOverview overview;
-
-  factory CommandResultProject.fromJson(Map<String, Object?> json) => CommandResultProject(
-        overview: ProjectOverview.fromJson(json['overview'] as Map<String, Object?>),
-      );
-
-  Map<String, Object?> toJson() => {
-        'kind': 'project',
-        'overview': overview.toJson(),
-      };
-}
-
 final class CommandResultMcpServers extends CommandResult {
   const CommandResultMcpServers({
     required this.servers,
@@ -2172,29 +1091,6 @@ final class CommandResultMcpServers extends CommandResult {
   Map<String, Object?> toJson() => {
         'kind': 'mcp_servers',
         'servers': servers.map((e) => e.toJson()).toList(),
-      };
-}
-
-/// `window.hello`: the window's id and the terminal its TUI runs in.
-final class CommandResultWindow extends CommandResult {
-  const CommandResultWindow({
-    required this.window,
-    required this.terminal,
-  });
-
-  final String window;
-
-  final String terminal;
-
-  factory CommandResultWindow.fromJson(Map<String, Object?> json) => CommandResultWindow(
-        window: json['window'] as String,
-        terminal: json['terminal'] as String,
-      );
-
-  Map<String, Object?> toJson() => {
-        'kind': 'window',
-        'window': window,
-        'terminal': terminal,
       };
 }
 
@@ -2236,187 +1132,6 @@ final class CommandResultDesk extends CommandResult {
   Map<String, Object?> toJson() => {
         'kind': 'desk',
         'desk': desk.toJson(),
-      };
-}
-
-/// `apps.list`.
-final class CommandResultApps extends CommandResult {
-  const CommandResultApps({
-    required this.list,
-  });
-
-  final AppList list;
-
-  factory CommandResultApps.fromJson(Map<String, Object?> json) => CommandResultApps(
-        list: AppList.fromJson(json['list'] as Map<String, Object?>),
-      );
-
-  Map<String, Object?> toJson() => {
-        'kind': 'apps',
-        'list': list.toJson(),
-      };
-}
-
-/// `project.open`: its name, and whether this was the first open (watch started, `on_open`
-/// running).
-final class CommandResultProjectOpened extends CommandResult {
-  const CommandResultProjectOpened({
-    required this.project,
-    required this.first,
-  });
-
-  final String project;
-
-  final bool first;
-
-  factory CommandResultProjectOpened.fromJson(Map<String, Object?> json) => CommandResultProjectOpened(
-        project: json['project'] as String,
-        first: json['first'] as bool,
-      );
-
-  Map<String, Object?> toJson() => {
-        'kind': 'project_opened',
-        'project': project,
-        'first': first,
-      };
-}
-
-/// `projects.open`.
-final class CommandResultOpenProjects extends CommandResult {
-  const CommandResultOpenProjects({
-    required this.projects,
-  });
-
-  final List<OpenProject> projects;
-
-  factory CommandResultOpenProjects.fromJson(Map<String, Object?> json) => CommandResultOpenProjects(
-        projects: (json['projects'] as List).map((e) => OpenProject.fromJson(e as Map<String, Object?>)).toList(),
-      );
-
-  Map<String, Object?> toJson() => {
-        'kind': 'open_projects',
-        'projects': projects.map((e) => e.toJson()).toList(),
-      };
-}
-
-/// `library.list`.
-final class CommandResultLibrary extends CommandResult {
-  const CommandResultLibrary({
-    required this.sites,
-  });
-
-  final List<LibrarySiteInfo> sites;
-
-  factory CommandResultLibrary.fromJson(Map<String, Object?> json) => CommandResultLibrary(
-        sites: (json['sites'] as List).map((e) => LibrarySiteInfo.fromJson(e as Map<String, Object?>)).toList(),
-      );
-
-  Map<String, Object?> toJson() => {
-        'kind': 'library',
-        'sites': sites.map((e) => e.toJson()).toList(),
-      };
-}
-
-/// `library.install`: the site as installed, from which library site and commit (12 digits),
-/// how many files; `has_ui`: build it with its `ui-build` action.
-final class CommandResultLibraryInstalled extends CommandResult {
-  const CommandResultLibraryInstalled({
-    required this.site,
-    required this.from,
-    required this.commit,
-    required this.files,
-    required this.hasUi,
-  });
-
-  final String site;
-
-  final String from;
-
-  final String commit;
-
-  final int files;
-
-  final bool hasUi;
-
-  factory CommandResultLibraryInstalled.fromJson(Map<String, Object?> json) => CommandResultLibraryInstalled(
-        site: json['site'] as String,
-        from: json['from'] as String,
-        commit: json['commit'] as String,
-        files: (json['files'] as num).toInt(),
-        hasUi: json['has_ui'] as bool,
-      );
-
-  Map<String, Object?> toJson() => {
-        'kind': 'library_installed',
-        'site': site,
-        'from': from,
-        'commit': commit,
-        'files': files,
-        'has_ui': hasUi,
-      };
-}
-
-/// `library.update`: the files that changed (or would, for a dry run).
-final class CommandResultLibraryUpdated extends CommandResult {
-  const CommandResultLibraryUpdated({
-    required this.changes,
-  });
-
-  final List<LibraryChange> changes;
-
-  factory CommandResultLibraryUpdated.fromJson(Map<String, Object?> json) => CommandResultLibraryUpdated(
-        changes: (json['changes'] as List).map((e) => LibraryChange.fromJson(e as Map<String, Object?>)).toList(),
-      );
-
-  Map<String, Object?> toJson() => {
-        'kind': 'library_updated',
-        'changes': changes.map((e) => e.toJson()).toList(),
-      };
-}
-
-/// `library.publish` without `approved`: what publishing would do.
-final class CommandResultLibraryPublishPlan extends CommandResult {
-  const CommandResultLibraryPublishPlan({
-    required this.plan,
-  });
-
-  final LibraryPublishPlan plan;
-
-  factory CommandResultLibraryPublishPlan.fromJson(Map<String, Object?> json) => CommandResultLibraryPublishPlan(
-        plan: LibraryPublishPlan.fromJson(json['plan'] as Map<String, Object?>),
-      );
-
-  Map<String, Object?> toJson() => {
-        'kind': 'library_publish_plan',
-        'plan': plan.toJson(),
-      };
-}
-
-/// `library.publish` with `approved`: the library site and its new commit (12 digits).
-final class CommandResultLibraryPublished extends CommandResult {
-  const CommandResultLibraryPublished({
-    required this.site,
-    required this.name,
-    required this.commit,
-  });
-
-  final String site;
-
-  final String name;
-
-  final String commit;
-
-  factory CommandResultLibraryPublished.fromJson(Map<String, Object?> json) => CommandResultLibraryPublished(
-        site: json['site'] as String,
-        name: json['name'] as String,
-        commit: json['commit'] as String,
-      );
-
-  Map<String, Object?> toJson() => {
-        'kind': 'library_published',
-        'site': site,
-        'name': name,
-        'commit': commit,
       };
 }
 
@@ -2496,7 +1211,7 @@ class DeskEntry {
     this.unseen = false,
   });
 
-  /// `app:cad@game`, `app:calendar`, `page:site://x`, `terminal:<id>`, `changes:<project>`, `live`.
+  /// `page:site://x`, `terminal:<id>`, `changes:<project>`, `live`.
   final String id;
 
   final DeskTab tab;
@@ -2522,7 +1237,6 @@ sealed class DeskTab {
   const DeskTab();
 
   factory DeskTab.fromJson(Map<String, Object?> json) => switch (json['kind']) {
-        'app' => DeskTabApp.fromJson(json),
         'page' => DeskTabPage.fromJson(json),
         'terminal' => DeskTabTerminal.fromJson(json),
         'changes' => DeskTabChanges.fromJson(json),
@@ -2531,29 +1245,6 @@ sealed class DeskTab {
       };
 
   Map<String, Object?> toJson();
-}
-
-/// An app: on a project (by name), or on Home (`None`).
-final class DeskTabApp extends DeskTab {
-  const DeskTabApp({
-    required this.site,
-    this.project,
-  });
-
-  final String site;
-
-  final String? project;
-
-  factory DeskTabApp.fromJson(Map<String, Object?> json) => DeskTabApp(
-        site: json['site'] as String,
-        project: json['project'] == null ? null : json['project'] as String,
-      );
-
-  Map<String, Object?> toJson() => {
-        'kind': 'app',
-        'site': site,
-        if (project != null) 'project': project,
-      };
 }
 
 /// A page (`site://...`).
@@ -2592,7 +1283,7 @@ final class DeskTabTerminal extends DeskTab {
       };
 }
 
-/// A project's changes (its ticket branches, its diff).
+/// A project's changes (its diff).
 final class DeskTabChanges extends DeskTab {
   const DeskTabChanges({
     required this.project,
@@ -2610,7 +1301,7 @@ final class DeskTabChanges extends DeskTab {
       };
 }
 
-/// The workspace's live view of its application (wayai's viewer, proxied at `<workspace>/view`).
+/// The live view of the user's application (wayai's viewer, proxied at `/view`).
 /// It names no site or project; one per desk (id `live`). Wire form: `{"kind":"live_view"}`.
 final class DeskTabLiveView extends DeskTab {
   const DeskTabLiveView();
@@ -2629,212 +1320,6 @@ final class DeskTabUnknown extends DeskTab {
   final Map<String, Object?> raw;
 
   Map<String, Object?> toJson() => raw;
-}
-
-/// A review comment on a changed line, appended to the ticket page as
-/// `- file:line — message`.
-class DiffComment {
-  const DiffComment({
-    required this.file,
-    required this.start,
-    required this.end,
-    required this.message,
-    this.quote,
-  });
-
-  final String file;
-
-  /// The first and last line the comment is about, in the new file (`start == end` for one
-  /// line; a removed line anchors where it sits in the new file).
-  final int start;
-
-  final int end;
-
-  final String message;
-
-  /// The commented line's text; written into the comment when it fits one line.
-  final String? quote;
-
-  factory DiffComment.fromJson(Map<String, Object?> json) => DiffComment(
-        file: json['file'] as String,
-        start: (json['start'] as num).toInt(),
-        end: (json['end'] as num).toInt(),
-        message: json['message'] as String,
-        quote: json['quote'] == null ? null : json['quote'] as String,
-      );
-
-  Map<String, Object?> toJson() => {
-        'file': file,
-        'start': start,
-        'end': end,
-        'message': message,
-        if (quote != null) 'quote': quote,
-      };
-}
-
-/// An external harness (or one of its models) for a project: allowed by config.toml, and
-/// turned on or off at runtime.
-class HarnessSwitch {
-  const HarnessSwitch({
-    required this.entry,
-    required this.allowed,
-    required this.on,
-  });
-
-  /// `claude-code`, or `claude-code:<model>`.
-  final String entry;
-
-  final bool allowed;
-
-  final bool on;
-
-  factory HarnessSwitch.fromJson(Map<String, Object?> json) => HarnessSwitch(
-        entry: json['entry'] as String,
-        allowed: json['allowed'] as bool,
-        on: json['on'] as bool,
-      );
-
-  Map<String, Object?> toJson() => {
-        'entry': entry,
-        'allowed': allowed,
-        'on': on,
-      };
-}
-
-/// A workspace site installed from the library.
-class InstalledSiteInfo {
-  const InstalledSiteInfo({
-    required this.site,
-    required this.behind,
-  });
-
-  final String site;
-
-  /// The library changed it since: `library.update` brings it in.
-  final bool behind;
-
-  factory InstalledSiteInfo.fromJson(Map<String, Object?> json) => InstalledSiteInfo(
-        site: json['site'] as String,
-        behind: json['behind'] as bool,
-      );
-
-  Map<String, Object?> toJson() => {
-        'site': site,
-        'behind': behind,
-      };
-}
-
-/// `library.update`: what happened to one file of an installed site.
-class LibraryChange {
-  const LibraryChange({
-    required this.path,
-    required this.outcome,
-    this.review,
-  });
-
-  /// `workspaces/<ws>/sites/<site>/<file>`.
-  final String path;
-
-  /// `added`, `replaced`, `removed`, `merged`, `conflict` or `review`.
-  final String outcome;
-
-  /// For `conflict` and `review`: the library's version (with conflict markers) to look at.
-  final String? review;
-
-  factory LibraryChange.fromJson(Map<String, Object?> json) => LibraryChange(
-        path: json['path'] as String,
-        outcome: json['outcome'] as String,
-        review: json['review'] == null ? null : json['review'] as String,
-      );
-
-  Map<String, Object?> toJson() => {
-        'path': path,
-        'outcome': outcome,
-        if (review != null) 'review': review,
-      };
-}
-
-/// `library.publish`'s plan: what publishing a workspace site to the library would do.
-class LibraryPublishPlan {
-  const LibraryPublishPlan({
-    required this.site,
-    required this.name,
-    required this.newSite,
-    required this.changes,
-    required this.leftOut,
-    required this.text,
-    required this.digest,
-  });
-
-  /// The workspace's site.
-  final String site;
-
-  /// Its name in the library.
-  final String name;
-
-  /// The library has no such site yet.
-  final bool newSite;
-
-  /// The files that differ from the library (`outcome`: `added`, `changed`, `removed`).
-  final List<LibraryChange> changes;
-
-  /// Top-level entries of the site that are not published (works, tickets, pages).
-  final List<String> leftOut;
-
-  /// The whole plan as text, diff included: what to show before asking.
-  final String text;
-
-  /// Pass back as `approved` to publish exactly this.
-  final String digest;
-
-  factory LibraryPublishPlan.fromJson(Map<String, Object?> json) => LibraryPublishPlan(
-        site: json['site'] as String,
-        name: json['name'] as String,
-        newSite: json['new_site'] as bool,
-        changes: (json['changes'] as List).map((e) => LibraryChange.fromJson(e as Map<String, Object?>)).toList(),
-        leftOut: (json['left_out'] as List).map((e) => e as String).toList(),
-        text: json['text'] as String,
-        digest: json['digest'] as String,
-      );
-
-  Map<String, Object?> toJson() => {
-        'site': site,
-        'name': name,
-        'new_site': newSite,
-        'changes': changes.map((e) => e.toJson()).toList(),
-        'left_out': leftOut,
-        'text': text,
-        'digest': digest,
-      };
-}
-
-/// `library.list`: one site of the library, and this workspace's copies of it.
-class LibrarySiteInfo {
-  const LibrarySiteInfo({
-    required this.site,
-    required this.commit,
-    required this.installed,
-  });
-
-  final String site;
-
-  /// The last library commit that changed it (12 digits).
-  final String commit;
-
-  /// This workspace's sites installed from it.
-  final List<InstalledSiteInfo> installed;
-
-  factory LibrarySiteInfo.fromJson(Map<String, Object?> json) => LibrarySiteInfo(
-        site: json['site'] as String,
-        commit: json['commit'] as String,
-        installed: (json['installed'] as List).map((e) => InstalledSiteInfo.fromJson(e as Map<String, Object?>)).toList(),
-      );
-
-  Map<String, Object?> toJson() => {
-        'site': site,
-        'commit': commit,
-        'installed': installed.map((e) => e.toJson()).toList(),
-      };
 }
 
 /// An MCP server from `config.toml` (`[mcp.<name>]`), whose tools agents may list.
@@ -2889,10 +1374,7 @@ sealed class MessageSource {
 
   factory MessageSource.fromJson(Map<String, Object?> json) => switch (json['kind']) {
         'tui' => MessageSourceTui.fromJson(json),
-        'app' => MessageSourceApp.fromJson(json),
-        'worker' => MessageSourceWorker.fromJson(json),
         'server' => MessageSourceServer.fromJson(json),
-        'reminder' => MessageSourceReminder.fromJson(json),
         'watch' => MessageSourceWatch.fromJson(json),
         _ => MessageSourceUnknown(json),
       };
@@ -2911,42 +1393,6 @@ final class MessageSourceTui extends MessageSource {
       };
 }
 
-/// A micro app; `site` is the app's site.
-final class MessageSourceApp extends MessageSource {
-  const MessageSourceApp({
-    required this.site,
-  });
-
-  final String site;
-
-  factory MessageSourceApp.fromJson(Map<String, Object?> json) => MessageSourceApp(
-        site: json['site'] as String,
-      );
-
-  Map<String, Object?> toJson() => {
-        'kind': 'app',
-        'site': site,
-      };
-}
-
-/// A worker finished; sent to its orchestrator.
-final class MessageSourceWorker extends MessageSource {
-  const MessageSourceWorker({
-    required this.session,
-  });
-
-  final String session;
-
-  factory MessageSourceWorker.fromJson(Map<String, Object?> json) => MessageSourceWorker(
-        session: json['session'] as String,
-      );
-
-  Map<String, Object?> toJson() => {
-        'kind': 'worker',
-        'session': session,
-      };
-}
-
 final class MessageSourceServer extends MessageSource {
   const MessageSourceServer();
 
@@ -2955,24 +1401,6 @@ final class MessageSourceServer extends MessageSource {
 
   Map<String, Object?> toJson() => {
         'kind': 'server',
-      };
-}
-
-/// A reminder page came due.
-final class MessageSourceReminder extends MessageSource {
-  const MessageSourceReminder({
-    required this.url,
-  });
-
-  final String url;
-
-  factory MessageSourceReminder.fromJson(Map<String, Object?> json) => MessageSourceReminder(
-        url: json['url'] as String,
-      );
-
-  Map<String, Object?> toJson() => {
-        'kind': 'reminder',
-        'url': url,
       };
 }
 
@@ -3031,29 +1459,6 @@ class ModelInfo {
       };
 }
 
-/// A project open in the workspace (`projects.open`).
-class OpenProject {
-  const OpenProject({
-    required this.name,
-    required this.clients,
-  });
-
-  final String name;
-
-  /// The clients (TUI, desktop, app sockets) that have it open.
-  final int clients;
-
-  factory OpenProject.fromJson(Map<String, Object?> json) => OpenProject(
-        name: json['name'] as String,
-        clients: (json['clients'] as num).toInt(),
-      );
-
-  Map<String, Object?> toJson() => {
-        'name': name,
-        'clients': clients,
-      };
-}
-
 enum PageChangeKind {
   created('created'),
   modified('modified'),
@@ -3066,28 +1471,6 @@ enum PageChangeKind {
       values.firstWhere((v) => v.wire == json, orElse: () => throw FormatException('unknown PageChangeKind: $json'));
 
   String toJson() => wire;
-}
-
-/// The start of a page.
-class PageExcerpt {
-  const PageExcerpt({
-    required this.url,
-    required this.excerpt,
-  });
-
-  final String url;
-
-  final String excerpt;
-
-  factory PageExcerpt.fromJson(Map<String, Object?> json) => PageExcerpt(
-        url: json['url'] as String,
-        excerpt: json['excerpt'] as String,
-      );
-
-  Map<String, Object?> toJson() => {
-        'url': url,
-        'excerpt': excerpt,
-      };
 }
 
 /// `GET /api/pages/{site}/{path}`. The `ETag` header carries `hash`.
@@ -3148,7 +1531,6 @@ class ProjectDiff {
     this.branch,
     required this.files,
     required this.diff,
-    this.ticket,
   });
 
   final String path;
@@ -3157,19 +1539,14 @@ class ProjectDiff {
 
   final List<ChangedFile> files;
 
-  /// Unified diff of the working tree against HEAD (a ticket's worktree: against where its
-  /// branch left the project's branch).
+  /// Unified diff of the working tree against HEAD.
   final String diff;
-
-  /// Set for a ticket's worktree: what merging it would do.
-  final TicketReview? ticket;
 
   factory ProjectDiff.fromJson(Map<String, Object?> json) => ProjectDiff(
         path: json['path'] as String,
         branch: json['branch'] == null ? null : json['branch'] as String,
         files: (json['files'] as List).map((e) => ChangedFile.fromJson(e as Map<String, Object?>)).toList(),
         diff: json['diff'] as String,
-        ticket: json['ticket'] == null ? null : TicketReview.fromJson(json['ticket'] as Map<String, Object?>),
       );
 
   Map<String, Object?> toJson() => {
@@ -3177,226 +1554,6 @@ class ProjectDiff {
         if (branch != null) 'branch': branch,
         'files': files.map((e) => e.toJson()).toList(),
         'diff': diff,
-        if (ticket != null) 'ticket': ticket?.toJson(),
-      };
-}
-
-/// `GET <app>/api/project`: the project an app was opened on (the sdk's `project()`).
-class ProjectInfo {
-  const ProjectInfo({
-    required this.name,
-    this.page,
-    required this.root,
-    this.branch,
-    this.sites = const [],
-    this.tags = const [],
-  });
-
-  /// Its name in the workspace (and in the app's URL).
-  final String name;
-
-  /// Its project page (`site://projects/<name>`), when it has one.
-  final String? page;
-
-  /// The absolute folder.
-  final String root;
-
-  /// The branch checked out, for a git repository.
-  final String? branch;
-
-  /// The sites operating on it (the project page's `sites:`).
-  final List<String> sites;
-
-  /// `[projects."<path>"] tags`.
-  final List<String> tags;
-
-  factory ProjectInfo.fromJson(Map<String, Object?> json) => ProjectInfo(
-        name: json['name'] as String,
-        page: json['page'] == null ? null : json['page'] as String,
-        root: json['root'] as String,
-        branch: json['branch'] == null ? null : json['branch'] as String,
-        sites: json['sites'] == null ? const [] : (json['sites'] as List).map((e) => e as String).toList(),
-        tags: json['tags'] == null ? const [] : (json['tags'] as List).map((e) => e as String).toList(),
-      );
-
-  Map<String, Object?> toJson() => {
-        'name': name,
-        if (page != null) 'page': page,
-        'root': root,
-        if (branch != null) 'branch': branch,
-        if (sites.isNotEmpty) 'sites': sites,
-        if (tags.isNotEmpty) 'tags': tags,
-      };
-}
-
-/// `project.overview`: what is going on in one project.
-class ProjectOverview {
-  const ProjectOverview({
-    required this.name,
-    this.page,
-    required this.path,
-    required this.folder,
-    this.branch,
-    required this.uncommitted,
-    this.sites = const [],
-    required this.branches,
-    this.memory,
-    required this.harnesses,
-    required this.toolRules,
-  });
-
-  final String name;
-
-  /// Its project page (`site://projects/<name>`), when it has one.
-  final String? page;
-
-  /// `~/Projects/<name>`.
-  final String path;
-
-  /// The absolute folder, as sessions' `project` holds it.
-  final String folder;
-
-  /// Checked-out branch; `None` outside git or with a detached HEAD.
-  final String? branch;
-
-  /// Files changed and not committed (git).
-  final int uncommitted;
-
-  /// The sites operating on it, each with its app tile.
-  final List<ProjectSiteSummary> sites;
-
-  /// Tickets whose worktree of it is still there: their branch waits to be merged or discarded.
-  final List<TicketBranchSummary> branches;
-
-  /// Its memory page (`site://memory/projects/<name>`), when there is one.
-  final PageExcerpt? memory;
-
-  /// External harnesses config.toml allows here, and whether each is on.
-  final List<HarnessSwitch> harnesses;
-
-  /// Tool rules remembered for it (Claude Code's `always`).
-  final int toolRules;
-
-  factory ProjectOverview.fromJson(Map<String, Object?> json) => ProjectOverview(
-        name: json['name'] as String,
-        page: json['page'] == null ? null : json['page'] as String,
-        path: json['path'] as String,
-        folder: json['folder'] as String,
-        branch: json['branch'] == null ? null : json['branch'] as String,
-        uncommitted: (json['uncommitted'] as num).toInt(),
-        sites: json['sites'] == null ? const [] : (json['sites'] as List).map((e) => ProjectSiteSummary.fromJson(e as Map<String, Object?>)).toList(),
-        branches: (json['branches'] as List).map((e) => TicketBranchSummary.fromJson(e as Map<String, Object?>)).toList(),
-        memory: json['memory'] == null ? null : PageExcerpt.fromJson(json['memory'] as Map<String, Object?>),
-        harnesses: (json['harnesses'] as List).map((e) => HarnessSwitch.fromJson(e as Map<String, Object?>)).toList(),
-        toolRules: (json['tool_rules'] as num).toInt(),
-      );
-
-  Map<String, Object?> toJson() => {
-        'name': name,
-        if (page != null) 'page': page,
-        'path': path,
-        'folder': folder,
-        if (branch != null) 'branch': branch,
-        'uncommitted': uncommitted,
-        if (sites.isNotEmpty) 'sites': sites.map((e) => e.toJson()).toList(),
-        'branches': branches.map((e) => e.toJson()).toList(),
-        if (memory != null) 'memory': memory?.toJson(),
-        'harnesses': harnesses.map((e) => e.toJson()).toList(),
-        'tool_rules': toolRules,
-      };
-}
-
-/// One site operating on a project, as the project hub shows it.
-class ProjectSiteSummary {
-  const ProjectSiteSummary({
-    required this.site,
-    required this.title,
-    this.app,
-  });
-
-  final String site;
-
-  final String title;
-
-  /// Its tile, when it has one.
-  final AppInfo? app;
-
-  factory ProjectSiteSummary.fromJson(Map<String, Object?> json) => ProjectSiteSummary(
-        site: json['site'] as String,
-        title: json['title'] as String,
-        app: json['app'] == null ? null : AppInfo.fromJson(json['app'] as Map<String, Object?>),
-      );
-
-  Map<String, Object?> toJson() => {
-        'site': site,
-        'title': title,
-        if (app != null) 'app': app?.toJson(),
-      };
-}
-
-/// `GET /api/projects`: the folders in the projects directory, most recently changed first.
-class ProjectSummary {
-  const ProjectSummary({
-    required this.name,
-    required this.path,
-    required this.modified,
-    this.folder,
-    this.sessions = 0,
-    this.running = 0,
-    this.waiting = 0,
-    this.lastUsed,
-    this.page,
-  });
-
-  /// Folder name; what `project.set` and `session.create` accept.
-  final String name;
-
-  /// `~/Projects/<name>`.
-  final String path;
-
-  /// RFC 3339.
-  final String modified;
-
-  /// The absolute folder, as sessions' `project` holds it.
-  final String? folder;
-
-  /// Chats and orchestrators in it (workers count with their orchestrator).
-  final int sessions;
-
-  /// Of those, the ones busy now (or with a worker busy).
-  final int running;
-
-  /// Approvals waiting in its sessions.
-  final int waiting;
-
-  /// When one of its sessions last did something (RFC 3339).
-  final String? lastUsed;
-
-  /// Its project page (`site://projects/<name>`), when it has one.
-  final String? page;
-
-  factory ProjectSummary.fromJson(Map<String, Object?> json) => ProjectSummary(
-        name: json['name'] as String,
-        path: json['path'] as String,
-        modified: json['modified'] as String,
-        folder: json['folder'] == null ? null : json['folder'] as String,
-        sessions: json['sessions'] == null ? 0 : (json['sessions'] as num).toInt(),
-        running: json['running'] == null ? 0 : (json['running'] as num).toInt(),
-        waiting: json['waiting'] == null ? 0 : (json['waiting'] as num).toInt(),
-        lastUsed: json['last_used'] == null ? null : json['last_used'] as String,
-        page: json['page'] == null ? null : json['page'] as String,
-      );
-
-  Map<String, Object?> toJson() => {
-        'name': name,
-        'path': path,
-        'modified': modified,
-        if (folder != null) 'folder': folder,
-        'sessions': sessions,
-        'running': running,
-        'waiting': waiting,
-        if (lastUsed != null) 'last_used': lastUsed,
-        if (page != null) 'page': page,
       };
 }
 
@@ -3459,59 +1616,6 @@ enum Role {
   String toJson() => wire;
 }
 
-/// `POST /api/actions/{site}/{recipe}`: run one public recipe of a site's justfile.
-class RunActionRequest {
-  const RunActionRequest({
-    this.args = const [],
-    this.session,
-  });
-
-  /// Recipe arguments, in order.
-  final List<String> args;
-
-  /// The session whose clients are asked when the recipe needs approval (an app's URL carries
-  /// `session=<id>`). Without one, a recipe that needs approval is not run.
-  final String? session;
-
-  factory RunActionRequest.fromJson(Map<String, Object?> json) => RunActionRequest(
-        args: json['args'] == null ? const [] : (json['args'] as List).map((e) => e as String).toList(),
-        session: json['session'] == null ? null : json['session'] as String,
-      );
-
-  Map<String, Object?> toJson() => {
-        if (args.isNotEmpty) 'args': args,
-        if (session != null) 'session': session,
-      };
-}
-
-/// The answer to `POST /api/actions/{site}/{recipe}`.
-class RunActionResponse {
-  const RunActionResponse({
-    required this.status,
-    this.exitCode,
-    required this.output,
-  });
-
-  /// `ok`, `failed`, `timed out` or `killed`.
-  final String status;
-
-  final int? exitCode;
-
-  final String output;
-
-  factory RunActionResponse.fromJson(Map<String, Object?> json) => RunActionResponse(
-        status: json['status'] as String,
-        exitCode: json['exit_code'] == null ? null : (json['exit_code'] as num).toInt(),
-        output: json['output'] as String,
-      );
-
-  Map<String, Object?> toJson() => {
-        'status': status,
-        if (exitCode != null) 'exit_code': exitCode,
-        'output': output,
-      };
-}
-
 /// `GET /api/search?q=`
 class SearchHit {
   const SearchHit({
@@ -3539,49 +1643,6 @@ class SearchHit {
       };
 }
 
-/// What the user points at in an app (ticket 0175): the hunk, the part, the ticket. It reaches the
-/// chat as a chip and the next message as context.
-class Selection {
-  const Selection({
-    required this.app,
-    required this.label,
-    this.text,
-    this.url,
-    this.data,
-  });
-
-  /// The app (its site) it was selected in.
-  final String app;
-
-  /// What the chip says: "ticket 0042", "hunk 3 of src/main.rs".
-  final String label;
-
-  /// The selected text, if any.
-  final String? text;
-
-  /// A page or file it is about (`site://...`, a path in the project).
-  final String? url;
-
-  /// Anything else the app wants the agent to have (small JSON).
-  final Object? data;
-
-  factory Selection.fromJson(Map<String, Object?> json) => Selection(
-        app: json['app'] as String,
-        label: json['label'] as String,
-        text: json['text'] == null ? null : json['text'] as String,
-        url: json['url'] == null ? null : json['url'] as String,
-        data: json['data'],
-      );
-
-  Map<String, Object?> toJson() => {
-        'app': app,
-        'label': label,
-        if (text != null) 'text': text,
-        if (url != null) 'url': url,
-        if (data != null) 'data': data,
-      };
-}
-
 /// `GET /api/info`: what this server is (for the app's server list).
 class ServerInfo {
   const ServerInfo({
@@ -3590,8 +1651,6 @@ class ServerInfo {
     required this.model,
     required this.slots,
     this.projectsDir,
-    this.workspace,
-    this.workspaceColor,
     this.viewer,
   });
 
@@ -3610,16 +1669,8 @@ class ServerInfo {
   /// Where projects live (`[projects] dir`), `~` for the home folder. Older servers leave it out.
   final String? projectsDir;
 
-  /// The workspace this server serves (`default` on a home from before workspaces). Older
-  /// servers leave it out.
-  final String? workspace;
-
-  /// The workspace's colour, `#rrggbb` (its `[desktop] color`, else from its name). Older
-  /// servers leave it out.
-  final String? workspaceColor;
-
-  /// Where this workspace serves wayai's live view, as a path after the workspace's address
-  /// (`/view`); absent when no viewer is configured. Needs the workspace's token, like the rest.
+  /// Where this server serves wayai's live view, as a path after its address (`/view`);
+  /// absent when no viewer is configured. Needs the token, like the rest.
   /// Older servers leave it out.
   final String? viewer;
 
@@ -3629,8 +1680,6 @@ class ServerInfo {
         model: json['model'] as String,
         slots: (json['slots'] as num).toInt(),
         projectsDir: json['projects_dir'] == null ? null : json['projects_dir'] as String,
-        workspace: json['workspace'] == null ? null : json['workspace'] as String,
-        workspaceColor: json['workspace_color'] == null ? null : json['workspace_color'] as String,
         viewer: json['viewer'] == null ? null : json['viewer'] as String,
       );
 
@@ -3640,8 +1689,6 @@ class ServerInfo {
         'model': model,
         'slots': slots,
         if (projectsDir != null) 'projects_dir': projectsDir,
-        if (workspace != null) 'workspace': workspace,
-        if (workspaceColor != null) 'workspace_color': workspaceColor,
         if (viewer != null) 'viewer': viewer,
       };
 }
@@ -3670,16 +1717,9 @@ sealed class ServerMessage {
         'approval.resolved' => ServerMessageApprovalResolved.fromJson(json),
         'session.updated' => ServerMessageSessionUpdated.fromJson(json),
         'page.changed' => ServerMessagePageChanged.fromJson(json),
-        'worker.status' => ServerMessageWorkerStatus.fromJson(json),
         'terminal.output' => ServerMessageTerminalOutput.fromJson(json),
         'terminal.exited' => ServerMessageTerminalExited.fromJson(json),
-        'window.changed' => ServerMessageWindowChanged.fromJson(json),
-        'selection.changed' => ServerMessageSelectionChanged.fromJson(json),
-        'app.event' => ServerMessageAppEvent.fromJson(json),
         'desk.changed' => ServerMessageDeskChanged.fromJson(json),
-        'project.changed' => ServerMessageProjectChanged.fromJson(json),
-        'on_open.ran' => ServerMessageOnOpenRan.fromJson(json),
-        'reminder.due' => ServerMessageReminderDue.fromJson(json),
         'config.reloaded' => ServerMessageConfigReloaded.fromJson(json),
         'slots' => ServerMessageSlots.fromJson(json),
         _ => ServerMessageUnknown(json),
@@ -4172,45 +2212,12 @@ final class ServerMessagePageChanged extends ServerMessage {
       };
 }
 
-final class ServerMessageWorkerStatus extends ServerMessage {
-  const ServerMessageWorkerStatus({
-    required this.worker,
-    required this.ticket,
-    required this.parent,
-    required this.state,
-  });
-
-  final String worker;
-
-  final String ticket;
-
-  final String parent;
-
-  final WorkerState state;
-
-  factory ServerMessageWorkerStatus.fromJson(Map<String, Object?> json) => ServerMessageWorkerStatus(
-        worker: json['worker'] as String,
-        ticket: json['ticket'] as String,
-        parent: json['parent'] as String,
-        state: WorkerState.fromJson(json['state']),
-      );
-
-  Map<String, Object?> toJson() => {
-        'type': 'worker.status',
-        'worker': worker,
-        'ticket': ticket,
-        'parent': parent,
-        'state': state.toJson(),
-      };
-}
-
 /// A terminal's output (base64 bytes), to the session's clients.
 final class ServerMessageTerminalOutput extends ServerMessage {
   const ServerMessageTerminalOutput({
     required this.session,
     required this.terminal,
     required this.data,
-    this.window,
   });
 
   final String session;
@@ -4219,14 +2226,10 @@ final class ServerMessageTerminalOutput extends ServerMessage {
 
   final String data;
 
-  /// A window's TUI terminal: to that window only.
-  final String? window;
-
   factory ServerMessageTerminalOutput.fromJson(Map<String, Object?> json) => ServerMessageTerminalOutput(
         session: json['session'] as String,
         terminal: json['terminal'] as String,
         data: json['data'] as String,
-        window: json['window'] == null ? null : json['window'] as String,
       );
 
   Map<String, Object?> toJson() => {
@@ -4234,7 +2237,6 @@ final class ServerMessageTerminalOutput extends ServerMessage {
         'session': session,
         'terminal': terminal,
         'data': data,
-        if (window != null) 'window': window,
       };
 }
 
@@ -4243,106 +2245,21 @@ final class ServerMessageTerminalExited extends ServerMessage {
   const ServerMessageTerminalExited({
     required this.session,
     required this.terminal,
-    this.window,
   });
 
   final String session;
 
   final String terminal;
 
-  final String? window;
-
   factory ServerMessageTerminalExited.fromJson(Map<String, Object?> json) => ServerMessageTerminalExited(
         session: json['session'] as String,
         terminal: json['terminal'] as String,
-        window: json['window'] == null ? null : json['window'] as String,
       );
 
   Map<String, Object?> toJson() => {
         'type': 'terminal.exited',
         'session': session,
         'terminal': terminal,
-        if (window != null) 'window': window,
-      };
-}
-
-/// The window's TUI shows another session: the stage shows its desk (to the window only).
-final class ServerMessageWindowChanged extends ServerMessage {
-  const ServerMessageWindowChanged({
-    required this.window,
-    required this.session,
-  });
-
-  final String window;
-
-  final String session;
-
-  factory ServerMessageWindowChanged.fromJson(Map<String, Object?> json) => ServerMessageWindowChanged(
-        window: json['window'] as String,
-        session: json['session'] as String,
-      );
-
-  Map<String, Object?> toJson() => {
-        'type': 'window.changed',
-        'window': window,
-        'session': session,
-      };
-}
-
-/// What the user points at in an app of the session changed (`None`: nothing): the chip.
-final class ServerMessageSelectionChanged extends ServerMessage {
-  const ServerMessageSelectionChanged({
-    required this.session,
-    this.selection,
-  });
-
-  final String session;
-
-  final Selection? selection;
-
-  factory ServerMessageSelectionChanged.fromJson(Map<String, Object?> json) => ServerMessageSelectionChanged(
-        session: json['session'] as String,
-        selection: json['selection'] == null ? null : Selection.fromJson(json['selection'] as Map<String, Object?>),
-      );
-
-  Map<String, Object?> toJson() => {
-        'type': 'selection.changed',
-        'session': session,
-        if (selection != null) 'selection': selection?.toJson(),
-      };
-}
-
-/// Something happened in an app of the session (a gate flipped, approve clicked); the agent
-/// sees it on its next turn.
-final class ServerMessageAppEvent extends ServerMessage {
-  const ServerMessageAppEvent({
-    required this.session,
-    required this.app,
-    required this.kind,
-    this.detail,
-  });
-
-  final String session;
-
-  final String app;
-
-  final String kind;
-
-  final Object? detail;
-
-  factory ServerMessageAppEvent.fromJson(Map<String, Object?> json) => ServerMessageAppEvent(
-        session: json['session'] as String,
-        app: json['app'] as String,
-        kind: json['kind'] as String,
-        detail: json['detail'],
-      );
-
-  Map<String, Object?> toJson() => {
-        'type': 'app.event',
-        'session': session,
-        'app': app,
-        'kind': kind,
-        if (detail != null) 'detail': detail,
       };
 }
 
@@ -4381,110 +2298,6 @@ final class ServerMessageDeskChanged extends ServerMessage {
       };
 }
 
-/// Files changed in an open project (paths relative to it, a settled burst at a time; at most
-/// 200). To the clients that opened it and its apps' sockets.
-final class ServerMessageProjectChanged extends ServerMessage {
-  const ServerMessageProjectChanged({
-    required this.project,
-    required this.paths,
-  });
-
-  final String project;
-
-  final List<String> paths;
-
-  factory ServerMessageProjectChanged.fromJson(Map<String, Object?> json) => ServerMessageProjectChanged(
-        project: json['project'] as String,
-        paths: (json['paths'] as List).map((e) => e as String).toList(),
-      );
-
-  Map<String, Object?> toJson() => {
-        'type': 'project.changed',
-        'project': project,
-        'paths': paths,
-      };
-}
-
-/// An app's `on_open` recipe ran when its project was first opened: `ok`, `failed`,
-/// `timed out`, or `needs approval` (it didn't run).
-final class ServerMessageOnOpenRan extends ServerMessage {
-  const ServerMessageOnOpenRan({
-    required this.project,
-    required this.app,
-    required this.recipe,
-    required this.status,
-    required this.output,
-  });
-
-  final String project;
-
-  final String app;
-
-  final String recipe;
-
-  final String status;
-
-  final String output;
-
-  factory ServerMessageOnOpenRan.fromJson(Map<String, Object?> json) => ServerMessageOnOpenRan(
-        project: json['project'] as String,
-        app: json['app'] as String,
-        recipe: json['recipe'] as String,
-        status: json['status'] as String,
-        output: json['output'] as String,
-      );
-
-  Map<String, Object?> toJson() => {
-        'type': 'on_open.ran',
-        'project': project,
-        'app': app,
-        'recipe': recipe,
-        'status': status,
-        'output': output,
-      };
-}
-
-/// A reminder page (`type: reminder`) came due. Sent once per reminder, to every client.
-final class ServerMessageReminderDue extends ServerMessage {
-  const ServerMessageReminderDue({
-    required this.url,
-    required this.title,
-    required this.due,
-    required this.late,
-    this.session,
-  });
-
-  final String url;
-
-  final String title;
-
-  /// When it was due, local time: `2026-10-19 20:00`.
-  final String due;
-
-  /// Delivered well after it was due (the server was off).
-  final bool late;
-
-  /// The session it was posted to: its own, or a new one. None if that failed.
-  final String? session;
-
-  factory ServerMessageReminderDue.fromJson(Map<String, Object?> json) => ServerMessageReminderDue(
-        url: json['url'] as String,
-        title: json['title'] as String,
-        due: json['due'] as String,
-        late: json['late'] as bool,
-        session: json['session'] == null ? null : json['session'] as String,
-      );
-
-  Map<String, Object?> toJson() => {
-        'type': 'reminder.due',
-        'url': url,
-        'title': title,
-        'due': due,
-        'late': late,
-        if (session != null) 'session': session,
-      };
-}
-
 /// `config.toml` changed and the server read it again. `error`: it doesn't parse, and the
 /// server keeps running with the config it had.
 final class ServerMessageConfigReloaded extends ServerMessage {
@@ -4509,7 +2322,7 @@ final class ServerMessageConfigReloaded extends ServerMessage {
       };
 }
 
-/// Model slot usage, shared by all sessions and workers.
+/// Model slot usage, shared by all sessions.
 final class ServerMessageSlots extends ServerMessage {
   const ServerMessageSlots({
     required this.used,
@@ -4551,9 +2364,7 @@ class SessionInfo {
     required this.agent,
     this.project,
     this.site,
-    this.ticket,
     this.parent,
-    this.worker,
     required this.state,
     required this.lastSeq,
     this.contextTokens = 0,
@@ -4573,15 +2384,8 @@ class SessionInfo {
   /// The site the agent entered (`enter_site`), if any.
   final String? site;
 
-  /// Set for worker sessions.
-  final String? ticket;
-
-  /// The session that spawned this one (orchestrator of a worker).
+  /// The session that spawned this one.
   final String? parent;
-
-  /// A worker's last state: kept after it ends, so a client connecting later still sees
-  /// `done` or `failed`. None for other sessions (and from older servers).
-  final WorkerState? worker;
 
   final TurnState state;
 
@@ -4605,9 +2409,7 @@ class SessionInfo {
         agent: json['agent'] as String,
         project: json['project'] == null ? null : json['project'] as String,
         site: json['site'] == null ? null : json['site'] as String,
-        ticket: json['ticket'] == null ? null : json['ticket'] as String,
         parent: json['parent'] == null ? null : json['parent'] as String,
-        worker: json['worker'] == null ? null : WorkerState.fromJson(json['worker']),
         state: TurnState.fromJson(json['state']),
         lastSeq: (json['last_seq'] as num).toInt(),
         contextTokens: json['context_tokens'] == null ? 0 : (json['context_tokens'] as num).toInt(),
@@ -4621,9 +2423,7 @@ class SessionInfo {
         'agent': agent,
         if (project != null) 'project': project,
         if (site != null) 'site': site,
-        if (ticket != null) 'ticket': ticket,
         if (parent != null) 'parent': parent,
-        if (worker != null) 'worker': worker?.toJson(),
         'state': state.toJson(),
         'last_seq': lastSeq,
         'context_tokens': contextTokens,
@@ -4639,11 +2439,8 @@ class SiteSummary {
     required this.name,
     required this.title,
     required this.hasJustfile,
-    required this.hasUi,
-    this.appBuilt = false,
     this.description,
     this.pages = 0,
-    this.app,
     this.mcp = const [],
   });
 
@@ -4653,20 +2450,11 @@ class SiteSummary {
 
   final bool hasJustfile;
 
-  /// Has a `ui/` folder: an app, built or not.
-  final bool hasUi;
-
-  /// The app is built (`ui/dist/index.html`) and can be opened. Older servers leave it out.
-  final bool appBuilt;
-
   /// One line about the site: its index's `description:`, else its first sentence.
   final String? description;
 
   /// Pages in the site.
   final int pages;
-
-  /// `app:` of its `index.md`: the application (`[applications.<name>]`) it starts.
-  final String? app;
 
   /// `mcp:` of its `index.md`: the MCP servers whose tools the agent has while in the site.
   final List<String> mcp;
@@ -4675,11 +2463,8 @@ class SiteSummary {
         name: json['name'] as String,
         title: json['title'] as String,
         hasJustfile: json['has_justfile'] as bool,
-        hasUi: json['has_ui'] as bool,
-        appBuilt: json['app_built'] == null ? false : json['app_built'] as bool,
         description: json['description'] == null ? null : json['description'] as String,
         pages: json['pages'] == null ? 0 : (json['pages'] as num).toInt(),
-        app: json['app'] == null ? null : json['app'] as String,
         mcp: json['mcp'] == null ? const [] : (json['mcp'] as List).map((e) => e as String).toList(),
       );
 
@@ -4687,106 +2472,9 @@ class SiteSummary {
         'name': name,
         'title': title,
         'has_justfile': hasJustfile,
-        'has_ui': hasUi,
-        'app_built': appBuilt,
         if (description != null) 'description': description,
         'pages': pages,
-        if (app != null) 'app': app,
         if (mcp.isNotEmpty) 'mcp': mcp,
-      };
-}
-
-/// A ticket's branch that is still there.
-class TicketBranchSummary {
-  const TicketBranchSummary({
-    required this.ticket,
-    required this.title,
-    required this.branch,
-    this.status,
-    required this.commits,
-  });
-
-  final String ticket;
-
-  final String title;
-
-  /// `ticket/<id>`.
-  final String branch;
-
-  /// The ticket's `status:`.
-  final String? status;
-
-  /// Commits on it the project's branch doesn't have.
-  final int commits;
-
-  factory TicketBranchSummary.fromJson(Map<String, Object?> json) => TicketBranchSummary(
-        ticket: json['ticket'] as String,
-        title: json['title'] as String,
-        branch: json['branch'] as String,
-        status: json['status'] == null ? null : json['status'] as String,
-        commits: (json['commits'] as num).toInt(),
-      );
-
-  Map<String, Object?> toJson() => {
-        'ticket': ticket,
-        'title': title,
-        'branch': branch,
-        if (status != null) 'status': status,
-        'commits': commits,
-      };
-}
-
-/// A ticket branch against the branch it would be merged into.
-class TicketReview {
-  const TicketReview({
-    required this.ticket,
-    required this.branch,
-    this.target,
-    required this.ahead,
-    this.commits = const [],
-    required this.uncommitted,
-    required this.conflicts,
-  });
-
-  final String ticket;
-
-  /// `ticket/<id>`.
-  final String branch;
-
-  /// The branch checked out in the project; `None` when its HEAD is detached.
-  final String? target;
-
-  /// Commits on the ticket branch that the target doesn't have (counting uncommitted changes
-  /// as one).
-  final int ahead;
-
-  /// Those commits, `<short hash> <subject>`, newest first.
-  final List<String> commits;
-
-  /// The worktree has changes nobody committed (merging commits them first).
-  final bool uncommitted;
-
-  /// Files that would conflict; empty when it merges cleanly.
-  final List<String> conflicts;
-
-  factory TicketReview.fromJson(Map<String, Object?> json) => TicketReview(
-        ticket: json['ticket'] as String,
-        branch: json['branch'] as String,
-        target: json['target'] == null ? null : json['target'] as String,
-        ahead: (json['ahead'] as num).toInt(),
-        commits: json['commits'] == null ? const [] : (json['commits'] as List).map((e) => e as String).toList(),
-        uncommitted: json['uncommitted'] as bool,
-        conflicts: (json['conflicts'] as List).map((e) => e as String).toList(),
-      );
-
-  Map<String, Object?> toJson() => {
-        'ticket': ticket,
-        'branch': branch,
-        if (target != null) 'target': target,
-        'ahead': ahead,
-        if (commits.isNotEmpty) 'commits': commits,
-        'uncommitted': uncommitted,
-        'conflicts': conflicts,
       };
 }
 
@@ -4891,23 +2579,4 @@ class WebSession {
         'value': value,
         'path': path,
       };
-}
-
-enum WorkerState {
-  starting('starting'),
-  running('running'),
-  done('done'),
-  failed('failed'),
-  /// Stopped before finishing, to be resumed later (a usage limit was hit).
-  paused('paused'),
-  /// Reached its turn limit (tokens, or Claude Code's turns) without finishing; waits for its orchestrator to continue or stop it.
-  stuck('stuck');
-
-  const WorkerState(this.wire);
-  final String wire;
-
-  static WorkerState fromJson(Object? json) =>
-      values.firstWhere((v) => v.wire == json, orElse: () => throw FormatException('unknown WorkerState: $json'));
-
-  String toJson() => wire;
 }

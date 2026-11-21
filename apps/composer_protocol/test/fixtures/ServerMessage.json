@@ -13,12 +13,10 @@
       "kind": "session",
       "session": {
         "id": "a3f1",
-        "agent": "orchestrator",
+        "agent": "default",
         "project": "/home/me/project",
-        "site": "orchestration",
-        "ticket": null,
+        "site": "plans",
         "parent": null,
-        "worker": "done",
         "state": "awaiting_approval",
         "last_seq": 42,
         "context_tokens": 1200,
@@ -36,12 +34,10 @@
       "sessions": [
         {
           "id": "a3f1",
-          "agent": "orchestrator",
+          "agent": "default",
           "project": "/home/me/project",
-          "site": "orchestration",
-          "ticket": null,
+          "site": "plans",
           "parent": null,
-          "worker": "done",
           "state": "awaiting_approval",
           "last_seq": 42,
           "context_tokens": 1200,
@@ -50,22 +46,6 @@
           "updated": "2026-10-18T12:00:00Z"
         }
       ]
-    }
-  },
-  {
-    "type": "ok",
-    "id": 4,
-    "result": {
-      "kind": "slot_granted",
-      "grant": 7
-    }
-  },
-  {
-    "type": "ok",
-    "id": 5,
-    "result": {
-      "kind": "approval",
-      "approved": true
     }
   },
   {
@@ -86,21 +66,6 @@
   },
   {
     "type": "ok",
-    "id": 52,
-    "result": {
-      "kind": "harnesses",
-      "project": "/home/me/project",
-      "harnesses": [
-        {
-          "entry": "claude-code",
-          "allowed": true,
-          "on": false
-        }
-      ]
-    }
-  },
-  {
-    "type": "ok",
     "id": 51,
     "result": {
       "kind": "models",
@@ -114,24 +79,6 @@
         {
           "id": "qwen3-coder"
         }
-      ]
-    }
-  },
-  {
-    "type": "ok",
-    "id": 52,
-    "result": {
-      "kind": "merged",
-      "commit": "abc1234"
-    }
-  },
-  {
-    "type": "ok",
-    "id": 152,
-    "result": {
-      "kind": "comments",
-      "lines": [
-        "- a.rs:3 — rename this"
       ]
     }
   },
@@ -183,8 +130,7 @@
     "session": "a3f1",
     "seq": 2,
     "source": {
-      "kind": "worker",
-      "session": "b2c3"
+      "kind": "server"
     }
   },
   {
@@ -231,8 +177,7 @@
         }
       ],
       "source": {
-        "kind": "app",
-        "site": "design"
+        "kind": "tui"
       }
     }
   },
@@ -315,12 +260,10 @@
     "type": "session.updated",
     "session": {
       "id": "a3f1",
-      "agent": "orchestrator",
+      "agent": "default",
       "project": "/home/me/project",
-      "site": "orchestration",
-      "ticket": null,
+      "site": "plans",
       "parent": null,
-      "worker": "done",
       "state": "awaiting_approval",
       "last_seq": 42,
       "context_tokens": 1200,
@@ -336,41 +279,10 @@
     "by": "external"
   },
   {
-    "type": "worker.status",
-    "worker": "w1",
-    "ticket": "0001",
-    "parent": "a3f1",
-    "state": "done"
-  },
-  {
     "type": "slots",
     "used": 1,
     "total": 2,
     "waiting": 0
-  },
-  {
-    "type": "reminder.due",
-    "url": "site://calendar/reminders/call.md",
-    "title": "Call",
-    "due": "2026-10-19 20:00",
-    "late": false
-  },
-  {
-    "type": "reminder.due",
-    "url": "site://calendar/reminders/review.md",
-    "title": "Review",
-    "due": "2026-10-19 08:00",
-    "late": true,
-    "session": "a3f1"
-  },
-  {
-    "type": "turn.queued",
-    "session": "a3f1",
-    "seq": 4,
-    "source": {
-      "kind": "reminder",
-      "url": "site://calendar/reminders/review.md"
-    }
   },
   {
     "type": "turn.queued",

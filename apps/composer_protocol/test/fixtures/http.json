@@ -5,19 +5,14 @@
     "model": "m",
     "slots": 2,
     "projects_dir": "~/Projects",
-    "workspace": "default",
-    "workspace_color": "#3f9c6b",
     "viewer": "/view"
   },
   {
     "name": "memory",
     "title": "Memory",
     "has_justfile": false,
-    "has_ui": true,
-    "app_built": false,
     "description": "what agents know",
     "pages": 12,
-    "app": "blender",
     "mcp": [
       "blender"
     ]
@@ -50,83 +45,11 @@
         "semantic": "a.rs --- Rust\n1 fn a() {}\n"
       }
     ],
-    "diff": "+x",
-    "ticket": {
-      "ticket": "0007",
-      "branch": "ticket/0007",
-      "target": "main",
-      "ahead": 2,
-      "commits": [
-        "abc1234 Add a"
-      ],
-      "uncommitted": true,
-      "conflicts": []
-    }
+    "diff": "+x"
   },
   {
     "name": "coder",
     "title": "Coder",
-    "description": "writes code",
-    "worker": true
-  },
-  {
-    "name": "composer",
-    "path": "~/Projects/composer",
-    "modified": "2026-10-20T07:00:00+02:00",
-    "folder": "/home/me/Projects/composer",
-    "sessions": 2,
-    "running": 1,
-    "waiting": 0,
-    "last_used": "2026-10-21T09:00:00+00:00",
-    "page": "site://projects/composer.md"
-  },
-  {
-    "name": "game",
-    "page": "site://projects/game.md",
-    "path": "~/Projects/game",
-    "folder": "/home/me/Projects/game",
-    "branch": "main",
-    "uncommitted": 3,
-    "sites": [],
-    "branches": [
-      {
-        "ticket": "0028",
-        "title": "Controller remapping",
-        "branch": "ticket/0028",
-        "status": "done",
-        "commits": 2
-      }
-    ],
-    "memory": {
-      "url": "site://memory/projects/game.md",
-      "excerpt": "Godot 4.4, C#."
-    },
-    "harnesses": [
-      {
-        "entry": "claude-code",
-        "allowed": true,
-        "on": true
-      }
-    ],
-    "tool_rules": 2
-  },
-  {
-    "name": "greet",
-    "doc": "Greets someone.",
-    "parameters": [
-      "name"
-    ],
-    "approved": true
-  },
-  {
-    "args": [
-      "world"
-    ],
-    "session": "a3f1"
-  },
-  {
-    "status": "ok",
-    "exit_code": 0,
-    "output": "hi world\n"
+    "description": "writes code"
   }
 ]
