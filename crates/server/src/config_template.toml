@@ -44,8 +44,8 @@ reasoning_effort = ""
 scrollback_kb = 256
 
 [desktop]
-# This workspace's colour, `#rrggbb`, in the desktop and the phone (its dot and title bar); empty:
-# one derived from the workspace's name, so its windows are still told apart.
+# This server's colour, `#rrggbb`, in the desktop and the phone (its dot and title bar); empty:
+# one derived from the server's name, so servers are still told apart.
 color = ""
 
 [attachments]
@@ -56,7 +56,7 @@ image_max_edge = 1500
 # Text and PDF text beyond this many KB is cut before it reaches the model.
 inline_max_kb = 100
 
-# wayai's live view, served to your other devices at `<workspace>/view` behind the workspace's
+# wayai's live view, served to your other devices at `/view` behind the server's
 # token (view only: nothing a device sends reaches the application). Without `url` it is taken from
 # `[mcp.wayai]`'s `url` (same address, path /view). Loopback addresses only.
 # wayai asks for a bearer token, which it keeps in a file: `bearer_file` names it (`~/` is your

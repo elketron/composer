@@ -1,4 +1,4 @@
-//! The message being written, with the TUI's modal keys (docs/desktop.md): in NORMAL, `i` / `a`
+//! The message being written, with the TUI's modal keys: in NORMAL, `i` / `a`
 //! write at / after the cursor, `o` on a new line at the end, Enter sends, `h` `l` `0` `$` move,
 //! `x` deletes; in INSERT, typing writes, Enter is a new line, Escape goes back. `ctrl+enter`
 //! sends from either.

@@ -1,4 +1,4 @@
-//! The native chat (docs/desktop.md, mockups/next 01): the session's conversation as a compact
+//! The native chat (docs/mockups/next 01): the session's conversation as a compact
 //! transcript with speaker labels and rules, tool calls grouped inline, approvals where they
 //! arise, and the modal composer pinned below. It holds the chat ([`Chat`], fed the session's
 //! events by the shell) and its own view state; what it asks of the server goes out as

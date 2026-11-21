@@ -56,17 +56,17 @@ fn default_scrollback_kb() -> usize {
     256
 }
 
-/// `[desktop]`: how a workspace is drawn in the desktop and the phone, so you can tell your
-/// workspaces apart at a glance.
+/// `[desktop]`: how this server is drawn in the desktop and the phone, so you can tell your
+/// servers apart at a glance.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct DesktopConfig {
-    /// The workspace's colour, `#rrggbb`; empty: one derived from its name. Shown as the
-    /// workspace's dot and title bar in the desktop and the phone.
+    /// The server's colour, `#rrggbb`; empty: one derived from its name. Shown as the
+    /// server's dot and title bar in the desktop and the phone.
     #[serde(default)]
     pub color: String,
 }
 
-/// `[viewer]`: wayai's live view, which composer serves to other devices at `<workspace>/view`.
+/// `[viewer]`: wayai's live view, which composer serves to other devices at `/view`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ViewerConfig {
     /// The viewer page, e.g. `http://127.0.0.1:7878/view`; loopback hosts only. Empty: taken from
@@ -134,8 +134,8 @@ pub struct McpServerConfig {
     pub read_only: Vec<String>,
     #[serde(default = "default_true")]
     pub enabled: bool,
-    /// Where a stdio server starts (`~/` and `${VAR}` expanded), instead of the workspace's
-    /// sites.
+    /// Where a stdio server starts (`~/` and `${VAR}` expanded), instead of the home's
+    /// sites folder.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub cwd: String,
     /// Settings of an `.mcpb` bundle (`[mcp.<name>.config]`), by the manifest's `user_config` keys.

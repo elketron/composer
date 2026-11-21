@@ -4,7 +4,7 @@ use std::sync::Mutex;
 
 use serde_json::Value;
 
-/// What the user said `always` to, per project: `state/tool_rules.json`,
+/// What the user said `always` to, per folder: `state/tool_rules.json`,
 /// `{ "<folder>": ["Bash(npm test:*)", "<mcp tool>"] }`. Outside agent
 /// reach. The rules use Claude Code's permission syntax (`Bash(<command>:*)`, an MCP tool's
 /// name).
