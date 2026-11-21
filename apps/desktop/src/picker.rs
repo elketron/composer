@@ -14,8 +14,13 @@ use crate::theme::*;
 #[derive(Debug, Clone, PartialEq)]
 pub enum Pick {
     Session(String),
-    /// A new session, as the default agent in the shown session's project.
+    /// The new-session menu: a run kind and maybe a site.
     NewSession,
+    /// Start a session of this kind, in this site or none.
+    CreateSession {
+        kind: composer_protocol::RunKind,
+        site: Option<String>,
+    },
     Page(String),
     AttachFile,
     NewTerminal,
@@ -37,7 +42,7 @@ pub enum Pick {
 #[derive(Debug, Clone)]
 pub struct Item {
     pub label: String,
-    /// At the right: a key, a site and project, what the command does.
+    /// At the right: a key, a site, what the command does.
     pub detail: String,
     /// A second line under the label (a session's last words); empty for most.
     pub note: String,
@@ -65,7 +70,16 @@ pub struct Picker {
 const ROWS: usize = 12;
 
 /// The palette's sections, in the order they are shown while nothing is typed.
-const GROUPS: [&str; 7] = ["session", "site", "stage", "pages", "home", "sessions", ""];
+const GROUPS: [&str; 8] = [
+    "new session",
+    "session",
+    "site",
+    "stage",
+    "pages",
+    "home",
+    "sessions",
+    "",
+];
 
 impl EventEmitter<PickerEvent> for Picker {}
 

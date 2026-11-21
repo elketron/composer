@@ -6,18 +6,19 @@ use std::collections::BTreeMap;
 use composer_client::Approval;
 use composer_protocol::{ApprovalKind, SessionInfo, TurnState};
 
-use crate::pick_lists::project_name;
+use crate::pick_lists::kind_name;
 
 /// A session's row.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SessionRow {
     pub id: String,
-    pub agent: String,
+    /// Its run kind (`agentic`, `workflow`, `single shot`).
+    pub kind: String,
     /// What waits for you (`approve run tools › greet`), else its state (`running`, `idle`).
     pub status: String,
     pub waiting: bool,
     pub preview: String,
-    /// `site/project`.
+    /// Its site, empty for none.
     pub place: String,
     pub age: String,
 }
@@ -41,16 +42,11 @@ pub fn session_rows(
         };
         let row = SessionRow {
             id: s.id.clone(),
-            agent: s.agent.clone(),
+            kind: kind_name(s.kind).into(),
             status,
             waiting,
             preview: s.preview.clone().unwrap_or_default(),
-            place: match (s.site.as_deref(), s.project.as_deref().map(project_name)) {
-                (Some(site), Some(project)) => format!("{site}/{project}"),
-                (Some(site), None) => site.to_string(),
-                (None, Some(project)) => project.to_string(),
-                (None, None) => String::new(),
-            },
+            place: s.site.clone().unwrap_or_default(),
             age: epoch_secs(&s.updated)
                 .map(|then| age(now, then))
                 .unwrap_or_default(),
@@ -154,7 +150,7 @@ mod tests {
 
     fn session(id: &str, updated: &str, state: &str) -> SessionInfo {
         serde_json::from_value(serde_json::json!({
-            "id": id, "agent": "default", "project": "/home/u/Projects/game", "site": "3d",
+            "id": id, "kind": "agentic", "site": "3d",
             "parent": null, "state": state, "last_seq": 0,
             "preview": "hello", "updated": updated
         }))
@@ -197,7 +193,7 @@ mod tests {
         let (needs, recent) = session_rows(&sessions, &approvals, now);
         assert_eq!(needs.len(), 1);
         assert_eq!(needs[0].status, "! approve run tools › greet");
-        assert_eq!(needs[0].place, "3d/game");
+        assert_eq!(needs[0].place, "3d");
         assert_eq!(needs[0].age, "2h");
         let ids: Vec<&str> = recent.iter().map(|r| r.id.as_str()).collect();
         assert_eq!(ids, ["c", "a"]);

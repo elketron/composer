@@ -23,7 +23,7 @@ pub fn origin(base: &str) -> &str {
 pub fn view_url(endpoint: &Endpoint, tab: &DeskTab) -> Option<String> {
     let path = match tab {
         DeskTab::Page { url } => format!("/view/{}", url.strip_prefix("site://")?),
-        DeskTab::Changes { project } => format!("/view/changes/{}", encode(project)),
+        DeskTab::Changes { site } => format!("/view/changes/{}", encode(site)),
         DeskTab::LiveView => "/view".to_string(),
         _ => return None,
     };
@@ -230,7 +230,7 @@ mod tests {
             "http://127.0.0.1:7420/view/plans/x.md"
         );
         let changes = DeskTab::Changes {
-            project: "my game".into(),
+            site: "my game".into(),
         };
         assert_eq!(
             view_url(&endpoint, &changes).unwrap(),
@@ -285,9 +285,7 @@ mod tests {
             DeskTab::Page {
                 url: "site://plans/x.md".into(),
             },
-            DeskTab::Changes {
-                project: "p".into(),
-            },
+            DeskTab::Changes { site: "p".into() },
             DeskTab::LiveView,
         ] {
             let url = view_url(&endpoint, &tab).unwrap();

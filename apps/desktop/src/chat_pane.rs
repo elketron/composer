@@ -65,8 +65,7 @@ pub enum ChatEvent {
 pub struct ChatPane {
     /// The transcript and the turn state: what is sent is decided there.
     model: ChatModel,
-    /// The session's agent and site (from its `session.updated`).
-    agent: String,
+    /// The session's site (from its `session.updated`).
     site: Option<String>,
     approvals: Vec<Approval>,
     draft: Draft,
@@ -94,7 +93,6 @@ impl ChatPane {
     pub fn new(cx: &mut Context<Self>) -> Self {
         Self {
             model: ChatModel::default(),
-            agent: String::new(),
             site: None,
             approvals: Vec::new(),
             draft: Draft::default(),
@@ -135,17 +133,10 @@ impl ChatPane {
         self.model.chat().map_or(0, |c| c.first_seq)
     }
 
-    /// What the session is: its agent, whether a turn runs, its site.
-    pub fn set_info(
-        &mut self,
-        agent: &str,
-        state: TurnState,
-        site: Option<String>,
-        cx: &mut Context<Self>,
-    ) {
+    /// What the session is: whether a turn runs, its site.
+    pub fn set_info(&mut self, state: TurnState, site: Option<String>, cx: &mut Context<Self>) {
         let changed = self.model.set_state(state);
-        if changed || self.agent != agent || self.site != site {
-            self.agent = agent.to_string();
+        if changed || self.site != site {
             self.site = site;
             cx.notify();
         }
@@ -922,11 +913,7 @@ impl ChatPane {
         let Some(chat) = self.model.chat() else {
             return vec![];
         };
-        let agent = if self.agent.is_empty() {
-            "agent"
-        } else {
-            &self.agent
-        };
+        let agent = "agent";
         let mut rows: Vec<AnyElement> = Vec::new();
         if chat.more {
             rows.push(
@@ -1187,14 +1174,7 @@ impl ChatPane {
                     .child(hint("Enter", "send"))
             });
         let placeholder = if insert {
-            format!(
-                "Write to {}…",
-                if self.agent.is_empty() {
-                    "the agent"
-                } else {
-                    &self.agent
-                }
-            )
+            "Write to the agent…".to_string()
         } else if self.approvals.is_empty() {
             "Press i to write".to_string()
         } else {

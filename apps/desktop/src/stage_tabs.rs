@@ -2,20 +2,19 @@
 
 use composer_protocol::{Desk, DeskTab};
 
-// rewrite: phase 2: name the live view after what it shows (a site's `app:` is ignored now).
-/// The live view tab's label.
+/// The live view tab's label while the session is in no site.
 pub const LIVE_VIEW: &str = "Live view";
 
-/// A tab's label in the strip.
-pub fn label(tab: &DeskTab) -> String {
+/// A tab's label in the strip; the live view is named after `site`, the session's, when it has one.
+pub fn label(tab: &DeskTab, site: Option<&str>) -> String {
     match tab {
         DeskTab::Page { url } => url
             .trim_start_matches("site://")
             .trim_end_matches(".md")
             .to_string(),
         DeskTab::Terminal { .. } => "terminal".into(),
-        DeskTab::Changes { project } => format!("changes · {project}"),
-        DeskTab::LiveView => LIVE_VIEW.into(),
+        DeskTab::Changes { site } => format!("changes · {site}"),
+        DeskTab::LiveView => site.map_or(LIVE_VIEW.into(), |site| format!("live · {site}")),
     }
 }
 
@@ -80,7 +79,12 @@ mod tests {
         let page = DeskTab::Page {
             url: "site://plans/x.md".into(),
         };
-        assert_eq!(label(&page), "plans/x");
-        assert_eq!(label(&DeskTab::LiveView), "Live view");
+        assert_eq!(label(&page, None), "plans/x");
+        assert_eq!(label(&DeskTab::LiveView, None), "Live view");
+        assert_eq!(label(&DeskTab::LiveView, Some("3d")), "live · 3d");
+        let changes = DeskTab::Changes {
+            site: "game".into(),
+        };
+        assert_eq!(label(&changes, Some("3d")), "changes · game");
     }
 }

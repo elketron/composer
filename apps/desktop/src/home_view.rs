@@ -16,7 +16,7 @@ use gpui::{
 
 use crate::chat_pane::PROSE;
 use crate::home_lists::{SessionRow, asked_line, now_secs, session_rows, state_word};
-use crate::pick_lists::project_name;
+use crate::pick_lists::kind_name;
 use crate::stage_tabs;
 use crate::theme::*;
 
@@ -488,7 +488,7 @@ impl HomeView {
                 out.push(self.row(
                     n,
                     dot,
-                    r.agent,
+                    r.kind,
                     format!("#{}", r.id),
                     (r.status, colour),
                     r.preview,
@@ -522,7 +522,7 @@ impl HomeView {
                     div()
                         .text_color(rgb(FG_BRIGHT))
                         .font_weight(FontWeight::SEMIBOLD)
-                        .child(info.agent.clone()),
+                        .child(kind_name(info.kind)),
                 )
                 .child(
                     div()
@@ -539,14 +539,6 @@ impl HomeView {
                 .into_any_element(),
             context_line(&[
                 ("site", info.site.clone().unwrap_or_else(|| "–".into())),
-                (
-                    "project",
-                    info.project
-                        .as_deref()
-                        .map(project_name)
-                        .unwrap_or("none")
-                        .to_string(),
-                ),
                 (
                     "model",
                     info.model.clone().unwrap_or_else(|| "default".into()),
@@ -651,7 +643,7 @@ impl HomeView {
                                     .child(if *you {
                                         "you".to_string()
                                     } else {
-                                        info.agent.clone()
+                                        "agent".to_string()
                                     }),
                             )
                             .child(
@@ -675,7 +667,7 @@ impl HomeView {
                             .iter()
                             .map(|e| {
                                 desk_item(
-                                    stage_tabs::label(&e.tab),
+                                    stage_tabs::label(&e.tab, info.site.as_deref()),
                                     if e.unseen { "new" } else { "" },
                                     ACCENT_SOFT,
                                 )
@@ -721,7 +713,7 @@ fn action_small(id: String, text: &'static str, primary: bool) -> gpui::Stateful
         .child(text)
 }
 
-/// `site 3d · project crashed-ship · …`: names dim, values bright.
+/// `site 3d · model m1 · …`: names dim, values bright.
 fn context_line(parts: &[(&'static str, String)]) -> AnyElement {
     div()
         .flex()
@@ -856,7 +848,7 @@ mod tests {
 
     fn session(id: &str, updated: &str) -> SessionInfo {
         serde_json::from_value(serde_json::json!({
-            "id": id, "agent": "default", "project": null, "parent": null,
+            "id": id, "kind": "agentic", "parent": null,
             "state": "idle", "last_seq": 1, "preview": "old", "updated": updated
         }))
         .unwrap()

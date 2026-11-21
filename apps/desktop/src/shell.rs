@@ -9,7 +9,7 @@ use std::time::Instant;
 use base64::Engine;
 use composer_client::{Connection, Endpoint, Event, Store};
 use composer_core::LinkTarget;
-use composer_protocol::{ClientCommand, CommandResult, DeskEntry, DeskTab, ServerMessage};
+use composer_protocol::{ClientCommand, CommandResult, DeskEntry, DeskTab, RunKind, ServerMessage};
 use gpui::{
     Context, Entity, ExternalPaths, FocusHandle, Focusable, MouseButton, MouseDownEvent,
     MouseMoveEvent, MouseUpEvent, Subscription, Window, actions, div, prelude::*, px, rgb,
@@ -321,16 +321,44 @@ impl Shell {
             .map(|s| s.id.clone());
         match latest {
             Some(session) => self.show_session(session, cx),
-            None => self.new_session(cx),
+            None => self.new_session(RunKind::Agentic, None, cx),
         }
     }
 
-    /// Start a session as the default agent, in the shown session's project (none at first).
-    fn new_session(&mut self, cx: &mut Context<Self>) {
-        let project = self.shown_info().and_then(|info| info.project.clone());
+    /// The new-session menu: a run kind, in the shown session's site, no site or another one
+    /// (the other sites join when fetched).
+    fn open_new_session_menu(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let current = self.session_site().map(str::to_string);
+        let items = pick_lists::new_sessions(&[], current.as_deref());
+        let shown = items.len();
+        let picker = cx.new(|cx| Picker::new("new session", items, cx));
+        let endpoint = self.endpoint.clone();
+        let fetched = cx.global::<Desktop>().spawn(async move {
+            endpoint
+                .get::<Vec<composer_protocol::http::SiteSummary>>("/api/sites")
+                .await
+                .unwrap_or_default()
+        });
+        let weak = picker.downgrade();
+        cx.spawn(async move |_, cx| {
+            let Ok(sites) = fetched.await else {
+                return;
+            };
+            // The kinds already listed (this site, no site) come first; the other sites follow.
+            let more = pick_lists::new_sessions(&sites, current.as_deref()).split_off(shown);
+            let _ = weak.update(cx, |picker, cx| picker.extend(more, cx));
+        })
+        .detach();
+        self.show_picker(picker, window, cx);
+    }
+
+    /// Start a session of `kind`, in `site` or none.
+    fn new_session(&mut self, kind: RunKind, site: Option<String>, cx: &mut Context<Self>) {
         let connection = self.connection.clone();
         cx.spawn(async move |this, cx| {
-            let created = connection.request(pick_lists::new_session(project)).await;
+            let created = connection
+                .request(pick_lists::new_session(kind, site))
+                .await;
             let _ = this.update(cx, |shell, cx| match created {
                 Ok(CommandResult::Session { session }) => {
                     let id = session.id.clone();
@@ -349,17 +377,17 @@ impl Shell {
         .detach();
     }
 
-    /// The shown session's agent, state and site, for the chat.
+    /// The shown session's state and site, for the chat.
     fn sync_info(&mut self, cx: &mut Context<Self>) {
         let info = self
             .store
             .attached
             .as_ref()
             .and_then(|id| self.store.sessions.iter().find(|s| &s.id == id))
-            .map(|s| (s.agent.clone(), s.state, s.site.clone()));
-        if let Some((agent, state, site)) = info {
+            .map(|s| (s.state, s.site.clone()));
+        if let Some((state, site)) = info {
             self.chat
-                .update(cx, |chat, cx| chat.set_info(&agent, state, site, cx));
+                .update(cx, |chat, cx| chat.set_info(state, site, cx));
         }
     }
 
@@ -424,7 +452,7 @@ impl Shell {
             HomeEvent::Back => self.close_home(window, cx),
             HomeEvent::NewSession => {
                 self.close_home(window, cx);
-                self.new_session(cx);
+                self.open_new_session_menu(window, cx);
             }
             HomeEvent::Answer { request, decision } => {
                 self.ask(ClientCommand::ApprovalRespond { request, decision }, cx)
@@ -1049,7 +1077,8 @@ impl Shell {
     fn picked(&mut self, pick: Pick, window: &mut Window, cx: &mut Context<Self>) {
         match pick {
             Pick::Session(session) => self.show_session(session, cx),
-            Pick::NewSession => self.new_session(cx),
+            Pick::NewSession => self.open_new_session_menu(window, cx),
+            Pick::CreateSession { kind, site } => self.new_session(kind, site, cx),
             Pick::Page(url) => self.open_page(url, cx),
             Pick::Site(site) => self.switch_site(Some(site), cx),
             Pick::LeaveSite => self.switch_site(None, cx),
@@ -1179,22 +1208,21 @@ impl Shell {
         }
     }
 
-    /// The shown session for the title bar: its agent and id, and its project.
+    /// The shown session for the title bar: its run kind and id, and its site.
     fn title_parts(&self) -> (String, String, String) {
         let session = self
             .store
             .attached
             .as_ref()
             .and_then(|id| self.store.sessions.iter().find(|s| &s.id == id));
-        let agent = session
-            .map(|s| s.agent.clone())
+        let kind = session
+            .map(|s| pick_lists::kind_name(s.kind).to_string())
             .unwrap_or_else(|| "no session".into());
         let id = session.map(|s| format!("#{}", s.id)).unwrap_or_default();
-        let project = session
-            .and_then(|s| s.project.as_deref())
-            .map(|p| pick_lists::project_name(p).to_string())
-            .unwrap_or_else(|| "no project".into());
-        (agent, id, project)
+        let site = session
+            .and_then(|s| s.site.clone())
+            .unwrap_or_else(|| "no site".into());
+        (kind, id, site)
     }
 }
 
@@ -1282,7 +1310,7 @@ impl Render for Shell {
                             .border_color(rgb(ACCENT_SOFT)),
                     )
                 })
-                .child(stage_tabs::label(&entry.tab))
+                .child(stage_tabs::label(&entry.tab, self.session_site()))
                 .child(
                     div()
                         .id(gpui::SharedString::from(format!("close-{}", entry.id)))
@@ -1318,7 +1346,7 @@ impl Render for Shell {
             .into_any_element(),
         };
         let chat = self.chat.clone().into_any_element();
-        let (agent, session_id, project) = self.title_parts();
+        let (kind, session_id, site) = self.title_parts();
         let in_home = self.home.is_some();
         let (connection, connection_colour) = match &self.link {
             LinkState::Up => ("connected".to_string(), OK),
@@ -1464,9 +1492,9 @@ impl Render for Shell {
                         d.child(div().text_color(rgb(FG)).child("home"))
                     })
                     .when(!in_home, |d| {
-                        d.child(div().text_color(rgb(FG)).child(agent.clone()))
+                        d.child(div().text_color(rgb(FG)).child(kind.clone()))
                             .child(div().text_color(rgb(FG_FAINT)).child(session_id.clone()))
-                            .child(div().text_color(rgb(FG_FAINT)).child(project))
+                            .child(div().text_color(rgb(FG_FAINT)).child(site))
                     })
                     .child(
                         div()

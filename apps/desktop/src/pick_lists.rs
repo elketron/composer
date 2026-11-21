@@ -4,25 +4,64 @@ use std::collections::BTreeMap;
 
 use composer_client::Approval;
 use composer_protocol::http::SiteSummary;
-use composer_protocol::{ClientCommand, ModelInfo, SessionInfo};
+use composer_protocol::{ClientCommand, ModelInfo, RunKind, SessionInfo};
 
 use crate::picker::{Item, Pick};
 
-// rewrite: phase 2: the run-kind choice replaces this.
-/// The agent every session the desktop starts runs as: the server's built-in `default` (a page in
-/// `site://agents` may override it). The desktop never asks for an agent.
-pub const DEFAULT_AGENT: &str = "default";
+/// The run kinds a new session can be, the default first.
+pub const RUN_KINDS: [RunKind; 3] = [RunKind::Agentic, RunKind::Workflow, RunKind::SingleShot];
 
-/// The command that starts a session in `project` (a folder) or none.
-pub fn new_session(project: Option<String>) -> ClientCommand {
-    ClientCommand::SessionCreate {
-        agent: DEFAULT_AGENT.into(),
-        project,
+/// A run kind in a few words.
+pub fn kind_name(kind: RunKind) -> &'static str {
+    match kind {
+        RunKind::Agentic => "agentic",
+        RunKind::Workflow => "workflow",
+        RunKind::SingleShot => "single shot",
     }
 }
 
-/// The sessions, most recent first: the agent and id, whether it is shown or waits for an
-/// approval, its site and project, and what it last said underneath.
+/// The command that starts a session of `kind`, in `site` or none; the server's model.
+pub fn new_session(kind: RunKind, site: Option<String>) -> ClientCommand {
+    ClientCommand::SessionCreate {
+        kind,
+        model: None,
+        site,
+    }
+}
+
+/// The new-session menu: each run kind in the shown session's site (or none), then each kind
+/// without a site, then in each other site of `sites`.
+pub fn new_sessions(sites: &[SiteSummary], current: Option<&str>) -> Vec<Item> {
+    let mut places: Vec<Option<&str>> = vec![current];
+    if current.is_some() {
+        places.push(None);
+    }
+    places.extend(
+        sites
+            .iter()
+            .map(|s| s.name.as_str())
+            .filter(|name| Some(*name) != current)
+            .map(Some),
+    );
+    places
+        .into_iter()
+        .flat_map(|site| {
+            RUN_KINDS.into_iter().map(move |kind| Item {
+                label: format!("{} session", kind_name(kind)),
+                detail: site.map_or("no site".into(), |s| format!("in {s}")),
+                note: String::new(),
+                group: "new session",
+                pick: Pick::CreateSession {
+                    kind,
+                    site: site.map(str::to_string),
+                },
+            })
+        })
+        .collect()
+}
+
+/// The sessions, most recent first: the run kind and id, whether it is shown or waits for an
+/// approval, its site, and what it last said underneath.
 pub fn sessions(
     all: &[SessionInfo],
     shown: Option<&str>,
@@ -40,22 +79,14 @@ pub fn sessions(
             } else {
                 ""
             };
-            let project = s
-                .project
-                .as_deref()
-                .map(project_name)
-                .unwrap_or("no project");
             Item {
-                label: format!("{} #{}{mark}", s.agent, s.id),
+                label: format!("{} #{}{mark}", kind_name(s.kind), s.id),
                 note: s
                     .preview
                     .as_deref()
                     .map(|p| short(p, 80))
                     .unwrap_or_default(),
-                detail: match &s.site {
-                    Some(site) => format!("{site}/{project}"),
-                    None => project.to_string(),
-                },
+                detail: s.site.clone().unwrap_or_else(|| "no site".into()),
                 group: "sessions",
                 pick: Pick::Session(s.id.clone()),
             }
@@ -75,7 +106,7 @@ pub fn commands(following: bool) -> Vec<Item> {
         },
         Item {
             label: "New session".into(),
-            detail: "in this session's project".into(),
+            detail: "agentic, workflow or single shot".into(),
             note: String::new(),
             group: "session",
             pick: Pick::NewSession,
@@ -195,22 +226,13 @@ pub fn short(text: &str, max: usize) -> String {
     }
 }
 
-/// A project's name from its folder.
-pub fn project_name(folder: &str) -> &str {
-    folder
-        .trim_end_matches('/')
-        .rsplit('/')
-        .next()
-        .unwrap_or(folder)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn session(id: &str, updated: &str, preview: Option<&str>) -> SessionInfo {
         serde_json::from_value(serde_json::json!({
-            "id": id, "agent": "default", "project": "/home/u/Projects/game/",
+            "id": id, "kind": "workflow", "site": "game",
             "parent": null, "state": "idle", "last_seq": 0, "preview": preview, "updated": updated
         }))
         .unwrap()
@@ -240,9 +262,9 @@ mod tests {
             picks,
             [&Pick::Session("b".into()), &Pick::Session("a".into())]
         );
-        assert_eq!(items[0].label, "default #b ! waiting");
+        assert_eq!(items[0].label, "workflow #b ! waiting");
         assert_eq!(items[0].note, "", "no preview: nothing under it");
-        assert_eq!(items[1].label, "default #a · shown");
+        assert_eq!(items[1].label, "workflow #a · shown");
         assert_eq!(items[1].note, "old one");
         assert_eq!(items[1].detail, "game");
         assert!(items.iter().all(|i| i.group == "sessions"));
@@ -292,7 +314,6 @@ mod tests {
         assert_eq!(short("abcdef", 3), "abc…");
         assert_eq!(short("abc", 3), "abc");
         assert_eq!(short("héllo wörld", 4), "héll…", "by characters");
-        assert_eq!(project_name("/a/b/game/"), "game");
     }
 
     #[test]
@@ -310,15 +331,49 @@ mod tests {
     }
 
     #[test]
-    fn a_new_session_starts_the_default_agent() {
-        for project in [Some("/home/u/Projects/game".to_string()), None] {
-            match new_session(project.clone()) {
-                ClientCommand::SessionCreate { agent, project: p } => {
-                    assert_eq!(agent, "default");
-                    assert_eq!(p, project);
+    fn a_new_session_has_a_kind_and_maybe_a_site() {
+        for site in [Some("game".to_string()), None] {
+            match new_session(RunKind::Workflow, site.clone()) {
+                ClientCommand::SessionCreate {
+                    kind,
+                    model,
+                    site: s,
+                } => {
+                    assert_eq!(kind, RunKind::Workflow);
+                    assert_eq!(model, None);
+                    assert_eq!(s, site);
                 }
                 other => panic!("not a session create: {other:?}"),
             }
         }
+    }
+
+    #[test]
+    fn the_new_session_menu_starts_agentic_in_the_current_site() {
+        let sites = [site("3d", &[]), site("notes", &[])];
+        let items = new_sessions(&sites, Some("3d"));
+        assert_eq!(items.len(), 9, "3d, no site, notes: three kinds each");
+        assert_eq!(items[0].label, "agentic session");
+        assert_eq!(items[0].detail, "in 3d");
+        assert_eq!(
+            items[0].pick,
+            Pick::CreateSession {
+                kind: RunKind::Agentic,
+                site: Some("3d".into())
+            }
+        );
+        assert_eq!(items[1].label, "workflow session");
+        assert_eq!(items[2].label, "single shot session");
+        assert_eq!(items[3].detail, "no site");
+        assert_eq!(items[6].detail, "in notes");
+        let none = new_sessions(&sites, None);
+        assert_eq!(none.len(), 9, "no site, 3d, notes");
+        assert_eq!(
+            none[0].pick,
+            Pick::CreateSession {
+                kind: RunKind::Agentic,
+                site: None
+            }
+        );
     }
 }
