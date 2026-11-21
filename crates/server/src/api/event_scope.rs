@@ -33,6 +33,7 @@ pub fn scope(message: &ServerMessage) -> EventScope<'_> {
         PageChanged { url, .. } => EventScope::Page(url),
         // Unsequenced: to the clients attached to the session.
         DeskChanged { session, .. }
+        | ProcessesChanged { session, .. }
         | TerminalOutput { session, .. }
         | TerminalExited { session, .. } => EventScope::Session {
             id: session,

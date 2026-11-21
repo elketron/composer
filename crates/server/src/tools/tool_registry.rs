@@ -14,6 +14,9 @@ use crate::tools::finish_tool::FinishTool;
 use crate::tools::list_sites_tool::ListSitesTool;
 use crate::tools::new_site_tool::NewSiteTool;
 use crate::tools::open_tool::OpenTool;
+use crate::tools::process_list_tool::ProcessListTool;
+use crate::tools::process_start_tool::ProcessStartTool;
+use crate::tools::process_stop_tool::ProcessStopTool;
 use crate::tools::run_tool::RunTool;
 use crate::tools::search_tool::SearchTool;
 use crate::tools::set_site_tool::SetSiteTool;
@@ -59,6 +62,9 @@ impl ToolRegistry {
                 Arc::new(TerminalReadTool),
                 Arc::new(TerminalSendTool),
                 Arc::new(SpawnRunTool),
+                Arc::new(ProcessStartTool),
+                Arc::new(ProcessStopTool),
+                Arc::new(ProcessListTool),
             ],
         }
     }

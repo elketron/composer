@@ -17,13 +17,20 @@ pub enum StageTab {
         site: String,
         unseen: bool,
     },
+    /// A server terminal: a shell, a program, a background process (`label`: its command).
+    Terminal {
+        id: String,
+        terminal: String,
+        label: Option<String>,
+        unseen: bool,
+    },
 }
 
 impl StageTab {
     /// What the tab is called, on the desk and in this list alike.
     pub fn id(&self) -> &str {
         match self {
-            Self::Page { id, .. } | Self::Changes { id, .. } => id,
+            Self::Page { id, .. } | Self::Changes { id, .. } | Self::Terminal { id, .. } => id,
         }
     }
 
@@ -32,13 +39,19 @@ impl StageTab {
         match self {
             Self::Page { url, .. } => url.strip_prefix("site://").unwrap_or(url).to_string(),
             Self::Changes { site, .. } => format!("changes · {site}"),
+            Self::Terminal {
+                label: Some(label), ..
+            } => format!("$ {label}"),
+            Self::Terminal { terminal, .. } => format!("term · {terminal}"),
         }
     }
 
     /// Opened by the agent and not looked at yet: a badge.
     pub fn unseen(&self) -> bool {
         match self {
-            Self::Page { unseen, .. } | Self::Changes { unseen, .. } => *unseen,
+            Self::Page { unseen, .. }
+            | Self::Changes { unseen, .. }
+            | Self::Terminal { unseen, .. } => *unseen,
         }
     }
 
@@ -47,6 +60,9 @@ impl StageTab {
         match self {
             Self::Page { url, .. } => DeskTab::Page { url: url.clone() },
             Self::Changes { site, .. } => DeskTab::Changes { site: site.clone() },
+            Self::Terminal { terminal, .. } => DeskTab::Terminal {
+                id: terminal.clone(),
+            },
         }
     }
 }

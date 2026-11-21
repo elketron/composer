@@ -14,6 +14,7 @@ composer-protocol = { path = "crates/protocol" }
 composer-server = { path = "crates/server" }
 composer-client = { path = "crates/client" }
 composer-tui = { path = "crates/tui" }
+composer-term = { path = "crates/term" }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = { version = "1.0.154", features = ["preserve_order"] }
 serde_norway = "0.9.42"

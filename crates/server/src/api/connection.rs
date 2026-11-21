@@ -350,12 +350,17 @@ impl Connection {
                 terminal,
                 cols,
                 rows,
+                command,
             } => {
                 let s = server.sessions.get(&session).map_err(|e| e.to_string())?;
-                let (id, scrollback) =
-                    server
-                        .terminals
-                        .open(server, &s, terminal.as_deref(), cols, rows)?;
+                let (id, scrollback) = server.terminals.open(
+                    server,
+                    &s,
+                    terminal.as_deref(),
+                    command.as_deref(),
+                    cols,
+                    rows,
+                )?;
                 Ok(CommandResult::Terminal {
                     terminal: id,
                     scrollback: base64::engine::general_purpose::STANDARD.encode(scrollback),
@@ -385,6 +390,18 @@ impl Connection {
             }
             ClientCommand::TerminalClose { terminal } => {
                 server.terminals.close(server, &terminal)?;
+                Ok(CommandResult::Done)
+            }
+            ClientCommand::ProcessList { session } => {
+                server.sessions.get(&session).map_err(|e| e.to_string())?;
+                Ok(CommandResult::Processes {
+                    processes: server.terminals.processes(&session),
+                })
+            }
+            ClientCommand::ProcessStop { terminal } => {
+                server
+                    .terminals
+                    .stop_process(&terminal, crate::terminals::StoppedBy::User)?;
                 Ok(CommandResult::Done)
             }
             ClientCommand::DeskGet { session } => Ok(CommandResult::Desk {
@@ -419,14 +436,23 @@ impl Connection {
     }
 }
 
-/// `session.delete`: its turn stops, its outside agent, terminals and watches end, its folder
-/// goes, and every client hears it.
+/// `session.delete`: its turn stops, its outside agent, terminals, background processes and
+/// watches end, its folder goes, and every client hears it.
 fn delete_session(server: &Arc<Server>, id: &str) -> Result<(), String> {
     let session = server.sessions.get(id).map_err(|e| e.to_string())?;
     session.cancel(None);
     server.acp.stop(id);
+    // Ended by the server, not the user: nobody is told in a session that is gone.
+    let processes = server.terminals.processes(id);
+    for process in &processes {
+        let _ = server
+            .terminals
+            .stop_process(&process.terminal, crate::terminals::StoppedBy::Server);
+    }
     for tab in session.desk().tabs {
-        if let DeskTab::Terminal { id: terminal } = tab.tab {
+        if let DeskTab::Terminal { id: terminal } = tab.tab
+            && !processes.iter().any(|p| p.terminal == terminal)
+        {
             let _ = server.terminals.close(server, &terminal);
         }
     }
