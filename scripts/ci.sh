@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # Runs every CI job's steps (.github/workflows/ci.yml) locally, so a merge can't skip one:
-# rust (fmt, clippy, tests), protocol (the Dart models are current, analyze, test), flutter
-# (analyze, test).
-#   scripts/ci.sh            all
+# rust (fmt, clippy, tests, TypeScript bindings), protocol (the Dart models are current, analyze,
+# test), flutter (analyze, test), desktop (apps/desktop, its own Cargo workspace: fmt, clippy,
+# test; needs CEF, see apps/desktop/scripts/fetch-cef.sh).
+#   scripts/ci.sh               all four
 #   scripts/ci.sh rust flutter  some
-#   scripts/ci.sh desktop    the desktop app (apps/desktop, its own workspace; not in CI yet: 0187)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 jobs=("$@")
-[ ${#jobs[@]} -eq 0 ] && jobs=(rust protocol flutter)
+[ ${#jobs[@]} -eq 0 ] && jobs=(rust protocol flutter desktop)
 
 step() { printf '\n== %s\n' "$*"; }
 

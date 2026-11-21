@@ -3,46 +3,40 @@
 # or emulator against a test server on this machine. Each test is a fresh install, so each gets
 # its own pairing code; the server's port is forwarded into the device (`adb reverse`).
 #
-#   COMPOSER_HOME=<test home> scripts/phone-e2e.sh <device> http://127.0.0.1:7531/w/default [test...]
+#   COMPOSER_HOME=<test home> scripts/phone-e2e.sh <device> http://127.0.0.1:7531 [test...]
 #
-# A second workspace of the home is paired too (PAIR_LINE_2) when there is one: the pairing test
-# pairs both and switches between them.
+# The server has one home, so its URL has no path. A headless emulator:
+# `emulator -avd <name> -read-only -no-window -no-audio`.
 #
-# A headless emulator: `emulator -avd <name> -read-only -no-window -no-audio`. Tests default to
-# pairing, chat and reader; chat needs a `tools` site with `greet name:` printing `zebra-42` and a
-# model that runs it, reader the orchestration app built, workflow a `demo` site (`app: demoapp`)
-# with `[applications.demoapp]` and a `[viewer]` pointing at a running wayai. Chat also needs the greet recipe to be
-# unapproved: use a fresh home, or drop it from state/tool_rules.json and restart the server.
+# Tests default to pairing, chat, reader and site. What the test home needs:
+# - chat: a `tools` site whose justfile has `greet name:` printing `zebra-42`, and a model that
+#   runs it. The greet recipe must not be approved yet: use a fresh home, or remove it from
+#   state/approvals.json and restart the server.
+# - site: a `demo` site, and a `[viewer]` in config.toml pointing at a running wayai.
+# - measure_open (not in the default list): a few sessions to open.
 set -euo pipefail
-device=${1:?usage: phone-e2e.sh <device> <workspace url> [test...]}
-server=${2:?usage: phone-e2e.sh <device> <workspace url> [test...]}
+device=${1:?usage: phone-e2e.sh <device> <server url> [test...]}
+server=${2:?usage: phone-e2e.sh <device> <server url> [test...]}
+server=${server%/}
 shift 2
 tests=("$@")
-[ ${#tests[@]} -eq 0 ] && tests=(pairing desk chat reader workflow)
+[ ${#tests[@]} -eq 0 ] && tests=(pairing chat reader site)
 composer=${COMPOSER:-composer}
 port=$(sed -E 's#^[a-z]+://[^:/]+:([0-9]+).*#\1#' <<<"$server")
-home=${COMPOSER_HOME:-$HOME/.composer}
-workspace=$(basename "$server")
-base=${server%/w/*}
-other=$(for dir in "$home"/workspaces/*/; do name=$(basename "$dir"); [ "$name" != "$workspace" ] && echo "$name" && break; done || true)
 adb -s "$device" reverse "tcp:$port" "tcp:$port" >/dev/null
 cd "$(dirname "$0")/../apps/composer_app"
 
 pair_code() {
-  "$composer" -w "$1" pair --name phone-e2e 2>/dev/null \
+  "$composer" pair --name phone-e2e 2>/dev/null \
     | sed -nE 's/^computer: +composer login [^ ]+ ([A-Z0-9-]+)$/\1/p' | tail -1
 }
 
 failed=()
 for t in "${tests[@]}"; do
-  code=$(pair_code "$workspace")
+  code=$(pair_code)
   defines=(--dart-define=PAIR_LINE="composer login $server $code")
   # SHOT_PAUSE=<seconds>: tests stop at their `shot`s (support.dart) so a watcher can screenshot them.
   [ -n "${SHOT_PAUSE:-}" ] && defines+=(--dart-define=SHOT_PAUSE="$SHOT_PAUSE")
-  if [ -n "$other" ]; then
-    code2=$(pair_code "$other")
-    defines+=(--dart-define=PAIR_LINE_2="composer login $base/w/$other $code2")
-  fi
   echo "== $t"
   # A fresh install asks for the notification permission, and the dialog takes the app out of the
   # foreground (the live view pauses then): grant it as soon as the install is there.
