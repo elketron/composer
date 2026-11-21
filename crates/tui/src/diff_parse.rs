@@ -206,7 +206,6 @@ mod tests {
             branch: None,
             files: vec![file("a.rs", semantic), file("n.txt", None)],
             diff: "diff --git a/a.rs b/a.rs\n--- a/a.rs\n+++ b/a.rs\n@@ -1,2 +1,2 @@\n fn a() {\n-    let x = 1;\n+    let x = 2;\ndiff --git a/n.txt b/n.txt\n--- a/n.txt\n+++ b/n.txt\n@@ -1 +1 @@\n-a\n+b\n".into(),
-            ticket: None,
         }
     }
 

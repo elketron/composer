@@ -1,38 +1,21 @@
 //! `:` commands.
 
 use crate::action::Action;
-use crate::store::types::PickerKind;
 
 /// Every command, as shown by help: (usage, what it does).
-pub const COMMANDS: [(&str, &str); 21] = [
+pub const COMMANDS: [(&str, &str); 14] = [
     (
         ":new [agent]",
-        "start a new session (the orchestrator, or name an agent)",
+        "start a new session (the default agent, or name one)",
     ),
     (":attach <id>", "switch to a session by id (or Space w)"),
-    (
-        ":workers",
-        "this orchestration's sessions (Space o; ]w / [w step through them)",
-    ),
-    (
-        ":project [name|none]",
-        "set the active project: a folder in the projects dir (or ~/path); `none` unsets it",
-    ),
-    (
-        ":project view [name]",
-        "a project's works, sessions, branches and memory (gp; default: this session's)",
-    ),
     (
         ":model [id|none]",
         "the model this session uses (Tab lists the provider's); none: the server's again",
     ),
     (
         ":scope [name|none]",
-        "narrow the session picker to a project (space P finds projects)",
-    ),
-    (
-        ":harness [on|off] [name]",
-        "the project's external harnesses; turn Claude Code (or claude-code:<model>) on or off",
+        "narrow the session picker to a project",
     ),
     (
         ":mcp",
@@ -43,25 +26,13 @@ pub const COMMANDS: [(&str, &str); 21] = [
         "read config.toml again (the server also does when you save it); says what needs a restart",
     ),
     (
-        ":merge [ticket]",
-        "merge a ticket's branch into the project (default: this worker's ticket; gd shows it)",
-    ),
-    (
-        ":discard <ticket>",
-        "delete a ticket's branch and worktree without merging",
-    ),
-    (
         ":file <path>|clear",
         "attach a file to the message (or paste or drop its path); clear removes them",
     ),
     (":open <url>", "open a page, e.g. :open memory/user"),
     (
-        ":app [site]",
-        "open a site's app in the browser (default: the page's site)",
-    ),
-    (
         ":site [site]",
-        "enter a site for this session (its page, tools and app); no name leaves it",
+        "enter a site for this session (its page and tools); no name leaves it",
     ),
     (":compact", "save memory, then summarize older messages now"),
     (":follow", "toggle following the agent's pages (F)"),
@@ -84,46 +55,14 @@ pub fn parse_command(line: &str) -> Result<Action, String> {
         "attach" | "a" => arg
             .map(Action::AttachSession)
             .ok_or_else(|| "usage: :attach <session id>".into()),
-        "workers" => Ok(Action::OpenPicker(PickerKind::Orchestration)),
-        "project" | "p" => match arg.as_deref() {
-            Some("view") => Ok(Action::ProjectView(None)),
-            Some(view) if view.starts_with("view ") => {
-                Ok(Action::ProjectView(Some(view[5..].trim().to_string())))
-            }
-            _ => Ok(Action::SetProject(arg.filter(|a| a != "none"))),
-        },
         "scope" => Ok(Action::Scope(arg)),
         "model" | "m" => Ok(match arg.as_deref() {
             None => Action::ShowModel,
             Some("none") => Action::SetModel(None),
             Some(model) => Action::SetModel(Some(model.to_string())),
         }),
-        "harness" => {
-            let words: Vec<&str> = arg.as_deref().unwrap_or("").split_whitespace().collect();
-            let (on, rest) = match words.first() {
-                Some(&"on") => (Some(true), &words[1..]),
-                Some(&"off") => (Some(false), &words[1..]),
-                _ => (None, &words[..]),
-            };
-            match rest {
-                [] => Ok(Action::Harness {
-                    on,
-                    entry: "claude-code".into(),
-                }),
-                [entry] if on.is_some() => Ok(Action::Harness {
-                    on,
-                    entry: entry.to_string(),
-                }),
-                _ => Err("usage: :harness [on|off] [claude-code[:model]]".into()),
-            }
-        }
         "mcp" => Ok(Action::McpServers),
-        "unselect" => Ok(Action::Unselect),
         "reload" => Ok(Action::ReloadConfig),
-        "merge" => Ok(Action::TicketMerge(arg)),
-        "discard" => arg
-            .map(Action::TicketDiscard)
-            .ok_or_else(|| "usage: :discard <ticket> (deletes its branch and worktree)".into()),
         "file" => match arg.as_deref() {
             Some("clear") => Ok(Action::ClearAttachments),
             Some(path) => {
@@ -149,11 +88,6 @@ pub fn parse_command(line: &str) -> Result<Action, String> {
             .ok_or_else(|| "usage: :open <site://url>".into()),
         "follow" => Ok(Action::ToggleFollow),
         "compact" => Ok(Action::Compact),
-        "app" => Ok(Action::OpenApp(arg.map(|s| {
-            s.trim_start_matches("site://")
-                .trim_end_matches('/')
-                .to_string()
-        }))),
         "site" => Ok(Action::SetSite(arg.map(|s| {
             s.trim_start_matches("site://")
                 .trim_end_matches('/')
@@ -174,56 +108,17 @@ mod tests {
     fn parses() {
         assert_eq!(parse_command("q"), Ok(Action::Quit));
         assert_eq!(
-            parse_command("new orchestrator"),
+            parse_command("new default"),
             Ok(Action::NewSession {
-                agent: Some("orchestrator".into())
+                agent: Some("default".into())
             })
         );
         assert_eq!(
             parse_command("open memory/user"),
             Ok(Action::OpenUrl("site://memory/user".into()))
         );
-        assert_eq!(parse_command("project"), Ok(Action::SetProject(None)));
-        assert_eq!(parse_command("project none"), Ok(Action::SetProject(None)));
-        assert_eq!(
-            parse_command("harness off"),
-            Ok(Action::Harness {
-                on: Some(false),
-                entry: "claude-code".into()
-            })
-        );
-        assert_eq!(
-            parse_command("harness on claude-code:opus"),
-            Ok(Action::Harness {
-                on: Some(true),
-                entry: "claude-code:opus".into()
-            })
-        );
-        assert!(matches!(
-            parse_command("harness"),
-            Ok(Action::Harness { on: None, .. })
-        ));
-        assert!(parse_command("harness sideways").is_err());
-        assert_eq!(parse_command("merge").unwrap(), Action::TicketMerge(None));
-        assert_eq!(
-            parse_command("discard 7").unwrap(),
-            Action::TicketDiscard("7".into())
-        );
-        assert!(parse_command("discard").is_err());
         assert_eq!(parse_command("mcp").unwrap(), Action::McpServers);
         assert_eq!(parse_command("reload").unwrap(), Action::ReloadConfig);
-        assert_eq!(
-            parse_command("project view").unwrap(),
-            Action::ProjectView(None)
-        );
-        assert_eq!(
-            parse_command("project view game").unwrap(),
-            Action::ProjectView(Some("game".into()))
-        );
-        assert_eq!(
-            parse_command("project game").unwrap(),
-            Action::SetProject(Some("game".into()))
-        );
         assert_eq!(parse_command("scope").unwrap(), Action::Scope(None));
         assert_eq!(
             parse_command("site 3d").unwrap(),

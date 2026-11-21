@@ -165,9 +165,6 @@ impl Chat {
 /// Who sent a user message, when not you.
 fn source_label(source: Option<&MessageSource>) -> Option<String> {
     match source? {
-        MessageSource::App { site } => Some(format!("{site} app")),
-        MessageSource::Worker { session } => Some(format!("worker #{session}")),
-        MessageSource::Reminder { .. } => Some("reminder".into()),
         MessageSource::Watch { .. } => Some("watch".into()),
         _ => None,
     }

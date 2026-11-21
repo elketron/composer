@@ -236,19 +236,19 @@ mod tests {
         assert!(line.cycle.is_none());
 
         let mut line = CommandLine::new();
-        press(&mut line, &state, "a<Tab>");
-        assert_eq!(line.input, "attach");
+        press(&mut line, &state, "m<Tab>");
+        assert_eq!(line.input, "model");
         press(&mut line, &state, "<Tab>");
-        assert_eq!(line.input, "app");
+        assert_eq!(line.input, "mcp");
         press(&mut line, &state, "<Tab>");
-        assert_eq!(line.input, "a", "past the last: back to what was typed");
+        assert_eq!(line.input, "m", "past the last: back to what was typed");
         press(&mut line, &state, "<S-Tab>");
-        assert_eq!(line.input, "app");
+        assert_eq!(line.input, "mcp");
         line.handle_key(
             KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL),
             &state,
         );
-        assert_eq!(line.input, "attach");
+        assert_eq!(line.input, "model");
     }
 
     #[test]

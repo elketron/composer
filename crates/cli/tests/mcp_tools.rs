@@ -1,15 +1,15 @@
-//! `composer mcp` serves a running worker's tools: an external harness reads its ticket and
-//! finishes it through MCP, and the orchestrator hears about it as from any worker. The
-//! orchestrator works in a git project, so the worker gets its own worktree.
+//! `composer mcp` serves a session's tools over stdio: an MCP client lists them and calls one,
+//! and the tool runs in that session on the server.
 
 mod support;
 
 use std::process::Stdio;
 use std::time::Duration;
 
-use composer_protocol::{ServerMessage, WorkerState};
+use composer_protocol::{ClientCommand, CommandResult, ServerMessage};
+use composer_server::{Home, Server, init_home};
 use serde_json::{Value, json};
-use support::{BusyWorker, busy_worker, until};
+use support::{fake_model, send, until};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Lines};
 use tokio::process::{ChildStdin, ChildStdout};
 
@@ -58,36 +58,53 @@ impl Mcp {
 }
 
 #[tokio::test]
-async fn an_external_harness_works_a_ticket_through_mcp() {
-    let Some(BusyWorker {
-        dir,
-        server,
-        addr,
-        mut socket,
-        orchestrator,
-        worker,
-    }) = busy_worker("noted", true).await
-    else {
-        return;
-    };
+async fn a_client_uses_a_sessions_tools_through_mcp() {
+    let base_url = fake_model().await;
+    let dir = tempfile::tempdir().unwrap();
+    let home = Home::new(dir.path());
+    init_home(&home).await.unwrap();
+    std::fs::write(
+        home.config_file(),
+        format!("[provider]\nbase_url = \"{base_url}\"\n"),
+    )
+    .unwrap();
+    let server = Server::start(home).await.unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let serving = server.clone();
+    tokio::spawn(async move { serving.serve(listener).await });
 
-    // The worker works in its own worktree, on the ticket's branch.
-    let worktree = dir.path().join("state/worktrees/0001");
-    assert_eq!(
-        server.sessions.get(&worker).unwrap().info().project,
-        Some(worktree.to_string_lossy().to_string())
-    );
-    assert!(worktree.join("README.md").is_file());
-    let ticket =
-        std::fs::read_to_string(dir.path().join("sites/orchestration/tickets/0001.md")).unwrap();
-    assert!(ticket.contains("branch: ticket/0001"), "{ticket}");
+    let (mut socket, _) =
+        tokio_tungstenite::connect_async(format!("ws://{addr}/ws?token={}", server.token))
+            .await
+            .unwrap();
+    send(
+        &mut socket,
+        1,
+        ClientCommand::SessionCreate {
+            agent: "default".into(),
+            project: None,
+        },
+    )
+    .await;
+    let reply = until(&mut socket, 10, |e| {
+        matches!(e, ServerMessage::Ok { id: 1, .. })
+    })
+    .await;
+    let Some(ServerMessage::Ok {
+        result: CommandResult::Session { session },
+        ..
+    }) = reply.last()
+    else {
+        panic!("{reply:?}")
+    };
 
     let mut child = tokio::process::Command::new(env!("CARGO_BIN_EXE_composer"))
         .args([
             "mcp",
             "--session",
-            &worker,
-            "--parent",
+            &session.id,
+            "--server",
             &format!("http://{addr}"),
         ])
         .env("COMPOSER_HOME", dir.path())
@@ -112,7 +129,7 @@ async fn an_external_harness_works_a_ticket_through_mcp() {
     assert_eq!(init["result"]["serverInfo"]["name"], "composer");
     mcp.notify("notifications/initialized").await;
 
-    // The worker agent's tools, as a native worker gets them.
+    // The session's agent's tools.
     let list = mcp.request("tools/list", json!({})).await;
     let names: Vec<&str> = list["result"]["tools"]
         .as_array()
@@ -120,57 +137,17 @@ async fn an_external_harness_works_a_ticket_through_mcp() {
         .iter()
         .map(|t| t["name"].as_str().unwrap())
         .collect();
-    assert!(names.contains(&"open") && names.contains(&"finish"));
-    assert!(!names.contains(&"spawn_worker"));
-
-    let (ticket, failed) = mcp
-        .call(
-            "open",
-            json!({ "url": "site://orchestration/tickets/0001" }),
-        )
-        .await;
-    assert!(!failed, "{ticket}");
-    assert!(ticket.contains("Take forever"));
-
-    let (_, failed) = mcp
-        .call(
-            "finish",
-            json!({ "status": "done", "summary": "did it over MCP" }),
-        )
-        .await;
-    assert!(!failed);
-
-    let events = until(&mut socket, 30, |e| {
-        matches!(e, ServerMessage::MessageDone { session, message, .. }
-            if *session == orchestrator && message.content == "noted")
-    })
-    .await;
-    assert!(events.iter().any(|e| matches!(
-        e,
-        ServerMessage::WorkerStatus {
-            state: WorkerState::Done,
-            ..
-        }
-    )));
-    assert!(events.iter().any(
-        |e| matches!(e, ServerMessage::MessageDone { session, message, .. }
-        if *session == orchestrator && message.content.contains("finished ticket 0001: done")
-            && message.content.contains("did it over MCP")
-            && message.content.contains("on branch `ticket/0001`"))
-    ));
-    let ticket =
-        std::fs::read_to_string(dir.path().join("sites/orchestration/tickets/0001.md")).unwrap();
-    assert!(ticket.contains("status: done"));
-
-    // Finished: the worker's tools are gone.
-    let (output, failed) = mcp.call("open", json!({ "url": "site://home" })).await;
     assert!(
-        failed && output.contains("not a running worker"),
-        "{output}"
+        names.contains(&"open") && names.contains(&"search"),
+        "{names:?}"
     );
-    assert!(server.workers.running().is_empty());
 
-    // The harness exiting closes stdin; the tool server stops with it.
+    let (home_page, failed) = mcp.call("open", json!({ "url": "site://home" })).await;
+    assert!(!failed, "{home_page}");
+    let (output, failed) = mcp.call("open", json!({ "url": "site://nope" })).await;
+    assert!(failed, "{output}");
+
+    // The client exiting closes stdin; the tool server stops with it.
     drop(mcp);
     let status = tokio::time::timeout(Duration::from_secs(10), child.wait())
         .await

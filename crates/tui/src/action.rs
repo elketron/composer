@@ -24,7 +24,7 @@ pub enum Action {
     AttachPath(String),
     /// Attach the image on the clipboard (`space a`).
     AttachClipboard,
-    /// Text to the clipboard: a mouse selection, or an app's URL no browser could open.
+    /// Text to the clipboard: a mouse selection.
     CopyText(String),
     /// The clipboard image, read off the UI thread: (name, PNG bytes).
     ClipboardRead(Result<(String, Vec<u8>), String>),
@@ -45,39 +45,18 @@ pub enum Action {
     AttachSession(String),
     /// Scrolled up to the oldest message shown: fetch the ones before it.
     LoadOlder,
-    /// Back to the previous session (worker → orchestrator).
+    /// Back to the previous session.
     JumpBack,
-    /// The next (1) or previous (-1) session of this orchestration: orchestrator, workers.
-    CycleOrchestration(i32),
-    SetProject(Option<String>),
     /// `:model <id>`: the model the session's turns use; `None`: the server's.
     SetModel(Option<String>),
     /// `:model`: say which model the session uses.
     ShowModel,
-    /// Start a chat in this project (a folder).
-    NewSessionIn(String),
-    /// Show a project's overview (a name or folder; `None`: the current session's project).
-    ProjectView(Option<String>),
-    /// `gp`: the project view on or off.
-    ToggleProjectView,
     /// `:mcp`: the MCP servers, their state and tools.
     McpServers,
-    /// `:unselect`: the next message goes without the app's selection.
-    Unselect,
     /// `:reload`: the server reads config.toml again.
     ReloadConfig,
     /// Narrow the session picker to a project (a name or folder); `None`: all.
     Scope(Option<String>),
-    /// The project list for the picker, for `query`.
-    ProjectsLoaded {
-        query: String,
-        projects: Vec<composer_protocol::http::ProjectSummary>,
-    },
-    /// Show the project's external harnesses, or turn one (`claude-code[:model]`) on or off.
-    Harness {
-        on: Option<bool>,
-        entry: String,
-    },
 
     // ---- stage tabs (the session's desk) ----
     /// Show the next (1) or previous (-1) tab the stage can draw.
@@ -93,8 +72,6 @@ pub enum Action {
     PageForward,
     ToggleFollow,
     EditPage,
-    /// Open a site's app in the browser: the given site, or the current page's.
-    OpenApp(Option<String>),
     /// Enter a site for the shown session, or (`None`) leave its site.
     SetSite(Option<String>),
     ReloadPage,
@@ -104,20 +81,8 @@ pub enum Action {
     RefreshChanges,
     DiffLoaded(composer_protocol::http::ProjectDiff),
     DiffFailed(String),
-    /// Merge a ticket's branch (the current worker session's ticket when `None`).
-    TicketMerge(Option<String>),
-    /// Delete a ticket's worktree and branch.
-    TicketDiscard(String),
     /// Semantic (difft) diff or the text diff in the changes view.
     DiffSemantic,
-    /// Review comments on the diff: drafted here, sent together to the ticket page.
-    CommentAdd(composer_protocol::http::DiffComment),
-    CommentEdit {
-        index: usize,
-        message: String,
-    },
-    CommentRemove(usize),
-    CommentsSend,
     /// Open a project file in the editor at a line.
     OpenFileAt {
         path: String,
@@ -154,12 +119,6 @@ pub enum Action {
     CatalogLoaded {
         sites: Vec<SiteSummary>,
         pages: Vec<SearchHit>,
-    },
-    /// The sites, fetched before opening `site`'s app at `url`; `None` if that failed.
-    AppChecked {
-        site: String,
-        url: String,
-        sites: Option<Vec<SiteSummary>>,
     },
 }
 

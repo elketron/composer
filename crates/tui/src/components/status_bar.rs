@@ -28,7 +28,6 @@ impl Component for StatusBar {
             Mode::Insert => (" INSERT ", theme::OK),
             Mode::Command => (" COMMAND ", theme::INFO),
             Mode::Hint => (" HINT ", theme::WARN),
-            Mode::Comment => (" COMMENT ", theme::WARN),
         };
         let sep = || Span::styled(" │ ", theme::faint());
         let mut left = vec![
@@ -143,12 +142,10 @@ mod tests {
         state.conn.state = ConnState::Connected;
         state.session.upsert(SessionInfo {
             id: "s1".into(),
-            agent: "orchestrator".into(),
+            agent: "default".into(),
             project: None,
             site: site.map(Into::into),
-            ticket: None,
             parent: None,
-            worker: None,
             state: TurnState::Idle,
             last_seq: 0,
             context_tokens: 0,

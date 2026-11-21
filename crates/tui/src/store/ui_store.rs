@@ -34,7 +34,7 @@ impl UiStore {
         match mode {
             Mode::Insert => self.focus = Pane::Chat,
             Mode::Hint => self.focus = Pane::Stage,
-            Mode::Normal | Mode::Command | Mode::Comment => {}
+            Mode::Normal | Mode::Command => {}
         }
         if self.maximized.is_some_and(|p| p != self.focus) {
             self.maximized = Some(self.focus);

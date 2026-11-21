@@ -4,14 +4,14 @@ use composer_protocol::{
 
 use crate::action::Action;
 use crate::effect::Effect;
-use crate::store::desk_store::{PROJECT_TAB, StageTab, page_key};
+use crate::store::desk_store::{StageTab, page_key};
 use crate::store::types::{
     Catalog, ConnState, FileSource, FlashLevel, Mode, Outgoing, Pane, Pending, PendingApproval,
-    PickerKind, PickerTarget, Startup,
+    PickerTarget, Startup,
 };
 use crate::store::{
     ApprovalStore, AttachmentStore, ConnectionStore, DeskStore, PageStore, PickerStore,
-    ProjectStore, ProjectViewStore, SessionStore, UiStore,
+    ProjectStore, SessionStore, UiStore,
 };
 
 /// Messages a session opens with, and fetches each time you scroll up to the oldest.
@@ -30,23 +30,13 @@ pub struct AppState {
     pub picker: PickerStore,
     pub approvals: ApprovalStore,
     pub project: ProjectStore,
-    /// The project view (`gp`).
-    pub project_view: ProjectViewStore,
     pub catalog: Catalog,
     /// Files attached to the message being written.
     pub attachments: AttachmentStore,
     startup: Option<Startup>,
     default_agent: String,
-    /// Where project names point (`:project composer`), when known.
+    /// Where project names point (`--project composer`), when known.
     pub projects_dir: Option<String>,
-    /// The project this client has open on the server (`project.open`): the current session's.
-    opened_project: Option<String>,
-    /// The desktop window this TUI is the chat of, and the session its stage was last told of.
-    window: Option<String>,
-    window_session: Option<String>,
-    /// What the user points at in an app of the current session (the chip): goes with the next
-    /// message unless `:unselect`.
-    pub selection: Option<composer_protocol::Selection>,
 }
 
 impl AppState {
@@ -60,15 +50,10 @@ impl AppState {
             picker: PickerStore::new(),
             approvals: ApprovalStore::default(),
             project: ProjectStore::default(),
-            project_view: ProjectViewStore::default(),
             catalog: Catalog::default(),
             attachments: AttachmentStore::default(),
             default_agent: startup.agent.clone(),
             projects_dir: startup.projects_dir.clone(),
-            opened_project: None,
-            window: startup.window.clone(),
-            window_session: None,
-            selection: None,
             startup: Some(startup),
         }
     }
@@ -218,9 +203,8 @@ impl AppState {
                 self.attachments.clear();
                 vec![]
             }
-            // Also stops a paused worker for good (a usage limit, a restart cut it off).
             Action::CancelTurn => match self.session.current.clone() {
-                Some(session) if self.session.is_busy() || self.session.is_paused_worker() => {
+                Some(session) if self.session.is_busy() => {
                     // What it had seen: a turn that started since (a queued message) keeps going.
                     let seen = Some(self.session.last_seq).filter(|s| *s > 0);
                     self.send(ClientCommand::TurnCancel { session, seen }, Pending::Ignore)
@@ -239,11 +223,8 @@ impl AppState {
             },
             Action::NewSession { agent } => {
                 let agent = agent.unwrap_or_else(|| self.default_agent.clone());
-                // A worker's project is its worktree: the new chat gets the orchestrator's.
-                let project = self
-                    .session
-                    .current_info()
-                    .and_then(|s| self.session.project_of(s));
+                // The new chat gets this session's project.
+                let project = self.session.current_info().and_then(|s| s.project.clone());
                 self.send(
                     ClientCommand::SessionCreate { agent, project },
                     Pending::CreateSession,
@@ -257,32 +238,6 @@ impl AppState {
                     vec![]
                 }
             },
-            Action::CycleOrchestration(delta) => {
-                let members = self.session.orchestration();
-                let Some(here) = members
-                    .iter()
-                    .position(|s| Some(&s.id) == self.session.current.as_ref())
-                else {
-                    self.no_orchestration();
-                    return vec![];
-                };
-                let next = (here as i32 + delta).rem_euclid(members.len() as i32) as usize;
-                let id = members[next].id.clone();
-                self.attach(&id, true)
-            }
-            Action::SetProject(path) => match self.session.current.clone() {
-                Some(session) => {
-                    if path.is_none() {
-                        self.ui.flash(
-                            "project unset (new sessions from here start without one)",
-                            FlashLevel::Info,
-                        );
-                    }
-                    self.send(ClientCommand::ProjectSet { session, path }, Pending::Ignore)
-                }
-                None => vec![],
-            },
-
             Action::SetSite(site) => match self.session.current.clone() {
                 Some(session) => {
                     self.send(ClientCommand::SiteSet { session, site }, Pending::SiteSet)
@@ -310,27 +265,6 @@ impl AppState {
                 self.send(ClientCommand::ModelList, Pending::Models)
             }
 
-            Action::Harness { on, entry } => {
-                let project = self
-                    .session
-                    .current
-                    .as_deref()
-                    .and_then(|id| self.session.sessions.iter().find(|s| s.id == id))
-                    .and_then(|s| s.project.clone());
-                let Some(project) = project else {
-                    self.ui.flash(
-                        "no project here (:project <name> sets one)",
-                        FlashLevel::Warn,
-                    );
-                    return vec![];
-                };
-                let command = match on {
-                    Some(on) => ClientCommand::HarnessSet { project, entry, on },
-                    None => ClientCommand::HarnessList { project },
-                };
-                self.send(command, Pending::Harnesses)
-            }
-
             Action::OpenUrl(url) => {
                 if !url.starts_with("site://") {
                     self.ui
@@ -346,7 +280,6 @@ impl AppState {
             Action::PageForward => self.step_page(false),
             Action::ReloadPage => match self.shown_tab() {
                 Some(StageTab::Changes { .. }) => self.refresh_changes(),
-                Some(StageTab::Project { .. }) => self.refetch_overview(),
                 _ => self.page.reload().into_iter().collect(),
             },
             Action::ToggleChanges => match self.changes_tab() {
@@ -354,43 +287,6 @@ impl AppState {
                 Some(id) => self.show_tab_id(&id),
                 None => self.open_changes(),
             },
-            Action::ToggleProjectView => {
-                if !self.project_view.open {
-                    return self.reduce(Action::ProjectView(None));
-                }
-                if self.matches_shown(|tab| matches!(tab, StageTab::Project { .. })) {
-                    self.close_shown()
-                } else {
-                    self.show_tab_id(PROJECT_TAB)
-                }
-            }
-            Action::ProjectView(project) => {
-                let Some(project) = project.or_else(|| {
-                    self.session
-                        .current_info()
-                        .and_then(|s| self.session.project_of(s))
-                }) else {
-                    self.ui
-                        .flash("no project here: :project view <name>", FlashLevel::Warn);
-                    return vec![];
-                };
-                // The project view is a tab of this terminal only: no `DeskTab` names an
-                // overview, so it is never written to the desk.
-                self.project_view.open = true;
-                self.project_view.loading = true;
-                if self.project_view.project.as_deref() != Some(project.as_str()) {
-                    self.project_view.overview = None;
-                }
-                self.project_view.project = Some(project.clone());
-                self.desk.show(PROJECT_TAB);
-                self.page.hide();
-                self.reduce(Action::FocusPane(Pane::Stage));
-                self.send(
-                    ClientCommand::ProjectOverview { project },
-                    Pending::Overview,
-                )
-            }
-
             Action::CycleTab(delta) => self.cycle_tab(delta),
             Action::ShowTab(index) => self.show_tab(index),
             Action::CloseTab => self.close_shown(),
@@ -409,87 +305,10 @@ impl AppState {
                 self.ui.flash(text, FlashLevel::Info);
                 vec![]
             }
-            Action::ProjectsLoaded { query, projects } => {
-                self.picker.projects(&query, projects);
-                vec![]
-            }
-            Action::NewSessionIn(project) => self.send(
-                ClientCommand::SessionCreate {
-                    agent: self.default_agent.clone(),
-                    project: Some(project),
-                },
-                Pending::CreateSession,
-            ),
             Action::RefreshChanges => self.refresh_changes(),
-            Action::TicketMerge(ticket) => {
-                let Some(ticket) =
-                    ticket.or_else(|| self.session.current_info().and_then(|i| i.ticket.clone()))
-                else {
-                    self.ui
-                        .flash("not a worker session: :merge <ticket>", FlashLevel::Warn);
-                    return vec![];
-                };
-                self.ui
-                    .flash(format!("merging ticket {ticket}…"), FlashLevel::Info);
-                self.send(
-                    ClientCommand::TicketMerge {
-                        ticket: ticket.clone(),
-                    },
-                    Pending::Merged(ticket),
-                )
-            }
-            Action::TicketDiscard(ticket) => self.send(
-                ClientCommand::TicketDiscard {
-                    ticket: ticket.clone(),
-                },
-                Pending::Discarded(ticket),
-            ),
             Action::DiffSemantic => {
                 self.project.toggle_semantic();
                 vec![]
-            }
-            Action::CommentAdd(comment) => {
-                self.project.drafts.push(comment);
-                vec![]
-            }
-            Action::CommentEdit { index, message } => {
-                if let Some(draft) = self.project.drafts.get_mut(index) {
-                    draft.message = message;
-                }
-                vec![]
-            }
-            Action::CommentRemove(index) => {
-                if index < self.project.drafts.len() {
-                    self.project.drafts.remove(index);
-                }
-                vec![]
-            }
-            Action::CommentsSend => {
-                let ticket = self
-                    .project
-                    .diff
-                    .as_ref()
-                    .and_then(|d| d.ticket.as_ref())
-                    .map(|t| t.ticket.clone());
-                let Some(ticket) = ticket else {
-                    self.ui.flash(
-                        "comments go to a ticket's review: open a worker session's changes",
-                        FlashLevel::Warn,
-                    );
-                    return vec![];
-                };
-                if self.project.drafts.is_empty() {
-                    self.ui.flash("no comments to send", FlashLevel::Warn);
-                    return vec![];
-                }
-                let comments = self.project.drafts.clone();
-                self.send(
-                    ClientCommand::TicketComment {
-                        ticket: ticket.clone(),
-                        comments,
-                    },
-                    Pending::Comments(ticket),
-                )
             }
             Action::DiffLoaded(diff) => {
                 self.project.loaded(diff);
@@ -518,30 +337,6 @@ impl AppState {
                 self.ui.flash(text, FlashLevel::Info);
                 vec![]
             }
-            Action::OpenApp(site) => {
-                let from_page = || {
-                    let url = self.page.current.as_ref()?.url.clone();
-                    url.strip_prefix("site://")?
-                        .split('/')
-                        .next()
-                        .map(str::to_string)
-                };
-                let Some(site) = site.or_else(from_page) else {
-                    self.ui.flash(
-                        "open a page of the site first, or :app <site>",
-                        FlashLevel::Warn,
-                    );
-                    return vec![];
-                };
-                // Opened with a token of its own (never the workspace's in its URL): on the
-                // session's project if it is one of its apps, else on Home.
-                let session = self.session.current.clone().unwrap_or_default();
-                let project = self
-                    .session
-                    .current_info()
-                    .and_then(|s| self.session.project_of(s));
-                self.open_app(site, session, project)
-            }
             Action::EditPage => match &self.page.current {
                 Some(page) => vec![Effect::EditPage(page.url.clone())],
                 None => vec![],
@@ -565,21 +360,13 @@ impl AppState {
                 Some(a) => vec![Effect::ViewText {
                     name: match a.kind {
                         ApprovalKind::Recipe => format!("{}-{}.just", a.site, a.recipe),
-                        ApprovalKind::Merge => format!("merge-{}.txt", a.request),
                         ApprovalKind::Tool => format!("tool-{}.txt", a.request),
                         ApprovalKind::Mcp => format!("mcp-{}.json", a.request),
-                        ApprovalKind::Publish => format!("publish-{}.diff", a.request),
                     },
                     text: a.body.clone(),
                 }],
                 None => vec![],
             },
-            Action::OpenPicker(PickerKind::Orchestration)
-                if self.session.orchestration().is_empty() =>
-            {
-                self.no_orchestration();
-                vec![]
-            }
             Action::OpenPicker(kind) => {
                 self.ui.picker_open = true;
                 self.picker.open(kind, &self.session)
@@ -594,9 +381,6 @@ impl AppState {
                 match self.picker.selected_target() {
                     Some(PickerTarget::Url(url)) => self.reduce(Action::OpenUrl(url)),
                     Some(PickerTarget::Session(id)) => self.attach(&id, true),
-                    Some(PickerTarget::Project(folder)) => {
-                        self.reduce(Action::ProjectView(Some(folder)))
-                    }
                     None => vec![],
                 }
             }
@@ -605,32 +389,12 @@ impl AppState {
                 vec![]
             }
 
-            Action::Connected => {
-                // A new connection: the server has nothing open for it yet.
-                self.opened_project = None;
-                self.window_session = None;
-                self.connected()
-            }
+            Action::Connected => self.connected(),
             Action::Disconnected(reason) => {
                 self.conn.state = ConnState::Disconnected(reason);
                 vec![]
             }
-            Action::Server(message) => {
-                let mut effects = self.server_message(message);
-                effects.extend(self.follow_project());
-                effects.extend(self.follow_window());
-                effects
-            }
-            Action::Unselect => match self.session.current.clone() {
-                Some(session) if self.selection.take().is_some() => {
-                    self.ui.flash("the selection is dropped", FlashLevel::Info);
-                    self.send(ClientCommand::SelectionClear { session }, Pending::Ignore)
-                }
-                _ => {
-                    self.ui.flash("nothing is selected", FlashLevel::Info);
-                    vec![]
-                }
-            },
+            Action::Server(message) => self.server_message(message),
             Action::PageLoaded(page) => {
                 let id = page_key(&page.url).unwrap_or_default();
                 self.page.loaded(&id, page);
@@ -654,31 +418,6 @@ impl AppState {
                 (self.catalog.sites, self.catalog.pages) = (sites, pages);
                 vec![]
             }
-            Action::AppChecked { site, url, sites } => {
-                let found = sites
-                    .as_ref()
-                    .map(|all| all.iter().find(|s| s.name == site));
-                let problem = match found {
-                    // Couldn't ask (an older server, a network error): let the browser show it.
-                    None => None,
-                    Some(None) => Some(format!("there is no site://{site}")),
-                    Some(Some(s)) if !s.has_ui => Some(format!(
-                        "site://{site} has no app (no {site}/ui/ folder); new_app creates one"
-                    )),
-                    Some(Some(s)) if !s.app_built => Some(format!(
-                        "site://{site}'s app is not built ({site}/ui/dist/index.html is missing): \
-                         run its ui-build action"
-                    )),
-                    Some(Some(_)) => None,
-                };
-                match problem {
-                    Some(text) => {
-                        self.ui.flash(text, FlashLevel::Warn);
-                        vec![]
-                    }
-                    None => vec![Effect::OpenBrowser(url)],
-                }
-            }
         }
     }
 
@@ -694,17 +433,9 @@ impl AppState {
 
     // ---- the stage: the session's desk, drawn in this terminal ----
 
-    /// The tabs the stage can draw: the desk's pages and changes, in the desk's order, with the
-    /// project view's own tab last (no `DeskTab` names a project overview, so that one is local
-    /// and never written back).
+    /// The tabs the stage can draw: the desk's pages and changes, in the desk's order.
     pub fn stage_tabs(&self) -> Vec<StageTab> {
-        let mut tabs = self.desk.visible();
-        if self.project_view.open {
-            tabs.push(StageTab::Project {
-                project: self.project_view.project.clone(),
-            });
-        }
-        tabs
+        self.desk.visible()
     }
 
     /// The ids of the desk's tabs a terminal can draw, in order.
@@ -716,7 +447,7 @@ impl AppState {
             .collect()
     }
 
-    /// Every tab id the stage could be showing, desk's and its own.
+    /// Every tab id the stage could be showing.
     fn showable_ids(&self) -> Vec<String> {
         self.stage_tabs()
             .iter()
@@ -761,9 +492,8 @@ impl AppState {
     /// Keep the page on the screen the shown tab's page, and the shown tab the desk's. Called
     /// after every action: the desk may have changed, or a tab was opened locally.
     pub fn sync_stage(&mut self) -> Vec<Effect> {
-        // The tab shown has to be one that can be drawn: the desk's pages and changes, plus
-        // this terminal's own project tab. A page belongs to a desk tab, so only those are
-        // kept when dropping what is gone.
+        // The tab shown has to be one that can be drawn: the desk's pages and changes. A page
+        // belongs to a desk tab, so only those are kept when dropping what is gone.
         let ids = self.showable_ids();
         self.desk.reconcile(&ids);
         self.page.forget(&self.visible_ids());
@@ -792,10 +522,6 @@ impl AppState {
                 } else {
                     vec![]
                 }
-            }
-            Some(StageTab::Project { .. }) => {
-                self.page.hide();
-                vec![]
             }
             None => {
                 self.page.hide();
@@ -830,7 +556,7 @@ impl AppState {
     fn open_changes(&mut self) -> Vec<Effect> {
         let Some(project) = self.changes_project() else {
             self.ui.flash(
-                "this session has no project (:project sets one)",
+                "this session has no project (start one with --project)",
                 FlashLevel::Warn,
             );
             return vec![];
@@ -853,23 +579,12 @@ impl AppState {
         let folder = self
             .session
             .current_info()
-            .and_then(|s| self.session.project_of(s))?;
+            .and_then(|s| s.project.clone())?;
         let name = std::path::Path::new(&folder)
             .file_name()?
             .to_string_lossy()
             .to_string();
         Some(name)
-    }
-
-    /// The project overview this tab is about, when it needs asking for again.
-    fn refetch_overview(&mut self) -> Vec<Effect> {
-        match self.project_view.reload() {
-            Some(project) => self.send(
-                ClientCommand::ProjectOverview { project },
-                Pending::Overview,
-            ),
-            None => vec![],
-        }
     }
 
     /// A changes tab naming a project other than this session's: the diff there is the
@@ -934,12 +649,6 @@ impl AppState {
     /// Put a tab on the screen: on the desk when it is one of the desk's, and here either way
     /// (waiting for the desk to agree, so it does not feel like a key that did nothing).
     fn show_tab_id(&mut self, id: &str) -> Vec<Effect> {
-        if id == PROJECT_TAB {
-            self.project_view.open = true;
-            self.desk.show(id);
-            self.page.hide();
-            return self.refetch_overview();
-        }
         if !self.desk.can_draw(id) {
             return vec![];
         }
@@ -972,7 +681,7 @@ impl AppState {
             Some(StageTab::Changes { .. }) => {
                 self.page.hide();
             }
-            Some(StageTab::Project { .. }) | None => self.page.hide(),
+            None => self.page.hide(),
         }
         effects
     }
@@ -985,21 +694,12 @@ impl AppState {
             return vec![];
         };
         let id = tab.id().to_string();
-        // A tab the desk has no form for is this terminal's own: nothing to ask anyone about.
-        let effects = match tab.desk_tab() {
-            None => {
-                self.project_view.open = false;
-                self.project_view.project = None;
-                self.project_view.overview = None;
-                vec![]
+        let effects = match self.session.current.clone() {
+            Some(session) => {
+                let tab = id.clone();
+                self.send(ClientCommand::DeskClose { session, tab }, Pending::Ignore)
             }
-            Some(_) => match self.session.current.clone() {
-                Some(session) => {
-                    let tab = id.clone();
-                    self.send(ClientCommand::DeskClose { session, tab }, Pending::Ignore)
-                }
-                None => vec![],
-            },
+            None => vec![],
         };
         // The tab is gone from the screen already, its neighbour shown; the desk catching up
         // with the close changes nothing here.
@@ -1035,8 +735,6 @@ impl AppState {
         // unasked and does not broadcast one on attach.
         self.desk.clear();
         self.page.forget(&[]);
-        // This terminal's own tab names a project too, and it is not the next session's.
-        self.project_view = ProjectViewStore::default();
         let mut effects = self.fetch_history(id.to_string(), None);
         effects.extend(self.send(
             ClientCommand::DeskGet {
@@ -1083,13 +781,6 @@ impl AppState {
         )
     }
 
-    fn no_orchestration(&mut self) {
-        self.ui.flash(
-            "this session has no workers or orchestrator · space w lists every session",
-            FlashLevel::Info,
-        );
-    }
-
     fn connected(&mut self) -> Vec<Effect> {
         self.conn.state = ConnState::Connected;
         let mut effects = self.send(
@@ -1100,10 +791,6 @@ impl AppState {
         );
         effects.extend(self.send(ClientCommand::SessionList, Pending::ListSessions));
         effects.extend(self.send(ClientCommand::ModelList, Pending::Models));
-        // A desktop window's TUI: the window's events (a session it picks) come here too.
-        if let Some(window) = self.window.clone() {
-            effects.extend(self.send(ClientCommand::WindowJoin { window }, Pending::Ignore));
-        }
         // After a reconnect, catch up on what we missed (or, its history never came, start over).
         if let Some(current) = self.session.current.clone() {
             effects.extend(if self.session.loaded {
@@ -1117,63 +804,6 @@ impl AppState {
         effects
     }
 
-    fn open_app(&mut self, site: String, session: String, project: Option<String>) -> Vec<Effect> {
-        self.send(
-            ClientCommand::AppOpen {
-                site: site.clone(),
-                project: project.clone(),
-                // The app messages this session only (ticket 0172).
-                session: Some(session.clone()).filter(|s| !s.is_empty()),
-            },
-            Pending::OpenApp {
-                site,
-                session,
-                project,
-            },
-        )
-    }
-
-    /// The window's stage shows this TUI's session (ticket 0177): tells the server when it changes.
-    fn follow_window(&mut self) -> Vec<Effect> {
-        let (Some(window), Some(session)) = (self.window.clone(), self.session.current.clone())
-        else {
-            return vec![];
-        };
-        if self.window_session.as_deref() == Some(session.as_str()) {
-            return vec![];
-        }
-        self.window_session = Some(session.clone());
-        self.selection = None;
-        self.send(
-            ClientCommand::WindowSession { window, session },
-            Pending::Ignore,
-        )
-    }
-
-    /// Keeps the current session's project open on the server (its apps' watches, `on_open`),
-    /// closing the one before when it changes.
-    fn follow_project(&mut self) -> Vec<Effect> {
-        let current = self
-            .session
-            .current_info()
-            .and_then(|s| self.session.project_of(s));
-        if current == self.opened_project {
-            return vec![];
-        }
-        let mut effects = Vec::new();
-        if let Some(old) = self.opened_project.take() {
-            effects.extend(self.send(
-                ClientCommand::ProjectClose { project: old },
-                Pending::Ignore,
-            ));
-        }
-        if let Some(project) = current.clone() {
-            effects.extend(self.send(ClientCommand::ProjectOpen { project }, Pending::Ignore));
-        }
-        self.opened_project = current;
-        effects
-    }
-
     fn server_message(&mut self, message: ServerMessage) -> Vec<Effect> {
         match message {
             ServerMessage::Ok { id, result } => self.reply(id, result),
@@ -1181,12 +811,6 @@ impl AppState {
                 let pending = id.map(|id| self.conn.take_pending(id));
                 match pending {
                     Some(Pending::Models) => vec![],
-                    // Not one of the project's apps: on Home, then.
-                    Some(Pending::OpenApp {
-                        site,
-                        session,
-                        project: Some(_),
-                    }) => self.open_app(site, session, None),
                     // An older server: the whole chat replays.
                     Some(Pending::History {
                         session,
@@ -1200,40 +824,11 @@ impl AppState {
                         self.session.more = false;
                         vec![]
                     }
-                    // The project tab says what failed and asks again on `r`; a flash there
-                    // would be gone before you looked at the tab that is empty.
-                    Some(Pending::Overview) => {
-                        self.project_view.failed(message);
-                        vec![]
-                    }
                     _ => {
                         self.ui.flash(message, FlashLevel::Error);
                         vec![]
                     }
                 }
-            }
-            // The desktop picked another session for this TUI's window: show it.
-            ServerMessage::WindowChanged { window, session }
-                if self.window.as_deref() == Some(window.as_str())
-                    && self.session.current.as_deref() != Some(session.as_str()) =>
-            {
-                // Attaching then says so (`window.session`): the window hears it confirmed.
-                self.attach(&session, true)
-            }
-            ServerMessage::SelectionChanged { session, selection }
-                if self.session.current.as_deref() == Some(session.as_str()) =>
-            {
-                if let Some(chosen) = &selection {
-                    self.ui.flash(
-                        format!(
-                            "◆ {} ({}): goes with your next message; :unselect drops it",
-                            chosen.label, chosen.app
-                        ),
-                        FlashLevel::Info,
-                    );
-                }
-                self.selection = selection;
-                vec![]
             }
             ServerMessage::SessionUpdated { session } => {
                 self.session.upsert(session);
@@ -1299,81 +894,6 @@ impl AppState {
                     _ => vec![],
                 }
             }
-            ServerMessage::ReminderDue {
-                url,
-                title,
-                due,
-                late,
-                session,
-            } => {
-                let when = if late { "was due" } else { "due" };
-                let path = url.strip_prefix("site://").unwrap_or(&url);
-                let path = path.strip_suffix(".md").unwrap_or(path);
-                let next = match session {
-                    Some(session) => format!(":attach {session}"),
-                    None => format!(":open {path}"),
-                };
-                self.ui.flash(
-                    format!("⏰ {title} ({when} {due}) · {next}"),
-                    FlashLevel::Warn,
-                );
-                vec![]
-            }
-            ServerMessage::WorkerStatus {
-                worker,
-                ticket,
-                parent,
-                state,
-            } => {
-                self.session.workers.insert(worker.clone(), state);
-                let (text, level) = match state {
-                    composer_protocol::WorkerState::Starting => (
-                        format!("worker #{worker} started on ticket {ticket} · space w to watch"),
-                        FlashLevel::Info,
-                    ),
-                    composer_protocol::WorkerState::Running => return vec![],
-                    composer_protocol::WorkerState::Done => (
-                        format!("worker #{worker} finished ticket {ticket}"),
-                        FlashLevel::Info,
-                    ),
-                    composer_protocol::WorkerState::Failed => (
-                        format!("worker #{worker} failed ticket {ticket}"),
-                        FlashLevel::Warn,
-                    ),
-                    composer_protocol::WorkerState::Paused => (
-                        format!("worker #{worker} paused ticket {ticket} (usage limit)"),
-                        FlashLevel::Warn,
-                    ),
-                    composer_protocol::WorkerState::Stuck => (
-                        format!(
-                            "worker #{worker} reached its turn limit on ticket {ticket}; its \
-                             orchestrator decides whether it goes on"
-                        ),
-                        FlashLevel::Warn,
-                    ),
-                };
-                // Watching it finish: back to the orchestrator, which gets its result next.
-                // Not while you're typing, or the message would go to the orchestrator.
-                let finished = matches!(
-                    state,
-                    composer_protocol::WorkerState::Done
-                        | composer_protocol::WorkerState::Failed
-                        | composer_protocol::WorkerState::Paused
-                );
-                if finished
-                    && self.session.current.as_deref() == Some(worker.as_str())
-                    && self.ui.mode != Mode::Insert
-                {
-                    let effects = self.attach(&parent, true);
-                    self.ui.flash(
-                        format!("{text} · back to the orchestrator (ctrl-o: the worker)"),
-                        level,
-                    );
-                    return effects;
-                }
-                self.ui.flash(text, level);
-                vec![]
-            }
             ServerMessage::ApprovalRequest {
                 request,
                 session,
@@ -1431,33 +951,6 @@ impl AppState {
 
     fn reply(&mut self, id: u64, result: CommandResult) -> Vec<Effect> {
         match (self.conn.take_pending(id), result) {
-            (Pending::OpenApp { site, session, .. }, CommandResult::AppOpened { opened }) => {
-                // The desktop's stage is this TUI's other half: put the app on the session's desk
-                // (opened by `:app`), and the stage shows it, instead of opening a browser. The
-                // answer says whether it opened on a project or on Home.
-                if self.window.is_some() {
-                    return self.send(
-                        ClientCommand::DeskOpen {
-                            session,
-                            tab: DeskTab::App {
-                                site,
-                                project: opened.project,
-                            },
-                            focus: true,
-                        },
-                        Pending::Ignore,
-                    );
-                }
-                // The server knows the session it was opened from; `session` in the URL is for a
-                // client app (the chat), which reads it from there.
-                let join = if opened.url.contains('?') { '&' } else { '?' };
-                let url = format!(
-                    "{}{}{join}session={session}",
-                    origin(&self.conn.server_url),
-                    opened.url
-                );
-                vec![Effect::CheckApp { site, url }]
-            }
             (Pending::ListSessions, CommandResult::Sessions { sessions }) => {
                 for info in sessions.into_iter().rev() {
                     self.session.upsert(info);
@@ -1514,17 +1007,6 @@ impl AppState {
                 self.session.upsert(session);
                 vec![]
             }
-            (Pending::Harnesses, CommandResult::Harnesses { harnesses, .. }) => {
-                let states: Vec<String> = harnesses
-                    .iter()
-                    .map(|h| match (h.allowed, h.on) {
-                        (false, _) => format!("{}: not allowed in config.toml", h.entry),
-                        (true, on) => format!("{} {}", h.entry, if on { "on" } else { "off" }),
-                    })
-                    .collect();
-                self.ui.flash(states.join(" · "), FlashLevel::Info);
-                vec![]
-            }
             (Pending::McpServers, CommandResult::McpServers { servers }) => {
                 let (text, level) = mcp_summary(&servers);
                 self.ui.flash(text, level);
@@ -1544,10 +1026,6 @@ impl AppState {
                 }
                 vec![]
             }
-            (Pending::Overview, CommandResult::Project { overview }) => {
-                self.project_view.loaded(overview);
-                vec![]
-            }
             // The stage of the session this TUI shows, from the horse's mouth: this answer is
             // what the tab list is built from after `:attach`, after a resume, after a
             // reconnect. A late answer for a session you have left is dropped.
@@ -1563,30 +1041,6 @@ impl AppState {
                 self.page.forget(&self.visible_ids());
                 let shown = self.desk.shown().unwrap_or("").to_string();
                 self.show_local(&shown, vec![])
-            }
-            (Pending::Merged(ticket), CommandResult::Merged { commit }) => {
-                self.ui.flash(
-                    format!("ticket {ticket} merged as {commit}; worktree and branch removed"),
-                    FlashLevel::Info,
-                );
-                self.refresh_changes()
-            }
-            (Pending::Comments(ticket), CommandResult::Comments { lines }) => {
-                let sent = self.project.drafts.len();
-                self.project.drafts.clear();
-                self.project.comments = lines;
-                self.ui.flash(
-                    format!("{sent} comment(s) added to ticket {ticket}"),
-                    FlashLevel::Info,
-                );
-                vec![]
-            }
-            (Pending::Discarded(ticket), CommandResult::Done) => {
-                self.ui.flash(
-                    format!("ticket {ticket} discarded: worktree and branch removed"),
-                    FlashLevel::Info,
-                );
-                self.refresh_changes()
             }
             _ => vec![],
         }
@@ -1696,16 +1150,6 @@ fn mcp_summary(servers: &[composer_protocol::http::McpServerInfo]) -> (String, F
     (format!("mcp: {}", parts.join(" · ")), level)
 }
 
-/// `http://host:port` of a server URL (`http://host:port/w/default`): app URLs come with their
-/// own path.
-fn origin(server_url: &str) -> &str {
-    let after = server_url.find("://").map_or(0, |i| i + 3);
-    match server_url[after..].find('/') {
-        Some(slash) => &server_url[..after + slash],
-        None => server_url,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use composer_protocol::http::McpServerInfo;
@@ -1714,17 +1158,15 @@ mod tests {
     use crate::store::types::PageView;
 
     use super::*;
-    use crate::store::types::ChatItem;
+    use crate::store::types::{ChatItem, PickerKind};
 
     fn info(id: &str, parent: Option<&str>) -> SessionInfo {
         SessionInfo {
             id: id.into(),
-            agent: "orchestrator".into(),
+            agent: "default".into(),
             project: None,
             site: None,
-            ticket: None,
             parent: parent.map(Into::into),
-            worker: None,
             state: TurnState::Idle,
             last_seq: 0,
             context_tokens: 0,
@@ -1737,7 +1179,7 @@ mod tests {
     fn connected() -> (AppState, Vec<Effect>) {
         let mut state = AppState::new(
             Startup {
-                agent: "orchestrator".into(),
+                agent: "default".into(),
                 ..Startup::default()
             },
             160_000,
@@ -1956,59 +1398,6 @@ mod tests {
     }
 
     #[test]
-    fn a_window_tui_joins_its_window_and_shows_the_session_it_picks() {
-        let mut state = AppState::new(
-            Startup {
-                agent: "orchestrator".into(),
-                window: Some("w1".into()),
-                ..Startup::default()
-            },
-            160_000,
-        );
-        let joined = state.reduce(Action::Connected);
-        assert!(sent(&joined).iter().any(|(_, c)| *c
-            == ClientCommand::WindowJoin {
-                window: "w1".into()
-            }));
-        state.session.upsert(info("a", None));
-        state.session.upsert(info("b", None));
-        state.reduce(Action::AttachSession("a".into()));
-        let changed = |window: &str, session: &str| {
-            Action::Server(ServerMessage::WindowChanged {
-                window: window.into(),
-                session: session.into(),
-            })
-        };
-        assert_eq!(
-            attached(&state.reduce(changed("w2", "b"))),
-            None,
-            "another window"
-        );
-        assert_eq!(
-            attached(&state.reduce(changed("w1", "a"))),
-            None,
-            "already showing it"
-        );
-        assert_eq!(
-            attached(&state.reduce(changed("w1", "b"))).as_deref(),
-            Some("b")
-        );
-    }
-
-    /// The session opened: its history asked for (then it attaches), or attached.
-    fn attached(effects: &[Effect]) -> Option<String> {
-        sent(effects).into_iter().find_map(|(_, c)| match c {
-            ClientCommand::SessionAttach { session, .. }
-            | ClientCommand::SessionHistory {
-                session,
-                before: None,
-                ..
-            } => Some(session),
-            _ => None,
-        })
-    }
-
-    #[test]
     fn a_session_opens_on_its_last_messages_and_loads_older_ones_at_the_top() {
         let (mut state, _) = connected();
         state.session.upsert(info("s", None));
@@ -2096,242 +1485,6 @@ mod tests {
         assert!(state.ui.flash.is_none());
     }
 
-    /// A window's TUI tells the server which session its stage shows, once per change; without
-    /// a window it says nothing. An app's selection is the chip; `:unselect` drops it.
-    #[test]
-    fn a_windows_tui_moves_its_stage_and_shows_the_chip() {
-        let nudge = || {
-            Action::Server(ServerMessage::Error {
-                id: None,
-                message: "x".into(),
-            })
-        };
-        let windowed = |effects: &[Effect]| -> Vec<ClientCommand> {
-            sent(effects)
-                .into_iter()
-                .map(|(_, c)| c)
-                .filter(|c| matches!(c, ClientCommand::WindowSession { .. }))
-                .collect()
-        };
-        let mut state = AppState::new(
-            Startup {
-                agent: "orchestrator".into(),
-                window: Some("w1".into()),
-                ..Startup::default()
-            },
-            160_000,
-        );
-        state.reduce(Action::Connected);
-        state.session.upsert(info("a", None));
-        state.session.upsert(info("b", None));
-        state.reduce(Action::AttachSession("a".into()));
-        assert_eq!(
-            windowed(&state.reduce(nudge())),
-            [ClientCommand::WindowSession {
-                window: "w1".into(),
-                session: "a".into()
-            }]
-        );
-        assert!(windowed(&state.reduce(nudge())).is_empty(), "once");
-        state.reduce(Action::AttachSession("b".into()));
-        assert_eq!(windowed(&state.reduce(nudge())).len(), 1);
-
-        // The chip, for the current session only.
-        let chip = |session: &str| {
-            Action::Server(ServerMessage::SelectionChanged {
-                session: session.into(),
-                selection: Some(composer_protocol::Selection {
-                    app: "board".into(),
-                    label: "ticket 0042".into(),
-                    text: None,
-                    url: None,
-                    data: None,
-                }),
-            })
-        };
-        state.reduce(chip("a"));
-        assert!(state.selection.is_none(), "another session's");
-        state.reduce(chip("b"));
-        assert_eq!(state.selection.as_ref().unwrap().label, "ticket 0042");
-        let effects = state.reduce(Action::Unselect);
-        assert!(state.selection.is_none());
-        assert!(sent(&effects).iter().any(
-            |(_, c)| matches!(c, ClientCommand::SelectionClear { session } if session == "b")
-        ));
-
-        // Without a window: nothing about windows.
-        let (mut plain, _) = connected();
-        plain.session.upsert(info("a", None));
-        plain.reduce(Action::AttachSession("a".into()));
-        assert!(windowed(&plain.reduce(nudge())).is_empty());
-    }
-
-    /// The current session's project is open on the server; switching closes it and opens the
-    /// next; a reconnect opens it again.
-    #[test]
-    fn the_current_sessions_project_is_kept_open() {
-        let (mut state, _) = connected();
-        state.session.upsert(SessionInfo {
-            project: Some("/p/game".into()),
-            site: None,
-            ..info("a", None)
-        });
-        state.session.upsert(SessionInfo {
-            project: Some("/p/notes".into()),
-            site: None,
-            ..info("b", None)
-        });
-        let nudge = || {
-            Action::Server(ServerMessage::Error {
-                id: None,
-                message: "x".into(),
-            })
-        };
-        let projects = |effects: &[Effect]| -> Vec<ClientCommand> {
-            sent(effects)
-                .into_iter()
-                .map(|(_, c)| c)
-                .filter(|c| {
-                    matches!(
-                        c,
-                        ClientCommand::ProjectOpen { .. } | ClientCommand::ProjectClose { .. }
-                    )
-                })
-                .collect()
-        };
-        state.reduce(Action::AttachSession("a".into()));
-        assert_eq!(
-            projects(&state.reduce(nudge())),
-            [ClientCommand::ProjectOpen {
-                project: "/p/game".into()
-            }]
-        );
-        assert!(projects(&state.reduce(nudge())).is_empty(), "once");
-        state.reduce(Action::AttachSession("b".into()));
-        assert_eq!(
-            projects(&state.reduce(nudge())),
-            [
-                ClientCommand::ProjectClose {
-                    project: "/p/game".into()
-                },
-                ClientCommand::ProjectOpen {
-                    project: "/p/notes".into()
-                },
-            ]
-        );
-        state.reduce(Action::Connected);
-        assert_eq!(
-            projects(&state.reduce(nudge())),
-            [ClientCommand::ProjectOpen {
-                project: "/p/notes".into()
-            }]
-        );
-    }
-
-    /// An orchestrator `o` with workers `w1` (idle) and `w2` (running); `x` is unrelated.
-    fn orchestration() -> AppState {
-        let (mut state, _) = connected();
-        state.session.upsert(info("x", None));
-        state.session.upsert(info("o", None));
-        state.session.upsert(info("w1", Some("o")));
-        state.session.upsert(SessionInfo {
-            state: TurnState::Running,
-            ..info("w2", Some("o"))
-        });
-        state
-    }
-
-    #[test]
-    fn the_orchestration_picker_offers_the_likely_switch() {
-        let mut state = orchestration();
-        state.reduce(Action::AttachSession("o".into()));
-        state.reduce(Action::OpenPicker(PickerKind::Orchestration));
-        let rows: Vec<(&str, &str)> = state
-            .picker
-            .items
-            .iter()
-            .map(|i| (i.title.as_str(), i.right.as_str()))
-            .collect();
-        // Session list order is newest first; the orchestrator heads its workers.
-        assert_eq!(
-            rows,
-            [
-                ("orchestrator #o ◂", ""),
-                ("  orchestrator #w2", "● running"),
-                ("  orchestrator #w1", ""),
-            ]
-        );
-        assert_eq!(state.picker.selected, 1, "the busy worker");
-        assert_eq!(
-            attached(&state.reduce(Action::PickerAccept)).as_deref(),
-            Some("w2")
-        );
-
-        // From a worker, Enter goes back to the orchestrator.
-        state.reduce(Action::OpenPicker(PickerKind::Orchestration));
-        assert_eq!(state.picker.selected, 0);
-
-        // A session without workers has nothing to show.
-        state.reduce(Action::AttachSession("x".into()));
-        state.ui.picker_open = false;
-        state.reduce(Action::OpenPicker(PickerKind::Orchestration));
-        assert!(!state.ui.picker_open);
-    }
-
-    #[test]
-    fn stepping_through_the_orchestration_wraps() {
-        let mut state = orchestration();
-        state.reduce(Action::AttachSession("o".into()));
-        let mut step = |delta| attached(&state.reduce(Action::CycleOrchestration(delta)));
-        assert_eq!(step(1).as_deref(), Some("w2"));
-        assert_eq!(step(1).as_deref(), Some("w1"));
-        assert_eq!(step(1).as_deref(), Some("o"));
-        assert_eq!(step(-1).as_deref(), Some("w1"));
-    }
-
-    #[test]
-    fn a_finished_worker_hands_back_to_its_orchestrator() {
-        let mut state = orchestration();
-        let status = |worker: &str, state| {
-            Action::Server(ServerMessage::WorkerStatus {
-                worker: worker.into(),
-                ticket: "0003".into(),
-                parent: "o".into(),
-                state,
-            })
-        };
-        state.reduce(Action::AttachSession("o".into()));
-        state.reduce(Action::AttachSession("w2".into()));
-        // Another worker finishing doesn't move you.
-        assert!(
-            attached(&state.reduce(status("w1", composer_protocol::WorkerState::Done))).is_none()
-        );
-        assert_eq!(state.session.status(&info("w1", Some("o"))), "done");
-
-        let effects = state.reduce(status("w2", composer_protocol::WorkerState::Done));
-        assert_eq!(attached(&effects).as_deref(), Some("o"));
-        assert!(
-            state
-                .ui
-                .flash
-                .as_ref()
-                .unwrap()
-                .text
-                .contains("back to the orchestrator")
-        );
-        // ctrl-o returns to the worker.
-        assert_eq!(
-            attached(&state.reduce(Action::JumpBack)).as_deref(),
-            Some("w2")
-        );
-
-        // Typing a message: stay put.
-        state.reduce(Action::SetMode(Mode::Insert));
-        let effects = state.reduce(status("w2", composer_protocol::WorkerState::Failed));
-        assert!(attached(&effects).is_none());
-        assert_eq!(state.session.current.as_deref(), Some("w2"));
-    }
-
     #[test]
     fn nothing_is_sent_while_disconnected() {
         let (mut state, _) = connected();
@@ -2396,213 +1549,6 @@ mod tests {
     }
 
     #[test]
-    fn an_app_opens_by_its_own_token_on_the_project_else_home() {
-        let (mut state, _) = connected();
-        state.conn.server_url = "http://h:1/w/default".into();
-        state.session.upsert(SessionInfo {
-            project: Some("/p/game".into()),
-            site: None,
-            ..info("s", None)
-        });
-        state.reduce(Action::AttachSession("s".into()));
-        let effects = state.reduce(Action::OpenApp(Some("calendar".into())));
-        let commands: Vec<_> = sent(&effects)
-            .into_iter()
-            .filter(|(_, c)| matches!(c, ClientCommand::AppOpen { .. }))
-            .collect();
-        let [
-            (
-                id,
-                ClientCommand::AppOpen {
-                    site,
-                    project,
-                    session,
-                },
-            ),
-        ] = commands.as_slice()
-        else {
-            panic!("{effects:?}")
-        };
-        assert_eq!(
-            (site.as_str(), project.as_deref()),
-            ("calendar", Some("/p/game"))
-        );
-        assert_eq!(
-            session.as_deref(),
-            Some("s"),
-            "the session it is opened from"
-        );
-        // Not one of the project's apps: on Home.
-        let effects = state.reduce(Action::Server(ServerMessage::Error {
-            id: Some(*id),
-            message: "isn't one of project `game`'s apps".into(),
-        }));
-        let commands: Vec<_> = sent(&effects)
-            .into_iter()
-            .filter(|(_, c)| matches!(c, ClientCommand::AppOpen { .. }))
-            .collect();
-        let [(id, ClientCommand::AppOpen { project: None, .. })] = commands.as_slice() else {
-            panic!("{effects:?}")
-        };
-        let effects = state.reduce(Action::Server(ServerMessage::Ok {
-            id: *id,
-            result: CommandResult::AppOpened {
-                opened: composer_protocol::http::AppOpened {
-                    url: "/w/default/a/app_x/".into(),
-                    token: Some("app_x".into()),
-                    project: None,
-                },
-            },
-        }));
-        let [Effect::CheckApp { site, url }] = effects.as_slice() else {
-            panic!("{effects:?}")
-        };
-        assert_eq!(site, "calendar");
-        assert_eq!(url, "http://h:1/w/default/a/app_x/?session=s");
-        assert!(!url.contains(&state.conn.token) || state.conn.token.is_empty());
-    }
-
-    #[test]
-    fn a_windows_tui_puts_an_app_on_the_desk_not_in_a_browser() {
-        let (mut state, _) = connected();
-        state.window = Some("w1".into());
-        state.conn.server_url = "http://h:1/w/default".into();
-        state.session.upsert(SessionInfo {
-            project: Some("/p/game".into()),
-            site: None,
-            ..info("s", None)
-        });
-        state.reduce(Action::AttachSession("s".into()));
-
-        let open = |state: &mut AppState, project: Option<&str>| {
-            let effects = state.reduce(Action::OpenApp(Some("calendar".into())));
-            let commands = sent(&effects);
-            let [(id, _)] = commands
-                .iter()
-                .filter(|(_, c)| matches!(c, ClientCommand::AppOpen { .. }))
-                .collect::<Vec<_>>()
-                .as_slice()
-            else {
-                panic!("{effects:?}")
-            };
-            let id = *id;
-            let effects = state.reduce(Action::Server(ServerMessage::Ok {
-                id,
-                result: CommandResult::AppOpened {
-                    opened: composer_protocol::http::AppOpened {
-                        url: "/w/default/a/app_x/".into(),
-                        token: Some("app_x".into()),
-                        project: project.map(Into::into),
-                    },
-                },
-            }));
-            let commands = sent(&effects);
-            assert!(
-                effects
-                    .iter()
-                    .all(|e| !matches!(e, Effect::CheckApp { .. } | Effect::OpenBrowser(_))),
-                "the stage shows apps, not a browser: {effects:?}"
-            );
-            commands
-        };
-
-        let desk_tab = |commands: &[(u64, ClientCommand)]| -> (String, DeskTab, bool) {
-            commands
-                .iter()
-                .find_map(|(_, command)| match command {
-                    ClientCommand::DeskOpen {
-                        session,
-                        tab,
-                        focus,
-                    } => Some((session.clone(), tab.clone(), *focus)),
-                    _ => None,
-                })
-                .expect("a desk.open")
-        };
-
-        // On the session's project: the tab names it.
-        let (session, tab, focus) = desk_tab(&open(&mut state, Some("game")));
-        assert_eq!(session, "s");
-        assert!(focus, "the stage shows the tab it was opened on");
-        assert_eq!(
-            tab,
-            DeskTab::App {
-                site: "calendar".into(),
-                project: Some("game".into())
-            }
-        );
-
-        // On Home: no project.
-        let (_, tab, _) = desk_tab(&open(&mut state, None));
-        assert_eq!(
-            tab,
-            DeskTab::App {
-                site: "calendar".into(),
-                project: None
-            }
-        );
-    }
-
-    #[test]
-    fn an_app_opens_only_when_built() {
-        let (mut state, _) = connected();
-        let effects = state.reduce(Action::OpenApp(Some("orchestration".into())));
-        let commands: Vec<_> = sent(&effects)
-            .into_iter()
-            .filter(|(_, c)| matches!(c, ClientCommand::AppOpen { .. }))
-            .collect();
-        let [(id, ClientCommand::AppOpen { .. })] = commands.as_slice() else {
-            panic!("{effects:?}")
-        };
-        let effects = state.reduce(Action::Server(ServerMessage::Ok {
-            id: *id,
-            result: CommandResult::AppOpened {
-                opened: composer_protocol::http::AppOpened {
-                    url: "/a/app_x/".into(),
-                    token: Some("app_x".into()),
-                    project: None,
-                },
-            },
-        }));
-        let [Effect::CheckApp { site, url }] = effects.as_slice() else {
-            panic!("{effects:?}")
-        };
-        assert_eq!(site, "orchestration");
-        let site = |name: &str, has_ui, app_built| composer_protocol::http::SiteSummary {
-            name: name.into(),
-            title: name.into(),
-            has_justfile: true,
-            has_ui,
-            app_built,
-            description: String::new(),
-            pages: 0,
-            app: None,
-            mcp: Vec::new(),
-        };
-        let mut check = |sites| {
-            state.reduce(Action::AppChecked {
-                site: "orchestration".into(),
-                url: url.clone(),
-                sites,
-            })
-        };
-        assert!(check(Some(vec![site("orchestration", true, false)])).is_empty());
-        assert_eq!(
-            check(Some(vec![site("orchestration", true, true)])),
-            [Effect::OpenBrowser(url.clone())]
-        );
-        assert_eq!(check(None), [Effect::OpenBrowser(url.clone())]);
-        assert!(check(Some(vec![site("orchestration", false, false)])).is_empty());
-        assert!(check(Some(vec![])).is_empty());
-        let flash = state.ui.flash.as_ref().unwrap();
-        assert!(
-            flash.text.contains("no site://orchestration"),
-            "{}",
-            flash.text
-        );
-    }
-
-    #[test]
     fn config_reload_lines() {
         assert_eq!(
             config_reload_line(true, &[], None),
@@ -2647,59 +1593,6 @@ mod tests {
         );
         assert_eq!(level, FlashLevel::Warn);
         assert!(mcp_summary(&[]).0.starts_with("no MCP servers"));
-    }
-
-    #[test]
-    fn comments_are_sent_to_the_ticket_and_replaced_by_its_lines() {
-        use composer_protocol::http::{DiffComment, ProjectDiff, TicketReview};
-        let (mut state, _) = connected();
-        let comment = DiffComment {
-            file: "a.rs".into(),
-            start: 2,
-            end: 2,
-            message: "why?".into(),
-            quote: None,
-        };
-        // No ticket review open: nowhere to send them.
-        state.reduce(Action::CommentAdd(comment.clone()));
-        assert!(sent(&state.reduce(Action::CommentsSend)).is_empty());
-        state.project.loaded(ProjectDiff {
-            path: "/wt".into(),
-            branch: None,
-            files: vec![],
-            diff: String::new(),
-            ticket: Some(TicketReview {
-                ticket: "0007".into(),
-                branch: "ticket/0007".into(),
-                target: None,
-                ahead: 0,
-                commits: vec![],
-                uncommitted: false,
-                conflicts: vec![],
-            }),
-        });
-        assert!(
-            state.project.drafts.is_empty(),
-            "another review: its own comments"
-        );
-        state.reduce(Action::CommentAdd(comment.clone()));
-        let effects = state.reduce(Action::CommentsSend);
-        let (id, command) = sent(&effects).remove(0);
-        assert_eq!(
-            command,
-            ClientCommand::TicketComment {
-                ticket: "0007".into(),
-                comments: vec![comment]
-            }
-        );
-        state.reduce(Action::Server(ServerMessage::Ok {
-            id,
-            result: CommandResult::Comments {
-                lines: vec!["- a.rs:2:2 — why?".into()],
-            },
-        }));
-        assert!(state.project.drafts.is_empty());
-        assert_eq!(state.project.comments, ["- a.rs:2:2 — why?"]);
     }
 
     // ---- the stage: the session's desk, as tabs (ticket 0208) ----
@@ -2967,19 +1860,12 @@ mod tests {
     #[test]
     fn kinds_a_terminal_cannot_draw_are_kept_but_neither_shown_nor_written() {
         let mut state = showing_a_session();
-        let app = entry(
-            "app:cad@game",
-            DeskTab::App {
-                site: "cad".into(),
-                project: Some("game".into()),
-            },
-            false,
-        );
+        let app = entry("live", DeskTab::LiveView, false);
         let terminal = entry("terminal:t1", DeskTab::Terminal { id: "t1".into() }, false);
         say_desk(
             &mut state,
             vec![app.clone(), terminal.clone()],
-            Some("app:cad@game"),
+            Some("live"),
             DeskBy::User,
         );
         assert_eq!(
@@ -3004,17 +1890,7 @@ mod tests {
         // And a page next to them is still listed on its own, with the others left alone.
         say_desk(
             &mut state,
-            vec![
-                entry(
-                    "app:cad@game",
-                    DeskTab::App {
-                        site: "cad".into(),
-                        project: Some("game".into()),
-                    },
-                    false,
-                ),
-                page("site://a"),
-            ],
+            vec![entry("live", DeskTab::LiveView, false), page("site://a")],
             Some("page:site://a"),
             DeskBy::User,
         );
@@ -3187,42 +2063,6 @@ mod tests {
             }),
             "{effects:?}"
         );
-    }
-
-    #[test]
-    fn the_project_view_stays_a_tab_of_this_terminal_only() {
-        let mut state = showing_a_session();
-        state.session.upsert(SessionInfo {
-            project: Some("/home/u/Projects/game".into()),
-            ..info("s", None)
-        });
-        let effects = settle(&mut state, Action::ProjectView(None));
-        assert!(
-            sent(&effects).iter().any(|(_, c)| c
-                == &ClientCommand::ProjectOverview {
-                    project: "/home/u/Projects/game".into()
-                }),
-            "{effects:?}"
-        );
-        assert_eq!(titles(&state), ["project · game"]);
-        assert!(
-            !sent(&effects)
-                .iter()
-                .any(|(_, c)| matches!(c, ClientCommand::DeskOpen { .. })),
-            "no `DeskTab` names a project overview, so it never reaches the desk"
-        );
-        assert_eq!(shown_title(&state), Some("project · game".into()));
-        // It walks with the desk's tabs and closes like one, and nothing is written back.
-        let effects = settle(&mut state, Action::CycleTab(1));
-        assert!(
-            sent(&effects).is_empty(),
-            "a local tab needs no desk command"
-        );
-        assert_eq!(shown_title(&state), Some("project · game".into()));
-        let effects = settle(&mut state, Action::CloseTab);
-        assert!(sent(&effects).is_empty());
-        assert_eq!(state.stage_tabs(), vec![]);
-        assert!(!state.project_view.open);
     }
 
     /// The stage drawn, not just its state: the bar lists the tabs and marks the one shown,
@@ -3420,24 +2260,17 @@ mod tests {
             Some("page:site://reading"),
             DeskBy::User,
         );
-        let app = entry(
-            "app:cad@game",
-            DeskTab::App {
-                site: "cad".into(),
-                project: Some("game".into()),
-            },
-            true,
-        );
+        let app = entry("live", DeskTab::LiveView, true);
         settle(
             &mut state,
             Action::Server(ServerMessage::DeskChanged {
                 session: "s".into(),
                 desk: Desk {
                     tabs: vec![page("site://reading"), page("site://other"), app],
-                    active: Some("app:cad@game".into()),
+                    active: Some("live".into()),
                 },
                 by: DeskBy::User,
-                opened: Some("app:cad@game".into()),
+                opened: Some("live".into()),
             }),
         );
         assert_eq!(
@@ -3465,14 +2298,7 @@ mod tests {
             titles(&state).is_empty(),
             "nothing is listed before the answer"
         );
-        let unread = entry(
-            "app:cad@game",
-            DeskTab::App {
-                site: "cad".into(),
-                project: Some("game".into()),
-            },
-            true,
-        );
+        let unread = entry("live", DeskTab::LiveView, true);
         let effects = settle(
             &mut state,
             Action::Server(ServerMessage::Ok {
@@ -3539,14 +2365,7 @@ mod tests {
             .iter()
             .find(|(_, c)| matches!(c, ClientCommand::DeskGet { session } if session == "s"))
             .expect("its desk was asked for");
-        let app = entry(
-            "app:cad@game",
-            DeskTab::App {
-                site: "cad".into(),
-                project: Some("game".into()),
-            },
-            false,
-        );
+        let app = entry("live", DeskTab::LiveView, false);
         settle(
             &mut state,
             Action::Server(ServerMessage::Ok {
@@ -3554,7 +2373,7 @@ mod tests {
                 result: CommandResult::Desk {
                     desk: Desk {
                         tabs: vec![app, page("site://first"), page("site://the/app/is/instead")],
-                        active: Some("app:cad@game".into()),
+                        active: Some("live".into()),
                     },
                 },
             }),
@@ -3564,63 +2383,6 @@ mod tests {
             shown_title(&state),
             Some("the/app/is/instead".into()),
             "the last tab a terminal can draw, the same fallback a change follows"
-        );
-    }
-
-    #[test]
-    fn attaching_another_session_leaves_no_tab_naming_its_project() {
-        let mut state = showing_a_session();
-        state.session.upsert(SessionInfo {
-            project: Some("/home/u/Projects/game".into()),
-            ..info("s", None)
-        });
-        settle(&mut state, Action::ProjectView(None));
-        assert_eq!(titles(&state), ["project · game"]);
-        state.session.upsert(info("t", None));
-        settle(&mut state, Action::AttachSession("t".into()));
-        assert!(
-            titles(&state).is_empty(),
-            "the overview was the other session's project: {:?}",
-            titles(&state)
-        );
-    }
-
-    #[test]
-    fn an_overview_that_failed_is_said_on_the_tab_and_asked_again_on_r() {
-        let mut state = showing_a_session();
-        state.session.upsert(SessionInfo {
-            project: Some("/home/u/Projects/game".into()),
-            ..info("s", None)
-        });
-        let effects = settle(&mut state, Action::ProjectView(None));
-        let asked = sent(&effects);
-        let (id, _) = asked
-            .iter()
-            .find(|(_, c)| matches!(c, ClientCommand::ProjectOverview { .. }))
-            .expect("the overview is asked for");
-        settle(
-            &mut state,
-            Action::Server(ServerMessage::Error {
-                id: Some(*id),
-                message: "no project here".into(),
-            }),
-        );
-        assert_eq!(
-            state.project_view.error.as_deref(),
-            Some("no project here"),
-            "the tab says what failed"
-        );
-        assert!(
-            !state.project_view.loading,
-            "and does not say `loading…` for ever"
-        );
-        let effects = settle(&mut state, Action::ReloadPage);
-        assert!(
-            sent(&effects).iter().any(|(_, c)| c
-                == &ClientCommand::ProjectOverview {
-                    project: "/home/u/Projects/game".into()
-                }),
-            "`r` asks again: {effects:?}"
         );
     }
 

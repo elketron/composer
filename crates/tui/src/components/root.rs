@@ -9,7 +9,7 @@ use ratatui::{Frame, Terminal};
 use crate::action::Action;
 use crate::components::{
     ApprovalPopup, ChangesView, ChatPane, CommandLine, Component, Help, PageViewer, Picker,
-    ProjectView, Selection, StatusBar, TabBar,
+    Selection, StatusBar, TabBar,
 };
 use crate::store::AppState;
 use crate::store::StageTab;
@@ -27,7 +27,6 @@ pub struct Root {
     pub chat: ChatPane,
     pub page: PageViewer,
     changes: ChangesView,
-    project: ProjectView,
     tabs: TabBar,
     status: StatusBar,
     command: CommandLine,
@@ -47,7 +46,6 @@ impl Root {
             chat: ChatPane::new(),
             page: PageViewer::new(),
             changes: ChangesView::new(),
-            project: ProjectView::new(),
             tabs: TabBar,
             status: StatusBar,
             command: CommandLine::new(),
@@ -144,11 +142,6 @@ impl Root {
         match pane {
             Pane::Chat => return self.chat.scroll_by(up, WHEEL_LINES, state),
             Pane::Stage => match state.shown_tab() {
-                Some(StageTab::Project { .. }) => {
-                    for _ in 0..WHEEL_LINES {
-                        self.project.handle_key(key, state);
-                    }
-                }
                 Some(StageTab::Changes { .. }) => {
                     for _ in 0..WHEEL_LINES {
                         self.changes.handle_key(key, state);
@@ -177,7 +170,6 @@ impl Root {
             _ => area,
         };
         match state.shown_tab() {
-            Some(StageTab::Project { .. }) => self.project.render(frame, content, state),
             Some(StageTab::Changes { .. }) => self.changes.render(frame, content, state),
             Some(StageTab::Page { .. }) => self.page.render(frame, content, state),
             // Nothing open: the stage says what would put something here.
@@ -243,12 +235,10 @@ impl Component for Root {
             Mode::Command => self.command.handle_key(key, state),
             // These modes belong to a view, whatever else is open: you got to them from it.
             Mode::Hint => self.page.handle_key(key, state),
-            Mode::Comment => self.changes.handle_key(key, state),
             Mode::Normal => match state.ui.focus {
                 Pane::Chat => self.chat.handle_key(key, state),
                 // The tab on the screen owns the stage's keys.
                 Pane::Stage => match state.shown_tab() {
-                    Some(StageTab::Project { .. }) => self.project.handle_key(key, state),
                     Some(StageTab::Changes { .. }) => self.changes.handle_key(key, state),
                     Some(StageTab::Page { .. }) | None => self.page.handle_key(key, state),
                 },

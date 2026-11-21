@@ -12,9 +12,8 @@ use crate::components::widgets::{centered, dim};
 use crate::store::AppState;
 use crate::theme;
 
-/// Asks to run a recipe that wasn't approved (in this version), to merge a ticket an agent
-/// asked to merge, or to let Claude Code use a tool outside its allowlist. Modal: it takes
-/// every key until answered. Drawn in the warn colour, never the accent.
+/// Asks to run a recipe that wasn't approved (in this version), to type into a terminal, or to
+/// call an MCP tool. Modal: it takes every key until answered. Drawn in the warn colour, never the accent.
 pub struct ApprovalPopup;
 
 impl Component for ApprovalPopup {
@@ -53,10 +52,8 @@ impl Component for ApprovalPopup {
         let more = state.approvals.count().saturating_sub(1);
         let question = match approval.kind {
             ApprovalKind::Recipe => "run recipe?",
-            ApprovalKind::Merge => "merge?",
             ApprovalKind::Tool => "allow tool?",
             ApprovalKind::Mcp => "allow MCP tool?",
-            ApprovalKind::Publish => "publish to the library?",
         };
         let title = if more > 0 {
             format!(" {question} (+{more} more) ")
@@ -123,12 +120,6 @@ impl Component for ApprovalPopup {
                 format!(
                     "sha256 {short_hash} · new or changed · approval lasts until the recipe changes"
                 )
-            }
-            ApprovalKind::Merge => {
-                "merges into the project's branch, then removes the worktree and branch".to_string()
-            }
-            ApprovalKind::Publish => {
-                "every workspace can install or update from it then · asked each time".to_string()
             }
             ApprovalKind::Tool => match &approval.rule {
                 Some(rule) => format!("a always: allow {rule} in this project from now on"),

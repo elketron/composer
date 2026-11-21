@@ -1,9 +1,6 @@
-//! A tab the stage can draw (ticket 0208): the desk's tabs a terminal can show, plus the
-//! project overview, which is this terminal's own.
+//! A tab the stage can draw (ticket 0208): the desk's tabs a terminal can show.
 
 use composer_protocol::DeskTab;
-
-use crate::store::desk_store::PROJECT_TAB;
 
 /// A tab the stage can draw.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -20,8 +17,6 @@ pub enum StageTab {
         project: String,
         unseen: bool,
     },
-    /// A project's overview: this terminal's own tab, never on the desk.
-    Project { project: Option<String> },
 }
 
 impl StageTab {
@@ -29,7 +24,6 @@ impl StageTab {
     pub fn id(&self) -> &str {
         match self {
             Self::Page { id, .. } | Self::Changes { id, .. } => id,
-            Self::Project { .. } => PROJECT_TAB,
         }
     }
 
@@ -38,17 +32,6 @@ impl StageTab {
         match self {
             Self::Page { url, .. } => url.strip_prefix("site://").unwrap_or(url).to_string(),
             Self::Changes { project, .. } => format!("changes · {project}"),
-            Self::Project {
-                project: Some(project),
-            } => format!(
-                "project · {}",
-                project
-                    .trim_end_matches('/')
-                    .rsplit('/')
-                    .next()
-                    .unwrap_or(project)
-            ),
-            Self::Project { project: None } => "project".to_string(),
         }
     }
 
@@ -56,18 +39,16 @@ impl StageTab {
     pub fn unseen(&self) -> bool {
         match self {
             Self::Page { unseen, .. } | Self::Changes { unseen, .. } => *unseen,
-            Self::Project { .. } => false,
         }
     }
 
-    /// What to write back to the desk for it; `None` for a tab that lives only here.
-    pub fn desk_tab(&self) -> Option<DeskTab> {
+    /// What to write back to the desk for it.
+    pub fn desk_tab(&self) -> DeskTab {
         match self {
-            Self::Page { url, .. } => Some(DeskTab::Page { url: url.clone() }),
-            Self::Changes { project, .. } => Some(DeskTab::Changes {
+            Self::Page { url, .. } => DeskTab::Page { url: url.clone() },
+            Self::Changes { project, .. } => DeskTab::Changes {
                 project: project.clone(),
-            }),
-            Self::Project { .. } => None,
+            },
         }
     }
 }

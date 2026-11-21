@@ -58,12 +58,6 @@ impl EffectRunner {
                     });
                 });
             }
-            Effect::LoadProjects(query) => {
-                tokio::spawn(async move {
-                    let projects = api.projects(&query).await.unwrap_or_default();
-                    dispatcher.dispatch(Action::ProjectsLoaded { query, projects });
-                });
-            }
             Effect::LoadSites => {
                 tokio::spawn(async move {
                     dispatcher.dispatch(Action::SitesLoaded(api.sites().await.unwrap_or_default()));
@@ -76,12 +70,6 @@ impl EffectRunner {
                         sites: sites.unwrap_or_default(),
                         pages: pages.unwrap_or_default(),
                     });
-                });
-            }
-            Effect::CheckApp { site, url } => {
-                tokio::spawn(async move {
-                    let sites = api.sites().await.ok();
-                    dispatcher.dispatch(Action::AppChecked { site, url, sites });
                 });
             }
             Effect::UploadFile {
@@ -108,7 +96,6 @@ impl EffectRunner {
             Effect::EditPage(_)
             | Effect::CopyText(_)
             | Effect::ViewText { .. }
-            | Effect::OpenBrowser(_)
             | Effect::OpenFile { .. }
             | Effect::Quit => {}
         }

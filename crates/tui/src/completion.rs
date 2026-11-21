@@ -1,5 +1,5 @@
 //! Completing `:` commands with Tab, as vim's command line does: command names, then each
-//! command's argument (session ids, agents, sites and pages, project directories).
+//! command's argument (session ids, agents, sites and pages, models).
 
 use crate::commands::COMMANDS;
 use crate::store::AppState;
@@ -49,27 +49,8 @@ pub fn complete(line: &str, state: &AppState) -> Completions {
         "attach" | "a" => sessions(arg, state),
         "new" => agents(arg, state),
         "open" | "o" => pages(arg, state),
-        "app" => app_sites(arg, state),
         "site" => all_sites(arg, state),
         "model" | "m" => models(arg, state),
-        "project" | "p" => {
-            let view = subcommands(arg, &[("view", "its works, sessions, branches and memory")]);
-            let unset = state
-                .session
-                .current_info()
-                .and_then(|s| s.project.as_deref())
-                .filter(|_| starts_with("none", arg))
-                .map(|project| Candidate {
-                    text: "none".into(),
-                    detail: format!("unset {project}"),
-                });
-            let folders = if is_local(&state.conn.server_url) {
-                projects(arg, state.projects_dir.as_deref())
-            } else {
-                Vec::new()
-            };
-            view.into_iter().chain(unset).chain(folders).collect()
-        }
         _ => Vec::new(),
     };
     Completions {
@@ -82,8 +63,7 @@ fn starts_with(text: &str, prefix: &str) -> bool {
     text.to_lowercase().starts_with(&prefix.to_lowercase())
 }
 
-/// One candidate per command. A command with several forms (`:project`, `:project view`)
-/// lists them as its detail.
+/// One candidate per command. A command with several forms lists them as its detail.
 fn command_names(prefix: &str) -> Vec<Candidate> {
     let mut names: Vec<(&str, Vec<(&str, &str)>)> = Vec::new();
     for (usage, help) in COMMANDS {
@@ -114,23 +94,8 @@ fn command_names(prefix: &str) -> Vec<Candidate> {
         .collect()
 }
 
-/// A command's subcommands, as its first argument.
-fn subcommands(arg: &str, choices: &[(&str, &str)]) -> Vec<Candidate> {
-    if arg.contains(char::is_whitespace) {
-        return Vec::new();
-    }
-    choices
-        .iter()
-        .filter(|(name, _)| starts_with(name, arg))
-        .map(|(name, detail)| Candidate {
-            text: name.to_string(),
-            detail: detail.to_string(),
-        })
-        .collect()
-}
-
 /// By id; when no id starts with it, by words in the agent or the last message. Newest first.
-/// Top-level sessions: a session's workers are a `Space o` away once you are in it.
+/// Top-level sessions.
 fn sessions(arg: &str, state: &AppState) -> Vec<Candidate> {
     let all: Vec<_> = state
         .session
@@ -262,7 +227,7 @@ fn page_path(url: &str) -> Option<String> {
     Some(path.strip_suffix("/index").unwrap_or(path).to_string())
 }
 
-/// Every site of the workspace; its `index.md` says what it brings.
+/// Every site; its `index.md` says what it brings.
 fn all_sites(arg: &str, state: &AppState) -> Vec<Candidate> {
     let arg = arg.strip_prefix("site://").unwrap_or(arg);
     state
@@ -273,89 +238,6 @@ fn all_sites(arg: &str, state: &AppState) -> Vec<Candidate> {
         .map(|site| Candidate {
             text: site.name.clone(),
             detail: site.title.clone(),
-        })
-        .collect()
-}
-
-fn app_sites(arg: &str, state: &AppState) -> Vec<Candidate> {
-    state
-        .catalog
-        .sites
-        .iter()
-        .filter(|site| site.has_ui && starts_with(&site.name, arg))
-        .map(|site| Candidate {
-            text: site.name.clone(),
-            detail: site.title.clone(),
-        })
-        .collect()
-}
-
-/// The project path is on the server's machine: complete it only when that is this one.
-fn is_local(server_url: &str) -> bool {
-    let host = server_url
-        .split("://")
-        .nth(1)
-        .unwrap_or(server_url)
-        .split(['/', ':'])
-        .next()
-        .unwrap_or("");
-    matches!(host, "127.0.0.1" | "localhost" | "[")
-}
-
-/// As the server reads it: `~/...` and `/...` are paths; anything else (`comp`, `work/api`)
-/// is inside the projects directory.
-fn projects(arg: &str, projects_dir: Option<&str>) -> Vec<Candidate> {
-    let is_path = arg.starts_with(['~', '/']);
-    let Some(dir) = projects_dir.filter(|_| !is_path) else {
-        return directories(arg);
-    };
-    let base = format!("{}/", dir.trim_end_matches('/'));
-    directories(&format!("{base}{arg}"))
-        .into_iter()
-        .filter_map(|c| {
-            let name = c
-                .text
-                .strip_prefix(&base)?
-                .trim_end_matches('/')
-                .to_string();
-            Some(Candidate {
-                detail: format!("{base}{name}"),
-                text: name,
-            })
-        })
-        .collect()
-}
-
-/// Directories, like vim's file completion: `~/Pro` → `~/Projects/`. Hidden ones only after a `.`.
-fn directories(arg: &str) -> Vec<Candidate> {
-    let home = std::env::var("HOME").unwrap_or_default();
-    let expanded = match arg.strip_prefix('~') {
-        Some(rest) if !home.is_empty() => format!("{home}{rest}"),
-        _ => arg.to_string(),
-    };
-    let (dir, partial) = match expanded.rfind('/') {
-        Some(i) => (&expanded[..=i], &expanded[i + 1..]),
-        None => ("./", expanded.as_str()),
-    };
-    // What the user typed before the partial name, `~` and all.
-    let typed_dir = &arg[..arg.rfind('/').map_or(0, |i| i + 1)];
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return Vec::new();
-    };
-    let mut names: Vec<String> = entries
-        .filter_map(Result::ok)
-        .filter(|e| e.file_type().is_ok_and(|t| t.is_dir()))
-        .filter_map(|e| e.file_name().into_string().ok())
-        .filter(|name| {
-            name.starts_with(partial) && (partial.starts_with('.') || !name.starts_with('.'))
-        })
-        .collect();
-    names.sort();
-    names
-        .into_iter()
-        .map(|name| Candidate {
-            text: format!("{typed_dir}{name}/"),
-            detail: String::new(),
         })
         .collect()
 }
@@ -375,9 +257,7 @@ mod tests {
             agent: agent.into(),
             project: None,
             site: None,
-            ticket: None,
             parent: None,
-            worker: None,
             state: TurnState::Idle,
             last_seq: 0,
             context_tokens: 0,
@@ -386,23 +266,19 @@ mod tests {
             updated: String::new(),
         };
         state.session.sessions = vec![
-            session("a3f1", "orchestrator", "fix the login bug"),
-            session("b2c3", "orchestrator", "plan the release"),
+            session("a3f1", "default", "fix the login bug"),
+            session("b2c3", "default", "plan the release"),
             SessionInfo {
-                ticket: Some("0001".into()),
                 parent: Some("b2c3".into()),
-                ..session("c4d5", "orchestrator", "ticket 0001: release notes")
+                ..session("c4d5", "default", "a spawned run")
             },
         ];
-        let site = |name: &str, title: &str, has_ui: bool| SiteSummary {
+        let site = |name: &str, title: &str| SiteSummary {
             name: name.into(),
             title: title.into(),
             has_justfile: false,
-            has_ui,
-            app_built: has_ui,
             description: String::new(),
             pages: 0,
-            app: None,
             mcp: Vec::new(),
         };
         let page = |url: &str, title: &str| SearchHit {
@@ -417,17 +293,17 @@ mod tests {
         };
         state.catalog = Catalog {
             sites: vec![
-                site("memory", "Memory", false),
-                site("orchestration", "Orchestration", true),
-                site("agents", "Agents", false),
+                site("memory", "Memory"),
+                site("plans", "Plans"),
+                site("agents", "Agents"),
             ],
             pages: vec![
                 page("site://memory/index.md", "Memory"),
                 page("site://memory/user.md", "User"),
                 page("site://memory/topics/rust.md", "Rust"),
                 page("site://agents/index.md", "Agents"),
-                page("site://agents/orchestrator.md", "Orchestrator"),
-                page("site://agents/worker.md", "Worker"),
+                page("site://agents/default.md", "Default"),
+                page("site://agents/writer.md", "Writer"),
             ],
             models: vec![
                 ModelInfo {
@@ -456,15 +332,14 @@ mod tests {
 
     #[test]
     fn command_names_with_their_help() {
-        assert_eq!(texts("a"), ["attach", "app"]);
+        assert_eq!(texts("a"), ["attach"]);
         // One per command, however many forms it has.
         let all = texts("");
         let mut unique = all.clone();
         unique.sort();
         unique.dedup();
         assert_eq!(all.len(), unique.len(), "{all:?}");
-        assert_eq!(texts("pro"), ["project"]);
-        assert_eq!(texts("wor"), ["workers"]);
+        assert_eq!(texts("sc"), ["scope"]);
         let first = &complete("comp", &state()).items[0];
         assert_eq!(first.text, "compact");
         assert!(first.detail.contains("summarize"));
@@ -478,7 +353,7 @@ mod tests {
         assert_eq!(texts("attach "), ["a3f1", "b2c3"]);
         // By words of the last message too.
         assert_eq!(texts("attach release"), ["b2c3"]);
-        // Not its workers: those are in Space o.
+        // Not the runs it spawned.
         assert!(texts("attach c4").is_empty());
     }
 
@@ -500,8 +375,8 @@ mod tests {
 
     #[test]
     fn agents_from_the_agents_site() {
-        assert_eq!(texts("new "), ["orchestrator", "worker"]);
-        assert_eq!(texts("new orch"), ["orchestrator"]);
+        assert_eq!(texts("new "), ["default", "writer"]);
+        assert_eq!(texts("new wr"), ["writer"]);
     }
 
     #[test]
@@ -510,8 +385,7 @@ mod tests {
         assert_eq!(texts("open memory/"), ["memory/topics/rust", "memory/user"]);
         assert_eq!(texts("open memory/u"), ["memory/user"]);
         assert_eq!(texts("o site://memory/t"), ["site://memory/topics/rust"]);
-        assert_eq!(texts("app "), ["orchestration"]);
-        assert_eq!(texts("site "), ["memory", "orchestration", "agents"]);
+        assert_eq!(texts("site "), ["memory", "plans", "agents"]);
         assert_eq!(texts("site ag"), ["agents"]);
     }
 
@@ -519,52 +393,5 @@ mod tests {
     fn nothing_for_commands_without_arguments() {
         assert!(texts("compact ").is_empty());
         assert!(texts("frobnicate x").is_empty());
-    }
-
-    #[test]
-    fn a_project_can_be_unset() {
-        let mut state = state();
-        state.conn.server_url = "https://home.tail1234.ts.net".into();
-        assert!(
-            complete("project n", &state).items.is_empty(),
-            "no project yet"
-        );
-        state.session.sessions[0].project = Some("/home/u/Projects/composer".into());
-        state.session.current = Some("a3f1".into());
-        let items = complete("project n", &state).items;
-        assert_eq!(
-            (items[0].text.as_str(), items[0].detail.as_str()),
-            ("none", "unset /home/u/Projects/composer")
-        );
-    }
-
-    #[test]
-    fn project_directories_only_for_a_local_server() {
-        assert!(is_local("http://127.0.0.1:7420"));
-        assert!(is_local("http://localhost:7420"));
-        assert!(!is_local("https://home.tail1234.ts.net"));
-        let dir = tempfile::tempdir().unwrap();
-        for name in ["alpha", "beta", ".hidden"] {
-            std::fs::create_dir(dir.path().join(name)).unwrap();
-        }
-        std::fs::write(dir.path().join("file.txt"), "").unwrap();
-        let base = format!("{}/", dir.path().display());
-        let names: Vec<String> = directories(&base).into_iter().map(|c| c.text).collect();
-        assert_eq!(names, [format!("{base}alpha/"), format!("{base}beta/")]);
-        assert_eq!(directories(&format!("{base}.")).len(), 1);
-        assert_eq!(
-            directories(&format!("{base}a"))[0].text,
-            format!("{base}alpha/")
-        );
-
-        // Names come from the projects directory; paths still complete as paths.
-        let projects_dir = Some(dir.path().to_str().unwrap());
-        let names: Vec<(String, String)> = projects("b", projects_dir)
-            .into_iter()
-            .map(|c| (c.text, c.detail))
-            .collect();
-        assert_eq!(names, [("beta".to_string(), format!("{base}beta"))]);
-        assert_eq!(projects(&base, projects_dir).len(), 2);
-        assert_eq!(projects("b", None), directories("b"));
     }
 }

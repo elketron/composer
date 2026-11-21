@@ -10,11 +10,9 @@ pub enum Mode {
     Insert,
     Command,
     Hint,
-    /// Typing a comment on a diff line (the changes view owns the keys).
-    Comment,
 }
 
-/// One of the two panes. The stage holds tabs (pages, changes, the project view): a tab is
+/// One of the two panes. The stage holds tabs (pages, changes): a tab is
 /// content inside it, not a pane of its own, so focus and layout keep their shape.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Pane {
@@ -27,10 +25,6 @@ pub enum PickerKind {
     Pages,
     Sites,
     Sessions,
-    /// The current session's orchestrator and its workers.
-    Orchestration,
-    /// Projects (searched on the server).
-    Projects,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -45,8 +39,6 @@ pub struct PickerItem {
 pub enum PickerTarget {
     Url(String),
     Session(String),
-    /// A project's folder.
-    Project(String),
 }
 
 /// One row-group in the chat.
@@ -138,36 +130,20 @@ pub enum Pending {
         session: String,
         before: Option<Seq>,
     },
-    /// `harness.list` / `harness.set`: show the result.
-    Harnesses,
     /// `model.list`: kept for `:model`'s completion (quietly: an older server doesn't know it).
     Models,
     /// `model.set`: say what it uses now.
     ModelSet,
-    /// `site.set`: say what happened, the site's application included.
+    /// `site.set`: say what happened.
     SiteSet,
-    /// `project.overview` for the project view.
-    Overview,
     /// `mcp.list`: say how the servers are.
     McpServers,
     /// `config.reload`: say what changed.
     ReloadConfig,
-    /// `ticket.merge` / `ticket.discard` of this ticket.
-    Merged(String),
-    Discarded(String),
-    /// `ticket.comment` on this ticket: say how many went in, show the lines.
-    Comments(String),
     /// `desk.get` for one session: its tabs, so the stage has something to list. The session is
     /// named because an answer that arrives after you moved on must not be applied.
     Desk {
         session: String,
-    },
-    /// `app.open` of `site` for `session`: on `project` (then on Home, if it isn't one of its
-    /// apps), then check it is built and open it.
-    OpenApp {
-        site: String,
-        session: String,
-        project: Option<String>,
     },
     Ignore,
 }
@@ -186,10 +162,8 @@ pub struct Startup {
     pub new: bool,
     pub agent: String,
     pub project: Option<String>,
-    /// `[projects] dir` from the config (`~/Projects`): `:project <name>` completes from it.
+    /// `[projects] dir` from the config (`~/Projects`).
     pub projects_dir: Option<String>,
-    /// The desktop window it is the chat of (ticket 0177): its stage follows this TUI's session.
-    pub window: Option<String>,
 }
 
 /// A recipe waiting for your approval.
@@ -198,13 +172,12 @@ pub struct PendingApproval {
     pub request: String,
     pub session: String,
     pub kind: composer_protocol::ApprovalKind,
-    /// What is asked, for merges and tools.
+    /// What is asked, for tools.
     pub title: String,
     pub site: String,
     pub recipe: String,
     pub args: Vec<String>,
-    /// The recipe source (with dependencies) as `just --show` prints it; the changes of a
-    /// merge; a tool's input.
+    /// The recipe source (with dependencies) as `just --show` prints it; a tool's input.
     pub body: String,
     pub hash: String,
     /// A tool's rule for `always`.

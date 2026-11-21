@@ -2,8 +2,7 @@ use std::path::Path;
 
 use serde_json::Value;
 
-/// Where a client talks to: a workspace's base URL (`http://127.0.0.1:7420/w/default`) and its
-/// token.
+/// Where a client talks to: the server's base URL (`http://127.0.0.1:7420`) and its token.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Endpoint {
     base: String,
@@ -21,10 +20,10 @@ impl Endpoint {
         }
     }
 
-    /// The server this machine talks to for `workspace` of the home at `home`: a paired one
-    /// (`composer login` wrote `remote.json`), else the local one (the home's `[server] bind`, the
-    /// workspace's token). Reads only: the server makes the token when it first starts.
-    pub fn discover(home: &Path, workspace: &str) -> Result<Self, String> {
+    /// The server this machine talks to for the home at `home`: a paired one (`composer login`
+    /// wrote `remote.json`), else the local one (the home's `[server] bind`, its token). Reads
+    /// only: the server makes the token when it first starts.
+    pub fn discover(home: &Path) -> Result<Self, String> {
         if let Ok(text) = std::fs::read_to_string(home.join("remote.json")) {
             let remote: Value = serde_json::from_str(&text)
                 .map_err(|e| format!("{}: {e}", home.join("remote.json").display()))?;
@@ -34,37 +33,28 @@ impl Endpoint {
                 return Ok(Self::new(server, token));
             }
         }
-        let workspace_root = home.join("workspaces").join(workspace);
-        let bind = [
-            home.join("global/config.toml"),
-            workspace_root.join("config.toml"),
-        ]
-        .iter()
-        .filter_map(|file| std::fs::read_to_string(file).ok())
-        .filter_map(|text| text.parse::<toml::Table>().ok())
-        .filter_map(|table| {
-            table
-                .get("server")?
-                .get("bind")?
-                .as_str()
-                .map(str::to_string)
-        })
-        .next_back()
-        .unwrap_or_else(|| DEFAULT_BIND.to_string());
-        let token_file = workspace_root.join("state/token");
+        let bind = std::fs::read_to_string(home.join("config.toml"))
+            .ok()
+            .and_then(|text| text.parse::<toml::Table>().ok())
+            .and_then(|table| {
+                table
+                    .get("server")?
+                    .get("bind")?
+                    .as_str()
+                    .map(str::to_string)
+            })
+            .unwrap_or_else(|| DEFAULT_BIND.to_string());
+        let token_file = home.join("state/token");
         let token = std::fs::read_to_string(&token_file).map_err(|_| {
             format!(
-                "no token in {} (is the workspace `{workspace}` there, and has the server run once?)",
+                "no token in {} (has the server run once?)",
                 token_file.display()
             )
         })?;
-        Ok(Self::new(
-            format!("http://{bind}/w/{workspace}"),
-            token.trim(),
-        ))
+        Ok(Self::new(format!("http://{bind}"), token.trim()))
     }
 
-    /// The workspace's base URL.
+    /// The server's base URL.
     pub fn base(&self) -> &str {
         &self.base
     }
@@ -82,7 +72,7 @@ impl Endpoint {
         )
     }
 
-    /// One of its HTTP routes (`/api/apps`).
+    /// One of its HTTP routes (`/api/sites`).
     pub fn url(&self, path: &str) -> String {
         format!("{}{path}", self.base)
     }
@@ -148,32 +138,30 @@ mod tests {
     #[test]
     fn paired_else_local() {
         let home = tempfile::tempdir().unwrap();
-        let ws = home.path().join("workspaces/default");
-        std::fs::create_dir_all(ws.join("state")).unwrap();
-        std::fs::create_dir_all(home.path().join("global")).unwrap();
-        std::fs::write(ws.join("state/token"), "abc\n").unwrap();
-        let local = Endpoint::discover(home.path(), "default").unwrap();
-        assert_eq!(local.base(), "http://127.0.0.1:7420/w/default");
-        assert_eq!(local.ws_url(), "ws://127.0.0.1:7420/w/default/ws?token=abc");
+        std::fs::create_dir_all(home.path().join("state")).unwrap();
+        std::fs::write(home.path().join("state/token"), "abc\n").unwrap();
+        let local = Endpoint::discover(home.path()).unwrap();
+        assert_eq!(local.base(), "http://127.0.0.1:7420");
+        assert_eq!(local.ws_url(), "ws://127.0.0.1:7420/ws?token=abc");
         std::fs::write(
-            home.path().join("global/config.toml"),
+            home.path().join("config.toml"),
             "[server]\nbind = \"127.0.0.1:9000\"\n",
         )
         .unwrap();
         assert_eq!(
-            Endpoint::discover(home.path(), "default").unwrap().base(),
-            "http://127.0.0.1:9000/w/default"
+            Endpoint::discover(home.path()).unwrap().base(),
+            "http://127.0.0.1:9000"
         );
         std::fs::write(
             home.path().join("remote.json"),
-            r#"{"server": "https://box.ts.net/w/default", "token": "dev"}"#,
+            r#"{"server": "https://box.ts.net", "token": "dev"}"#,
         )
         .unwrap();
-        let paired = Endpoint::discover(home.path(), "default").unwrap();
+        let paired = Endpoint::discover(home.path()).unwrap();
         assert_eq!(
             (paired.base(), paired.token()),
-            ("https://box.ts.net/w/default", "dev")
+            ("https://box.ts.net", "dev")
         );
-        assert!(Endpoint::discover(home.path().join("x").as_path(), "b").is_err());
+        assert!(Endpoint::discover(home.path().join("x").as_path()).is_err());
     }
 }

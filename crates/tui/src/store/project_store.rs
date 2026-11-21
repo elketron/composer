@@ -1,4 +1,4 @@
-use composer_protocol::http::{DiffComment, ProjectDiff};
+use composer_protocol::http::ProjectDiff;
 
 use crate::diff_parse::view_lines;
 use crate::store::types::DiffLine;
@@ -15,22 +15,12 @@ pub struct ProjectStore {
     pub plain: bool,
     pub error: Option<String>,
     pub loading: bool,
-    /// Comments written on the diff, not sent yet.
-    pub drafts: Vec<DiffComment>,
-    /// The comment lines on the ticket page, as the last send left them.
-    pub comments: Vec<String>,
 }
 
 impl ProjectStore {
     pub fn loaded(&mut self, diff: ProjectDiff) {
         self.loading = false;
         self.error = None;
-        let ticket = |d: &ProjectDiff| d.ticket.as_ref().map(|t| t.ticket.clone());
-        // Comments belong to one ticket's review; a refresh of it keeps them.
-        if self.diff.as_ref().map(ticket) != Some(ticket(&diff)) {
-            self.drafts.clear();
-            self.comments.clear();
-        }
         self.lines = view_lines(&diff, !self.plain);
         self.diff = Some(diff);
     }

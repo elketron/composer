@@ -60,27 +60,7 @@ impl Keymap {
             (
                 vec![space, key('w')],
                 Action::OpenPicker(PickerKind::Sessions),
-                "sessions and workers",
-            ),
-            (
-                vec![space, key('P')],
-                Action::OpenPicker(PickerKind::Projects),
-                "find a project (opens its view)",
-            ),
-            (
-                vec![space, key('o')],
-                Action::OpenPicker(PickerKind::Orchestration),
-                "this orchestration: orchestrator and workers, with what each is doing",
-            ),
-            (
-                vec![key(']'), key('w')],
-                Action::CycleOrchestration(1),
-                "next session of this orchestration",
-            ),
-            (
-                vec![key('['), key('w')],
-                Action::CycleOrchestration(-1),
-                "previous session of this orchestration",
+                "sessions",
             ),
             (vec![tab], Action::FocusNext, "switch pane"),
             // The desktop's keys for the same thing, on purpose: this is its tab list. A
@@ -106,7 +86,7 @@ impl Keymap {
             (
                 vec![ctrl('w'), key('c')],
                 Action::CloseTab,
-                "close the stage's tab shown: a page, the changes, the project",
+                "close the stage's tab shown: a page, the changes",
             ),
             (
                 vec![ctrl('w'), key('h')],
@@ -138,19 +118,9 @@ impl Keymap {
             ),
             (vec![key('e')], Action::EditPage, "edit the page in $EDITOR"),
             (
-                vec![key('a')],
-                Action::OpenApp(None),
-                "open the page's site app in the browser",
-            ),
-            (
                 vec![key('g'), key('d')],
                 Action::ToggleChanges,
                 "changes of the active project (git)",
-            ),
-            (
-                vec![key('g'), key('p')],
-                Action::ToggleProjectView,
-                "the project: its works, sessions, branches, memory",
             ),
             (
                 vec![key('t')],
@@ -165,12 +135,12 @@ impl Keymap {
             (
                 vec![ctrl('c')],
                 Action::CancelTurn,
-                "cancel the agent's turn (a paused worker: stop it for good)",
+                "cancel the agent's turn",
             ),
             (
                 vec![ctrl('o')],
                 Action::JumpBack,
-                "back to the previous session (worker → orchestrator)",
+                "back to the previous session",
             ),
         ];
         Self {

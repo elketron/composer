@@ -10,15 +10,8 @@ pub enum Effect {
     FetchPage(String),
     Search(String),
     LoadSites,
-    /// `GET /api/projects?q=` → `ProjectsLoaded`.
-    LoadProjects(String),
     /// Sites and every page, for completing `:` commands.
     LoadCatalog,
-    /// Look up the site before opening its app (answered by `AppChecked`).
-    CheckApp {
-        site: String,
-        url: String,
-    },
     /// Fetch the active project's git changes for a session.
     FetchDiff(String),
     /// Suspend the TUI and open a project file in the editor at a line. Run by the app loop.
@@ -33,8 +26,6 @@ pub enum Effect {
         name: String,
         text: String,
     },
-    /// Open a URL in the browser (an app). Run by the app loop.
-    OpenBrowser(String),
     /// Upload a file to a session (answered by `FileUploaded`).
     UploadFile {
         id: u64,

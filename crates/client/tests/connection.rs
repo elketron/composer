@@ -8,7 +8,7 @@ use std::time::Duration;
 use composer_client::{Connection, Endpoint, Event};
 use composer_protocol::{ClientCommand, CommandResult, ServerMessage};
 use composer_server::provider::{CallError, ModelRequest, ModelStream, Provider};
-use composer_server::{Config, Server, WorkspaceHome, init_workspace};
+use composer_server::{Config, Home, Server, init_home};
 
 /// A model that never answers: the connection is what's tested.
 struct Silent;
@@ -35,8 +35,8 @@ async fn ask(connection: &Connection, command: ClientCommand) -> Result<CommandR
 #[tokio::test]
 async fn a_connection_reconnects_and_pairs_replies() {
     let dir = tempfile::tempdir().unwrap();
-    let home = WorkspaceHome::new(dir.path());
-    init_workspace(&home).await.unwrap();
+    let home = Home::new(dir.path());
+    init_home(&home).await.unwrap();
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
     drop(listener);
@@ -72,7 +72,7 @@ async fn a_connection_reconnects_and_pairs_replies() {
     let created = ask(
         &connection,
         ClientCommand::SessionCreate {
-            agent: "orchestrator".into(),
+            agent: "default".into(),
             project: None,
         },
     )

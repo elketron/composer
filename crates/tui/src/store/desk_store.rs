@@ -1,21 +1,14 @@
 //! The session's desk, as this terminal shows it (plan phase 12, ticket 0208).
 //!
 //! The desk is the server's: the same one the desktop and the phone render, and the one the
-//! agent's `show_page` / `show_app` land on. The TUI reads it and draws the tabs a terminal can
-//! draw — a page, a project's changes. `App`, `Terminal` and `LiveView` tabs are kept exactly as
-//! received: never shown, never written back (terminals are slice 3; apps keep opening in the
-//! browser as they do today). A project's overview has no desk kind, so its tab is local: see
-//! [`PROJECT_TAB`].
+//! agent's `show_page` lands on. The TUI reads it and draws the tabs a terminal can draw — a
+//! page, a project's changes. `Terminal` and `LiveView` tabs are kept exactly as received: never
+//! shown, never written back.
 
 use composer_core::SiteUrl;
 use composer_protocol::{Desk, DeskTab};
 
 pub use crate::store::stage_tab::StageTab;
-
-/// The id of the project view's tab. It is not on the desk (no `DeskTab` names an overview),
-/// and `local:` is a prefix the server's ids never produce (`app:`, `page:`, `terminal:`,
-/// `changes:`, `live`), so it cannot collide with one.
-pub const PROJECT_TAB: &str = "local:project";
 
 /// The id a page tab has on the desk. The server derives an id from what the tab shows, so the
 /// same page is one tab however it was reached; this is the same derivation, so opening a page

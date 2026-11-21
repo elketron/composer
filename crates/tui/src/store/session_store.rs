@@ -1,8 +1,4 @@
-use std::collections::HashMap;
-
-use composer_protocol::{
-    MessageSource, Role, Seq, ServerMessage, SessionInfo, TurnState, WorkerState,
-};
+use composer_protocol::{MessageSource, Role, Seq, ServerMessage, SessionInfo, TurnState};
 
 use crate::store::types::{ChatItem, Streaming};
 use crate::tool_text::{tool_detail, tool_summary};
@@ -19,8 +15,6 @@ pub struct SessionStore {
     pub last_seq: Seq,
     /// Turns finished in the current session since attaching (scripts wait on this).
     pub turns_done: u64,
-    /// Workers' last `worker.status`, by session id (seen since the TUI started).
-    pub workers: HashMap<String, WorkerState>,
     /// The project (name or folder) the session picker is narrowed to (`:scope`).
     pub scope: Option<String>,
     /// The current session's last messages arrived (it opens on its end), and it is attached.
@@ -32,27 +26,14 @@ pub struct SessionStore {
 }
 
 impl SessionStore {
-    /// A session's project: its own, or for a worker (whose project is its ticket's worktree)
-    /// its orchestrator's.
-    pub fn project_of(&self, session: &SessionInfo) -> Option<String> {
-        match (&session.ticket, &session.parent) {
-            (Some(_), Some(parent)) => self
-                .sessions
-                .iter()
-                .find(|s| &s.id == parent)
-                .and_then(|p| p.project.clone()),
-            _ => session.project.clone(),
-        }
-    }
-
     /// Whether a session is in the scope (always, without one). The scope matches the folder
     /// or its last part (`game` for `/home/me/Projects/game`).
     pub fn in_scope(&self, session: &SessionInfo) -> bool {
         let Some(scope) = &self.scope else {
             return true;
         };
-        self.project_of(session).is_some_and(|folder| {
-            folder == *scope
+        session.project.as_ref().is_some_and(|folder| {
+            *folder == *scope
                 || folder.rsplit('/').next() == Some(scope.as_str())
                 || scope
                     .strip_prefix("~/")
@@ -70,44 +51,13 @@ impl SessionStore {
             .is_some_and(|s| s.state != TurnState::Idle)
     }
 
-    /// The current session is a worker that stopped before finishing, to go on later.
-    pub fn is_paused_worker(&self) -> bool {
-        self.current_info()
-            .is_some_and(|s| s.worker == Some(WorkerState::Paused))
-    }
-
-    /// The current session's orchestration: its orchestrator first, then the workers it
-    /// spawned. Empty for a session without workers or orchestrator.
-    pub fn orchestration(&self) -> Vec<&SessionInfo> {
-        let Some(current) = self.current_info() else {
-            return vec![];
-        };
-        let root = current.parent.as_deref().unwrap_or(&current.id);
-        let workers = self
-            .sessions
-            .iter()
-            .filter(|s| s.parent.as_deref() == Some(root));
-        let root = self.sessions.iter().find(|s| s.id == root);
-        let members: Vec<&SessionInfo> = root.into_iter().chain(workers).collect();
-        if members.len() > 1 { members } else { vec![] }
-    }
-
-    /// What a session is doing, for lists: `running`, `waiting`, `approval`, `idle`, or a
-    /// worker's `starting` / `done` / `failed` / `paused`.
+    /// What a session is doing, for lists: `running`, `waiting`, `approval` or `idle`.
     pub fn status(&self, session: &SessionInfo) -> &'static str {
-        // Events seen since starting, else what the server remembers (`SessionInfo.worker`).
-        let worker = self.workers.get(&session.id).or(session.worker.as_ref());
-        match (session.state, worker) {
-            // A finished worker is finished, whatever its last turn state said.
-            (_, Some(WorkerState::Done)) => "done",
-            (_, Some(WorkerState::Failed)) => "failed",
-            (_, Some(WorkerState::Paused)) => "paused",
-            (_, Some(WorkerState::Stuck)) => "stuck",
-            (TurnState::Running, _) => "running",
-            (TurnState::Waiting, _) => "waiting",
-            (TurnState::AwaitingApproval, _) => "approval",
-            (TurnState::Idle, Some(WorkerState::Starting)) => "starting",
-            (TurnState::Idle, _) => "idle",
+        match session.state {
+            TurnState::Running => "running",
+            TurnState::Waiting => "waiting",
+            TurnState::AwaitingApproval => "approval",
+            TurnState::Idle => "idle",
         }
     }
 
@@ -202,11 +152,6 @@ impl SessionStore {
                 Role::User => self.items.push(ChatItem::User {
                     text: message.content.clone(),
                     source: match &message.source {
-                        Some(MessageSource::App { site }) => Some(format!("{site} app")),
-                        Some(MessageSource::Worker { session }) => {
-                            Some(format!("worker #{session}"))
-                        }
-                        Some(MessageSource::Reminder { .. }) => Some("reminder".into()),
                         Some(MessageSource::Watch { .. }) => Some("watch".into()),
                         _ => None,
                     },

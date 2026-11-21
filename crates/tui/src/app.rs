@@ -132,7 +132,6 @@ impl App {
                 Effect::EditPage(_)
                 | Effect::ViewText { .. }
                 | Effect::CopyText(_)
-                | Effect::OpenBrowser(_)
                 | Effect::OpenFile { .. }
                 | Effect::Quit => deferred.push(effect),
                 other => self.runner.run(other),
@@ -152,11 +151,6 @@ impl App {
                         let result = editor::open_file(path, *line);
                         self.dispatcher.dispatch(result);
                     }
-                    continue;
-                }
-                if let Effect::OpenBrowser(url) = &effect {
-                    self.dispatcher
-                        .dispatch(Action::Flash(format!("would open {url}"), FlashLevel::Info));
                     continue;
                 }
                 if let Effect::ViewText { name, text } = &effect {
@@ -218,11 +212,6 @@ impl App {
                     for effect in self.process(action) {
                         match effect {
                             Effect::Quit => return Ok(()),
-                            Effect::OpenBrowser(url) => {
-                                for action in editor::open_browser(&url) {
-                                    self.dispatcher.dispatch(action);
-                                }
-                            }
                             Effect::CopyText(text) => crate::terminal::copy(&text, &mut self.clipboard),
                             Effect::OpenFile { path, line } => {
                                 drop(events);

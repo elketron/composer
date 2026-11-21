@@ -1,11 +1,11 @@
 use composer_protocol::SessionInfo;
-use composer_protocol::http::{ProjectSummary, SearchHit, SiteSummary};
+use composer_protocol::http::{SearchHit, SiteSummary};
 
 use crate::effect::Effect;
 use crate::store::SessionStore;
 use crate::store::types::{PickerItem, PickerKind, PickerTarget};
 
-/// The floating picker (`Space p/s/w/o`).
+/// The floating picker (`Space p/s/w`).
 #[derive(Debug)]
 pub struct PickerStore {
     pub kind: PickerKind,
@@ -37,7 +37,7 @@ impl PickerStore {
             PickerKind::Pages => vec![Effect::Search(String::new())],
             PickerKind::Sites => vec![Effect::LoadSites],
             PickerKind::Sessions => {
-                // A tree: each top-level session (most recent first), then its workers.
+                // A tree: each top-level session (most recent first), then the ones it spawned.
                 let sessions = &store.sessions;
                 // `:scope` narrows it to one project.
                 let top = sessions
@@ -55,14 +55,6 @@ impl PickerStore {
                 self.filter();
                 vec![]
             }
-            PickerKind::Projects => vec![Effect::LoadProjects(String::new())],
-            PickerKind::Orchestration => {
-                let members = store.orchestration();
-                self.all = members.iter().map(|s| session_item(s, store)).collect();
-                self.filter();
-                self.selected = switch_target(&members, store.current.as_deref());
-                vec![]
-            }
         }
     }
 
@@ -71,8 +63,7 @@ impl PickerStore {
         self.selected = 0;
         match self.kind {
             PickerKind::Pages => vec![Effect::Search(self.query.clone())],
-            PickerKind::Projects => vec![Effect::LoadProjects(self.query.clone())],
-            PickerKind::Sites | PickerKind::Sessions | PickerKind::Orchestration => {
+            PickerKind::Sites | PickerKind::Sessions => {
                 self.filter();
                 vec![]
             }
@@ -107,11 +98,6 @@ impl PickerStore {
                 if s.has_justfile {
                     right.push("actions");
                 }
-                if s.app_built {
-                    right.push("app");
-                } else if s.has_ui {
-                    right.push("app (not built)");
-                }
                 PickerItem {
                     detail: format!("site://{}", s.name),
                     target: PickerTarget::Url(format!("site://{}", s.name)),
@@ -121,39 +107,6 @@ impl PickerStore {
             })
             .collect();
         self.filter();
-    }
-
-    /// The server's matches for `query`; stale ones (an older query) are dropped.
-    pub fn projects(&mut self, query: &str, projects: Vec<ProjectSummary>) {
-        if self.kind != PickerKind::Projects || query != self.query {
-            return;
-        }
-        self.items = projects
-            .into_iter()
-            .map(|p| {
-                let mut right = Vec::new();
-                if p.waiting > 0 {
-                    right.push(format!("{} waiting", p.waiting));
-                }
-                if p.running > 0 {
-                    right.push(format!("{} running", p.running));
-                }
-                if right.is_empty() && p.sessions > 0 {
-                    right.push(format!("{} chats", p.sessions));
-                }
-                PickerItem {
-                    target: PickerTarget::Project(if p.folder.is_empty() {
-                        p.path.clone()
-                    } else {
-                        p.folder
-                    }),
-                    title: p.name,
-                    detail: p.path,
-                    right: right.join(" · "),
-                }
-            })
-            .collect();
-        self.selected = self.selected.min(self.items.len().saturating_sub(1));
     }
 
     pub fn move_selection(&mut self, delta: i32) {
@@ -189,31 +142,12 @@ fn session_item(s: &SessionInfo, store: &SessionStore) -> PickerItem {
     let preview = s.preview.clone().unwrap_or_default();
     PickerItem {
         title: format!("{indent}{} #{}{here}", s.agent, s.id),
-        detail: match &s.ticket {
-            Some(ticket) if !preview.starts_with("ticket ") => {
-                format!("ticket {ticket} · {preview}")
-            }
-            _ => preview,
-        },
+        detail: preview,
         right: match store.status(s) {
             "idle" => s.updated.get(..16).unwrap_or("").replace('T', " "),
-            busy @ ("running" | "waiting" | "approval" | "starting") => format!("● {busy}"),
-            finished => finished.to_string(),
+            busy => format!("● {busy}"),
         },
         target: PickerTarget::Session(s.id.clone()),
-    }
-}
-
-/// Where the orchestration picker starts: from the orchestrator, the first busy worker (else
-/// the first worker); from a worker, the orchestrator. Enter then switches right away.
-fn switch_target(members: &[&SessionInfo], current: Option<&str>) -> usize {
-    match members.iter().position(|s| Some(s.id.as_str()) == current) {
-        Some(0) => members
-            .iter()
-            .skip(1)
-            .position(|s| s.state != composer_protocol::TurnState::Idle)
-            .map_or(1, |i| i + 1),
-        _ => 0,
     }
 }
 
