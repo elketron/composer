@@ -8,38 +8,49 @@
   },
   {
     "id": 2,
-    "type": "session.list"
+    "type": "session.create",
+    "kind": "agentic",
+    "harness": "claude"
   },
   {
     "id": 3,
+    "type": "session.list"
+  },
+  {
+    "id": 4,
     "type": "session.attach",
     "session": "a3f1",
     "since": 3
   },
   {
-    "id": 4,
+    "id": 5,
     "type": "session.history",
     "session": "a3f1",
     "before": 40,
     "messages": 50
   },
   {
-    "id": 5,
+    "id": 6,
     "type": "session.detach",
     "session": "a3f1"
   },
   {
-    "id": 6,
+    "id": 7,
+    "type": "session.delete",
+    "session": "a3f1"
+  },
+  {
+    "id": 8,
     "type": "model.list"
   },
   {
-    "id": 7,
+    "id": 9,
     "type": "model.set",
     "session": "a3f1",
     "model": "anthropic/claude-sonnet-4.5"
   },
   {
-    "id": 8,
+    "id": 10,
     "type": "message.send",
     "session": "a3f1",
     "text": "hi",
@@ -50,54 +61,72 @@
     "attachments": []
   },
   {
-    "id": 9,
+    "id": 11,
     "type": "session.compact",
     "session": "a3f1"
   },
   {
-    "id": 10,
+    "id": 12,
     "type": "turn.cancel",
     "session": "a3f1",
     "seen": 3
   },
   {
-    "id": 11,
+    "id": 13,
     "type": "site.set",
     "session": "a3f1",
     "site": "3d"
   },
   {
-    "id": 12,
+    "id": 14,
     "type": "site.set",
     "session": "a3f1",
     "site": null
   },
   {
-    "id": 13,
+    "id": 15,
     "type": "approval.respond",
     "request": "r1",
     "decision": "approve"
   },
   {
-    "id": 14,
+    "id": 16,
     "type": "approval.respond",
     "request": "r2",
     "decision": "always"
   },
   {
-    "id": 15,
+    "id": 17,
     "type": "subscribe",
     "urls": [
       "*"
     ]
   },
   {
-    "id": 16,
+    "id": 18,
+    "type": "process.list",
+    "session": "a3f1"
+  },
+  {
+    "id": 19,
+    "type": "process.stop",
+    "terminal": "t1a2b3c4d"
+  },
+  {
+    "id": 20,
+    "type": "terminal.open",
+    "session": "a3f1",
+    "cols": 100,
+    "rows": 30,
+    "command": "nvim notes.md"
+  },
+  {
+    "id": 21,
     "type": "tool.list",
     "session": "a3f1"
   },
   {
-    "id": 17,
+    "id": 22,
     "type": "tool.call",
     "session": "a3f1",
     "name": "open",

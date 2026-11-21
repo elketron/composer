@@ -16,6 +16,7 @@
         "kind": "agentic",
         "site": "plans",
         "parent": null,
+        "harness": "claude",
         "state": "awaiting_approval",
         "last_seq": 42,
         "context_tokens": 1200,
@@ -36,6 +37,7 @@
           "kind": "agentic",
           "site": "plans",
           "parent": null,
+          "harness": "claude",
           "state": "awaiting_approval",
           "last_seq": 42,
           "context_tokens": 1200,
@@ -261,6 +263,7 @@
       "kind": "agentic",
       "site": "plans",
       "parent": null,
+      "harness": "claude",
       "state": "awaiting_approval",
       "last_seq": 42,
       "context_tokens": 1200,
@@ -268,6 +271,14 @@
       "preview": "hello",
       "updated": "2026-10-18T12:00:00Z"
     }
+  },
+  {
+    "type": "session.deleted",
+    "session": "a3f1"
+  },
+  {
+    "type": "tools.changed",
+    "session": "a3f1"
   },
   {
     "type": "page.changed",
@@ -288,6 +299,36 @@
     "source": {
       "kind": "watch",
       "pattern": "site://video/work/renders/**"
+    }
+  },
+  {
+    "type": "turn.queued",
+    "session": "a3f1",
+    "seq": 6,
+    "source": {
+      "kind": "process",
+      "terminal": "t1a2b3c4d",
+      "command": "npm run dev"
+    }
+  },
+  {
+    "type": "processes.changed",
+    "session": "a3f1",
+    "processes": [
+      {
+        "terminal": "t1a2b3c4d",
+        "command": "npm run dev",
+        "cwd": "/home/u/app",
+        "started": "2026-11-21T12:00:00Z"
+      }
+    ]
+  },
+  {
+    "type": "ok",
+    "id": 60,
+    "result": {
+      "kind": "processes",
+      "processes": []
     }
   }
 ]

@@ -2,33 +2,6 @@
 // Source of truth: crates/protocol (Rust).
 // ignore_for_file: annotate_overrides, prefer_const_constructors, unnecessary_this
 
-/// `POST /api/sessions/{id}/messages`: a message to the agent over HTTP.
-class AppMessage {
-  const AppMessage({
-    required this.text,
-    this.pages = const [],
-    this.images = const [],
-  });
-
-  final String text;
-
-  final List<String> pages;
-
-  final List<String> images;
-
-  factory AppMessage.fromJson(Map<String, Object?> json) => AppMessage(
-        text: json['text'] as String,
-        pages: json['pages'] == null ? const [] : (json['pages'] as List).map((e) => e as String).toList(),
-        images: json['images'] == null ? const [] : (json['images'] as List).map((e) => e as String).toList(),
-      );
-
-  Map<String, Object?> toJson() => {
-        'text': text,
-        if (pages.isNotEmpty) 'pages': pages,
-        if (images.isNotEmpty) 'images': images,
-      };
-}
-
 enum ApprovalDecision {
   approve('approve'),
   deny('deny'),
@@ -212,6 +185,7 @@ sealed class ClientCommand {
         'session.attach' => ClientCommandSessionAttach.fromJson(json),
         'session.history' => ClientCommandSessionHistory.fromJson(json),
         'session.detach' => ClientCommandSessionDetach.fromJson(json),
+        'session.delete' => ClientCommandSessionDelete.fromJson(json),
         'message.send' => ClientCommandMessageSend.fromJson(json),
         'session.compact' => ClientCommandSessionCompact.fromJson(json),
         'turn.cancel' => ClientCommandTurnCancel.fromJson(json),
@@ -223,6 +197,8 @@ sealed class ClientCommand {
         'terminal.resize' => ClientCommandTerminalResize.fromJson(json),
         'terminal.read' => ClientCommandTerminalRead.fromJson(json),
         'terminal.close' => ClientCommandTerminalClose.fromJson(json),
+        'process.list' => ClientCommandProcessList.fromJson(json),
+        'process.stop' => ClientCommandProcessStop.fromJson(json),
         'desk.get' => ClientCommandDeskGet.fromJson(json),
         'desk.open' => ClientCommandDeskOpen.fromJson(json),
         'desk.close' => ClientCommandDeskClose.fromJson(json),
@@ -245,6 +221,7 @@ final class ClientCommandSessionCreate extends ClientCommand {
     this.kind,
     this.model,
     this.site,
+    this.harness,
   });
 
   /// Default: an agentic session.
@@ -256,10 +233,15 @@ final class ClientCommandSessionCreate extends ClientCommand {
   /// The site it starts in.
   final String? site;
 
+  /// The outside agent (an `[acp.<name>]` of config.toml) that runs it; default: composer's
+  /// own. Agentic sessions only.
+  final String? harness;
+
   factory ClientCommandSessionCreate.fromJson(Map<String, Object?> json) => ClientCommandSessionCreate(
         kind: json['kind'] == null ? null : RunKind.fromJson(json['kind']),
         model: json['model'] == null ? null : json['model'] as String,
         site: json['site'] == null ? null : json['site'] as String,
+        harness: json['harness'] == null ? null : json['harness'] as String,
       );
 
   Map<String, Object?> toJson() => {
@@ -267,6 +249,7 @@ final class ClientCommandSessionCreate extends ClientCommand {
         if (kind != null) 'kind': kind?.toJson(),
         if (model != null) 'model': model,
         if (site != null) 'site': site,
+        if (harness != null) 'harness': harness,
       };
 }
 
@@ -347,6 +330,25 @@ final class ClientCommandSessionDetach extends ClientCommand {
 
   Map<String, Object?> toJson() => {
         'type': 'session.detach',
+        'session': session,
+      };
+}
+
+/// Deletes a session: its running turn stops, its outside agent and terminals end, and its
+/// folder goes. Every client hears `session.deleted`. The reply is `done`.
+final class ClientCommandSessionDelete extends ClientCommand {
+  const ClientCommandSessionDelete({
+    required this.session,
+  });
+
+  final String session;
+
+  factory ClientCommandSessionDelete.fromJson(Map<String, Object?> json) => ClientCommandSessionDelete(
+        session: json['session'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'session.delete',
         'session': session,
       };
 }
@@ -504,6 +506,7 @@ final class ClientCommandTerminalOpen extends ClientCommand {
     this.terminal,
     this.cols = 0,
     this.rows = 0,
+    this.command,
   });
 
   final String session;
@@ -515,11 +518,16 @@ final class ClientCommandTerminalOpen extends ClientCommand {
 
   final int rows;
 
+  /// A program to run in it instead of a shell (`nvim notes.md`), through the user's
+  /// shell; the terminal ends when it exits. Ignored when `terminal` names a live one.
+  final String? command;
+
   factory ClientCommandTerminalOpen.fromJson(Map<String, Object?> json) => ClientCommandTerminalOpen(
         session: json['session'] as String,
         terminal: json['terminal'] == null ? null : json['terminal'] as String,
         cols: json['cols'] == null ? 0 : (json['cols'] as num).toInt(),
         rows: json['rows'] == null ? 0 : (json['rows'] as num).toInt(),
+        command: json['command'] == null ? null : json['command'] as String,
       );
 
   Map<String, Object?> toJson() => {
@@ -528,6 +536,7 @@ final class ClientCommandTerminalOpen extends ClientCommand {
         if (terminal != null) 'terminal': terminal,
         'cols': cols,
         'rows': rows,
+        if (command != null) 'command': command,
       };
 }
 
@@ -614,6 +623,43 @@ final class ClientCommandTerminalClose extends ClientCommand {
 
   Map<String, Object?> toJson() => {
         'type': 'terminal.close',
+        'terminal': terminal,
+      };
+}
+
+/// A session's background processes (`process_start`); the reply is `processes`.
+final class ClientCommandProcessList extends ClientCommand {
+  const ClientCommandProcessList({
+    required this.session,
+  });
+
+  final String session;
+
+  factory ClientCommandProcessList.fromJson(Map<String, Object?> json) => ClientCommandProcessList(
+        session: json['session'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'process.list',
+        'session': session,
+      };
+}
+
+/// Stops a background process and everything it started (its process group); the agent is
+/// told, as for any exit. The reply is `done`.
+final class ClientCommandProcessStop extends ClientCommand {
+  const ClientCommandProcessStop({
+    required this.terminal,
+  });
+
+  final String terminal;
+
+  factory ClientCommandProcessStop.fromJson(Map<String, Object?> json) => ClientCommandProcessStop(
+        terminal: json['terminal'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'process.stop',
         'terminal': terminal,
       };
 }
@@ -895,6 +941,7 @@ sealed class CommandResult {
         'history' => CommandResultHistory.fromJson(json),
         'mcp_servers' => CommandResultMcpServers.fromJson(json),
         'terminal' => CommandResultTerminal.fromJson(json),
+        'processes' => CommandResultProcesses.fromJson(json),
         'desk' => CommandResultDesk.fromJson(json),
         'config_reloaded' => CommandResultConfigReloaded.fromJson(json),
         _ => CommandResultUnknown(json),
@@ -1094,6 +1141,24 @@ final class CommandResultTerminal extends CommandResult {
         'kind': 'terminal',
         'terminal': terminal,
         'scrollback': scrollback,
+      };
+}
+
+/// `process.list`: the session's background processes, oldest first.
+final class CommandResultProcesses extends CommandResult {
+  const CommandResultProcesses({
+    required this.processes,
+  });
+
+  final List<ProcessInfo> processes;
+
+  factory CommandResultProcesses.fromJson(Map<String, Object?> json) => CommandResultProcesses(
+        processes: (json['processes'] as List).map((e) => ProcessInfo.fromJson(e as Map<String, Object?>)).toList(),
+      );
+
+  Map<String, Object?> toJson() => {
+        'kind': 'processes',
+        'processes': processes.map((e) => e.toJson()).toList(),
       };
 }
 
@@ -1302,7 +1367,32 @@ final class DeskTabUnknown extends DeskTab {
   Map<String, Object?> toJson() => raw;
 }
 
-/// An MCP server from `config.toml` (`[mcp.<name>]`), whose tools agents may list.
+/// `POST /api/hooks/{name}`: what a webhook's run gave back. A single shot's answer, a workflow
+/// run's `finish` value (or its answer), an agentic run's final assistant message.
+class HookReply {
+  const HookReply({
+    this.value,
+    this.session,
+  });
+
+  final Object? value;
+
+  /// The stored session the run was, when the hook says `store = true`.
+  final String? session;
+
+  factory HookReply.fromJson(Map<String, Object?> json) => HookReply(
+        value: json['value'],
+        session: json['session'] == null ? null : json['session'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'value': value,
+        if (session != null) 'session': session,
+      };
+}
+
+/// An MCP server: one from `config.toml` (`[mcp.<name>]`, in every session) or one a site's
+/// approved `mcp.toml` declares (in sessions in that site).
 class McpServerInfo {
   const McpServerInfo({
     required this.name,
@@ -1326,7 +1416,7 @@ class McpServerInfo {
   /// Its tools as agents see them (`github__get_issue`).
   final List<String> tools;
 
-  /// The sites that may grant its tools (`sites` in its config).
+  /// The site whose `mcp.toml` declares it; empty for a `config.toml` server.
   final List<String> sites;
 
   factory McpServerInfo.fromJson(Map<String, Object?> json) => McpServerInfo(
@@ -1356,6 +1446,7 @@ sealed class MessageSource {
         'tui' => MessageSourceTui.fromJson(json),
         'server' => MessageSourceServer.fromJson(json),
         'watch' => MessageSourceWatch.fromJson(json),
+        'process' => MessageSourceProcess.fromJson(json),
         _ => MessageSourceUnknown(json),
       };
 
@@ -1399,6 +1490,29 @@ final class MessageSourceWatch extends MessageSource {
   Map<String, Object?> toJson() => {
         'kind': 'watch',
         'pattern': pattern,
+      };
+}
+
+/// A background process the agent started (`process_start`) exited.
+final class MessageSourceProcess extends MessageSource {
+  const MessageSourceProcess({
+    required this.terminal,
+    required this.command,
+  });
+
+  final String terminal;
+
+  final String command;
+
+  factory MessageSourceProcess.fromJson(Map<String, Object?> json) => MessageSourceProcess(
+        terminal: json['terminal'] as String,
+        command: json['command'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'kind': 'process',
+        'terminal': terminal,
+        'command': command,
       };
 }
 
@@ -1501,6 +1615,42 @@ class PageResponse {
         'raw': raw,
         'backlinks': backlinks,
         'hash': hash,
+      };
+}
+
+/// A background process that is running.
+class ProcessInfo {
+  const ProcessInfo({
+    required this.terminal,
+    required this.command,
+    required this.cwd,
+    required this.started,
+  });
+
+  /// The terminal it runs in (`terminal.read` / `terminal.output`, `process.stop`).
+  final String terminal;
+
+  /// The command, as the agent gave it.
+  final String command;
+
+  /// The folder it runs in.
+  final String cwd;
+
+  /// When it started, RFC 3339.
+  final String started;
+
+  factory ProcessInfo.fromJson(Map<String, Object?> json) => ProcessInfo(
+        terminal: json['terminal'] as String,
+        command: json['command'] as String,
+        cwd: json['cwd'] as String,
+        started: json['started'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'terminal': terminal,
+        'command': command,
+        'cwd': cwd,
+        'started': started,
       };
 }
 
@@ -1709,9 +1859,12 @@ sealed class ServerMessage {
         'approval.request' => ServerMessageApprovalRequest.fromJson(json),
         'approval.resolved' => ServerMessageApprovalResolved.fromJson(json),
         'session.updated' => ServerMessageSessionUpdated.fromJson(json),
+        'session.deleted' => ServerMessageSessionDeleted.fromJson(json),
+        'tools.changed' => ServerMessageToolsChanged.fromJson(json),
         'page.changed' => ServerMessagePageChanged.fromJson(json),
         'terminal.output' => ServerMessageTerminalOutput.fromJson(json),
         'terminal.exited' => ServerMessageTerminalExited.fromJson(json),
+        'processes.changed' => ServerMessageProcessesChanged.fromJson(json),
         'desk.changed' => ServerMessageDeskChanged.fromJson(json),
         'config.reloaded' => ServerMessageConfigReloaded.fromJson(json),
         'slots' => ServerMessageSlots.fromJson(json),
@@ -2178,6 +2331,44 @@ final class ServerMessageSessionUpdated extends ServerMessage {
       };
 }
 
+/// The session was deleted (`session.delete`): clients drop it.
+final class ServerMessageSessionDeleted extends ServerMessage {
+  const ServerMessageSessionDeleted({
+    required this.session,
+  });
+
+  final String session;
+
+  factory ServerMessageSessionDeleted.fromJson(Map<String, Object?> json) => ServerMessageSessionDeleted(
+        session: json['session'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'session.deleted',
+        'session': session,
+      };
+}
+
+/// The tools a session has changed: its site was set (or left), or the site's MCP servers
+/// came up after the user approved its `mcp.toml`. An MCP client of the session lists them
+/// again (`composer mcp` tells its harness with `notifications/tools/list_changed`).
+final class ServerMessageToolsChanged extends ServerMessage {
+  const ServerMessageToolsChanged({
+    required this.session,
+  });
+
+  final String session;
+
+  factory ServerMessageToolsChanged.fromJson(Map<String, Object?> json) => ServerMessageToolsChanged(
+        session: json['session'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'tools.changed',
+        'session': session,
+      };
+}
+
 final class ServerMessagePageChanged extends ServerMessage {
   const ServerMessagePageChanged({
     required this.url,
@@ -2253,6 +2444,30 @@ final class ServerMessageTerminalExited extends ServerMessage {
         'type': 'terminal.exited',
         'session': session,
         'terminal': terminal,
+      };
+}
+
+/// A session's background processes changed (one started or ended): all of them now, to
+/// the clients attached to it.
+final class ServerMessageProcessesChanged extends ServerMessage {
+  const ServerMessageProcessesChanged({
+    required this.session,
+    required this.processes,
+  });
+
+  final String session;
+
+  final List<ProcessInfo> processes;
+
+  factory ServerMessageProcessesChanged.fromJson(Map<String, Object?> json) => ServerMessageProcessesChanged(
+        session: json['session'] as String,
+        processes: (json['processes'] as List).map((e) => ProcessInfo.fromJson(e as Map<String, Object?>)).toList(),
+      );
+
+  Map<String, Object?> toJson() => {
+        'type': 'processes.changed',
+        'session': session,
+        'processes': processes.map((e) => e.toJson()).toList(),
       };
 }
 
@@ -2356,7 +2571,9 @@ class SessionInfo {
     required this.id,
     this.kind,
     this.site,
+    this.folder,
     this.parent,
+    this.harness,
     required this.state,
     required this.lastSeq,
     this.contextTokens = 0,
@@ -2374,8 +2591,16 @@ class SessionInfo {
   /// and its `folder:` is where terminals start and what the changes view diffs.
   final String? site;
 
-  /// The session that spawned this one (phase 3 spawns runs; none yet).
+  /// The workflow folder inside its site whose instructions (`CONTEXT.md`, else `index.md`)
+  /// its runs follow, if any.
+  final String? folder;
+
+  /// The session that spawned this one (`spawn_run`), if any.
   final String? parent;
+
+  /// The outside agent (an `[acp.<name>]` of config.toml) that runs its turns; `None`:
+  /// composer's own.
+  final String? harness;
 
   final TurnState state;
 
@@ -2398,7 +2623,9 @@ class SessionInfo {
         id: json['id'] as String,
         kind: json['kind'] == null ? null : RunKind.fromJson(json['kind']),
         site: json['site'] == null ? null : json['site'] as String,
+        folder: json['folder'] == null ? null : json['folder'] as String,
         parent: json['parent'] == null ? null : json['parent'] as String,
+        harness: json['harness'] == null ? null : json['harness'] as String,
         state: TurnState.fromJson(json['state']),
         lastSeq: (json['last_seq'] as num).toInt(),
         contextTokens: json['context_tokens'] == null ? 0 : (json['context_tokens'] as num).toInt(),
@@ -2411,7 +2638,9 @@ class SessionInfo {
         'id': id,
         if (kind != null) 'kind': kind?.toJson(),
         if (site != null) 'site': site,
+        if (folder != null) 'folder': folder,
         if (parent != null) 'parent': parent,
+        if (harness != null) 'harness': harness,
         'state': state.toJson(),
         'last_seq': lastSeq,
         'context_tokens': contextTokens,
@@ -2444,7 +2673,8 @@ class SiteSummary {
   /// Pages in the site.
   final int pages;
 
-  /// `mcp:` of its `index.md`: the MCP servers whose tools the agent has while in the site.
+  /// The MCP servers its `mcp.toml` declares: their tools come with the site once the user
+  /// approved the file.
   final List<String> mcp;
 
   factory SiteSummary.fromJson(Map<String, Object?> json) => SiteSummary(
