@@ -20,6 +20,7 @@ pub mod mcp_bundles;
 pub mod mcp_clients;
 pub mod project;
 pub mod provider;
+pub mod runs;
 mod secret;
 mod server;
 pub mod session;

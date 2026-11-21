@@ -53,6 +53,20 @@ impl ToolContext {
             .ok_or_else(|| "this tool needs a stored session; this run is not stored".to_string())
     }
 
+    /// The stored session to ask the user's approval of `what` in. A run that is not stored has
+    /// nobody to ask: it is stopped with a clear error instead of waiting for an answer that
+    /// cannot come.
+    pub fn approval_session(&self, what: &str) -> Result<Arc<Session>, String> {
+        self.run.session().ok_or_else(|| {
+            let error = format!(
+                "{what} needs the user's approval, and this run is not stored, so nobody can \
+                 give it: the run stops. Allow it in config.toml, or store the run."
+            );
+            self.run.abort(error.clone());
+            error
+        })
+    }
+
     /// Parses a URL from the model. Forgiving: `memory/user` means `site://memory/user`.
     pub fn url(&self, raw: &str) -> Result<SiteUrl, String> {
         let raw = raw.trim();

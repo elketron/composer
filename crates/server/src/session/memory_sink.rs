@@ -16,6 +16,7 @@ pub struct MemorySink {
     history: Mutex<Vec<ModelMessage>>,
     site: Mutex<Option<String>>,
     result: Mutex<Option<Value>>,
+    aborted: Mutex<Option<String>>,
 }
 
 impl MemorySink {
@@ -31,6 +32,7 @@ impl MemorySink {
             }]),
             site: Mutex::new(site),
             result: Mutex::new(None),
+            aborted: Mutex::new(None),
         }
     }
 
@@ -79,6 +81,17 @@ impl RunSink for MemorySink {
 
     fn finish(&self, value: &Value) {
         *self.result.lock().expect("result lock") = Some(value.clone());
+    }
+
+    fn abort(&self, error: String) {
+        self.aborted
+            .lock()
+            .expect("aborted lock")
+            .get_or_insert(error);
+    }
+
+    fn aborted(&self) -> Option<String> {
+        self.aborted.lock().expect("aborted lock").clone()
     }
 
     fn session(&self) -> Option<Arc<Session>> {

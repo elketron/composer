@@ -5,16 +5,14 @@ use axum::Json;
 use axum::extract::{Extension, Path, Query, State};
 use axum::http::StatusCode;
 use composer_core::SiteUrl;
+use composer_protocol::ChangedBy;
 use composer_protocol::http::{
-    AppMessage, PageResponse, ProjectDiff, PutPageRequest, PutPageResponse, SearchHit, ServerInfo,
-    SiteSummary,
+    PageResponse, ProjectDiff, PutPageRequest, PutPageResponse, SearchHit, ServerInfo, SiteSummary,
 };
-use composer_protocol::{ChangedBy, ChatMessage, MessageSource, Role};
 
 use crate::agent::Site;
 use crate::api::{ApiError, Credential};
 use crate::server::Server;
-use crate::session::submit;
 
 /// `POST /api/web-session`: a new browser session of the caller's kind (a device gets a device's
 /// session, the local token the local user's), for a client that sets the cookie in its own
@@ -118,28 +116,6 @@ pub async fn put_page(
     Json(body): Json<PutPageRequest>,
 ) -> Result<Json<PutPageResponse>, ApiError> {
     write(&server, SiteUrl::new(&site, &path)?, body)
-}
-
-/// A message pushed into a session over HTTP.
-// rewrite: phase 3: becomes the webhook (waits for the answer, stores only when asked).
-pub async fn post_message(
-    State(server): State<Arc<Server>>,
-    Path(id): Path<String>,
-    Json(body): Json<AppMessage>,
-) -> Result<StatusCode, ApiError> {
-    let session = server.sessions.get(&id)?;
-    let message = ChatMessage {
-        role: Role::User,
-        content: body.text,
-        thinking: None,
-        tool_calls: vec![],
-        pages: body.pages,
-        images: body.images,
-        attachments: vec![],
-        source: Some(MessageSource::Server),
-    };
-    submit(&server, &session, message);
-    Ok(StatusCode::ACCEPTED)
 }
 
 pub(crate) fn read(server: &Server, url: SiteUrl) -> Result<Json<PageResponse>, ApiError> {

@@ -6,7 +6,7 @@ use composer_protocol::{ChatMessage, MessageSource, Role, RunKind, ServerMessage
 use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 
-use crate::agent::{RunSettings, Site, system_prompt};
+use crate::agent::{RunSettings, Site, single_shot_prompt, system_prompt};
 use crate::provider::{ModelMessage, ModelRequest, ModelToolCall};
 use crate::server::Server;
 use crate::session::compaction::compact;
@@ -79,16 +79,26 @@ pub async fn run(
         {
             compact(server, &session, cancel, true).await?;
         }
-        // The prompt is rebuilt every step: memory or the site may have changed.
-        let mut messages = vec![ModelMessage::System {
-            content: system_prompt(
+        // The prompt is rebuilt every step: memory or the site may have changed. A single shot's
+        // is only its folder's instructions.
+        let system = match settings.kind {
+            RunKind::SingleShot => single_shot_prompt(
+                &server.web,
+                sink.site().as_deref(),
+                settings.folder.as_deref(),
+            ),
+            _ => Some(system_prompt(
                 settings,
                 &server.web,
                 &server.index.read().expect("index lock"),
                 sink.site().as_deref(),
                 sink.id(),
-            ),
-        }];
+            )),
+        };
+        let mut messages: Vec<ModelMessage> = system
+            .map(|content| ModelMessage::System { content })
+            .into_iter()
+            .collect();
         messages.extend(prepare_history(
             server,
             sink.history(),
@@ -134,6 +144,10 @@ pub async fn run(
                 content: result.text,
                 images,
             })?;
+            // Something only the user could allow, in a run nobody can be asked in.
+            if let Some(error) = sink.aborted() {
+                return Err(error);
+            }
         }
         if let Some(value) = value {
             return Ok(finished(&*sink, value));

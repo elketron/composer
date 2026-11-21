@@ -98,3 +98,18 @@ inline_max_kb = 100
 # It writes in the folder `$COMPOSER_BUNDLE_STATE` names
 # (`<home>/state/mcps/.run/blender/`), where a `uv` bundle's environment and cache also live.
 # config = { api_key = "..." }   # the bundle's settings
+
+# Webhooks: `POST /api/hooks/<name>` with `Authorization: Bearer <the hook's token>` starts a run
+# and answers when it is done: `{"value": ...}` (and `"session"` when stored). Only this hook's
+# token opens it; device and local tokens do not. `kind`: single_shot (one model call, the folder's
+# instructions as its whole system prompt), workflow (reads, changes nothing, returns `finish`'s
+# value) or agentic (every tool; returns the final answer). `prompt` is filled from the JSON body:
+# `{{body}}` is all of it, `{{field}}` one field. `store = true` keeps the run as a session.
+# [hooks.krea]
+# token_file = "~/.config/composer/krea-hook-token"   # or token = "..."
+# kind = "single_shot"
+# site = "prompts"
+# folder = "krea2_prompt_improver"
+# prompt = "{{prompt}}"
+# store = false
+# timeout_secs = 300

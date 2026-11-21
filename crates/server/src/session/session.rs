@@ -28,6 +28,18 @@ pub struct Session {
     open_approvals: Mutex<OpenApprovals>,
     /// Held while the desk (`desk.json`) is read, changed and written.
     desk_lock: Mutex<()>,
+    /// How its last turn ended, and how many have ([`Session::turn_ends`]).
+    turn_end: tokio::sync::watch::Sender<TurnEnd>,
+    /// Whoever spawned it waits for its next turn's result, so the parent is not told.
+    parent_waiting: AtomicBool,
+}
+
+/// How many turns of a session have ended, and the result of the last one: what [`crate::session::run`]
+/// returned.
+#[derive(Debug, Clone, Default)]
+pub struct TurnEnd {
+    pub count: u64,
+    pub result: Option<std::result::Result<serde_json::Value, String>>,
 }
 
 /// The turn a Stop is for.
@@ -79,6 +91,8 @@ impl Session {
                 after: TurnState::Idle,
             }),
             desk_lock: Mutex::new(()),
+            turn_end: tokio::sync::watch::Sender::new(TurnEnd::default()),
+            parent_waiting: AtomicBool::new(false),
         }))
     }
 
@@ -237,6 +251,30 @@ impl Session {
         }
         turn.token.cancel();
         true
+    }
+
+    /// Its turns' ends, from now on: wait for `count` to pass the one it has now.
+    pub fn turn_ends(&self) -> tokio::sync::watch::Receiver<TurnEnd> {
+        self.turn_end.subscribe()
+    }
+
+    /// A turn ended with `result`.
+    pub fn turn_ended(&self, result: std::result::Result<serde_json::Value, String>) {
+        self.turn_end.send_modify(|end| {
+            end.count += 1;
+            end.result = Some(result);
+        });
+    }
+
+    /// Whoever spawned it waits for its next turn (`true`), so that turn's end is not posted to
+    /// the parent.
+    pub fn set_parent_waiting(&self, waiting: bool) {
+        self.parent_waiting.store(waiting, Ordering::SeqCst);
+    }
+
+    /// Whether the spawner waited for the turn that just ended; clears it.
+    pub fn take_parent_waiting(&self) -> bool {
+        self.parent_waiting.swap(false, Ordering::SeqCst)
     }
 
     fn save_meta(&self) {

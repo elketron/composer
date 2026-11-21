@@ -260,6 +260,7 @@ mod tests {
             id: id.into(),
             kind,
             site: None,
+            folder: None,
             parent: None,
             state: TurnState::Idle,
             last_seq: 0,

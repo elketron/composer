@@ -38,11 +38,25 @@ impl SessionManager {
         })
     }
 
+    /// A new session of `kind` in `site`.
     pub fn create(
         &self,
         kind: RunKind,
         model: Option<String>,
         site: Option<String>,
+    ) -> Result<Arc<Session>> {
+        self.create_run(kind, model, site, None, None)
+    }
+
+    /// A new session of `kind` in `site`, following the workflow `folder` there if given, and
+    /// spawned by `parent` if given (a webhook's stored run, `spawn_run`).
+    pub fn create_run(
+        &self,
+        kind: RunKind,
+        model: Option<String>,
+        site: Option<String>,
+        folder: Option<String>,
+        parent: Option<SessionId>,
     ) -> Result<Arc<Session>> {
         let mut sessions = self.sessions.write().expect("sessions lock");
         let id = loop {
@@ -55,7 +69,8 @@ impl SessionManager {
             id: id.clone(),
             kind,
             site,
-            parent: None,
+            folder,
+            parent,
             state: TurnState::Idle,
             last_seq: 0,
             context_tokens: 0,

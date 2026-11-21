@@ -14,6 +14,7 @@ mod run_tool;
 mod search_tool;
 mod set_site_tool;
 mod show_page_tool;
+mod spawn_run_tool;
 mod stage_tools;
 mod terminal_read_tool;
 mod terminal_send_tool;

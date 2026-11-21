@@ -121,17 +121,16 @@ pub struct SearchHit {
     pub site: String,
 }
 
-/// `POST /api/sessions/{id}/messages`: a message to the agent over HTTP.
-// rewrite: phase 3: becomes the webhook.
+/// `POST /api/hooks/{name}`: what a webhook's run gave back. A single shot's answer, a workflow
+/// run's `finish` value (or its answer), an agentic run's final assistant message.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-pub struct AppMessage {
-    pub text: String,
-    #[serde(default)]
-    pub pages: Vec<Url>,
-    #[serde(default)]
-    pub images: Vec<Url>,
+pub struct HookReply {
+    pub value: serde_json::Value,
+    /// The stored session the run was, when the hook says `store = true`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session: Option<crate::SessionId>,
 }
 
 /// `GET /api/sessions/{id}/project/diff`: the changes of the session's site's `folder:`.

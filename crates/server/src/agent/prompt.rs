@@ -42,6 +42,12 @@ pub fn system_prompt(
              it.",
             site.name, site.title
         ));
+        if settings.folder.is_some()
+            && let Ok(Some((url, instructions))) =
+                folder_instructions(workspace, Some(&site.name), settings.folder.as_deref())
+        {
+            sections.push(format!("<page url=\"{url}\">\n{instructions}\n</page>"));
+        }
     } else if let Some(home) = page_body(workspace, "site://home") {
         sections.push(format!("<page url=\"site://home\">\n{home}\n</page>"));
     }
@@ -76,6 +82,50 @@ pub fn system_prompt(
     sections.push(folder_section(site.as_ref()));
 
     sections.join("\n\n---\n\n")
+}
+
+/// A single shot's whole system prompt: the instructions of its folder in its site, and nothing
+/// of composer's own. `None` (no system prompt) for a single shot in no site.
+pub fn single_shot_prompt(
+    workspace: &Web,
+    site: Option<&str>,
+    folder: Option<&str>,
+) -> Option<String> {
+    folder_instructions(workspace, site, folder)
+        .ok()
+        .flatten()
+        .map(|(_, instructions)| instructions)
+}
+
+/// The instructions of `folder` (a workflow folder inside `site`; none: the site itself): its
+/// `CONTEXT.md`, else its `index.md`, without frontmatter, and where they are. `Ok(None)` without a
+/// site; an error for a folder outside the site, or one with neither file.
+pub fn folder_instructions(
+    workspace: &Web,
+    site: Option<&str>,
+    folder: Option<&str>,
+) -> Result<Option<(SiteUrl, String)>, String> {
+    let Some(site) = site else {
+        return match folder {
+            Some(folder) => Err(format!("the folder `{folder}` needs a site")),
+            None => Ok(None),
+        };
+    };
+    let folder = folder.map(|f| f.trim().trim_matches('/')).unwrap_or("");
+    let prefix = if folder.is_empty() {
+        String::new()
+    } else {
+        format!("{folder}/")
+    };
+    for file in ["CONTEXT.md", "index.md"] {
+        let url = SiteUrl::new(site, &format!("{prefix}{file}")).map_err(|e| e.to_string())?;
+        if let Ok(page) = workspace.read_page(&url) {
+            return Ok(Some((page.url.clone(), page.body().trim().to_string())));
+        }
+    }
+    Err(format!(
+        "site://{site}/{prefix} has no CONTEXT.md or index.md"
+    ))
 }
 
 /// The folder of the session's site, if it names one, with its git branch.

@@ -8,7 +8,7 @@ mod site_set;
 mod site_switch;
 
 pub use entered::Entered;
-pub use prompt::system_prompt;
+pub use prompt::{folder_instructions, single_shot_prompt, system_prompt};
 pub use run_settings::RunSettings;
 pub use site::Site;
 pub use site_set::SiteSet;

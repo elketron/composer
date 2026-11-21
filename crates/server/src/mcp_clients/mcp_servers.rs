@@ -280,7 +280,7 @@ impl McpServers {
         let body = serde_json::to_string_pretty(args).unwrap_or_default();
         let decision = server_ref
             .ask_approval(
-                &*context.session()?,
+                &*context.approval_session(&format!("`{name}` (MCP {server})"))?,
                 ApprovalKind::Mcp,
                 format!("MCP {server}: {tool}"),
                 body,

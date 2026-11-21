@@ -12,7 +12,7 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use composer_protocol::http::{
-    AppMessage, ChangedFile, PageResponse, ProjectDiff, PutPageRequest, PutPageResponse, SearchHit,
+    ChangedFile, HookReply, PageResponse, ProjectDiff, PutPageRequest, PutPageResponse, SearchHit,
     ServerInfo, SiteSummary, WebSession,
 };
 use composer_protocol::*;
@@ -67,7 +67,7 @@ fn definitions() -> Map<String, Value> {
     let _ = generator.subschema_for::<PutPageRequest>();
     let _ = generator.subschema_for::<PutPageResponse>();
     let _ = generator.subschema_for::<SearchHit>();
-    let _ = generator.subschema_for::<AppMessage>();
+    let _ = generator.subschema_for::<HookReply>();
     let _ = generator.subschema_for::<ProjectDiff>();
     let _ = generator.subschema_for::<ChangedFile>();
     // Phase 4: apps on projects (0162-0168).
@@ -551,6 +551,7 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
         id: "a3f1".into(),
         kind: RunKind::Agentic,
         site: Some("plans".into()),
+        folder: None,
         parent: None,
         state: TurnState::AwaitingApproval,
         last_seq: 42,

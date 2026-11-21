@@ -29,6 +29,9 @@ pub struct Config {
     /// MCP servers by name, `[mcp.github]`.
     #[serde(default)]
     pub mcp: BTreeMap<String, McpServerConfig>,
+    /// Webhooks by name, `[hooks.krea]`: `POST /api/hooks/krea`.
+    #[serde(default)]
+    pub hooks: BTreeMap<String, crate::runs::HookConfig>,
 }
 
 impl Config {

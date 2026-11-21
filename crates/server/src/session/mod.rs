@@ -21,7 +21,7 @@ pub use history::History;
 pub use memory_sink::MemorySink;
 pub use run::{run, run_once};
 pub use run_sink::RunSink;
-pub use session::Session;
+pub use session::{Session, TurnEnd};
 pub use session_folder::SessionFolder;
 pub use session_manager::SessionManager;
 pub use session_sink::SessionSink;

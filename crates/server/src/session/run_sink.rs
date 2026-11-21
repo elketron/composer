@@ -26,6 +26,11 @@ pub trait RunSink: Send + Sync {
     fn set_site(&self, site: Option<String>);
     /// The run's result: a workflow run's `finish` value, else its last answer.
     fn finish(&self, value: &Value);
+    /// Stops the run after the current tool call with `error`: something needs the user's
+    /// approval and nobody can be asked (a run that is not stored).
+    fn abort(&self, error: String);
+    /// Why the run was stopped, if it was.
+    fn aborted(&self) -> Option<String>;
     /// The stored session behind it, for what only a session has (a desk, terminals,
     /// approvals, attachments); `None` for a run that is not stored.
     fn session(&self) -> Option<Arc<Session>>;

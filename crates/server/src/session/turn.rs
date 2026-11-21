@@ -65,6 +65,10 @@ async fn drive(server: Arc<Server>, session: Arc<Session>) {
             cancelled,
         });
         session.update_info(&server.hub, |info| info.state = TurnState::Idle);
+        if !session.take_parent_waiting() {
+            crate::runs::tell_parent(&server, &session, &outcome);
+        }
+        session.turn_ended(outcome);
     }
 }
 

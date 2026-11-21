@@ -59,6 +59,15 @@ impl RunSink for SessionSink {
 
     fn finish(&self, _value: &Value) {}
 
+    /// A stored session can always ask its clients: it waits for them instead.
+    fn abort(&self, error: String) {
+        tracing::warn!("session {}: {error}", self.session.id());
+    }
+
+    fn aborted(&self) -> Option<String> {
+        None
+    }
+
     fn session(&self) -> Option<Arc<Session>> {
         Some(self.session.clone())
     }

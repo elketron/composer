@@ -19,7 +19,11 @@ pub struct SessionInfo {
     /// and its `folder:` is where terminals start and what the changes view diffs.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub site: Option<String>,
-    /// The session that spawned this one (phase 3 spawns runs; none yet).
+    /// The workflow folder inside its site whose instructions (`CONTEXT.md`, else `index.md`)
+    /// its runs follow, if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub folder: Option<String>,
+    /// The session that spawned this one (`spawn_run`), if any.
     pub parent: Option<SessionId>,
     pub state: TurnState,
     /// Last seq written to the transcript.

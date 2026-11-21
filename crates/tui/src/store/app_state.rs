@@ -1157,6 +1157,7 @@ mod tests {
             id: id.into(),
             kind: composer_protocol::RunKind::Agentic,
             site: None,
+            folder: None,
             parent: parent.map(Into::into),
             state: TurnState::Idle,
             last_seq: 0,

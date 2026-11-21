@@ -19,6 +19,7 @@ use crate::tools::run_tool::RunTool;
 use crate::tools::search_tool::SearchTool;
 use crate::tools::set_site_tool::SetSiteTool;
 use crate::tools::show_page_tool::ShowPageTool;
+use crate::tools::spawn_run_tool::SpawnRunTool;
 use crate::tools::terminal_read_tool::TerminalReadTool;
 use crate::tools::terminal_send_tool::TerminalSendTool;
 use crate::tools::watch_tool::WatchTool;
@@ -58,6 +59,7 @@ impl ToolRegistry {
                 Arc::new(DeskTool),
                 Arc::new(TerminalReadTool),
                 Arc::new(TerminalSendTool),
+                Arc::new(SpawnRunTool),
             ],
         }
     }
