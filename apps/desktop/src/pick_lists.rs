@@ -4,8 +4,9 @@ use std::collections::BTreeMap;
 
 use composer_client::Approval;
 use composer_protocol::http::SiteSummary;
-use composer_protocol::{ClientCommand, ModelInfo, RunKind, SessionInfo};
+use composer_protocol::{ClientCommand, ModelInfo, ProcessInfo, RunKind, SessionInfo};
 
+use crate::home_lists::{age, epoch_secs};
 use crate::picker::{Item, Pick};
 
 /// The run kinds a new session can be, the default first.
@@ -20,18 +21,33 @@ pub fn kind_name(kind: RunKind) -> &'static str {
     }
 }
 
-/// The command that starts a session of `kind`, in `site` or none; the server's model.
-pub fn new_session(kind: RunKind, site: Option<String>) -> ClientCommand {
+/// A session's run kind, and the outside harness that runs it if one does.
+pub fn kind_label(session: &SessionInfo) -> String {
+    match &session.harness {
+        Some(harness) => format!("{} · {harness}", kind_name(session.kind)),
+        None => kind_name(session.kind).to_string(),
+    }
+}
+
+/// The command that starts a session of `kind`, in `site` or none, run by `harness` or
+/// composer; the server's model.
+pub fn new_session(kind: RunKind, site: Option<String>, harness: Option<String>) -> ClientCommand {
     ClientCommand::SessionCreate {
         kind,
         model: None,
         site,
+        harness,
     }
 }
 
 /// The new-session menu: each run kind in the shown session's site (or none), then each kind
-/// without a site, then in each other site of `sites`.
-pub fn new_sessions(sites: &[SiteSummary], current: Option<&str>) -> Vec<Item> {
+/// without a site, then in each other site of `sites`. An agentic session is offered run by
+/// composer, then by each of the server's `harnesses`.
+pub fn new_sessions(
+    sites: &[SiteSummary],
+    current: Option<&str>,
+    harnesses: &[String],
+) -> Vec<Item> {
     let mut places: Vec<Option<&str>> = vec![current];
     if current.is_some() {
         places.push(None);
@@ -46,16 +62,32 @@ pub fn new_sessions(sites: &[SiteSummary], current: Option<&str>) -> Vec<Item> {
     places
         .into_iter()
         .flat_map(|site| {
-            RUN_KINDS.into_iter().map(move |kind| Item {
-                label: format!("{} session", kind_name(kind)),
-                detail: site.map_or("no site".into(), |s| format!("in {s}")),
-                note: String::new(),
-                group: "new session",
-                pick: Pick::CreateSession {
-                    kind,
-                    site: site.map(str::to_string),
-                },
-            })
+            RUN_KINDS
+                .into_iter()
+                .flat_map(move |kind| {
+                    let others: &[String] = if kind == RunKind::Agentic {
+                        harnesses
+                    } else {
+                        &[]
+                    };
+                    std::iter::once(None)
+                        .chain(others.iter().map(Some))
+                        .map(move |harness| (kind, harness))
+                })
+                .map(move |(kind, harness)| Item {
+                    label: match harness {
+                        Some(h) => format!("{} session · {h}", kind_name(kind)),
+                        None => format!("{} session", kind_name(kind)),
+                    },
+                    detail: site.map_or("no site".into(), |s| format!("in {s}")),
+                    note: String::new(),
+                    group: "new session",
+                    pick: Pick::CreateSession {
+                        kind,
+                        site: site.map(str::to_string),
+                        harness: harness.cloned(),
+                    },
+                })
         })
         .collect()
 }
@@ -80,7 +112,7 @@ pub fn sessions(
                 ""
             };
             Item {
-                label: format!("{} #{}{mark}", kind_name(s.kind), s.id),
+                label: format!("{} #{}{mark}", kind_label(s), s.id),
                 note: s
                     .preview
                     .as_deref()
@@ -140,6 +172,20 @@ pub fn commands(following: bool) -> Vec<Item> {
             pick: Pick::Compact,
         },
         Item {
+            label: "Delete session…".into(),
+            detail: "this one, with its folder".into(),
+            note: String::new(),
+            group: "session",
+            pick: Pick::DeleteMenu,
+        },
+        Item {
+            label: "Background processes…".into(),
+            detail: "the session's; open or stop one".into(),
+            note: String::new(),
+            group: "session",
+            pick: Pick::ProcessMenu,
+        },
+        Item {
             label: "Open terminal tab".into(),
             detail: "+".into(),
             note: String::new(),
@@ -154,6 +200,52 @@ pub fn commands(following: bool) -> Vec<Item> {
             pick: Pick::Home,
         },
     ]
+}
+
+/// The confirm for deleting `session`: one item; Escape keeps it.
+pub fn delete_confirm(session: &SessionInfo) -> Vec<Item> {
+    vec![Item {
+        label: format!("Delete {} #{}", kind_label(session), session.id),
+        detail: "can't be undone".into(),
+        note: session
+            .preview
+            .as_deref()
+            .map(|p| short(p, 80))
+            .unwrap_or_default(),
+        group: "delete session?",
+        pick: Pick::DeleteSession(session.id.clone()),
+    }]
+}
+
+/// The shown session's background processes: open each one's terminal on the stage, or stop it.
+/// `now`: seconds since the epoch, for how long each has run.
+pub fn processes(processes: &[ProcessInfo], now: i64) -> Vec<Item> {
+    processes
+        .iter()
+        .flat_map(|p| {
+            let since = match epoch_secs(&p.started).map(|then| age(now, then)) {
+                Some(age) if age == "now" => "just started".to_string(),
+                Some(age) => format!("running {age}"),
+                None => String::new(),
+            };
+            [
+                Item {
+                    label: format!("open: {}", short(&p.command, 60)),
+                    detail: since.clone(),
+                    note: p.cwd.clone(),
+                    group: "processes",
+                    pick: Pick::OpenProcess(p.terminal.clone()),
+                },
+                Item {
+                    label: format!("stop: {}", short(&p.command, 60)),
+                    detail: since,
+                    note: String::new(),
+                    group: "processes",
+                    pick: Pick::StopProcess(p.terminal.clone()),
+                },
+            ]
+        })
+        .collect()
 }
 
 /// "leave site" while the shown session is in one.
@@ -307,7 +399,8 @@ mod tests {
         assert_eq!(
             groups,
             [
-                "session", "session", "session", "session", "session", "session", "stage", "home"
+                "session", "session", "session", "session", "session", "session", "session",
+                "session", "stage", "home"
             ],
             "grouped as shown"
         );
@@ -333,15 +426,17 @@ mod tests {
     #[test]
     fn a_new_session_has_a_kind_and_maybe_a_site() {
         for site in [Some("game".to_string()), None] {
-            match new_session(RunKind::Workflow, site.clone()) {
+            match new_session(RunKind::Workflow, site.clone(), None) {
                 ClientCommand::SessionCreate {
                     kind,
                     model,
                     site: s,
+                    harness,
                 } => {
                     assert_eq!(kind, RunKind::Workflow);
                     assert_eq!(model, None);
                     assert_eq!(s, site);
+                    assert_eq!(harness, None);
                 }
                 other => panic!("not a session create: {other:?}"),
             }
@@ -351,7 +446,7 @@ mod tests {
     #[test]
     fn the_new_session_menu_starts_agentic_in_the_current_site() {
         let sites = [site("3d", &[]), site("notes", &[])];
-        let items = new_sessions(&sites, Some("3d"));
+        let items = new_sessions(&sites, Some("3d"), &[]);
         assert_eq!(items.len(), 9, "3d, no site, notes: three kinds each");
         assert_eq!(items[0].label, "agentic session");
         assert_eq!(items[0].detail, "in 3d");
@@ -359,21 +454,71 @@ mod tests {
             items[0].pick,
             Pick::CreateSession {
                 kind: RunKind::Agentic,
-                site: Some("3d".into())
+                site: Some("3d".into()),
+                harness: None,
             }
         );
         assert_eq!(items[1].label, "workflow session");
         assert_eq!(items[2].label, "single shot session");
         assert_eq!(items[3].detail, "no site");
         assert_eq!(items[6].detail, "in notes");
-        let none = new_sessions(&sites, None);
+        let none = new_sessions(&sites, None, &[]);
         assert_eq!(none.len(), 9, "no site, 3d, notes");
         assert_eq!(
             none[0].pick,
             Pick::CreateSession {
                 kind: RunKind::Agentic,
-                site: None
+                site: None,
+                harness: None,
             }
         );
+    }
+
+    #[test]
+    fn harnesses_run_agentic_sessions_only() {
+        let harnesses = ["claude".to_string()];
+        let items = new_sessions(&[], None, &harnesses);
+        let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
+        assert_eq!(
+            labels,
+            [
+                "agentic session",
+                "agentic session · claude",
+                "workflow session",
+                "single shot session"
+            ]
+        );
+        assert_eq!(
+            items[1].pick,
+            Pick::CreateSession {
+                kind: RunKind::Agentic,
+                site: None,
+                harness: Some("claude".into()),
+            }
+        );
+        let mut s = session("x", "2026-11-01T00:00:00Z", None);
+        assert_eq!(kind_label(&s), "workflow");
+        s.kind = RunKind::Agentic;
+        s.harness = Some("claude".into());
+        assert_eq!(kind_label(&s), "agentic · claude");
+        assert_eq!(delete_confirm(&s)[0].label, "Delete agentic · claude #x");
+        assert_eq!(delete_confirm(&s)[0].pick, Pick::DeleteSession("x".into()));
+    }
+
+    #[test]
+    fn a_process_opens_or_stops() {
+        let process = ProcessInfo {
+            terminal: "t7".into(),
+            command: "cargo run".into(),
+            cwd: "/w".into(),
+            started: "2026-11-21T10:00:00Z".into(),
+        };
+        let now = epoch_secs("2026-11-21T10:05:00Z").unwrap();
+        let items = processes(&[process], now);
+        assert_eq!(items[0].label, "open: cargo run");
+        assert_eq!(items[0].detail, "running 5m");
+        assert_eq!(items[0].pick, Pick::OpenProcess("t7".into()));
+        assert_eq!(items[1].label, "stop: cargo run");
+        assert_eq!(items[1].pick, Pick::StopProcess("t7".into()));
     }
 }

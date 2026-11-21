@@ -16,11 +16,19 @@ pub enum Pick {
     Session(String),
     /// The new-session menu: a run kind and maybe a site.
     NewSession,
-    /// Start a session of this kind, in this site or none.
+    /// Start a session of this kind, in this site or none, run by this harness or composer.
     CreateSession {
         kind: composer_protocol::RunKind,
         site: Option<String>,
+        harness: Option<String>,
     },
+    /// Confirm deleting the shown session; delete this one.
+    DeleteMenu,
+    DeleteSession(String),
+    /// The shown session's background processes; open one's terminal on the stage; stop one.
+    ProcessMenu,
+    OpenProcess(String),
+    StopProcess(String),
     Page(String),
     AttachFile,
     NewTerminal,

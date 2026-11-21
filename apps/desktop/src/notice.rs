@@ -26,7 +26,9 @@ impl Notice {
                 recipe,
                 ..
             } => {
-                let what = if title.is_empty() {
+                let what = if recipe == crate::home_lists::MCP_FILE {
+                    format!("Start {site}'s MCP servers")
+                } else if title.is_empty() {
                     format!("{site} › {recipe}")
                 } else {
                     title.clone()

@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use composer_client::Approval;
 use composer_protocol::{ApprovalKind, SessionInfo, TurnState};
 
-use crate::pick_lists::kind_name;
+use crate::pick_lists::kind_label;
 
 /// A session's row.
 #[derive(Debug, Clone, PartialEq)]
@@ -42,7 +42,7 @@ pub fn session_rows(
         };
         let row = SessionRow {
             id: s.id.clone(),
-            kind: kind_name(s.kind).into(),
+            kind: kind_label(s),
             status,
             waiting,
             preview: s.preview.clone().unwrap_or_default(),
@@ -63,11 +63,27 @@ pub fn session_rows(
 /// What an approval asks, in a few words.
 pub fn asked_line(approval: &Approval) -> String {
     match approval.kind {
+        ApprovalKind::Recipe if is_mcp_start(approval) => {
+            format!("approve: {}", mcp_start(&approval.site))
+        }
         ApprovalKind::Recipe => format!("approve run {} › {}", approval.site, approval.recipe),
         _ if !approval.title.is_empty() => format!("approve {}", approval.title),
         ApprovalKind::Tool | ApprovalKind::Mcp => "approve a tool".into(),
     }
 }
+
+/// The approval to start a site's MCP servers (its `mcp.toml`), not a recipe run.
+pub fn is_mcp_start(approval: &Approval) -> bool {
+    approval.kind == ApprovalKind::Recipe && approval.recipe == MCP_FILE
+}
+
+/// What approving a site's `mcp.toml` does.
+pub fn mcp_start(site: &str) -> String {
+    format!("start {site}'s MCP servers")
+}
+
+/// The file a site declares its MCP servers in; approving it starts them.
+pub const MCP_FILE: &str = "mcp.toml";
 
 pub fn state_word(state: TurnState) -> &'static str {
     match state {

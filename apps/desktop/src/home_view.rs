@@ -16,7 +16,7 @@ use gpui::{
 
 use crate::chat_pane::PROSE;
 use crate::home_lists::{SessionRow, asked_line, now_secs, session_rows, state_word};
-use crate::pick_lists::kind_name;
+use crate::pick_lists::kind_label;
 use crate::stage_tabs;
 use crate::theme::*;
 
@@ -522,7 +522,7 @@ impl HomeView {
                     div()
                         .text_color(rgb(FG_BRIGHT))
                         .font_weight(FontWeight::SEMIBOLD)
-                        .child(kind_name(info.kind)),
+                        .child(kind_label(info)),
                 )
                 .child(
                     div()

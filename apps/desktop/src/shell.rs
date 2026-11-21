@@ -9,7 +9,9 @@ use std::time::Instant;
 use base64::Engine;
 use composer_client::{Connection, Endpoint, Event, Store};
 use composer_core::LinkTarget;
-use composer_protocol::{ClientCommand, CommandResult, DeskEntry, DeskTab, RunKind, ServerMessage};
+use composer_protocol::{
+    ClientCommand, CommandResult, DeskEntry, DeskTab, ProcessInfo, RunKind, ServerMessage,
+};
 use gpui::{
     Context, Entity, ExternalPaths, FocusHandle, Focusable, MouseButton, MouseDownEvent,
     MouseMoveEvent, MouseUpEvent, Subscription, Window, actions, div, prelude::*, px, rgb,
@@ -82,6 +84,10 @@ pub struct Shell {
     dragging: bool,
     /// Show what the agent opens (else it is only marked unseen). The client's choice.
     follow: bool,
+    /// The outside agents (ACP) the server can run an agentic session with.
+    harnesses: Vec<String>,
+    /// The shown session's background processes.
+    processes: Vec<ProcessInfo>,
     /// The window is in front (as of its last draw): notifications only when it isn't.
     active: bool,
     /// Drawn once (start-up timing).
@@ -130,6 +136,8 @@ impl Shell {
             chat_width: ChatWidth::DEFAULT,
             dragging: false,
             follow: true,
+            harnesses: Vec::new(),
+            processes: Vec::new(),
             active: true,
             drawn: false,
             visibility_observed: false,
@@ -159,6 +167,7 @@ impl Shell {
                 // All the sessions, for the switcher (updates follow as events); the first
                 // reply also picks the session to show.
                 self.ask(ClientCommand::SessionList, cx);
+                self.fetch_harnesses(cx);
                 // Stage panes start over from the server's scrollback.
                 self.panes.clear();
                 self.webs.clear();
@@ -172,7 +181,13 @@ impl Shell {
                         },
                         cx,
                     );
-                    self.ask(ClientCommand::DeskGet { session }, cx);
+                    self.ask(
+                        ClientCommand::DeskGet {
+                            session: session.clone(),
+                        },
+                        cx,
+                    );
+                    self.fetch_processes(session, cx);
                 }
                 // Nothing on screen is known to be current after this. Every pane is made again
                 // just above, so nothing is left showing what it loaded before the break.
@@ -226,6 +241,10 @@ impl Shell {
             ServerMessage::PageChanged { url, .. } => {
                 self.changed(page_refresh::page_tabs(&self.store.desk, url), cx)
             }
+            ServerMessage::SessionDeleted { session } => self.deleted(session.clone(), cx),
+            ServerMessage::ProcessesChanged { session, processes } if self.is_shown(session) => {
+                self.processes = processes.clone()
+            }
             _ => {}
         }
         if let ServerMessage::DeskChanged {
@@ -243,6 +262,56 @@ impl Shell {
         }
     }
 
+    /// A session is gone: out of the lists; when it was the shown one, another is shown.
+    fn deleted(&mut self, session: String, cx: &mut Context<Self>) {
+        self.store.sessions.retain(|s| s.id != session);
+        self.store.approvals.retain(|_, a| a.session != session);
+        if self.is_shown(&session) {
+            self.store.attached = None;
+            self.processes.clear();
+            self.pick_first_session(cx);
+        }
+        self.sync_approvals(cx);
+        self.sync_home(cx);
+    }
+
+    /// The harnesses the server offers (`/api/info`), for the new-session menu.
+    fn fetch_harnesses(&mut self, cx: &mut Context<Self>) {
+        let endpoint = self.endpoint.clone();
+        let fetched = cx.global::<Desktop>().spawn(async move {
+            endpoint
+                .get::<composer_protocol::http::ServerInfo>("/api/info")
+                .await
+        });
+        cx.spawn(async move |this, cx| {
+            if let Ok(Ok(info)) = fetched.await {
+                let _ = this.update(cx, |shell, _| shell.harnesses = info.harnesses);
+            }
+        })
+        .detach();
+    }
+
+    /// `session`'s background processes, while it is the shown one.
+    fn fetch_processes(&mut self, session: String, cx: &mut Context<Self>) {
+        let connection = self.connection.clone();
+        cx.spawn(async move |this, cx| {
+            let answer = connection
+                .request(ClientCommand::ProcessList {
+                    session: session.clone(),
+                })
+                .await;
+            let _ = this.update(cx, |shell, cx| {
+                if let Ok(CommandResult::Processes { processes }) = answer
+                    && shell.is_shown(&session)
+                {
+                    shell.processes = processes;
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
+    }
+
     fn is_shown(&self, session: &str) -> bool {
         self.store.attached.as_deref() == Some(session)
     }
@@ -257,6 +326,8 @@ impl Shell {
             self.ask(ClientCommand::SessionDetach { session: previous }, cx);
         }
         self.store.attach(&session);
+        self.processes.clear();
+        self.fetch_processes(session.clone(), cx);
         self.chat.update(cx, |chat, cx| chat.open(&session, cx));
         self.sync_info(cx);
         self.sync_approvals(cx);
@@ -321,7 +392,7 @@ impl Shell {
             .map(|s| s.id.clone());
         match latest {
             Some(session) => self.show_session(session, cx),
-            None => self.new_session(RunKind::Agentic, None, cx),
+            None => self.new_session(RunKind::Agentic, None, None, cx),
         }
     }
 
@@ -329,7 +400,8 @@ impl Shell {
     /// (the other sites join when fetched).
     fn open_new_session_menu(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let current = self.session_site().map(str::to_string);
-        let items = pick_lists::new_sessions(&[], current.as_deref());
+        let harnesses = self.harnesses.clone();
+        let items = pick_lists::new_sessions(&[], current.as_deref(), &harnesses);
         let shown = items.len();
         let picker = cx.new(|cx| Picker::new("new session", items, cx));
         let endpoint = self.endpoint.clone();
@@ -345,19 +417,26 @@ impl Shell {
                 return;
             };
             // The kinds already listed (this site, no site) come first; the other sites follow.
-            let more = pick_lists::new_sessions(&sites, current.as_deref()).split_off(shown);
+            let more =
+                pick_lists::new_sessions(&sites, current.as_deref(), &harnesses).split_off(shown);
             let _ = weak.update(cx, |picker, cx| picker.extend(more, cx));
         })
         .detach();
         self.show_picker(picker, window, cx);
     }
 
-    /// Start a session of `kind`, in `site` or none.
-    fn new_session(&mut self, kind: RunKind, site: Option<String>, cx: &mut Context<Self>) {
+    /// Start a session of `kind`, in `site` or none, run by `harness` or composer.
+    fn new_session(
+        &mut self,
+        kind: RunKind,
+        site: Option<String>,
+        harness: Option<String>,
+        cx: &mut Context<Self>,
+    ) {
         let connection = self.connection.clone();
         cx.spawn(async move |this, cx| {
             let created = connection
-                .request(pick_lists::new_session(kind, site))
+                .request(pick_lists::new_session(kind, site, harness))
                 .await;
             let _ = this.update(cx, |shell, cx| match created {
                 Ok(CommandResult::Session { session }) => {
@@ -757,6 +836,7 @@ impl Shell {
                 terminal: Some(terminal),
                 cols: cols.max(10) as u16,
                 rows: rows.max(4) as u16,
+                command: None,
             },
             cx,
         );
@@ -773,6 +853,7 @@ impl Shell {
                 terminal: None,
                 cols: 100,
                 rows: 30,
+                command: None,
             },
             cx,
         );
@@ -1000,6 +1081,13 @@ impl Shell {
         self.show_picker(picker, window, cx);
     }
 
+    /// The shown session's background processes: open one's terminal, or stop it.
+    fn open_processes(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let items = pick_lists::processes(&self.processes, crate::home_lists::now_secs());
+        let picker = cx.new(|cx| Picker::new("process", items, cx));
+        self.show_picker(picker, window, cx);
+    }
+
     fn shown_info(&self) -> Option<&composer_protocol::SessionInfo> {
         let id = self.store.attached.as_ref()?;
         self.store.sessions.iter().find(|s| &s.id == id)
@@ -1078,7 +1166,34 @@ impl Shell {
         match pick {
             Pick::Session(session) => self.show_session(session, cx),
             Pick::NewSession => self.open_new_session_menu(window, cx),
-            Pick::CreateSession { kind, site } => self.new_session(kind, site, cx),
+            Pick::CreateSession {
+                kind,
+                site,
+                harness,
+            } => self.new_session(kind, site, harness, cx),
+            Pick::DeleteMenu => {
+                if let Some(info) = self.shown_info() {
+                    let items = pick_lists::delete_confirm(info);
+                    let picker = cx.new(|cx| Picker::new("delete session?", items, cx));
+                    self.show_picker(picker, window, cx);
+                }
+            }
+            Pick::DeleteSession(session) => self.ask(ClientCommand::SessionDelete { session }, cx),
+            Pick::ProcessMenu => self.open_processes(window, cx),
+            // Its terminal, as a stage tab.
+            Pick::OpenProcess(terminal) => {
+                if let Some(session) = self.store.attached.clone() {
+                    self.ask(
+                        ClientCommand::DeskOpen {
+                            session,
+                            tab: DeskTab::Terminal { id: terminal },
+                            focus: true,
+                        },
+                        cx,
+                    );
+                }
+            }
+            Pick::StopProcess(terminal) => self.ask(ClientCommand::ProcessStop { terminal }, cx),
             Pick::Page(url) => self.open_page(url, cx),
             Pick::Site(site) => self.switch_site(Some(site), cx),
             Pick::LeaveSite => self.switch_site(None, cx),
@@ -1216,7 +1331,7 @@ impl Shell {
             .as_ref()
             .and_then(|id| self.store.sessions.iter().find(|s| &s.id == id));
         let kind = session
-            .map(|s| pick_lists::kind_name(s.kind).to_string())
+            .map(pick_lists::kind_label)
             .unwrap_or_else(|| "no session".into());
         let id = session.map(|s| format!("#{}", s.id)).unwrap_or_default();
         let site = session
@@ -1686,6 +1801,22 @@ impl Render for Shell {
                             div()
                                 .text_color(rgb(WARN))
                                 .child(format!("! {waiting} waiting")),
+                        )
+                    })
+                    .when(!self.processes.is_empty(), |d| {
+                        let count = self.processes.len();
+                        d.child(
+                            div()
+                                .id("status-processes")
+                                .text_color(rgb(FG_DIM))
+                                .hover(|d| d.text_color(rgb(FG_BRIGHT)))
+                                .child(format!(
+                                    "⚙ {count} process{} running",
+                                    if count == 1 { "" } else { "es" }
+                                ))
+                                .on_click(cx.listener(|shell, _, window, cx| {
+                                    shell.open_processes(window, cx)
+                                })),
                         )
                     })
                     .child(div().flex_1())

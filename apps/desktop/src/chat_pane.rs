@@ -21,6 +21,7 @@ use composer_core::{LinkTarget, SiteUrl};
 
 use crate::chat_model::ChatModel;
 use crate::draft::{Draft, DraftKey, Mode};
+use crate::home_lists::{is_mcp_start, mcp_start};
 use crate::markdown;
 use crate::outgoing::Outgoing;
 use crate::prose::{head, thinking_preview};
@@ -471,6 +472,14 @@ fn block_style(block: &markdown::Block) -> gpui::Div {
         })
 }
 
+/// "[background process t1 (`cargo run`) exited with code 1]\n…" → "⏹ background process t1
+/// (cargo run) exited with code 1".
+fn process_line(text: &str) -> String {
+    let first = text.lines().next().unwrap_or_default();
+    let first = first.trim().trim_start_matches('[').trim_end_matches(']');
+    format!("⏹ {}", first.replace('`', ""))
+}
+
 /// A line between rules: something that happened (`cancelled`, a summary, a system note).
 fn event(text: String) -> AnyElement {
     let rule = || div().flex_1().h(px(1.)).bg(rgb(BORDER));
@@ -792,12 +801,14 @@ impl ChatPane {
 
     fn approval(&self, approval: &Approval, cx: &mut Context<Self>) -> AnyElement {
         let what = match approval.kind {
+            ApprovalKind::Recipe if is_mcp_start(approval) => mcp_start(&approval.site),
             ApprovalKind::Recipe => format!("run {} › {}", approval.site, approval.recipe),
             _ if !approval.title.is_empty() => approval.title.clone(),
             ApprovalKind::Tool | ApprovalKind::Mcp => "use a tool".into(),
         };
         let args = approval.args.join(" ");
-        let open = self.opened.contains(&approval.request);
+        // A site's MCP servers: what they are (the body) shows from the start; the toggle flips it.
+        let open = self.opened.contains(&approval.request) != is_mcp_start(approval);
         let request = approval.request.clone();
         let answer = |decision: ApprovalDecision| {
             let request = approval.request.clone();
@@ -981,6 +992,13 @@ impl ChatPane {
                     } else {
                         body.extend(self.markdown(text, &format!("md-{n}"), cx));
                     }
+                }
+                // A background process ended: a line, not a message from you.
+                ChatItem::User { text, source, .. } if source.as_deref() == Some("process") => {
+                    flush_tools(&mut tools, &mut body, self, cx);
+                    flush(&mut body, &mut body_label, &mut rows);
+                    rows.push(event(process_line(text)));
+                    last = None;
                 }
                 ChatItem::User {
                     text,
@@ -1548,5 +1566,14 @@ mod tests {
         assert_eq!(from_utf16(text, 4), 8, "after the emoji's two units");
         assert_eq!(to_utf16(text, 8), 4);
         assert_eq!(from_utf16(text, 9), text.len());
+    }
+
+    #[test]
+    fn a_process_that_ended_is_one_line() {
+        let text = "[background process t3 (`npm run dev`) exited with code 1]\nIts last lines:\n```\nboom\n```";
+        assert_eq!(
+            super::process_line(text),
+            "⏹ background process t3 (npm run dev) exited with code 1"
+        );
     }
 }
