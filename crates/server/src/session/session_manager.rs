@@ -42,7 +42,7 @@ impl SessionManager {
         &self,
         kind: RunKind,
         model: Option<String>,
-        project: Option<String>,
+        site: Option<String>,
     ) -> Result<Arc<Session>> {
         let mut sessions = self.sessions.write().expect("sessions lock");
         let id = loop {
@@ -54,8 +54,7 @@ impl SessionManager {
         let info = SessionInfo {
             id: id.clone(),
             kind,
-            project,
-            site: None,
+            site,
             parent: None,
             state: TurnState::Idle,
             last_seq: 0,

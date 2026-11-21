@@ -27,10 +27,8 @@ pub(crate) fn point(context: &ToolContext, desk: Desk, tab: &str) {
     });
 }
 
-/// The session's project, by name (its folder's).
-pub(crate) fn session_project(context: &ToolContext) -> Option<String> {
-    let folder = context.session.info().project?;
-    std::path::Path::new(&folder)
-        .file_name()
-        .map(|name| name.to_string_lossy().to_string())
+/// The site the run is in, when it names a folder that exists: the changes view diffs that.
+pub(crate) fn site_with_folder(context: &ToolContext) -> Option<String> {
+    let site = context.site.as_ref()?;
+    site.existing_folder().ok().map(|_| site.name.clone())
 }

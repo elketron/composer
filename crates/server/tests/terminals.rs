@@ -1,4 +1,4 @@
-//! Server-owned terminals (ticket 0176): a session's terminal is the user's shell in its project, a tab on its desk; its output streams to the session's clients and a
+//! Server-owned terminals (ticket 0176): a session's terminal is the user's shell in the folder of its site, a tab on its desk; its output streams to the session's clients and a
 //! late one gets the scrollback; the agent reads it, and types into it only when the user
 //! approves; a closed one opens again fresh where it was.
 
@@ -50,7 +50,7 @@ async fn reply(socket: &mut Socket, id: u64, command: ClientCommand) -> CommandR
 }
 
 #[tokio::test]
-async fn a_sessions_terminal_runs_in_its_project() {
+async fn a_sessions_terminal_runs_in_the_folder_of_its_site() {
     // SAFETY: before the server starts; the only test in this binary.
     unsafe { std::env::set_var("SHELL", "/bin/sh") };
     let projects = tempfile::tempdir().unwrap();
@@ -58,15 +58,22 @@ async fn a_sessions_terminal_runs_in_its_project() {
     let game = root.join("game");
     std::fs::create_dir_all(&game).unwrap();
     std::fs::write(game.join("README"), "the game\n").unwrap();
-    let mut config = Config::defaults();
-    config.projects.dir = root.display().to_string();
-    let (_dir, server, _provider, addr) = start_with(config, vec![]).await;
+    let (dir, server, _provider, addr) = start_with(Config::defaults(), vec![]).await;
+    std::fs::create_dir_all(dir.path().join("sites/game")).unwrap();
+    std::fs::write(
+        dir.path().join("sites/game/index.md"),
+        format!(
+            "---\ntitle: Game\nfolder: {}\n---\n# Game\n",
+            game.display()
+        ),
+    )
+    .unwrap();
     let session = server
         .sessions
         .create(
             composer_protocol::RunKind::Agentic,
             None,
-            Some(game.display().to_string()),
+            Some("game".into()),
         )
         .unwrap();
     let sid = session.id().to_string();
@@ -96,7 +103,7 @@ async fn a_sessions_terminal_runs_in_its_project() {
         panic!()
     };
     assert_eq!(session.desk().active, Some(format!("terminal:{id}")));
-    // In its project.
+    // In the folder of its site.
     let input = |data: String| ClientCommand::TerminalInput {
         terminal: id.clone(),
         data,

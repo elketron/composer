@@ -4,8 +4,8 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::config_sections::{
-    AgentConfig, AttachmentsConfig, DesktopConfig, McpServerConfig, ProjectsConfig, ProviderConfig,
-    ServerConfig, TerminalsConfig, ViewerConfig,
+    AgentConfig, AttachmentsConfig, DesktopConfig, McpServerConfig, ProviderConfig, ServerConfig,
+    TerminalsConfig, ViewerConfig,
 };
 use crate::error::{Result, ServerError};
 
@@ -18,8 +18,6 @@ pub struct Config {
     pub server: ServerConfig,
     #[serde(default = "section")]
     pub agent: AgentConfig,
-    #[serde(default = "section")]
-    pub projects: ProjectsConfig,
     #[serde(default = "section")]
     pub attachments: AttachmentsConfig,
     #[serde(default = "section")]
@@ -105,19 +103,5 @@ mod tests {
         for gone in ["[sandbox]", "lend =", "binds_ro", "binds_rw"] {
             assert!(!saved.contains(gone), "{gone} in {saved}");
         }
-    }
-
-    #[test]
-    fn per_project_settings() {
-        let c = Config::parse(
-            "[projects]\ndir = \"~/code\"\n\n[projects.\"~/code/app\"]\nexternal_harnesses = [\"claude-code\"]\n",
-        )
-        .unwrap();
-        assert_eq!(c.projects.dir, "~/code");
-        assert_eq!(
-            c.projects.settings["~/code/app"].external_harnesses,
-            ["claude-code"]
-        );
-        assert_eq!(Config::parse(&c.to_toml()).unwrap(), c);
     }
 }

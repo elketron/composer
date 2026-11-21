@@ -550,7 +550,6 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
     let info = SessionInfo {
         id: "a3f1".into(),
         kind: RunKind::Agentic,
-        project: Some("/home/me/project".into()),
         site: Some("plans".into()),
         parent: None,
         state: TurnState::AwaitingApproval,
@@ -769,7 +768,7 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
         ClientCommand::SessionCreate {
             kind: RunKind::Workflow,
             model: Some("qwen3".into()),
-            project: None,
+            site: Some("plans".into()),
         },
         ClientCommand::SessionList,
         ClientCommand::SessionAttach {
@@ -842,7 +841,6 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
             version: "0.1.0".into(),
             model: "m".into(),
             slots: 2,
-            projects_dir: "~/Projects".into(),
             viewer: Some("/view".into()),
         }),
         serde_json::to_value(SiteSummary {

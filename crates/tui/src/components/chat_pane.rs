@@ -84,10 +84,9 @@ impl ChatPane {
             kind_name(info.kind),
             Style::new().fg(theme::ACCENT),
         ));
-        if let Some(project) = &info.project {
+        if let Some(site) = &info.site {
             spans.push(sep());
-            let name = project.rsplit('/').next().unwrap_or(project);
-            spans.push(Span::styled(name.to_string(), theme::text()));
+            spans.push(Span::styled(site.clone(), theme::text()));
         }
         spans.push(sep());
         spans.push(Span::styled(format!("#{}", info.id), theme::muted()));

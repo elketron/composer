@@ -12,10 +12,10 @@ pub enum DeskTab {
     Page { url: String },
     /// A server-owned terminal.
     Terminal { id: String },
-    /// A project's changes (its diff).
-    Changes { project: String },
+    /// The changes (git diff) of a site's `folder:`.
+    Changes { site: String },
     /// The live view of the user's application (wayai's viewer, proxied at `/view`).
-    /// It names no site or project; one per desk (id `live`). Wire form: `{"kind":"live_view"}`.
+    /// It names no site; one per desk (id `live`). Wire form: `{"kind":"live_view"}`.
     LiveView,
 }
 
@@ -24,7 +24,7 @@ pub enum DeskTab {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct DeskEntry {
-    /// `page:site://x`, `terminal:<id>`, `changes:<project>`, `live`.
+    /// `page:site://x`, `terminal:<id>`, `changes:<site>`, `live`.
     pub id: String,
     pub tab: DeskTab,
     /// Opened by the agent and not looked at yet (a badge, for a client not following it).
@@ -48,7 +48,7 @@ impl DeskEntry {
     }
 }
 
-/// A session's desk: its tabs in order, and the one shown. Empty: the project home.
+/// A session's desk: its tabs in order, and the one shown. Empty: the session's home.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]

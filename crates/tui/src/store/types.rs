@@ -162,9 +162,8 @@ pub struct Startup {
     pub new: bool,
     /// The run kind of a new session.
     pub kind: RunKind,
-    pub project: Option<String>,
-    /// `[projects] dir` from the config (`~/Projects`).
-    pub projects_dir: Option<String>,
+    /// The site a new session starts in.
+    pub site: Option<String>,
 }
 
 /// A recipe waiting for your approval.

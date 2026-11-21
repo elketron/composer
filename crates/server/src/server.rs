@@ -4,7 +4,9 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
 
 use composer_core::{Index, Page, SiteUrl, Web};
-use composer_protocol::{ApprovalDecision, ApprovalKind, ChangedBy, PageChangeKind, ServerMessage};
+use composer_protocol::{
+    ApprovalDecision, ApprovalKind, ChangedBy, PageChangeKind, ServerMessage, SessionInfo,
+};
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
@@ -18,11 +20,10 @@ use crate::home::Home;
 use crate::hub::EventHub;
 use crate::init::local_token;
 use crate::mcp_clients::McpServers;
-use crate::project::ProjectPath;
 use crate::provider::{OpenAiProvider, Provider};
 use crate::session::{Session, SessionManager};
 use crate::slot_pool::SlotPool;
-use crate::tools::{ToolRegistry, expand_home};
+use crate::tools::ToolRegistry;
 use crate::watches::{WRITER, WatchRegistry};
 
 /// The running harness. Shared as `Arc<Server>` by the API, turns and tools.
@@ -51,7 +52,7 @@ pub struct Server {
     pub terminals: crate::terminals::Terminals,
     /// Sessions' watches on site files (`state/watches.json`).
     pub watches: WatchRegistry,
-    /// Tools the user said `always` to, per project.
+    /// Tools the user said `always` to, per folder.
     pub tool_rules: ToolRules,
     listen_addr: OnceLock<SocketAddr>,
     /// Hash of each file as we last saw or wrote it; tells the watcher which changes are ours.
@@ -72,9 +73,10 @@ impl Server {
 
     pub fn new(home: Home, config: Config, provider: Arc<dyn Provider>) -> Result<Arc<Self>> {
         crate::viewer_upstream::ViewerUpstream::warn_if_refused(&config);
-        // Scoped mounts (ticket 0122): a symlink inside a site may point into the projects
-        // directory; one that lands elsewhere is refused, not followed.
-        let web = Web::with_allowed(home.sites(), vec![expand_home(&config.projects.dir)]);
+        // Scoped mounts (ticket 0122): a symlink inside a site may point into a site's folder;
+        // one that lands elsewhere is refused, not followed.
+        let web = Web::with_allowed(home.sites(), vec![]);
+        web.set_allowed(site_folders(&web));
         if !web.root().is_dir() {
             return Err(ServerError::Invalid(format!(
                 "{} does not exist; run `composer init` first",
@@ -152,11 +154,6 @@ impl Server {
             let mut mcp = self.mcp.write().expect("mcp lock");
             *mcp = Arc::new(mcp.reconfigured(&next.mcp));
         }
-        if current.projects.dir != next.projects.dir {
-            // Mounted folders start following the new scope from now on; pages under a mount
-            // the new scope drops stay indexed until something changes them.
-            self.web.set_allowed(vec![expand_home(&next.projects.dir)]);
-        }
         crate::viewer_upstream::ViewerUpstream::warn_if_refused(&next);
         *current = Arc::new(next);
         tracing::info!("config.toml reloaded");
@@ -232,14 +229,16 @@ impl Server {
         self.listen_addr.get().copied()
     }
 
-    /// The project folder `path` names (a name in the projects directory, `~/...` or absolute).
-    pub fn project_folder(&self, path: &str) -> std::result::Result<String, String> {
-        ProjectPath::resolve(path, &self.config().projects.dir).map(|p| p.to_string())
+    /// The folder of the site `session` is in (`folder:`), when it names one that exists.
+    pub fn session_folder(&self, session: &SessionInfo) -> Option<PathBuf> {
+        let site = crate::agent::Site::load(&self.web, session.site.as_deref()?).ok()?;
+        site.existing_folder().ok()
     }
 
-    /// Builds the index again from the web as it is now (a mount closed, a project claimed
-    /// elsewhere).
+    /// Builds the index again from the web as it is now (a mount closed, a site's folder
+    /// changed), and the folders mounts may point into.
     pub fn reindex(&self) {
+        self.web.set_allowed(site_folders(&self.web));
         match Index::build(&self.web) {
             Ok(index) => *self.index.write().expect("index lock") = index,
             Err(e) => tracing::warn!("reindexing: {e}"),
@@ -522,4 +521,16 @@ pub(crate) async fn shutdown_signal() {
     }
     #[cfg(not(unix))]
     let _ = tokio::signal::ctrl_c().await;
+}
+
+/// The folders the sites name (`folder:`): where a mount inside a site may point.
+fn site_folders(web: &Web) -> Vec<PathBuf> {
+    let Ok(sites) = web.sites() else {
+        return Vec::new();
+    };
+    sites
+        .iter()
+        .filter_map(|site| crate::agent::Site::load(web, &site.name).ok())
+        .filter_map(|site| site.existing_folder().ok())
+        .collect()
 }

@@ -26,7 +26,7 @@ mod write_tool;
 use async_trait::async_trait;
 use serde_json::Value;
 
-pub(crate) use crate::project::{expand_home, tilde};
+pub(crate) use crate::project::expand_home;
 pub use tool_context::ToolContext;
 pub use tool_registry::ToolRegistry;
 

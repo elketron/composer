@@ -17,9 +17,6 @@ pub struct ServerInfo {
     pub model: String,
     /// Model slots (the provider's parallelism).
     pub slots: u32,
-    /// Where projects live (`[projects] dir`), `~` for the home folder. Older servers leave it out.
-    #[serde(default)]
-    pub projects_dir: String,
     /// Where this server serves wayai's live view, as a path after its address (`/view`);
     /// absent when no viewer is configured. Needs the token, like the rest.
     /// Older servers leave it out.
@@ -137,7 +134,7 @@ pub struct AppMessage {
     pub images: Vec<Url>,
 }
 
-/// `GET /api/sessions/{id}/project/diff`
+/// `GET /api/sessions/{id}/project/diff`: the changes of the session's site's `folder:`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]

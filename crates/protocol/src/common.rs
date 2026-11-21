@@ -15,9 +15,8 @@ pub struct SessionInfo {
     /// What its runs are: a single shot, a workflow run or an agentic session.
     #[serde(default)]
     pub kind: RunKind,
-    /// Active project directory, if any.
-    pub project: Option<String>,
-    /// The site the agent entered (`enter_site`), if any.
+    /// The site the session is in (`enter_site`), if any: its page is the agent's instructions,
+    /// and its `folder:` is where terminals start and what the changes view diffs.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub site: Option<String>,
     /// The session that spawned this one (phase 3 spawns runs; none yet).
@@ -170,7 +169,7 @@ pub struct ToolInfo {
 pub enum ApprovalDecision {
     Approve,
     Deny,
-    /// Approve, and don't ask again for this rule in this project (tool requests only).
+    /// Approve, and don't ask again for this rule in this folder (tool requests only).
     Always,
 }
 

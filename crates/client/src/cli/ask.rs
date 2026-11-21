@@ -15,7 +15,8 @@ pub struct AskOptions {
     pub kind: RunKind,
     /// Continue this session instead of creating one.
     pub session: Option<String>,
-    pub project: Option<String>,
+    /// The site a new session starts in.
+    pub site: Option<String>,
     pub show_thinking: bool,
     /// `http(s)://host[:port]` of the server.
     pub server_url: String,
@@ -54,7 +55,7 @@ pub async fn ask(options: AskOptions) -> anyhow::Result<()> {
                 .send(request(ClientCommand::SessionCreate {
                     kind: options.kind,
                     model: None,
-                    project: options.project,
+                    site: options.site,
                 }))
                 .await?;
             match next_reply(&mut socket).await? {

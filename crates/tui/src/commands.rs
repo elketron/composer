@@ -41,7 +41,7 @@ pub const COMMANDS: [(&str, &str); 14] = [
     ),
     (
         ":scope [name|none]",
-        "narrow the session picker to a project",
+        "narrow the session picker to the sessions in a site",
     ),
     (
         ":mcp",

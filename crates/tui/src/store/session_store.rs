@@ -15,7 +15,7 @@ pub struct SessionStore {
     pub last_seq: Seq,
     /// Turns finished in the current session since attaching (scripts wait on this).
     pub turns_done: u64,
-    /// The project (name or folder) the session picker is narrowed to (`:scope`).
+    /// The site the session picker is narrowed to (`:scope`).
     pub scope: Option<String>,
     /// The current session's last messages arrived (it opens on its end), and it is attached.
     pub loaded: bool,
@@ -26,19 +26,11 @@ pub struct SessionStore {
 }
 
 impl SessionStore {
-    /// Whether a session is in the scope (always, without one). The scope matches the folder
-    /// or its last part (`game` for `/home/me/Projects/game`).
+    /// Whether a session is in the scope (always, without one): it is in that site.
     pub fn in_scope(&self, session: &SessionInfo) -> bool {
-        let Some(scope) = &self.scope else {
-            return true;
-        };
-        session.project.as_ref().is_some_and(|folder| {
-            *folder == *scope
-                || folder.rsplit('/').next() == Some(scope.as_str())
-                || scope
-                    .strip_prefix("~/")
-                    .is_some_and(|rest| folder.ends_with(&format!("/{rest}")))
-        })
+        self.scope
+            .as_ref()
+            .is_none_or(|scope| session.site.as_ref() == Some(scope))
     }
 
     pub fn current_info(&self) -> Option<&SessionInfo> {

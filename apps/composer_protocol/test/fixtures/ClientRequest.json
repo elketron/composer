@@ -4,7 +4,7 @@
     "type": "session.create",
     "kind": "workflow",
     "model": "qwen3",
-    "project": null
+    "site": "plans"
   },
   {
     "id": 2,

@@ -118,7 +118,7 @@ pub enum ServerMessage {
         args: Vec<String>,
         body: String,
         hash: String,
-        /// For a tool: what `always` would allow from then on in this project (`Bash(npm:*)`).
+        /// For a tool: what `always` would allow from then on in this folder (`Bash(npm:*)`).
         #[serde(default, skip_serializing_if = "Option::is_none")]
         rule: Option<String>,
     },

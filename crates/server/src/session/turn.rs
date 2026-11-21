@@ -173,7 +173,7 @@ async fn run_turn(
         if session.info().context_tokens >= server.config().agent.compaction_threshold {
             compact(server, session, cancel, true).await?;
         }
-        // The prompt is rebuilt every step: memory or the active project may have changed.
+        // The prompt is rebuilt every step: memory or the site may have changed.
         let mut messages = vec![ModelMessage::System {
             content: system_prompt(
                 &settings,

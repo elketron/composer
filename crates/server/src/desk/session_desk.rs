@@ -39,7 +39,7 @@ impl SessionDesk {
                 }
                 format!("terminal:{id}")
             }
-            DeskTab::Changes { project } => format!("changes:{}", project_name(project)?),
+            DeskTab::Changes { site } => format!("changes:{}", site_name(site)?),
             DeskTab::LiveView => "live".to_string(),
         })
     }
@@ -103,18 +103,18 @@ impl SessionDesk {
     }
 }
 
-/// `project` as a changes tab names it: a folder name (no `/`, not starting with `.`).
-fn project_name(project: &str) -> Result<&str, String> {
-    let ok = !project.is_empty()
-        && !project.starts_with('.')
-        && project.len() <= 100
-        && !project
+/// `site` as a changes tab names it: a site name (no `/`, not starting with `.`).
+fn site_name(site: &str) -> Result<&str, String> {
+    let ok = !site.is_empty()
+        && !site.starts_with('.')
+        && site.len() <= 100
+        && !site
             .chars()
             .any(|c| c == '/' || c == '\\' || c.is_control());
     match ok {
-        true => Ok(project),
+        true => Ok(site),
         false => Err(format!(
-            "`{project}` isn't a project name: a folder name (no `/`, not starting with `.`)"
+            "`{site}` isn't a site name (no `/`, not starting with `.`)"
         )),
     }
 }
@@ -123,10 +123,8 @@ fn project_name(project: &str) -> Result<&str, String> {
 mod tests {
     use super::*;
 
-    fn changes(project: &str) -> DeskTab {
-        DeskTab::Changes {
-            project: project.into(),
-        }
+    fn changes(site: &str) -> DeskTab {
+        DeskTab::Changes { site: site.into() }
     }
 
     /// The desktop matches page changes to tabs through `page_url`, so the id `key` makes must read

@@ -40,14 +40,14 @@ impl Tool for TerminalSendTool {
             return Err("give the command as plain text".into());
         }
         let server = &context.server;
-        // Rules per project, as for Claude Code's Bash: `Bash(<command>:*)`.
+        // Rules per folder, as for Claude Code's Bash: `Bash(<command>:*)`.
         let key = format!(
             "terminal:{}",
             context
-                .session
-                .info()
-                .project
-                .unwrap_or_else(|| "home".into())
+                .site
+                .as_ref()
+                .and_then(|site| site.existing_folder().ok())
+                .map_or_else(|| "home".into(), |folder| folder.display().to_string())
         );
         let input = json!({ "command": text });
         if !server.tool_rules.allows(&key, "Bash", &input) {

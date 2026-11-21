@@ -7,10 +7,7 @@ use support::*;
 
 #[tokio::test]
 async fn sites() {
-    let projects = tempfile::tempdir().unwrap();
-    let mut config = Config::defaults();
-    config.projects.dir = projects.path().display().to_string();
-    let (_dir, server, _p, addr) = start_with(config, vec![]).await;
+    let (_dir, server, _p, addr) = start_with(Config::defaults(), vec![]).await;
     let client = reqwest::Client::new();
     let get = |path: &str| {
         let request = client
@@ -26,9 +23,6 @@ async fn sites() {
                 .unwrap()
         }
     };
-
-    let info = get("/api/info").await;
-    assert_eq!(info["projects_dir"], projects.path().display().to_string());
 
     let sites = get("/api/sites").await;
     let memory = sites

@@ -39,7 +39,7 @@ async fn a_second_stop_leaves_the_queued_turn_it_had_not_seen() {
         ClientCommand::SessionCreate {
             kind: composer_protocol::RunKind::Agentic,
             model: None,
-            project: None,
+            site: None,
         },
     )
     .await;

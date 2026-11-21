@@ -84,7 +84,7 @@ async fn a_client_uses_a_sessions_tools_through_mcp() {
         ClientCommand::SessionCreate {
             kind: composer_protocol::RunKind::Agentic,
             model: None,
-            project: None,
+            site: None,
         },
     )
     .await;

@@ -7,14 +7,13 @@ use ratatui::widgets::Paragraph;
 
 use crate::action::Action;
 use crate::components::Component;
-use crate::components::widgets::short_path;
 use crate::store::AppState;
 use crate::store::types::{ConnState, FlashLevel, Mode};
 use crate::theme;
 
 const FLASH_SECONDS: u64 = 6;
 
-/// Mode, project, context, slots on the left; flash message or follow state on the right.
+/// Mode, site, context, slots on the left; flash message or follow state on the right.
 pub struct StatusBar;
 
 impl Component for StatusBar {
@@ -44,15 +43,10 @@ impl Component for StatusBar {
         match &state.conn.state {
             ConnState::Connected => {
                 let info = state.session.current_info();
-                let project = info
-                    .and_then(|i| i.project.as_deref())
-                    .map(short_path)
-                    .unwrap_or_else(|| "no project".into());
-                left.push(Span::styled(project, theme::muted()));
-                if let Some(site) = info.and_then(|i| i.site.as_deref()) {
-                    left.push(sep());
-                    left.push(Span::styled(format!("site {site}"), theme::muted()));
-                }
+                let site = info
+                    .and_then(|i| i.site.as_deref())
+                    .map_or_else(|| "no site".to_string(), |site| format!("site {site}"));
+                left.push(Span::styled(site, theme::muted()));
                 left.push(sep());
                 let ctx = info.map(|i| i.context_tokens).unwrap_or(0);
                 let ctx_style = if ctx > state.conn.context_limit * 9 / 10 {
@@ -143,7 +137,6 @@ mod tests {
         state.session.upsert(SessionInfo {
             id: "s1".into(),
             kind: composer_protocol::RunKind::Agentic,
-            project: None,
             site: site.map(Into::into),
             parent: None,
             state: TurnState::Idle,
@@ -168,10 +161,10 @@ mod tests {
     }
 
     #[test]
-    fn the_site_shows_next_to_the_project_only_when_set() {
+    fn the_site_shows() {
         let inside = bar(Some("3d"));
-        assert!(inside.contains("no project │ site 3d │ ctx"), "{inside}");
+        assert!(inside.contains("site 3d │ ctx"), "{inside}");
         let outside = bar(None);
-        assert!(!outside.contains("site "), "{outside}");
+        assert!(outside.contains("no site │ ctx"), "{outside}");
     }
 }

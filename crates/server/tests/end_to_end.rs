@@ -16,7 +16,7 @@ async fn create_session(socket: &mut Socket) -> String {
         ClientCommand::SessionCreate {
             kind: composer_protocol::RunKind::Agentic,
             model: None,
-            project: None,
+            site: None,
         },
     )
     .await;
@@ -608,6 +608,15 @@ async fn open_shows_an_image_to_the_model() {
     scripts.push(vec![ModelEvent::Content("seen".into()), finished(vec![])]);
     let (dir, server, provider, addr) = start(scripts).await;
     std::fs::write(dir.path().join("sites/memory/pic.png"), PNG).unwrap();
+    std::fs::create_dir_all(dir.path().join("sites/game")).unwrap();
+    std::fs::write(
+        dir.path().join("sites/game/index.md"),
+        format!(
+            "---\ntitle: Game\nfolder: {}\n---\n# Game\n",
+            project.path().display()
+        ),
+    )
+    .unwrap();
     let mut socket = connect(addr, &server.token).await;
     send(
         &mut socket,
@@ -615,7 +624,7 @@ async fn open_shows_an_image_to_the_model() {
         ClientCommand::SessionCreate {
             kind: composer_protocol::RunKind::Agentic,
             model: None,
-            project: Some(project.path().display().to_string()),
+            site: Some("game".into()),
         },
     )
     .await;
@@ -667,7 +676,10 @@ async fn open_shows_an_image_to_the_model() {
         "{tools:?}"
     );
     assert_eq!(tools[1].1, 1);
-    assert!(tools[2].0.contains("outside your project"), "{tools:?}");
+    assert!(
+        tools[2].0.contains("outside the site's folder"),
+        "{tools:?}"
+    );
     assert_eq!(tools[2].1, 0);
     assert!(
         tools[3].0.starts_with("url: site://memory/user"),
@@ -688,7 +700,7 @@ async fn a_sessions_model_goes_with_its_requests() {
             ClientCommand::SessionCreate {
                 kind: composer_protocol::RunKind::Agentic,
                 model: model.map(String::from),
-                project: None,
+                site: None,
             },
         )
         .await;

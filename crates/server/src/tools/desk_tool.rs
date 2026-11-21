@@ -3,7 +3,7 @@ use serde_json::{Value, json};
 
 use composer_protocol::DeskTab;
 
-use crate::tools::stage_tools::{point, put, session_project};
+use crate::tools::stage_tools::{point, put, site_with_folder};
 use crate::tools::{Tool, ToolContext};
 
 /// What is on the user's stage; the changes; pointing at a tab (ticket 0174).
@@ -17,7 +17,7 @@ impl Tool for DeskTool {
 
     fn description(&self) -> &'static str {
         "What is on the user's stage for this session (its tabs, the one shown, the ones the user \
-         hasn't looked at yet). `changes: true` puts the session project's changes on it; `point` \
+         hasn't looked at yet). `changes: true` puts the changes of the site's folder on it; `point` \
          (a tab id) asks the user's client to show that tab."
     }
 
@@ -25,7 +25,7 @@ impl Tool for DeskTool {
         json!({
             "type": "object",
             "properties": {
-                "changes": { "type": "boolean", "description": "put the project's changes on the stage" },
+                "changes": { "type": "boolean", "description": "put the changes of the site's folder on the stage" },
                 "live": { "type": "boolean", "description": "put the live view of the application on the stage" },
                 "point": { "type": "string", "description": "a tab id to show, e.g. page:site://plans/x.md" }
             }
@@ -34,9 +34,9 @@ impl Tool for DeskTool {
 
     async fn call(&self, context: &ToolContext, args: Value) -> Result<String, String> {
         if args["changes"].as_bool().unwrap_or(false) {
-            let project = session_project(context)
-                .ok_or("this session has no project (it is set when the session starts)")?;
-            let tab = put(context, DeskTab::Changes { project })?;
+            let site = site_with_folder(context)
+                .ok_or("this session is in no site with a folder (`folder:` in its index.md)")?;
+            let tab = put(context, DeskTab::Changes { site })?;
             return Ok(format!("{tab} is on the stage"));
         }
         if args["live"].as_bool().unwrap_or(false) {
@@ -57,7 +57,7 @@ impl Tool for DeskTool {
             return Ok(format!("pointed the user at {tab}"));
         }
         if desk.tabs.is_empty() {
-            return Ok("The stage is empty (the project home).".into());
+            return Ok("The stage is empty.".into());
         }
         let lines: Vec<String> = desk
             .tabs

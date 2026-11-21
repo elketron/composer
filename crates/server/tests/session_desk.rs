@@ -73,7 +73,7 @@ async fn a_sessions_desk_comes_back_with_it() {
         focus: true,
     };
     let cad = DeskTab::Changes {
-        project: "game".into(),
+        site: "game".into(),
     };
     desk(&mut other, 3, open(cad.clone())).await.unwrap();
     desk(

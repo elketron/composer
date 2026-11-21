@@ -1,8 +1,12 @@
 //! A site as a capability: its `index.md` is the prompt and its `tools:` are the verbs that
 //! exist only while the agent is inside it.
 
+use std::path::PathBuf;
+
 use composer_core::{SiteUrl, Web};
 use serde_json::Value;
+
+use crate::project::expand_home;
 
 /// A site the agent can enter (`enter_site`).
 #[derive(Debug, Clone)]
@@ -15,8 +19,9 @@ pub struct Site {
     /// server's tools come with the site only where `[mcp.<server>] sites` in `config.toml` lists
     /// this site ([`crate::mcp_clients::McpServers::allows`]).
     pub mcp: Vec<String>,
-    /// `project: required`: no entering without an active project.
-    pub needs_project: bool,
+    /// `folder:`: a folder outside the web the site works on (`~/Projects/composer`), `~`
+    /// expanded. Terminals start there and the changes view diffs it.
+    pub folder: Option<PathBuf>,
     /// The site's `index.md` body, put in the prompt after the agent's.
     pub prompt: String,
 }
@@ -56,22 +61,39 @@ impl Site {
         .map(|server| server.trim().to_string())
         .filter(|server| !server.is_empty())
         .collect();
-        let needs_project = page
+        let folder = page
             .frontmatter
-            .get_str("project")
-            .is_some_and(|value| value == "required");
+            .get_str("folder")
+            .map(|folder| folder.trim().to_string())
+            .filter(|folder| !folder.is_empty())
+            .map(|folder| expand_home(&folder));
         Ok(Self {
             name: name.to_string(),
             title: page.title(),
             tools,
             mcp,
-            needs_project,
+            folder,
             prompt: page.body().trim().to_string(),
         })
     }
 
     pub fn allows_tool(&self, tool: &str) -> bool {
         self.tools.iter().any(|t| t == tool)
+    }
+
+    /// Its folder, when it names one that exists: canonical.
+    pub fn existing_folder(&self) -> Result<PathBuf, String> {
+        let folder = self
+            .folder
+            .as_ref()
+            .ok_or_else(|| format!("site://{} names no folder", self.name))?;
+        let canonical = folder
+            .canonicalize()
+            .map_err(|e| format!("{}: {e}", crate::project::tilde(folder)))?;
+        match canonical.is_dir() {
+            true => Ok(canonical),
+            false => Err(format!("{} is not a folder", crate::project::tilde(folder))),
+        }
     }
 
     pub fn url(&self) -> SiteUrl {
@@ -103,5 +125,16 @@ mod tests {
         );
         assert_eq!(site("mcp: blender\n").mcp, ["blender"]);
         assert!(site("").mcp.is_empty());
+    }
+
+    #[test]
+    fn folder_expands_home() {
+        let home = std::env::var("HOME").unwrap();
+        assert_eq!(
+            site("folder: ~/Projects/x\n").folder,
+            Some(std::path::Path::new(&home).join("Projects/x"))
+        );
+        assert_eq!(site("folder: /srv/x\n").folder, Some("/srv/x".into()));
+        assert_eq!(site("").folder, None);
     }
 }

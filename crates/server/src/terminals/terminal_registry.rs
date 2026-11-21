@@ -151,13 +151,10 @@ fn plain(id: &str) -> Result<String, String> {
         .ok_or_else(|| format!("`{id}` isn't a terminal id"))
 }
 
-/// Where a new terminal starts: the session's project, else the workspace's sites.
+/// Where a new terminal starts: the folder of the session's site, else the sites.
 fn place(server: &Server, session: &Session) -> PathBuf {
-    session
-        .info()
-        .project
-        .and_then(|p| server.project_folder(&p).ok())
-        .map(PathBuf::from)
+    server
+        .session_folder(&session.info())
         .unwrap_or_else(|| server.home.sites())
 }
 

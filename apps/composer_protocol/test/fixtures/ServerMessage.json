@@ -14,7 +14,6 @@
       "session": {
         "id": "a3f1",
         "kind": "agentic",
-        "project": "/home/me/project",
         "site": "plans",
         "parent": null,
         "state": "awaiting_approval",
@@ -35,7 +34,6 @@
         {
           "id": "a3f1",
           "kind": "agentic",
-          "project": "/home/me/project",
           "site": "plans",
           "parent": null,
           "state": "awaiting_approval",
@@ -261,7 +259,6 @@
     "session": {
       "id": "a3f1",
       "kind": "agentic",
-      "project": "/home/me/project",
       "site": "plans",
       "parent": null,
       "state": "awaiting_approval",

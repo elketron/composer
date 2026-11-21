@@ -175,21 +175,19 @@ impl Connection {
 
     fn run(&self, server: &Arc<Server>, command: ClientCommand) -> Result<CommandResult, String> {
         match command {
-            ClientCommand::SessionCreate {
-                kind,
-                model,
-                project,
-            } => {
+            ClientCommand::SessionCreate { kind, model, site } => {
                 let model = model
                     .map(|m| m.trim().to_string())
                     .filter(|m| !m.is_empty());
-                let project = project
+                let site = site
                     .as_deref()
-                    .map(|p| server.project_folder(p))
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .map(|s| crate::agent::Site::load(&server.web, s).map(|site| site.name))
                     .transpose()?;
                 let session = server
                     .sessions
-                    .create(kind, model, project)
+                    .create(kind, model, site)
                     .map_err(|e| e.to_string())?;
                 server.hub.send(ServerMessage::SessionUpdated {
                     session: session.info(),

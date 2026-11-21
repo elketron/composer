@@ -89,7 +89,7 @@ async fn session(socket: &mut Socket, site: &str) -> String {
         ClientCommand::SessionCreate {
             kind: RunKind::Agentic,
             model: None,
-            project: None,
+            site: None,
         },
     )
     .await

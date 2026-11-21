@@ -118,7 +118,7 @@ async fn a_bundle_is_an_mcp_server() {
         ClientCommand::SessionCreate {
             kind: composer_protocol::RunKind::Agentic,
             model: None,
-            project: None,
+            site: None,
         },
     )
     .await;

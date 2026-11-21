@@ -36,7 +36,7 @@ async fn wrapped_and_leaked_arguments_reach_the_tool_repaired() {
         ClientCommand::SessionCreate {
             kind: composer_protocol::RunKind::Agentic,
             model: None,
-            project: None,
+            site: None,
         },
     )
     .await;

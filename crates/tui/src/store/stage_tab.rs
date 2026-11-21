@@ -14,7 +14,7 @@ pub enum StageTab {
     /// A project's changes.
     Changes {
         id: String,
-        project: String,
+        site: String,
         unseen: bool,
     },
 }
@@ -31,7 +31,7 @@ impl StageTab {
     pub fn title(&self) -> String {
         match self {
             Self::Page { url, .. } => url.strip_prefix("site://").unwrap_or(url).to_string(),
-            Self::Changes { project, .. } => format!("changes · {project}"),
+            Self::Changes { site, .. } => format!("changes · {site}"),
         }
     }
 
@@ -46,9 +46,7 @@ impl StageTab {
     pub fn desk_tab(&self) -> DeskTab {
         match self {
             Self::Page { url, .. } => DeskTab::Page { url: url.clone() },
-            Self::Changes { project, .. } => DeskTab::Changes {
-                project: project.clone(),
-            },
+            Self::Changes { site, .. } => DeskTab::Changes { site: site.clone() },
         }
     }
 }

@@ -40,7 +40,7 @@ impl PickerStore {
             PickerKind::Sessions => {
                 // A tree: each top-level session (most recent first), then the ones it spawned.
                 let sessions = &store.sessions;
-                // `:scope` narrows it to one project.
+                // `:scope` narrows it to one site.
                 let top = sessions
                     .iter()
                     .filter(|s| s.parent.is_none() && store.in_scope(s));

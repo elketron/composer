@@ -18,7 +18,7 @@ impl Tool for RunTool {
     fn description(&self) -> &'static str {
         "Run a site action (a justfile recipe) in the site's folder and get its output. \
          The first run of a recipe, and the first run after it changes, waits for the user's approval. \
-         The recipe gets COMPOSER_PROJECT (the active project path), COMPOSER_SITE and COMPOSER_SESSION."
+         The recipe gets COMPOSER_FOLDER (the folder of the session's site), COMPOSER_SITE and COMPOSER_SESSION."
     }
 
     fn parameters(&self) -> Value {

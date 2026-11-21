@@ -25,7 +25,9 @@ pub enum ClientCommand {
         /// The model its runs use; default: the server's.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         model: Option<String>,
-        project: Option<String>,
+        /// The site it starts in.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        site: Option<String>,
     },
 
     #[serde(rename = "session.list")]
@@ -100,8 +102,8 @@ pub enum ClientCommand {
         model: Option<String>,
     },
 
-    /// Opens a terminal for a session (ticket 0176): a shell, in the
-    /// session's project (or the sites); a tab on its desk. With the `id` of one that ended (idle),
+    /// Opens a terminal for a session (ticket 0176): a shell, in the folder of the
+    /// session's site (or the sites); a tab on its desk. With the `id` of one that ended (idle),
     /// a fresh shell where it was. The reply is `terminal`.
     #[serde(rename = "terminal.open")]
     TerminalOpen {

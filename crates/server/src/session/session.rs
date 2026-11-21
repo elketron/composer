@@ -82,7 +82,7 @@ impl Session {
         }))
     }
 
-    /// Its desk (`desk.json`); empty (the project home) when it has none yet.
+    /// Its desk (`desk.json`); empty when it has none yet.
     pub fn desk(&self) -> composer_protocol::Desk {
         let _held = self.desk_lock.lock().expect("desk lock");
         self.read_desk()

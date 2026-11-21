@@ -23,17 +23,22 @@ async fn the_agent_puts_things_on_the_stage() {
     let projects = tempfile::tempdir().unwrap();
     let root = projects.path().canonicalize().unwrap();
     write(&root.join("game/arm.FCStd"), "");
-    let mut config = Config::defaults();
-    config.projects.dir = root.display().to_string();
-    let (dir, server, _provider, addr) = start_with(config, vec![]).await;
+    let (dir, server, _provider, addr) = start_with(Config::defaults(), vec![]).await;
     let sites = dir.path().join("sites");
     write(&sites.join("cad/index.md"), "---\ntitle: CAD\n---\n# CAD\n");
+    write(
+        &sites.join("game/index.md"),
+        &format!(
+            "---\ntitle: Game\nfolder: {}\n---\n# Game\n",
+            root.join("game").display()
+        ),
+    );
     let session = server
         .sessions
         .create(
             composer_protocol::RunKind::Agentic,
             None,
-            Some(root.join("game").display().to_string()),
+            Some("game".into()),
         )
         .unwrap();
     let id = session.id().to_string();
@@ -56,7 +61,9 @@ async fn the_agent_puts_things_on_the_stage() {
         session: session.clone(),
         kind: composer_protocol::RunKind::Agentic,
         only: None,
-        site: None,
+        site: Some(std::sync::Arc::new(
+            composer_server::agent::Site::load(&server.web, "game").unwrap(),
+        )),
         cancel: CancellationToken::new(),
     };
     let tool = |name: &'static str, args: Value| {

@@ -32,43 +32,6 @@ pub struct ServerConfig {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct ProjectsConfig {
-    /// Where your projects live (`~` is your home folder): `new_project` creates them here,
-    /// and a project given by name (`:project composer`, `--project composer`) is a folder here.
-    #[serde(default = "default_projects_dir")]
-    pub dir: String,
-    /// Per-project settings, `[projects."~/Projects/composer"]` (or a name in `dir`).
-    #[serde(flatten, default)]
-    pub settings: BTreeMap<String, ProjectSettings>,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-pub struct ProjectSettings {
-    /// External harnesses tickets in this project may run on (`claude-code`). Default: none.
-    #[serde(default)]
-    pub external_harnesses: Vec<String>,
-    /// Tools Claude Code may use here on top of `[claude_code] allowed_tools`, e.g. `Bash(cargo test:*)`.
-    #[serde(default)]
-    pub allowed_tools: Vec<String>,
-    /// Which models its tickets may use: `"<harness>"` (any of its models) or
-    /// `"<harness>:<model>"` (`"claude-code:sonnet"`, `"composer"`). Empty: any.
-    #[serde(default)]
-    pub models: Vec<String>,
-    /// What it is called in the workspace and in app URLs; default: its folder's name.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub name: Option<String>,
-    /// Tags apps can attach by (`when: ["tag:game"]`).
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub tags: Vec<String>,
-    /// Apps (sites) pinned to it, first in its rail, whatever their `when`.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub apps: Vec<String>,
-    /// Apps never attached to it, even when their `when` matches.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub hide_apps: Vec<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AttachmentsConfig {
     /// Largest upload, in MB.
     #[serde(default = "default_attachment_max_mb")]
@@ -187,10 +150,6 @@ pub struct McpServerConfig {
 /// llama.cpp's `llama-server` on this machine; set your own in config.toml.
 fn default_base_url() -> String {
     "http://127.0.0.1:8080/v1".into()
-}
-
-fn default_projects_dir() -> String {
-    "~/Projects".into()
 }
 
 fn default_attachment_max_mb() -> u64 {

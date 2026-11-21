@@ -20,7 +20,7 @@ async fn one_turn(scripts: Vec<Vec<ModelEvent>>) -> (Vec<ServerMessage>, usize) 
         ClientCommand::SessionCreate {
             kind: composer_protocol::RunKind::Agentic,
             model: None,
-            project: None,
+            site: None,
         },
     )
     .await;

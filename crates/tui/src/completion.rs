@@ -259,7 +259,6 @@ mod tests {
         let session = |id: &str, kind: RunKind, preview: &str| SessionInfo {
             id: id.into(),
             kind,
-            project: None,
             site: None,
             parent: None,
             state: TurnState::Idle,

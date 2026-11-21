@@ -1,5 +1,5 @@
-//! A `type: tui` page opens its program in a terminal on the session's desk, in the project (or
-//! the work's `project/` view). The hunk control adapter is tested separately.
+//! A `type: tui` page opens its program in a terminal on the session's desk, in the folder of
+//! the session's site. The hunk control adapter is tested separately.
 
 mod support;
 
@@ -15,7 +15,7 @@ fn write(path: &std::path::Path, text: &str) {
 }
 
 #[tokio::test]
-async fn a_tui_page_starts_in_the_project() {
+async fn a_tui_page_starts_in_the_sites_folder() {
     if std::process::Command::new("hunk")
         .arg("--version")
         .output()
@@ -25,19 +25,20 @@ async fn a_tui_page_starts_in_the_project() {
         return;
     }
     let projects = tempfile::tempdir().unwrap();
-    let mut config = composer_server::Config::defaults();
-    config.projects.dir = projects.path().display().to_string();
-    let (dir, server, _provider, _addr) = start_with(config, vec![]).await;
+    let (dir, server, _provider, _addr) = start(vec![]).await;
     let project = projects.path().join("game");
     std::fs::create_dir_all(&project).unwrap();
     write(&project.join("README.md"), "# game\n");
     write(
         &dir.path().join("sites/flow/index.md"),
-        "---\ntitle: Flow\ntype: index\n---\n# Flow\n",
+        &format!(
+            "---\ntitle: Flow\ntype: index\nfolder: {}\n---\n# Flow\n",
+            project.display()
+        ),
     );
     write(
         &dir.path().join("sites/flow/review.md"),
-        "---\ntitle: Review\ntype: tui\ncommand: hunk diff\ncontrol: hunk\ncwd: project\n---\n# Review\n",
+        "---\ntitle: Review\ntype: tui\ncommand: hunk diff\ncontrol: hunk\ncwd: folder\n---\n# Review\n",
     );
 
     let session = server
@@ -45,7 +46,7 @@ async fn a_tui_page_starts_in_the_project() {
         .create(
             composer_protocol::RunKind::Agentic,
             None,
-            Some(project.display().to_string()),
+            Some("flow".into()),
         )
         .unwrap();
     let context = ToolContext {
@@ -53,7 +54,9 @@ async fn a_tui_page_starts_in_the_project() {
         session: session.clone(),
         kind: composer_protocol::RunKind::Agentic,
         only: None,
-        site: None,
+        site: Some(std::sync::Arc::new(
+            composer_server::agent::Site::load(&server.web, "flow").unwrap(),
+        )),
         cancel: CancellationToken::new(),
     };
     let opened = server
@@ -80,85 +83,6 @@ async fn a_tui_page_starts_in_the_project() {
     assert_eq!(
         terminal.cwd.canonicalize().unwrap(),
         project.canonicalize().unwrap()
-    );
-    server.terminals.close(&server, &id).unwrap();
-}
-
-/// An ICM run keeps its pages under `works/<ticket>/`; a TUI page there must use that
-/// run's `project/` (the ticket's worktree), not the session's project.
-#[tokio::test]
-async fn a_run_tui_page_starts_in_its_runs_project() {
-    if std::process::Command::new("hunk")
-        .arg("--version")
-        .output()
-        .is_err()
-    {
-        eprintln!("hunk is not installed; skipping");
-        return;
-    }
-    let projects = tempfile::tempdir().unwrap();
-    let mut config = composer_server::Config::defaults();
-    config.projects.dir = projects.path().display().to_string();
-    let (dir, server, _provider, _addr) = start_with(config, vec![]).await;
-    let project = projects.path().join("game");
-    std::fs::create_dir_all(&project).unwrap();
-    write(&project.join("README.md"), "# game\n");
-
-    let run = dir.path().join("sites/flow/works/0001");
-    write(
-        &dir.path().join("sites/flow/index.md"),
-        "---\ntitle: Flow\ntype: index\n---\n# Flow\n",
-    );
-    std::fs::create_dir_all(run.join("project")).unwrap();
-    write(
-        &run.join("review.md"),
-        "---\ntitle: Review\ntype: tui\ncommand: hunk diff\ncontrol: hunk\ncwd: project\n---\n# Review\n",
-    );
-
-    let session = server
-        .sessions
-        .create(
-            composer_protocol::RunKind::Agentic,
-            None,
-            Some(project.display().to_string()),
-        )
-        .unwrap();
-    let context = ToolContext {
-        server: server.clone(),
-        session: session.clone(),
-        kind: composer_protocol::RunKind::Agentic,
-        only: None,
-        site: None,
-        cancel: CancellationToken::new(),
-    };
-    let opened = server
-        .tools
-        .call_value(
-            &context,
-            "open",
-            json!({ "url": "site://flow/works/0001/review" }),
-        )
-        .await;
-    assert!(!opened.is_error, "{}", opened.text);
-    assert!(
-        opened.text.contains("started `hunk diff`"),
-        "{}",
-        opened.text
-    );
-
-    let id = session
-        .desk()
-        .tabs
-        .iter()
-        .find_map(|tab| match &tab.tab {
-            DeskTab::Terminal { id } => Some(id.clone()),
-            _ => None,
-        })
-        .expect("a terminal tab");
-    let terminal = server.terminals.get(&id).expect("the terminal");
-    assert_eq!(
-        terminal.cwd.canonicalize().unwrap(),
-        run.join("project").canonicalize().unwrap()
     );
     server.terminals.close(&server, &id).unwrap();
 }

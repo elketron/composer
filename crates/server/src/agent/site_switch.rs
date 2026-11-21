@@ -25,12 +25,6 @@ pub fn leave_site(server: &Server, session: &Session) -> Option<String> {
 }
 
 async fn enter(server: &Arc<Server>, session: &Session, site: Site) -> Result<Entered, String> {
-    if site.needs_project && session.info().project.is_none() {
-        return Err(format!(
-            "site://{} needs an active project; start the session in one",
-            site.name
-        ));
-    }
     session.update_info(&server.hub, |info| info.site = Some(site.name.clone()));
     let mcp_refused = server.mcp().refused_grants(&site);
     Ok(Entered {

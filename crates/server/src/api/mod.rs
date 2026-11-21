@@ -68,7 +68,7 @@ pub fn router(server: Arc<Server>) -> Router {
         // `/view/{site}`, which they would otherwise match.
         .merge(viewer_proxy::router())
         // Read-only HTML views of pages and changes (the desktop's tabs).
-        .route("/view/changes/{project}", get(view_routes::changes))
+        .route("/view/changes/{site}", get(view_routes::changes))
         .route("/view/{site}", get(view_routes::site_index))
         .route("/view/{site}/{*path}", get(view_routes::page))
         .layer(middleware::from_fn_with_state(

@@ -82,7 +82,7 @@ async fn a_page_renders_without_its_html_running() {
 }
 
 #[tokio::test]
-async fn a_projects_changes_render() {
+async fn a_sites_folder_changes_render() {
     let projects = tempfile::tempdir().unwrap();
     let root = projects.path().canonicalize().unwrap();
     let game = root.join("game");
@@ -91,9 +91,14 @@ async fn a_projects_changes_render() {
     git(&game, &["add", "."]);
     git(&game, &["commit", "-qm", "init"]);
     write(&game.join("a.txt"), "one\n<b>two</b>\n");
-    let mut config = Config::defaults();
-    config.projects.dir = root.display().to_string();
-    let (_dir, server, _provider, addr) = start_with(config, vec![]).await;
+    let (dir, server, _provider, addr) = start_with(Config::defaults(), vec![]).await;
+    write(
+        &dir.path().join("sites/game/index.md"),
+        &format!(
+            "---\ntitle: Game\nfolder: {}\n---\n# Game\n",
+            game.display()
+        ),
+    );
     let token = server.token.clone();
 
     let changes = get(addr, "/view/changes/game", Some(&token)).await;

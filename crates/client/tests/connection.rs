@@ -74,7 +74,7 @@ async fn a_connection_reconnects_and_pairs_replies() {
         ClientCommand::SessionCreate {
             kind: composer_protocol::RunKind::Agentic,
             model: None,
-            project: None,
+            site: None,
         },
     )
     .await

@@ -26,10 +26,9 @@ struct Cli {
     /// Run kind of new sessions.
     #[arg(long, value_enum, default_value_t = Kind::Agentic, global = true)]
     kind: Kind,
-    /// Active project for a new session: a name in the projects directory (`[projects] dir`,
-    /// default ~/Projects), `.` for this directory, or a path.
-    #[arg(long, short, global = true)]
-    project: Option<String>,
+    /// The site a new session starts in (its `folder:` is where terminals start).
+    #[arg(long, global = true)]
+    site: Option<String>,
 }
 
 #[derive(Subcommand)]
@@ -101,9 +100,8 @@ enum DevicesAction {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let mut cli = Cli::parse();
+    let cli = Cli::parse();
     let home = Home::from_env();
-    cli.project = cli.project.map(project_arg);
     let tui_command = cli.command.is_none();
     if !tui_command {
         // Logging would garble the TUI, so only the other commands log to stderr.
@@ -118,7 +116,7 @@ async fn main() -> anyhow::Result<()> {
 
     match cli.command {
         None => {
-            let options = tui_options(&home, cli.kind.into(), cli.session, cli.new, cli.project)?;
+            let options = tui_options(&home, cli.kind.into(), cli.session, cli.new, cli.site)?;
             composer_tui::run(options).await?
         }
         Some(Command::Init) => {
@@ -148,7 +146,7 @@ async fn main() -> anyhow::Result<()> {
                 text,
                 kind: cli.kind.into(),
                 session: cli.session,
-                project: cli.project,
+                site: cli.site,
                 show_thinking: thinking,
                 server_url,
                 token,
@@ -177,7 +175,7 @@ async fn main() -> anyhow::Result<()> {
         }
         Some(Command::Script { file, out, new }) => {
             let script = std::fs::read_to_string(&file)?;
-            let options = tui_options(&home, cli.kind.into(), cli.session, new, cli.project)?;
+            let options = tui_options(&home, cli.kind.into(), cli.session, new, cli.site)?;
             for snapshot in composer_tui::run_script(options, &script, &out).await? {
                 println!("{}", snapshot.display());
             }
@@ -186,26 +184,13 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// `.`, `./x` and `../x` are this machine's current directory: made absolute here. Names and
-/// other paths go to the server as they are (a name is a folder in its projects directory).
-fn project_arg(project: String) -> String {
-    let relative = project == "."
-        || project == ".."
-        || project.starts_with("./")
-        || project.starts_with("../");
-    match std::env::current_dir() {
-        Ok(cwd) if relative => cwd.join(&project).display().to_string(),
-        _ => project,
-    }
-}
-
 /// Connects to the remote server from `composer login`, or the local one.
 fn tui_options(
     home: &Home,
     kind: RunKind,
     session: Option<String>,
     new: bool,
-    project: Option<String>,
+    site: Option<String>,
 ) -> anyhow::Result<TuiOptions> {
     let config = home.load_config()?;
     let (server_url, token) = remote::client(home)?;
@@ -216,8 +201,7 @@ fn tui_options(
             session,
             new,
             kind,
-            project,
-            projects_dir: Some(config.projects.dir.clone()),
+            site,
         },
         context_limit: config.agent.compaction_threshold,
     })

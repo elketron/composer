@@ -8,8 +8,8 @@ use crate::agent::RunSettings;
 /// Memory pages listed in the prompt, at most.
 const MEMORY_LIST_MAX: usize = 60;
 
-/// The system prompt: the run's prompt → the site or `site://home` → environment → relevant memory → the active
-/// project, which changes most often, last.
+/// The system prompt: the run's prompt → the site or `site://home` → environment → relevant memory → the
+/// site's folder, which changes most often, last.
 pub fn system_prompt(
     settings: &RunSettings,
     workspace: &Web,
@@ -77,31 +77,21 @@ pub fn system_prompt(
     }
     // Last, as it changes most often: the sections before it stay a
     // stable prefix for the provider's prompt cache.
-    sections.push(active_project(workspace, session));
+    sections.push(folder_section(site.as_ref()));
 
     sections.join("\n\n---\n\n")
 }
 
-/// The active project and its page (`site://projects/<name>`, else `site://memory/projects/<name>`).
-fn active_project(workspace: &Web, session: &SessionInfo) -> String {
-    let Some(project) = &session.project else {
-        return "# Active project\n\nNone.".to_string();
-    };
-    let mut section = format!(
-        "# Active project\n\n{project}{}",
-        git_branch(Path::new(project))
-    );
-    if let Some(name) = Path::new(project).file_name().and_then(|n| n.to_str()) {
-        let url = format!("site://projects/{name}");
-        let fallback = format!("site://memory/projects/{name}");
-        match page_body(workspace, &url).or_else(|| page_body(workspace, &fallback)) {
-            Some(page) => section.push_str(&format!("\n\n<page url=\"{url}.md\">\n{page}\n</page>")),
-            None => section.push_str(&format!(
-                "\n\nNo project page for this project yet: create `{url}.md` when you learn something worth keeping."
-            )),
-        }
+/// The folder of the session's site, if it names one, with its git branch.
+fn folder_section(site: Option<&crate::agent::Site>) -> String {
+    match site.and_then(|site| site.existing_folder().ok()) {
+        Some(folder) => format!(
+            "# Folder\n\nThe site works on {}{}: terminals start there.",
+            folder.display(),
+            git_branch(&folder)
+        ),
+        None => "# Folder\n\nNone.".to_string(),
     }
-    section
 }
 
 /// `- title — url (kind)` for each memory page except the index.
@@ -131,8 +121,8 @@ fn page_body(workspace: &Web, url: &str) -> Option<String> {
 }
 
 /// ` (git branch main)`, or empty when not a git checkout.
-fn git_branch(project: &Path) -> String {
-    let head = std::fs::read_to_string(project.join(".git/HEAD")).unwrap_or_default();
+fn git_branch(folder: &Path) -> String {
+    let head = std::fs::read_to_string(folder.join(".git/HEAD")).unwrap_or_default();
     match head.trim().strip_prefix("ref: refs/heads/") {
         Some(branch) => format!(" (git branch {branch})"),
         None => String::new(),

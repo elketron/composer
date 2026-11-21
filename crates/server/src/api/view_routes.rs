@@ -1,6 +1,6 @@
 //! Read-only HTML views for clients that show web content (the desktop's page and changes tabs,
-//! ticket 0183): `/view/<site>/<path>` renders a page's markdown, `/view/changes/<project>` a
-//! project's changes. Behind the workspace token like the rest of the API.
+//! ticket 0183): `/view/<site>/<path>` renders a page's markdown, `/view/changes/<site>` the
+//! changes of a site's folder. Behind the workspace token like the rest of the API.
 //!
 //! Pages are written by agents, so a view never runs what's in them: raw HTML in the markdown is
 //! shown as text, and the response forbids scripts (CSP). Links stay as written (`site://...`,
@@ -63,8 +63,8 @@ fn render_page(server: &Server, url: SiteUrl) -> Result<Response, ApiError> {
     Ok(document(&page.title(), None, &(meta + &body)))
 }
 
-pub async fn changes(State(server): State<Arc<Server>>, Path(project): Path<String>) -> Response {
-    shown(render_changes(&server, &project).await)
+pub async fn changes(State(server): State<Arc<Server>>, Path(site): Path<String>) -> Response {
+    shown(render_changes(&server, &site).await)
 }
 
 /// A view or its error, both as pages (a browser shows them).
@@ -80,11 +80,11 @@ fn shown(view: Result<Response, ApiError>) -> Response {
     })
 }
 
-async fn render_changes(server: &Server, project: &str) -> Result<Response, ApiError> {
-    let folder = server
-        .project_folder(project)
+async fn render_changes(server: &Server, site: &str) -> Result<Response, ApiError> {
+    let folder = crate::agent::Site::load(&server.web, site)
+        .and_then(|site| site.existing_folder())
         .map_err(|e| ApiError(StatusCode::NOT_FOUND, e))?;
-    let diff = crate::project::project_diff_plain(std::path::Path::new(&folder), None)
+    let diff = crate::project::project_diff_plain(&folder, None)
         .await
         .map_err(|e| ApiError(StatusCode::UNPROCESSABLE_ENTITY, e))?;
     let mut out = format!(
@@ -120,7 +120,7 @@ async fn render_changes(server: &Server, project: &str) -> Result<Response, ApiE
         }
         out.push_str("</pre>");
     }
-    let title = format!("changes · {project}");
+    let title = format!("changes · {site}");
     Ok(document(&title, Some(&title), &out))
 }
 

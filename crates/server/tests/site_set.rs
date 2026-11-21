@@ -55,10 +55,6 @@ async fn the_user_enters_and_leaves_a_site() {
         &sites.join("plain/index.md"),
         "---\ntitle: Plain\n---\n# Plain\n",
     );
-    write(
-        &sites.join("game/index.md"),
-        "---\ntitle: Game\nproject: required\n---\n# Game\n",
-    );
     let session = server
         .sessions
         .create(composer_protocol::RunKind::Agentic, None, None)
@@ -84,23 +80,12 @@ async fn the_user_enters_and_leaves_a_site() {
     let (reply, _) = site_set(&mut socket, 3, &id, None).await;
     assert!(note(reply).contains("not in a site"));
 
-    // Errors change nothing: an unknown site, a site that needs a project, an unknown session.
+    // Errors change nothing: an unknown site, an unknown session.
     let before = session.info().site;
     let (reply, _) = site_set(&mut socket, 6, &id, Some("nope")).await;
     let message = reply.unwrap_err();
     assert!(message.contains("nope"), "{message}");
-    let (reply, _) = site_set(&mut socket, 7, &id, Some("game")).await;
-    let message = reply.unwrap_err();
-    assert!(message.contains("needs an active project"), "{message}");
     assert_eq!(session.info().site, before);
     let (reply, _) = site_set(&mut socket, 8, "no-such-session", Some("plain")).await;
     assert!(reply.is_err());
-
-    // With a project the gated site opens.
-    session.update_info(&server.hub, |info| {
-        info.project = Some(dir.path().display().to_string())
-    });
-    let (reply, _) = site_set(&mut socket, 9, &id, Some("game")).await;
-    assert!(note(reply).contains("Entered game"));
-    assert_eq!(session.info().site.as_deref(), Some("game"));
 }

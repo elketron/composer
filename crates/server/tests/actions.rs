@@ -27,7 +27,7 @@ async fn session(socket: &mut Socket) -> String {
         ClientCommand::SessionCreate {
             kind: composer_protocol::RunKind::Agentic,
             model: None,
-            project: None,
+            site: None,
         },
     )
     .await;
@@ -453,17 +453,26 @@ async fn the_sh_escape_hatch_takes_one_command_with_quotes_and_newlines() {
     let (dir, server, _p, _addr) = start(vec![]).await;
     let site = tools_site(
         &dir,
-        "sh cmd:\n    @cd \"$COMPOSER_PROJECT\" && sh -c {{quote(cmd)}}\n",
+        "sh cmd:\n    @cd \"$COMPOSER_FOLDER\" && sh -c {{quote(cmd)}}\n",
     );
     approve(&server, &site, "sh").await;
     let project = tempfile::tempdir().unwrap();
     std::fs::write(project.path().join("README"), "hi\n").unwrap();
+    std::fs::create_dir_all(dir.path().join("sites/work")).unwrap();
+    std::fs::write(
+        dir.path().join("sites/work/index.md"),
+        format!(
+            "---\ntitle: Work\nfolder: {}\n---\n# Work\n",
+            project.path().display()
+        ),
+    )
+    .unwrap();
     let session = server
         .sessions
         .create(
             composer_protocol::RunKind::Agentic,
             None,
-            Some(project.path().display().to_string()),
+            Some("work".into()),
         )
         .unwrap();
     let context = ToolContext {

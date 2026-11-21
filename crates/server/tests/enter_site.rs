@@ -77,28 +77,4 @@ async fn a_site_brings_its_page_and_tools() {
         .await;
     assert!(missing.is_error, "{}", missing.text);
     assert_eq!(session.info().site, None);
-
-    // `project: required` refuses without one, then works once it is set.
-    write(
-        &dir.path().join("sites/game/index.md"),
-        "---\ntitle: Game\nproject: required\ntools: []\n---\n# Game\n",
-    );
-    let gated = server
-        .tools
-        .call_value(&context(), "enter_site", json!({ "site": "game" }))
-        .await;
-    assert!(
-        gated.is_error && gated.text.contains("needs an active project"),
-        "{}",
-        gated.text
-    );
-    session.update_info(&server.hub, |info| {
-        info.project = Some(dir.path().display().to_string())
-    });
-    let entered = server
-        .tools
-        .call_value(&context(), "enter_site", json!({ "site": "game" }))
-        .await;
-    assert!(!entered.is_error, "{}", entered.text);
-    assert_eq!(session.info().site.as_deref(), Some("game"));
 }

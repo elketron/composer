@@ -142,7 +142,7 @@ fn widening_the_allowed_list_opens_the_mount() {
 
     assert!(!ws.allows(&ws.root().join("widget/outside")));
 
-    // What config reload does when projects.dir changes.
+    // What reindexing does when a site's folder changes.
     ws.set_allowed(vec![
         allowed_root.path().to_path_buf(),
         outside.path().to_path_buf(),

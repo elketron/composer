@@ -4,7 +4,6 @@
     "version": "0.1.0",
     "model": "m",
     "slots": 2,
-    "projects_dir": "~/Projects",
     "viewer": "/view"
   },
   {

@@ -1,5 +1,5 @@
-//! A mount (a symlink inside a site into the projects dir from config) is part of the web:
-//! files landing on the project side reach subscribers as `page.changed` with the site's URL,
+//! A mount (a symlink inside a site into a folder a site names with `folder:`) is part of the
+//! web: files landing on the folder's side reach subscribers as `page.changed` with the site's URL,
 //! both for mounts that exist at startup and for ones created while running, and their pages
 //! become searchable. A symlink into a folder outside the allowed scope is refused: changes
 //! there light nothing up and reading through it errors.
@@ -37,7 +37,15 @@ fn search(server: &composer_server::Server, query: &str) -> Vec<String> {
         .collect()
 }
 
-/// A running server whose `projects.dir` is a fresh temp folder, with a subscribed socket.
+/// Names `folder` as the `plans` site's folder.
+fn plans_folder(sites: &std::path::Path, folder: &std::path::Path) {
+    let index = sites.join("plans/index.md");
+    let text = std::fs::read_to_string(&index).unwrap();
+    let text = text.replacen("---\n", &format!("---\nfolder: {}\n", folder.display()), 1);
+    std::fs::write(&index, text).unwrap();
+}
+
+/// A running server whose `plans` site names a fresh temp folder, with a subscribed socket.
 async fn listen() -> (
     tempfile::TempDir,
     tempfile::TempDir,
@@ -45,12 +53,9 @@ async fn listen() -> (
     Socket,
 ) {
     let projects = tempfile::tempdir().unwrap();
-    let config = Config::parse(&format!(
-        "[projects]\ndir = \"{}\"\n",
-        projects.path().display()
-    ))
-    .unwrap();
-    let (home, server, _p, addr) = start_with(config, vec![]).await;
+    let (home, server, _p, addr) = start_with(Config::defaults(), vec![]).await;
+    plans_folder(&home.path().join("sites"), projects.path());
+    server.reindex();
     // The watcher comes up when serve runs; let it, as the other watcher tests do.
     tokio::time::sleep(Duration::from_millis(500)).await;
     let mut socket = connect(addr, &server.token).await;
@@ -112,13 +117,9 @@ async fn a_mount_existing_at_server_start_is_scanned() {
     std::fs::create_dir_all(&mounted).unwrap();
     std::os::unix::fs::symlink(&mounted, home.sites().join("plans/mounted")).unwrap();
 
-    let config = Config::parse(&format!(
-        "[projects]\ndir = \"{}\"\n",
-        projects.path().display()
-    ))
-    .unwrap();
+    plans_folder(&home.sites(), projects.path());
     let provider = Arc::new(MockProvider::new(vec![]));
-    let server = composer_server::Server::new(home, config, provider).unwrap();
+    let server = composer_server::Server::new(home, Config::defaults(), provider).unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let serving = server.clone();

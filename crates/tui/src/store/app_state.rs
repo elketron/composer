@@ -35,8 +35,6 @@ pub struct AppState {
     pub attachments: AttachmentStore,
     startup: Option<Startup>,
     default_kind: RunKind,
-    /// Where project names point (`--project composer`), when known.
-    pub projects_dir: Option<String>,
 }
 
 impl AppState {
@@ -53,7 +51,6 @@ impl AppState {
             catalog: Catalog::default(),
             attachments: AttachmentStore::default(),
             default_kind: startup.kind,
-            projects_dir: startup.projects_dir.clone(),
             startup: Some(startup),
         }
     }
@@ -223,13 +220,13 @@ impl AppState {
             },
             Action::NewSession { kind } => {
                 let kind = kind.unwrap_or(self.default_kind);
-                // The new chat gets this session's project.
-                let project = self.session.current_info().and_then(|s| s.project.clone());
+                // The new chat starts in this session's site.
+                let site = self.session.current_info().and_then(|s| s.site.clone());
                 self.send(
                     ClientCommand::SessionCreate {
                         kind,
                         model: None,
-                        project,
+                        site,
                     },
                     Pending::CreateSession,
                 )
@@ -323,9 +320,10 @@ impl AppState {
                 vec![]
             }
             Action::OpenFileAt { path, line } => {
-                match self.session.current_info().and_then(|i| i.project.clone()) {
-                    Some(project) => vec![Effect::OpenFile {
-                        path: format!("{project}/{path}"),
+                // The diff names the folder it is of.
+                match self.project.diff.as_ref().map(|d| d.path.clone()) {
+                    Some(folder) => vec![Effect::OpenFile {
+                        path: format!("{folder}/{path}"),
                         line,
                     }],
                     None => vec![],
@@ -555,12 +553,12 @@ impl AppState {
         effects
     }
 
-    /// The project's changes as a tab (`gd`): opened on the desk and shown, or, when there is no
-    /// session to put it on, only here.
+    /// The changes of the folder of the session's site as a tab (`gd`): opened on the desk and
+    /// shown, or, when there is no session to put it on, only here.
     fn open_changes(&mut self) -> Vec<Effect> {
-        let Some(project) = self.changes_project() else {
+        let Some(site) = self.changes_site() else {
             self.ui.flash(
-                "this session has no project (start one with --project)",
+                "this session is in no site (`:site <name>`, one with a `folder:`)",
                 FlashLevel::Warn,
             );
             return vec![];
@@ -568,7 +566,7 @@ impl AppState {
         let effects = self.send(
             ClientCommand::DeskOpen {
                 session: self.session.current.clone().unwrap_or_default(),
-                tab: DeskTab::Changes { project },
+                tab: DeskTab::Changes { site },
                 focus: true,
             },
             Pending::Ignore,
@@ -577,29 +575,18 @@ impl AppState {
         effects
     }
 
-    /// The project a changes tab shows: this session's, by the one-word name the desk uses for
-    /// it (its folder's last component).
-    fn changes_project(&self) -> Option<String> {
-        let folder = self
-            .session
-            .current_info()
-            .and_then(|s| s.project.clone())?;
-        let name = std::path::Path::new(&folder)
-            .file_name()?
-            .to_string_lossy()
-            .to_string();
-        Some(name)
+    /// The site whose folder a changes tab shows: this session's.
+    fn changes_site(&self) -> Option<String> {
+        self.session.current_info().and_then(|s| s.site.clone())
     }
 
-    /// A changes tab naming a project other than this session's: the diff there is the
-    /// session's project's diff, so that tab has nothing of its own to show. Says which.
+    /// A changes tab naming a site other than this session's: the diff there is the folder of
+    /// the session's site, so that tab has nothing of its own to show. Says which.
     pub fn changes_elsewhere(&self) -> Option<String> {
-        let here = self.changes_project();
+        let here = self.changes_site();
         match self.shown_tab() {
-            Some(StageTab::Changes { project, .. })
-                if here.as_deref() != Some(project.as_str()) =>
-            {
-                Some(project)
+            Some(StageTab::Changes { site, .. }) if here.as_deref() != Some(site.as_str()) => {
+                Some(site)
             }
             _ => None,
         }
@@ -1069,7 +1056,7 @@ impl AppState {
                 ClientCommand::SessionCreate {
                     kind: startup.kind,
                     model: None,
-                    project: startup.project,
+                    site: startup.site,
                 },
                 Pending::CreateSession,
             ),
@@ -1169,7 +1156,6 @@ mod tests {
         SessionInfo {
             id: id.into(),
             kind: composer_protocol::RunKind::Agentic,
-            project: None,
             site: None,
             parent: parent.map(Into::into),
             state: TurnState::Idle,
@@ -2021,10 +2007,10 @@ mod tests {
     }
 
     #[test]
-    fn the_changes_tab_is_the_projects_changes_and_closes_like_any_other() {
+    fn the_changes_tab_is_the_sites_changes_and_closes_like_any_other() {
         let mut state = showing_a_session();
         state.session.upsert(SessionInfo {
-            project: Some("/home/u/Projects/game".into()),
+            site: Some("game".into()),
             ..info("s", None)
         });
         let effects = settle(&mut state, Action::ToggleChanges);
@@ -2033,18 +2019,18 @@ mod tests {
                 == &ClientCommand::DeskOpen {
                     session: "s".into(),
                     tab: DeskTab::Changes {
-                        project: "game".into()
+                        site: "game".into()
                     },
                     focus: true,
                 }),
-            "the desk gets a changes tab named for the project: {effects:?}"
+            "the desk gets a changes tab named for the site: {effects:?}"
         );
         say_desk(
             &mut state,
             vec![entry(
                 "changes:game",
                 DeskTab::Changes {
-                    project: "game".into(),
+                    site: "game".into(),
                 },
                 false,
             )],

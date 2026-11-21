@@ -46,9 +46,9 @@ impl DeskStore {
                     url: url.clone(),
                     unseen: entry.unseen,
                 }),
-                DeskTab::Changes { project } => Some(StageTab::Changes {
+                DeskTab::Changes { site } => Some(StageTab::Changes {
                     id: entry.id.clone(),
-                    project: project.clone(),
+                    site: site.clone(),
                     unseen: entry.unseen,
                 }),
                 // An app, a terminal, the live view: not this terminal's to show or change.

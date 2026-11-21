@@ -27,8 +27,8 @@ impl Tool for OpenTool {
          `site://memory` opens the site's index.md; `site://plans/x` finds x.md or x/index.md. \
          Relative paths are not resolved here: always pass a full site:// URL. \
          Also opens an image so you see it: a picture in a site (`site://designer/mock.png`), or \
-         an image file in your active project (a screenshot you took: `/abs/path.png`, `~/x.png`, \
-         or a path relative to the project). \
+         an image file in the folder of the site you are in (a screenshot you took: \
+         `/abs/path.png`, `~/x.png`, or a path relative to that folder). \
          A `type: tui` page starts its terminal program on the session's desk. A site folder \
          lists its files, and a \
          page's output starts with the `hash` to pass to `edit`."
@@ -148,7 +148,7 @@ fn directory(context: &ToolContext, url: &SiteUrl) -> Option<String> {
 }
 
 /// The file `raw` names when it is an image: a picture in a site, or an image file in the
-/// session's project. `None`: a page, as always.
+/// folder of the site the run is in. `None`: a page, as always.
 fn image_path(context: &ToolContext, raw: &str) -> Option<Result<PathBuf, String>> {
     let raw = raw.trim();
     let pictured = Path::new(raw)
@@ -156,14 +156,14 @@ fn image_path(context: &ToolContext, raw: &str) -> Option<Result<PathBuf, String
         .and_then(|e| e.to_str())
         .is_some_and(|e| IMAGE_EXTENSIONS.contains(&e.to_ascii_lowercase().as_str()));
     if raw.starts_with('/') || raw.starts_with('~') {
-        return Some(project_file(context, raw));
+        return Some(folder_file(context, raw));
     }
     if !pictured {
         return None;
     }
-    // A relative picture: the project's, else a site's (`designer/mock.png`).
+    // A relative picture: the folder's, else a site's (`designer/mock.png`).
     if !raw.starts_with("site://")
-        && let Ok(path) = project_file(context, raw)
+        && let Ok(path) = folder_file(context, raw)
     {
         return Some(Ok(path));
     }
@@ -180,24 +180,23 @@ fn image_path(context: &ToolContext, raw: &str) -> Option<Result<PathBuf, String
     )
 }
 
-/// `raw` in the session's project, which it may not leave.
-fn project_file(context: &ToolContext, raw: &str) -> Result<PathBuf, String> {
-    let project = context
-        .session
-        .info()
-        .project
-        .ok_or("no active project: open a site's picture with a site:// URL")?;
-    let project = PathBuf::from(context.server.project_folder(&project)?);
+/// `raw` in the folder of the site the run is in, which it may not leave.
+fn folder_file(context: &ToolContext, raw: &str) -> Result<PathBuf, String> {
+    let folder = context
+        .site
+        .as_ref()
+        .ok_or("you are in no site with a folder: open a site's picture with a site:// URL")?
+        .existing_folder()?;
     let path = if raw.starts_with('/') || raw.starts_with('~') {
         expand_home(raw)
     } else {
-        project.join(raw)
+        folder.join(raw)
     };
     let path = path.canonicalize().map_err(|e| format!("{raw}: {e}"))?;
-    if !path.starts_with(&project) {
+    if !path.starts_with(&folder) {
         return Err(format!(
-            "{raw} is outside your project ({}): only its files open here",
-            project.display()
+            "{raw} is outside the site's folder ({}): only its files open here",
+            folder.display()
         ));
     }
     Ok(path)

@@ -32,7 +32,7 @@ class AppMessage {
 enum ApprovalDecision {
   approve('approve'),
   deny('deny'),
-  /// Approve, and don't ask again for this rule in this project (tool requests only).
+  /// Approve, and don't ask again for this rule in this folder (tool requests only).
   always('always');
 
   const ApprovalDecision(this.wire);
@@ -244,7 +244,7 @@ final class ClientCommandSessionCreate extends ClientCommand {
   const ClientCommandSessionCreate({
     this.kind,
     this.model,
-    this.project,
+    this.site,
   });
 
   /// Default: an agentic session.
@@ -253,19 +253,20 @@ final class ClientCommandSessionCreate extends ClientCommand {
   /// The model its runs use; default: the server's.
   final String? model;
 
-  final String? project;
+  /// The site it starts in.
+  final String? site;
 
   factory ClientCommandSessionCreate.fromJson(Map<String, Object?> json) => ClientCommandSessionCreate(
         kind: json['kind'] == null ? null : RunKind.fromJson(json['kind']),
         model: json['model'] == null ? null : json['model'] as String,
-        project: json['project'] == null ? null : json['project'] as String,
+        site: json['site'] == null ? null : json['site'] as String,
       );
 
   Map<String, Object?> toJson() => {
         'type': 'session.create',
         if (kind != null) 'kind': kind?.toJson(),
         if (model != null) 'model': model,
-        if (project != null) 'project': project,
+        if (site != null) 'site': site,
       };
 }
 
@@ -494,8 +495,8 @@ final class ClientCommandModelSet extends ClientCommand {
       };
 }
 
-/// Opens a terminal for a session (ticket 0176): a shell, in the
-/// session's project (or the sites); a tab on its desk. With the `id` of one that ended (idle),
+/// Opens a terminal for a session (ticket 0176): a shell, in the folder of the
+/// session's site (or the sites); a tab on its desk. With the `id` of one that ended (idle),
 /// a fresh shell where it was. The reply is `terminal`.
 final class ClientCommandTerminalOpen extends ClientCommand {
   const ClientCommandTerminalOpen({
@@ -1146,7 +1147,7 @@ final class CommandResultUnknown extends CommandResult {
   Map<String, Object?> toJson() => raw;
 }
 
-/// A session's desk: its tabs in order, and the one shown. Empty: the project home.
+/// A session's desk: its tabs in order, and the one shown. Empty: the session's home.
 class Desk {
   const Desk({
     this.tabs = const [],
@@ -1190,7 +1191,7 @@ class DeskEntry {
     this.unseen = false,
   });
 
-  /// `page:site://x`, `terminal:<id>`, `changes:<project>`, `live`.
+  /// `page:site://x`, `terminal:<id>`, `changes:<site>`, `live`.
   final String id;
 
   final DeskTab tab;
@@ -1262,26 +1263,26 @@ final class DeskTabTerminal extends DeskTab {
       };
 }
 
-/// A project's changes (its diff).
+/// The changes (git diff) of a site's `folder:`.
 final class DeskTabChanges extends DeskTab {
   const DeskTabChanges({
-    required this.project,
+    required this.site,
   });
 
-  final String project;
+  final String site;
 
   factory DeskTabChanges.fromJson(Map<String, Object?> json) => DeskTabChanges(
-        project: json['project'] as String,
+        site: json['site'] as String,
       );
 
   Map<String, Object?> toJson() => {
         'kind': 'changes',
-        'project': project,
+        'site': site,
       };
 }
 
 /// The live view of the user's application (wayai's viewer, proxied at `/view`).
-/// It names no site or project; one per desk (id `live`). Wire form: `{"kind":"live_view"}`.
+/// It names no site; one per desk (id `live`). Wire form: `{"kind":"live_view"}`.
 final class DeskTabLiveView extends DeskTab {
   const DeskTabLiveView();
 
@@ -1503,7 +1504,7 @@ class PageResponse {
       };
 }
 
-/// `GET /api/sessions/{id}/project/diff`
+/// `GET /api/sessions/{id}/project/diff`: the changes of the session's site's `folder:`.
 class ProjectDiff {
   const ProjectDiff({
     required this.path,
@@ -1648,7 +1649,6 @@ class ServerInfo {
     required this.version,
     required this.model,
     required this.slots,
-    this.projectsDir,
     this.viewer,
   });
 
@@ -1664,9 +1664,6 @@ class ServerInfo {
   /// Model slots (the provider's parallelism).
   final int slots;
 
-  /// Where projects live (`[projects] dir`), `~` for the home folder. Older servers leave it out.
-  final String? projectsDir;
-
   /// Where this server serves wayai's live view, as a path after its address (`/view`);
   /// absent when no viewer is configured. Needs the token, like the rest.
   /// Older servers leave it out.
@@ -1677,7 +1674,6 @@ class ServerInfo {
         version: json['version'] as String,
         model: json['model'] as String,
         slots: (json['slots'] as num).toInt(),
-        projectsDir: json['projects_dir'] == null ? null : json['projects_dir'] as String,
         viewer: json['viewer'] == null ? null : json['viewer'] as String,
       );
 
@@ -1686,7 +1682,6 @@ class ServerInfo {
         'version': version,
         'model': model,
         'slots': slots,
-        if (projectsDir != null) 'projects_dir': projectsDir,
         if (viewer != null) 'viewer': viewer,
       };
 }
@@ -2107,7 +2102,7 @@ final class ServerMessageApprovalRequest extends ServerMessage {
 
   final String hash;
 
-  /// For a tool: what `always` would allow from then on in this project (`Bash(npm:*)`).
+  /// For a tool: what `always` would allow from then on in this folder (`Bash(npm:*)`).
   final String? rule;
 
   factory ServerMessageApprovalRequest.fromJson(Map<String, Object?> json) => ServerMessageApprovalRequest(
@@ -2360,7 +2355,6 @@ class SessionInfo {
   const SessionInfo({
     required this.id,
     this.kind,
-    this.project,
     this.site,
     this.parent,
     required this.state,
@@ -2376,10 +2370,8 @@ class SessionInfo {
   /// What its runs are: a single shot, a workflow run or an agentic session.
   final RunKind? kind;
 
-  /// Active project directory, if any.
-  final String? project;
-
-  /// The site the agent entered (`enter_site`), if any.
+  /// The site the session is in (`enter_site`), if any: its page is the agent's instructions,
+  /// and its `folder:` is where terminals start and what the changes view diffs.
   final String? site;
 
   /// The session that spawned this one (phase 3 spawns runs; none yet).
@@ -2405,7 +2397,6 @@ class SessionInfo {
   factory SessionInfo.fromJson(Map<String, Object?> json) => SessionInfo(
         id: json['id'] as String,
         kind: json['kind'] == null ? null : RunKind.fromJson(json['kind']),
-        project: json['project'] == null ? null : json['project'] as String,
         site: json['site'] == null ? null : json['site'] as String,
         parent: json['parent'] == null ? null : json['parent'] as String,
         state: TurnState.fromJson(json['state']),
@@ -2419,7 +2410,6 @@ class SessionInfo {
   Map<String, Object?> toJson() => {
         'id': id,
         if (kind != null) 'kind': kind?.toJson(),
-        if (project != null) 'project': project,
         if (site != null) 'site': site,
         if (parent != null) 'parent': parent,
         'state': state.toJson(),

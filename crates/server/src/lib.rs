@@ -34,8 +34,7 @@ pub mod watches;
 
 pub use config::Config;
 pub use config_sections::{
-    AgentConfig, AttachmentsConfig, McpServerConfig, ProjectSettings, ProjectsConfig,
-    ProviderConfig, ServerConfig,
+    AgentConfig, AttachmentsConfig, McpServerConfig, ProviderConfig, ServerConfig,
 };
 pub use error::{Result, ServerError};
 pub use hash::content_hash;

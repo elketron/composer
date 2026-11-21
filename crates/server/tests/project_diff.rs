@@ -96,10 +96,19 @@ async fn not_a_repository() {
 }
 
 #[tokio::test]
-async fn endpoint_uses_the_session_project() {
+async fn endpoint_diffs_the_folder_of_the_session_site() {
     let project = repo();
     std::fs::write(project.path().join("lib.rs"), "changed\n").unwrap();
-    let (_dir, server, _p, addr) = start(vec![]).await;
+    let (dir, server, _p, addr) = start(vec![]).await;
+    std::fs::create_dir_all(dir.path().join("sites/game")).unwrap();
+    std::fs::write(
+        dir.path().join("sites/game/index.md"),
+        format!(
+            "---\ntitle: Game\nfolder: {}\n---\n# Game\n",
+            project.path().display()
+        ),
+    )
+    .unwrap();
     let mut socket = connect(addr, &server.token).await;
     send(
         &mut socket,
@@ -107,7 +116,7 @@ async fn endpoint_uses_the_session_project() {
         ClientCommand::SessionCreate {
             kind: composer_protocol::RunKind::Agentic,
             model: None,
-            project: None,
+            site: None,
         },
     )
     .await;
@@ -134,17 +143,16 @@ async fn endpoint_uses_the_session_project() {
             .unwrap()
             .status(),
         404,
-        "no project yet"
+        "in no site yet"
     );
 
-    let path = project.path().display().to_string();
     send(
         &mut socket,
         2,
         ClientCommand::SessionCreate {
             kind: composer_protocol::RunKind::Agentic,
             model: None,
-            project: Some(path),
+            site: Some("game".into()),
         },
     )
     .await;

@@ -105,7 +105,7 @@ async fn a_watching_session_hears_when_files_land() {
         ClientCommand::SessionCreate {
             kind: composer_protocol::RunKind::Agentic,
             model: None,
-            project: None,
+            site: None,
         },
     )
     .await;
@@ -213,7 +213,7 @@ async fn a_steady_trickle_of_changes_is_still_delivered() {
         ClientCommand::SessionCreate {
             kind: composer_protocol::RunKind::Agentic,
             model: None,
-            project: None,
+            site: None,
         },
     )
     .await;

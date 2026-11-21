@@ -2,7 +2,7 @@
 //! command and where it runs; the terminal is the human's view. The agent drives the program's
 //! own control surface (for hunk, the `hunk` tool), not its keys.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use composer_core::Page;
 
@@ -17,7 +17,7 @@ const CONTROLS: [&str; 1] = ["hunk"];
 pub struct TuiPage {
     /// The program and its arguments, already split (`hunk diff`).
     pub command: Vec<String>,
-    /// `project` (default), `site`, `home`, or a path.
+    /// `folder` (default: the folder of the session's site), `site`, `home`, or a path.
     pub cwd: String,
     pub control: String,
     pub columns: u16,
@@ -73,7 +73,7 @@ impl TuiPage {
                 .frontmatter
                 .get_str("cwd")
                 .filter(|c| !c.trim().is_empty())
-                .unwrap_or_else(|| "project".into()),
+                .unwrap_or_else(|| "folder".into()),
             control,
             columns: number("cols", 120),
             rows: number("rows", 40),
@@ -85,30 +85,11 @@ impl TuiPage {
         let site = context.server.web.root().join(page.url.site());
         let raw = self.cwd.trim();
         let path = match raw {
-            "project" => {
-                // A page inside a work (`<work>/review.md`) runs in that folder's `project/`;
-                // a site-level page uses the session's.
-                if let Some(parent) = Path::new(page.url.path()).parent()
-                    && !parent.as_os_str().is_empty()
-                {
-                    let link = site.join(parent).join("project");
-                    if link.is_dir() {
-                        return link
-                            .canonicalize()
-                            .map_err(|e| format!("{}: {e}", link.display()));
-                    }
-                }
-                context
-                    .session
-                    .info()
-                    .project
-                    .and_then(|project| context.server.project_folder(&project).ok())
-                    .map(PathBuf::from)
-                    .ok_or_else(|| {
-                        "this TUI runs in the project, and no project is active; set one, or open it from a work"
-                            .to_string()
-                    })?
-            }
+            "folder" => context
+                .site
+                .as_ref()
+                .ok_or("this TUI runs in the site's folder, and the session is in no site")?
+                .existing_folder()?,
             "site" => site.clone(),
             "home" => context.server.home.root().to_path_buf(),
             other => {
@@ -131,23 +112,21 @@ impl TuiPage {
         let path = path
             .canonicalize()
             .map_err(|e| format!("{}: {e}", path.display()))?;
-        // A page may run in the site, the home, or the session's project; not in some other
+        // A page may run in the site, the home, or the site's folder; not in some other
         // folder the page names.
         let site = site.canonicalize().unwrap_or(site);
-        let project = context
-            .session
-            .info()
-            .project
-            .and_then(|project| context.server.project_folder(&project).ok())
-            .map(PathBuf::from);
+        let folder = context
+            .site
+            .as_ref()
+            .and_then(|site| site.existing_folder().ok());
         let allowed = path.starts_with(&site)
             || path.as_path() == context.server.home.root()
-            || project
+            || folder
                 .as_ref()
-                .is_some_and(|project| path.starts_with(project));
+                .is_some_and(|folder| path.starts_with(folder));
         if !allowed {
             return Err(format!(
-                "{} is outside composer's home; a TUI page runs in the site or the project",
+                "{} is outside composer's home; a TUI page runs in the site or the site's folder",
                 path.display()
             ));
         }
@@ -192,18 +171,18 @@ mod tests {
     #[test]
     fn parses_a_hunk_page() {
         let p = TuiPage::parse(&page(
-            "title: Review\ntype: tui\ncommand: hunk diff\ncontrol: hunk\ncwd: project",
+            "title: Review\ntype: tui\ncommand: hunk diff\ncontrol: hunk\ncwd: folder",
         ))
         .unwrap();
         assert_eq!(p.command, ["hunk", "diff"]);
-        assert_eq!((p.cwd.as_str(), p.control.as_str()), ("project", "hunk"));
+        assert_eq!((p.cwd.as_str(), p.control.as_str()), ("folder", "hunk"));
         assert_eq!((p.columns, p.rows), (120, 40));
     }
 
     #[test]
     fn parses_a_hunk_page_against_a_base_branch() {
         let p = TuiPage::parse(&page(
-            "type: tui\ncommand: hunk diff main\ncontrol: hunk\ncwd: project",
+            "type: tui\ncommand: hunk diff main\ncontrol: hunk\ncwd: folder",
         ))
         .unwrap();
         assert_eq!(p.command, ["hunk", "diff", "main"]);
