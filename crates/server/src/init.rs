@@ -13,7 +13,6 @@ use crate::workspace_home::WorkspaceHome;
 use crate::workspace_name::WorkspaceName;
 
 static SEED: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/../../seed/sites");
-static TEMPLATES: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/../../templates");
 
 /// What a new workspace's `config.toml` says: everything comes from the global config.
 const WORKSPACE_CONFIG: &str = "\
@@ -23,8 +22,8 @@ const WORKSPACE_CONFIG: &str = "\
 ";
 
 /// The stock folders this binary carries: (name under the root and `state/seed/`, contents).
-pub(crate) fn stock() -> [(&'static str, &'static Dir<'static>); 2] {
-    [("sites", &SEED), ("templates", &TEMPLATES)]
+pub(crate) fn stock() -> [(&'static str, &'static Dir<'static>); 1] {
+    [("sites", &SEED)]
 }
 
 /// Creates the composer home: global config, the site library and templates, server state, and

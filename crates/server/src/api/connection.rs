@@ -8,17 +8,16 @@ use composer_protocol::{
     MessageSource, Role, Seq, ServerMessage, SessionId,
 };
 use tokio::sync::mpsc;
-use tokio_util::sync::CancellationToken;
 
-use crate::actions::Caller;
 use crate::agent::AgentDefinition;
 use crate::api::app_commands::app_may;
 use crate::api::event_scope::{EventScope, scope};
 use crate::api::glob::url_matches;
+use crate::api::worker_commands::{permission_answer, worker_approval, worker_event};
 use crate::api::{Credential, viewer_proxy};
 use crate::apps::{AppGrant, ProjectName};
 use crate::attachments::resolve;
-use crate::harness::{PERMISSION_TOOL, WorkerSink, answer_permission, permission_tool_info};
+use crate::harness::permission_tool_info;
 use crate::server::Server;
 use crate::session::{compact_now, submit};
 use crate::slot_guard::SlotGuard;
@@ -243,7 +242,7 @@ impl Connection {
         }
         match request.command {
             ClientCommand::WorkerEvent { event } => {
-                self.worker_event(server, *event);
+                worker_event(server, self.worker_session(), *event);
                 None
             }
             ClientCommand::SlotRelease { grant } => {
@@ -585,10 +584,7 @@ impl Connection {
             } => {
                 let (connection, server) = (self.clone(), server.clone());
                 tokio::spawn(async move {
-                    if name == PERMISSION_TOOL
-                        && server.workers.get(&session).is_some_and(|h| h.external)
-                    {
-                        let output = answer_permission(&server, &session, args).await;
+                    if let Some(output) = permission_answer(&server, &session, &name, &args).await {
                         connection.reply(
                             id,
                             Ok(CommandResult::ToolOutput {
@@ -647,9 +643,16 @@ impl Connection {
             } => {
                 let (connection, server) = (self.clone(), server.clone());
                 tokio::spawn(async move {
-                    let reply = match connection
-                        .ask_approval(&server, &site, &recipe, &args, body, &hash)
-                        .await
+                    let reply = match worker_approval(
+                        &server,
+                        connection.worker_session(),
+                        &site,
+                        &recipe,
+                        &args,
+                        body,
+                        &hash,
+                    )
+                    .await
                     {
                         Ok((approved, reason)) => ServerMessage::Ok {
                             id,
@@ -674,67 +677,9 @@ impl Connection {
         }
     }
 
-    /// An event from the worker process, for its session here.
-    fn worker_event(&self, server: &Arc<Server>, event: ServerMessage) {
-        let Some(id) = self.worker_session.lock().expect("worker lock").clone() else {
-            return;
-        };
-        if let Some(sink) = WorkerSink::new(server, &id) {
-            sink.event(event);
-        }
-    }
-
-    /// A worker's recipe approval: already approved here, or asked of this server's clients (or
-    /// decided by its orchestrator: for this run only, with its reason).
-    async fn ask_approval(
-        &self,
-        server: &Arc<Server>,
-        site: &str,
-        recipe: &str,
-        args: &[String],
-        body: String,
-        hash: &str,
-    ) -> Result<(bool, Option<String>), String> {
-        if server
-            .approvals
-            .is_approved(site, recipe, hash, Caller::Agent)
-        {
-            return Ok((true, None));
-        }
-        let id = self
-            .worker_session
-            .lock()
-            .expect("worker lock")
-            .clone()
-            .ok_or("not a worker connection")?;
-        let session = server.sessions.get(&id).map_err(|e| e.to_string())?;
-        let decision = server
-            .request_approval(
-                &session,
-                site,
-                recipe,
-                args,
-                body,
-                hash,
-                Caller::Agent,
-                &CancellationToken::new(),
-            )
-            .await;
-        let approved = decision.as_ref().is_some_and(|answer| {
-            matches!(
-                answer.decision,
-                composer_protocol::ApprovalDecision::Approve
-                    | composer_protocol::ApprovalDecision::Always
-            )
-        });
-        let reason = decision.and_then(|answer| answer.reason);
-        if approved && reason.is_none() {
-            server
-                .approvals
-                .approve(site, recipe, hash, Caller::Agent)
-                .map_err(|e| e.to_string())?;
-        }
-        Ok((approved, reason))
+    /// The session the worker process on the other side runs, if it is one.
+    fn worker_session(&self) -> Option<SessionId> {
+        self.worker_session.lock().expect("worker lock").clone()
     }
 
     fn run(&self, server: &Arc<Server>, command: ClientCommand) -> Result<CommandResult, String> {

@@ -5,6 +5,7 @@
 //! model slots and approvals come from the parent, its session events go to the parent
 //! (and from there to every client), and `finish` ends it.
 
+mod delegate_approval;
 mod ending;
 mod parent_link;
 mod run_worker;
@@ -17,6 +18,7 @@ mod types;
 mod worker_approvals;
 mod worker_registry;
 
+pub use delegate_approval::{Delegated, delegate_approval};
 pub use parent_link::ParentLink;
 pub use run_worker::{WorkerOptions, run_worker};
 pub use ticket_changes::{discard_ticket, merge_ticket, ticket_changes, ticket_closed};

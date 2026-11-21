@@ -580,9 +580,9 @@ fn write_in(file: &FsPath, path: &str, body: &[u8]) -> Result<StatusCode, ApiErr
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// [`crate::apps::path_inside`], refused as a 403.
+/// [`composer_core::path_inside`], refused as a 403.
 fn inside(folder: &FsPath, path: &str, what: &str) -> Result<PathBuf, ApiError> {
-    crate::apps::path_inside(folder, path, what).map_err(|e| ApiError(StatusCode::FORBIDDEN, e))
+    composer_core::path_inside(folder, path, what).map_err(|e| ApiError(StatusCode::FORBIDDEN, e))
 }
 
 async fn list_actions(

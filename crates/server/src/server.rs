@@ -26,7 +26,7 @@ use crate::session::{Session, SessionManager};
 use crate::slot_pool::SlotPool;
 use crate::tools::{ToolRegistry, expand_home};
 use crate::watches::{WRITER, WatchRegistry};
-use crate::worker::{ParentLink, Verdict, WorkerApprovals, WorkerRegistry};
+use crate::worker::{Delegated, ParentLink, WorkerApprovals, WorkerRegistry, delegate_approval};
 use crate::workspace_home::WorkspaceHome;
 
 /// The running harness. Shared as `Arc<Server>` by the API, turns and tools.
@@ -62,7 +62,7 @@ pub struct Server {
     /// The client apps' builds the user approved (`composer app approve`).
     pub client_apps: crate::apps::ClientApprovals,
     /// One-time codes that open client apps (ticket 0168).
-    pub once_codes: crate::apps::OnceCodes,
+    pub once_codes: crate::api::OnceCodes,
     /// Browser sessions: what the auth cookie holds, never a token.
     pub web_sessions: crate::api::WebSessions,
     /// Events apps reported, per session and app per minute (ticket 0175).
@@ -187,7 +187,7 @@ impl Server {
             open_projects: crate::apps::OpenProjects::default(),
             local_apps: crate::apps::LocalAllowances::load(home.state().join("local_apps.json")),
             client_apps: crate::apps::ClientApprovals::new(home.state().join("client_apps.json")),
-            once_codes: crate::apps::OnceCodes::default(),
+            once_codes: crate::api::OnceCodes::default(),
             web_sessions: crate::api::WebSessions::default(),
             app_events: crate::apps::EventLimit::default(),
             terminals: crate::terminals::Terminals::default(),
@@ -639,8 +639,8 @@ impl Server {
     }
 
     /// Sends the approval request `message` (given its id) to every client and waits for an
-    /// answer; the session shows `needs approval` meanwhile. A worker's tool or recipe goes to
-    /// its orchestrator first, when it decides them ([`WorkerApprovals`]) and `delegate` allows it.
+    /// answer; the session shows `needs approval` meanwhile. With `delegate`, a worker's tool or
+    /// recipe may be decided without the clients first ([`delegate_approval`]).
     async fn ask_clients(
         self: &Arc<Self>,
         session: &Session,
@@ -651,58 +651,11 @@ impl Server {
         let request = format!("{:08x}", rand::random::<u32>());
         let mut message = message(request.clone());
         let mut wait = ApprovalWait::new(self, session, request.clone());
-        if let ServerMessage::ApprovalRequest {
-            kind,
-            title,
-            body,
-            site,
-            recipe,
-            args,
-            ..
-        } = &mut message
-            && delegate
-            && WorkerApprovals::delegable(self, session, *kind)
+        if delegate
+            && let Delegated::Decided(answer) =
+                delegate_approval(self, session, &request, &mut message, cancel).await
         {
-            let what = match kind {
-                ApprovalKind::Recipe => {
-                    format!("run recipe `{recipe}` of site://{site} {}", args.join(" "))
-                        .trim_end()
-                        .to_string()
-                }
-                _ => title.clone(),
-            };
-            // `[system1]` first, then the orchestrator (when its agent decides them).
-            let mut decided_by = self.config().system1.model.clone();
-            let mut verdict = tokio::select! {
-                verdict = crate::worker::system1::decide(self, session, &what, body) => verdict,
-                _ = cancel.cancelled() => return None,
-            };
-            if verdict.is_none()
-                && let Some(orchestrator) = WorkerApprovals::decider(self, session, *kind)
-            {
-                decided_by = "Its orchestrator".into();
-                verdict = self
-                    .worker_approvals
-                    .ask(self, &orchestrator, session, &request, &what, body, cancel)
-                    .await;
-                verdict.as_ref()?;
-            }
-            let decided = |decision, reason: String| {
-                Some(ApprovalAnswer {
-                    decision,
-                    reason: Some(reason),
-                })
-            };
-            match verdict {
-                None => {}
-                Some(Verdict::Approve(reason)) => {
-                    return decided(ApprovalDecision::Approve, reason);
-                }
-                Some(Verdict::Deny(reason)) => return decided(ApprovalDecision::Deny, reason),
-                Some(Verdict::AskUser(reason)) => {
-                    *body = format!("{decided_by} asks you: {reason}\n\n{body}");
-                }
-            }
+            return answer;
         }
         let answer = self.pending_approvals.add(&request, message.clone());
         wait.set_announced();

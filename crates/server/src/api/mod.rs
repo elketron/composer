@@ -15,10 +15,12 @@ pub(crate) mod glob;
 mod http_routes;
 mod launcher_routes;
 mod library_commands;
+mod once_codes;
 mod pair_routes;
 mod view_routes;
 pub(crate) mod viewer_proxy;
 mod web_sessions;
+mod worker_commands;
 mod ws_routes;
 
 use std::sync::Arc;
@@ -32,6 +34,7 @@ pub use api_error::ApiError;
 pub use app_api::{APP_PREFIX, SANDBOX, encode_segment};
 pub use connection::Connection;
 pub use credential::Credential;
+pub use once_codes::OnceCodes;
 pub use web_sessions::WebSessions;
 
 use crate::server::Server;

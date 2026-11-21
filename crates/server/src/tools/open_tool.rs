@@ -7,7 +7,9 @@ use serde_json::{Value, json};
 
 use composer_core::SiteUrl;
 
-use crate::apps::{DataUrl, path_inside};
+use composer_core::path_inside;
+
+use crate::apps::DataUrl;
 use crate::attachments::{AttachmentKind, classify};
 use crate::tools::args::OpenArgs;
 use crate::tools::{CallResult, Tool, ToolContext, expand_home, text_result};
