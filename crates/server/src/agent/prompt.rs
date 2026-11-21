@@ -41,8 +41,8 @@ pub fn system_prompt(
             )
         };
         sections.push(format!(
-            "# Site\n\nYou are in `site://{}` ({}); {tools}. `leave_site` returns to the \
-             base tools.",
+            "# Site\n\nYou are in `site://{}` ({}); {tools}. `set_site` with no site leaves \
+             it.",
             site.name, site.title
         ));
     } else if let Some(home) = page_body(workspace, "site://home") {

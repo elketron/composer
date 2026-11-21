@@ -2370,7 +2370,7 @@ class SessionInfo {
   /// What its runs are: a single shot, a workflow run or an agentic session.
   final RunKind? kind;
 
-  /// The site the session is in (`enter_site`), if any: its page is the agent's instructions,
+  /// The site the session is in (`set_site`), if any: its page is the agent's instructions,
   /// and its `folder:` is where terminals start and what the changes view diffs.
   final String? site;
 

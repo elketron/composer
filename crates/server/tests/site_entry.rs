@@ -7,7 +7,7 @@ mod support;
 use std::sync::Arc;
 
 use composer_protocol::RunKind;
-use composer_server::agent::{Site, enter_site, leave_site};
+use composer_server::agent::{Entered, Site, SiteSet, set_site};
 use composer_server::tools::ToolContext;
 use composer_server::{Config, McpServerConfig, Server};
 use serde_json::{Value, json};
@@ -113,6 +113,18 @@ fn context(
     }
 }
 
+/// Puts the session in `name`.
+async fn enter(
+    server: &Arc<Server>,
+    session: &composer_server::session::Session,
+    name: &str,
+) -> Entered {
+    match set_site(server, session, Some(name)).await.unwrap() {
+        SiteSet::Entered(entered) => entered,
+        other => panic!("{other:?}"),
+    }
+}
+
 async fn offered(server: &Arc<Server>, context: &ToolContext) -> Vec<String> {
     server
         .tools
@@ -162,7 +174,7 @@ async fn a_site_grants_mcp_tools_while_the_session_is_in_it() {
 
     // Inside: offered (a server in `mcp:` that is not configured is skipped, and said so), and
     // the call runs without asking (`allow`).
-    let entered = enter_site(&server, &session, "lab").await.unwrap();
+    let entered = enter(&server, &session, "lab").await;
     assert_eq!(entered.mcp_refused.len(), 1, "{:?}", entered.mcp_refused);
     assert!(
         entered.mcp_refused[0].contains("there is no [mcp.not_configured]"),
@@ -185,7 +197,7 @@ async fn a_site_grants_mcp_tools_while_the_session_is_in_it() {
     assert!(!ran.is_error && ran.text == "hi", "{}", ran.text);
 
     // Another site without `mcp:` takes it away again.
-    enter_site(&server, &session, "plain").await.unwrap();
+    enter(&server, &session, "plain").await;
     let other = context(&server, &session, RunKind::Agentic);
     assert!(
         !offered(&server, &other)
@@ -201,8 +213,11 @@ async fn a_site_grants_mcp_tools_while_the_session_is_in_it() {
     );
 
     // Leaving too.
-    enter_site(&server, &session, "lab").await.unwrap();
-    assert_eq!(leave_site(&server, &session).as_deref(), Some("lab"));
+    enter(&server, &session, "lab").await;
+    assert_eq!(
+        set_site(&server, &session, None).await.unwrap(),
+        SiteSet::Left("lab".into())
+    );
     let after = context(&server, &session, RunKind::Agentic);
     let refused = server
         .tools
@@ -238,7 +253,7 @@ async fn a_page_cannot_grant_a_server_its_config_does_not_list_the_site_for() {
     let says = "site sneaky names MCP server fake, but [mcp.fake] does not list it in `sites`";
 
     // The user enters: told in words, and nothing is granted.
-    let entered = enter_site(&server, &session, "sneaky").await.unwrap();
+    let entered = enter(&server, &session, "sneaky").await;
     assert_eq!(entered.mcp_refused.len(), 1);
     assert!(
         entered.mcp_refused[0].contains(says),
@@ -270,12 +285,12 @@ async fn a_page_cannot_grant_a_server_its_config_does_not_list_the_site_for() {
     );
 
     // The agent enters: its tool result says the same.
-    leave_site(&server, &session);
+    set_site(&server, &session, None).await.unwrap();
     let result = server
         .tools
         .call_value(
             &context(&server, &session, RunKind::Agentic),
-            "enter_site",
+            "set_site",
             json!({ "site": "sneaky" }),
         )
         .await;
@@ -307,7 +322,7 @@ async fn a_page_cannot_grant_a_server_its_config_does_not_list_the_site_for() {
     assert!(text.contains(says), "{text}");
 
     // A listed site grants it, and says nothing.
-    let entered = enter_site(&server, &session, "lab").await.unwrap();
+    let entered = enter(&server, &session, "lab").await;
     assert!(entered.mcp_refused.is_empty(), "{:?}", entered.mcp_refused);
     let inside = context(&server, &session, RunKind::Agentic);
     assert!(
@@ -328,7 +343,7 @@ async fn a_page_cannot_grant_a_server_its_config_does_not_list_the_site_for() {
         .sessions
         .create(RunKind::Agentic, None, None)
         .unwrap();
-    let entered = enter_site(&server, &session, "lab").await.unwrap();
+    let entered = enter(&server, &session, "lab").await;
     assert_eq!(entered.mcp_refused.len(), 1);
     let inside = context(&server, &session, RunKind::Agentic);
     assert!(

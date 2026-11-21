@@ -393,7 +393,7 @@ fn resolve_attachments(
         .collect()
 }
 
-/// `site.set`: the user enters site `site` for a session, or (`None`, or blank) leaves its site.
+/// `site.set`: the user puts a session in site `site`, or (`None`, or blank) out of its site.
 /// The text is what happened; the session's new state goes out as `session.updated`.
 async fn set_site(
     server: &Arc<Server>,
@@ -401,21 +401,9 @@ async fn set_site(
     site: Option<String>,
 ) -> Result<String, String> {
     let session = server.sessions.get(session).map_err(|e| e.to_string())?;
-    let name = site.as_deref().map(str::trim).filter(|n| !n.is_empty());
-    let Some(name) = name else {
-        return Ok(match crate::agent::leave_site(server, &session) {
-            Some(previous) => format!("Left site {previous}."),
-            None => "The session was not in a site.".into(),
-        });
-    };
-    let entered = crate::agent::enter_site(server, &session, name).await?;
-    let mut text = format!("Entered {} ({}).", entered.site, entered.title);
-    let notes = entered.notes();
-    if !notes.is_empty() {
-        text.push(' ');
-        text.push_str(&notes);
-    }
-    Ok(text)
+    crate::agent::set_site(server, &session, site.as_deref())
+        .await
+        .map(|set| set.text())
 }
 
 /// Changes `session`'s desk (the user's change) and tells its clients: the desk after.

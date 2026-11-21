@@ -8,12 +8,12 @@ use serde_json::Value;
 
 use crate::project::expand_home;
 
-/// A site the agent can enter (`enter_site`).
+/// A site a session can be in (`set_site`).
 #[derive(Debug, Clone)]
 pub struct Site {
     pub name: String,
     pub title: String,
-    /// The tools this site adds to the base set.
+    /// `tools:`: the site tools ([`crate::tools::SITE_TOOLS`]) it brings.
     pub tools: Vec<String>,
     /// `mcp:`: the MCP servers the page names. What the page says, not what is granted: a
     /// server's tools come with the site only where `[mcp.<server>] sites` in `config.toml` lists

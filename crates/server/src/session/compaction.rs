@@ -165,7 +165,7 @@ async fn save_memory(
 ) -> Result<(), String> {
     let tools = server
         .tools
-        .specs_for(RunKind::Agentic, Some(&MEMORY_TOOLS));
+        .specs_for(RunKind::Agentic, None, Some(&MEMORY_TOOLS));
     let context = ToolContext {
         server: server.clone(),
         session: session.clone(),

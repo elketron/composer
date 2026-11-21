@@ -16,12 +16,12 @@ Outside a site you have only the **base tools**: browse (`open`, `search`, `list
 declares `tools:` — verbs that exist only inside it. Entering a site puts that page in your context
 and adds its tools from the next turn; leaving returns.
 
-- `enter_site("home")` adds `new_site`, `new_app` and `publish_site`.
-- `enter_site("projects")` adds `new_project`.
+- `set_site("home")` adds `new_site`, `new_app` and `publish_site`.
+- `set_site("projects")` adds `new_project`.
 
 **If you need a verb that isn't in your base set, enter the site that owns it.**
 
-Any site can be entered with `:site <name>` or `enter_site`. A site may also name an application
+Any site can be entered with `:site <name>` or `set_site`. A site may also name an application
 with `app:` or server tools with `mcp:`; neither is required. Leaving drops the site's context and
 tools while keeping the conversation.
 

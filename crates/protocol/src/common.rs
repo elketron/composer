@@ -15,7 +15,7 @@ pub struct SessionInfo {
     /// What its runs are: a single shot, a workflow run or an agentic session.
     #[serde(default)]
     pub kind: RunKind,
-    /// The site the session is in (`enter_site`), if any: its page is the agent's instructions,
+    /// The site the session is in (`set_site`), if any: its page is the agent's instructions,
     /// and its `folder:` is where terminals start and what the changes view diffs.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub site: Option<String>,

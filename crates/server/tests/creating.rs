@@ -19,7 +19,7 @@ async fn run_tools(
     let mut scripts: Vec<Vec<ModelEvent>> = vec![
         vec![finished(vec![tool_call(
             "enter",
-            "enter_site",
+            "set_site",
             json!({ "site": site }),
         )])],
         vec![ModelEvent::Content("in site".into()), finished(vec![])],

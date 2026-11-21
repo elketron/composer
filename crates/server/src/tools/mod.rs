@@ -5,14 +5,13 @@ mod arg_repair;
 mod args;
 mod desk_tool;
 mod edit_tool;
-mod enter_site_tool;
-mod leave_site_tool;
 mod list_sites_tool;
 mod markdown_sections;
 mod new_site_tool;
 mod open_tool;
 mod run_tool;
 mod search_tool;
+mod set_site_tool;
 mod show_page_tool;
 mod stage_tools;
 mod terminal_read_tool;
@@ -28,7 +27,7 @@ use serde_json::Value;
 
 pub(crate) use crate::project::expand_home;
 pub use tool_context::ToolContext;
-pub use tool_registry::ToolRegistry;
+pub use tool_registry::{READ_ONLY_TOOLS, SITE_TOOLS, ToolRegistry};
 
 /// What a tool call gave back: its text, whether it failed, and the images in it (data URLs:
 /// an MCP server's screenshot).
