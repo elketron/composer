@@ -75,6 +75,12 @@ pub enum ChatItem {
         summary: String,
         messages: u32,
     },
+    /// A background process ended (the server tells the agent): what happened, its last lines.
+    ProcessEnded {
+        terminal: String,
+        command: String,
+        text: String,
+    },
 }
 
 /// The assistant message currently streaming in.
@@ -221,6 +227,8 @@ pub struct Catalog {
     /// The provider's models, and the one sessions use unless set.
     pub models: Vec<ModelInfo>,
     pub default_model: String,
+    /// The outside agents (`[acp.<name>]`) an agentic session may run on.
+    pub harnesses: Vec<String>,
 }
 
 /// A file attached to the message being written: uploaded right away, sent with the message.

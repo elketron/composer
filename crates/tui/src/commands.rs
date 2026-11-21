@@ -28,13 +28,29 @@ pub fn kind_name(kind: RunKind) -> &'static str {
         .expect("every kind has a name")
 }
 
+/// A session's kind as lists show it, with the outside agent that runs it: `agentic · claude`.
+pub fn session_label(session: &composer_protocol::SessionInfo) -> String {
+    match &session.harness {
+        Some(harness) => format!("{} · {harness}", kind_name(session.kind)),
+        None => kind_name(session.kind).to_string(),
+    }
+}
+
 /// Every command, as shown by help: (usage, what it does).
-pub const COMMANDS: [(&str, &str); 17] = [
+pub const COMMANDS: [(&str, &str); 19] = [
     (
         ":new [agentic|workflow|single]",
         "start a new session: agentic (the default), a read-only workflow run, or a single shot",
     ),
+    (
+        ":new agentic --harness <name>",
+        "an agentic session run by an outside agent (an [acp.<name>] of config.toml)",
+    ),
     (":attach <id>", "switch to a session by id (or Space w)"),
+    (
+        ":delete [id]",
+        "delete a session (this one unless named): its chat, terminals and folder; asks first",
+    ),
     (
         ":model [id|none]",
         "the model this session uses (Tab lists the provider's); none: the server's again",
@@ -65,8 +81,8 @@ pub const COMMANDS: [(&str, &str); 17] = [
         "a terminal on the stage: a shell, or a program (:term nvim notes.md); ctrl-space leaves it",
     ),
     (
-        ":ps",
-        "the session's background processes (the agent's process_start)",
+        ":ps [id]",
+        "the session's background processes (the agent's process_start); an id opens its terminal",
     ),
     (
         ":stop [id]",
@@ -89,12 +105,8 @@ pub fn parse_command(line: &str) -> Result<Action, String> {
     let arg = (!arg.is_empty()).then(|| arg.to_string());
     match name {
         "q" | "quit" => Ok(Action::Quit),
-        "new" => match arg.as_deref() {
-            None => Ok(Action::NewSession { kind: None }),
-            Some(name) => parse_kind(name)
-                .map(|kind| Action::NewSession { kind: Some(kind) })
-                .ok_or_else(|| format!("`{name}` isn't a run kind: agentic, workflow or single")),
-        },
+        "new" => parse_new(arg.as_deref().unwrap_or("")),
+        "delete" => Ok(Action::DeleteSession(arg)),
         "attach" | "a" => arg
             .map(Action::AttachSession)
             .ok_or_else(|| "usage: :attach <session id>".into()),
@@ -132,7 +144,10 @@ pub fn parse_command(line: &str) -> Result<Action, String> {
         "follow" => Ok(Action::ToggleFollow),
         "compact" => Ok(Action::Compact),
         "term" | "terminal" => Ok(Action::OpenTerminal(arg)),
-        "ps" => Ok(Action::ListProcesses),
+        "ps" => Ok(match arg {
+            Some(id) => Action::ShowProcess(id),
+            None => Action::ListProcesses,
+        }),
         "stop" => Ok(Action::StopProcess(arg)),
         "site" => Ok(Action::SetSite(arg.map(|s| {
             s.trim_start_matches("site://")
@@ -146,6 +161,44 @@ pub fn parse_command(line: &str) -> Result<Action, String> {
     }
 }
 
+/// `:new [kind] [--harness <name>]`: a harness runs agentic sessions only (and is one).
+fn parse_new(args: &str) -> Result<Action, String> {
+    let mut kind = None;
+    let mut harness = None;
+    let mut words = args.split_whitespace();
+    while let Some(word) = words.next() {
+        match word {
+            "--harness" => match words.next() {
+                Some(name) => harness = Some(name.to_string()),
+                None => return Err("usage: :new agentic --harness <name>".into()),
+            },
+            name if kind.is_none() => {
+                kind = Some(parse_kind(name).ok_or_else(|| {
+                    format!("`{name}` isn't a run kind: agentic, workflow or single")
+                })?)
+            }
+            other => {
+                return Err(format!(
+                    "unexpected `{other}`: :new [kind] [--harness <name>]"
+                ));
+            }
+        }
+    }
+    if harness.is_some() {
+        match kind {
+            None => kind = Some(RunKind::Agentic),
+            Some(RunKind::Agentic) => {}
+            Some(other) => {
+                return Err(format!(
+                    "a harness runs agentic sessions, not {}",
+                    kind_name(other)
+                ));
+            }
+        }
+    }
+    Ok(Action::NewSession { kind, harness })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -156,11 +209,43 @@ mod tests {
         assert_eq!(
             parse_command("new workflow"),
             Ok(Action::NewSession {
-                kind: Some(RunKind::Workflow)
+                kind: Some(RunKind::Workflow),
+                harness: None,
             })
         );
-        assert_eq!(parse_command("new"), Ok(Action::NewSession { kind: None }));
+        assert_eq!(
+            parse_command("new"),
+            Ok(Action::NewSession {
+                kind: None,
+                harness: None
+            })
+        );
         assert!(parse_command("new default").is_err());
+        assert_eq!(
+            parse_command("new --harness claude"),
+            Ok(Action::NewSession {
+                kind: Some(RunKind::Agentic),
+                harness: Some("claude".into()),
+            })
+        );
+        assert_eq!(
+            parse_command("new agentic --harness claude"),
+            parse_command("new --harness claude")
+        );
+        assert!(parse_command("new workflow --harness claude").is_err());
+        assert!(parse_command("new agentic --harness").is_err());
+        assert_eq!(
+            parse_command("delete").unwrap(),
+            Action::DeleteSession(None)
+        );
+        assert_eq!(
+            parse_command("delete s1").unwrap(),
+            Action::DeleteSession(Some("s1".into()))
+        );
+        assert_eq!(
+            parse_command("ps t2").unwrap(),
+            Action::ShowProcess("t2".into())
+        );
         assert_eq!(
             parse_command("open memory/user"),
             Ok(Action::OpenUrl("site://memory/user".into()))

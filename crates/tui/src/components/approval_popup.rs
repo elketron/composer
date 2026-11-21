@@ -50,7 +50,9 @@ impl Component for ApprovalPopup {
         frame.render_widget(Clear, rect);
 
         let more = state.approvals.count().saturating_sub(1);
+        let mcp_toml = is_mcp_toml(approval);
         let question = match approval.kind {
+            ApprovalKind::Recipe if mcp_toml => "start MCP servers?",
             ApprovalKind::Recipe => "run recipe?",
             ApprovalKind::Tool => "allow tool?",
             ApprovalKind::Mcp => "allow MCP tool?",
@@ -78,6 +80,9 @@ impl Component for ApprovalPopup {
         let label = |text: &'static str| Span::styled(text, theme::muted());
         let value = |text: String| Span::styled(text, theme::bold());
         let mut header = match approval.kind {
+            ApprovalKind::Recipe if mcp_toml => {
+                vec![value(format!("Start {}'s MCP servers", approval.site))]
+            }
             ApprovalKind::Recipe => vec![
                 label("site "),
                 value(approval.site.clone()),
@@ -115,6 +120,12 @@ impl Component for ApprovalPopup {
         }
         lines.push(Line::raw(""));
         let note = match approval.kind {
+            ApprovalKind::Recipe if mcp_toml => {
+                let short_hash: String = approval.hash.chars().take(8).collect();
+                format!(
+                    "sha256 {short_hash} · the site's mcp.toml · approval lasts until it changes"
+                )
+            }
             ApprovalKind::Recipe => {
                 let short_hash: String = approval.hash.chars().take(8).collect();
                 format!(
@@ -152,6 +163,11 @@ impl Component for ApprovalPopup {
         lines.push(Line::from(keys));
         frame.render_widget(Paragraph::new(lines), inner);
     }
+}
+
+/// Not a recipe: the site's `mcp.toml`, whose servers start once approved. The body is the file.
+fn is_mcp_toml(approval: &crate::store::types::PendingApproval) -> bool {
+    approval.kind == ApprovalKind::Recipe && approval.recipe == "mcp.toml"
 }
 
 /// Kinds where `always` remembers a rule.

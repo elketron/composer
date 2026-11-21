@@ -39,10 +39,16 @@ pub enum Action {
     CancelTurn,
     /// Save memory and summarize older messages now.
     Compact,
-    /// `:new [kind]`: a new session of that run kind (default: the startup's).
+    /// `:new [kind] [--harness <name>]`: a new session of that run kind (default: the
+    /// startup's), run by an outside agent when a harness is named (agentic only).
     NewSession {
         kind: Option<RunKind>,
+        harness: Option<String>,
     },
+    /// `:delete [id]`: ask whether to delete a session (default: this one).
+    DeleteSession(Option<String>),
+    /// The answer to that: delete it (true) or not.
+    ConfirmDelete(bool),
     AttachSession(String),
     /// Scrolled up to the oldest message shown: fetch the ones before it.
     LoadOlder,
@@ -85,6 +91,8 @@ pub enum Action {
     TerminalResize(u16, u16),
     /// `:ps`: the session's background processes.
     ListProcesses,
+    /// `:ps <id>`: a background process's terminal on the stage.
+    ShowProcess(String),
     /// `:stop [id]`: stop a background process (default: the one shown, or the only one).
     StopProcess(Option<String>),
 
@@ -141,6 +149,8 @@ pub enum Action {
     CatalogLoaded {
         sites: Vec<SiteSummary>,
         pages: Vec<SearchHit>,
+        /// The outside agents an agentic session may run on (`GET /api/info`).
+        harnesses: Vec<String>,
     },
 }
 

@@ -1,6 +1,6 @@
 use composer_protocol::Attachment;
 use composer_protocol::http::{
-    PageResponse, ProjectDiff, PutPageRequest, PutPageResponse, SearchHit, SiteSummary,
+    PageResponse, ProjectDiff, PutPageRequest, PutPageResponse, SearchHit, ServerInfo, SiteSummary,
 };
 
 use crate::store::types::PageView;
@@ -69,6 +69,11 @@ impl ApiClient {
     pub async fn project_diff(&self, session: &str) -> Result<ProjectDiff, String> {
         self.get(&format!("/api/sessions/{session}/project/diff"))
             .await
+    }
+
+    /// What the server is: its harnesses, for `:new`'s completion.
+    pub async fn info(&self) -> Result<ServerInfo, String> {
+        self.get("/api/info").await
     }
 
     pub async fn sites(&self) -> Result<Vec<SiteSummary>, String> {

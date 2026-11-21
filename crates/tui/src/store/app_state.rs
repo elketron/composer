@@ -221,8 +221,13 @@ impl AppState {
                 }
                 None => vec![],
             },
-            Action::NewSession { kind } => {
+            Action::NewSession { kind, harness } => {
                 let kind = kind.unwrap_or(self.default_kind);
+                if harness.is_some() && kind != RunKind::Agentic {
+                    self.ui
+                        .flash("a harness runs agentic sessions only", FlashLevel::Warn);
+                    return vec![];
+                }
                 // The new chat starts in this session's site.
                 let site = self.session.current_info().and_then(|s| s.site.clone());
                 self.send(
@@ -230,11 +235,28 @@ impl AppState {
                         kind,
                         model: None,
                         site,
-                        harness: None,
+                        harness,
                     },
                     Pending::CreateSession,
                 )
             }
+            Action::DeleteSession(id) => {
+                match id.or_else(|| self.session.current.clone()) {
+                    Some(id) if self.session.sessions.iter().any(|s| s.id == id) => {
+                        self.ui.confirm_delete = Some(id);
+                    }
+                    Some(id) => self.ui.flash(format!("no session #{id}"), FlashLevel::Warn),
+                    None => self.ui.flash("no session", FlashLevel::Warn),
+                }
+                vec![]
+            }
+            Action::ConfirmDelete(yes) => match self.ui.confirm_delete.take() {
+                // The server's `session.deleted` drops it, here and in every client.
+                Some(session) if yes => {
+                    self.send(ClientCommand::SessionDelete { session }, Pending::Ignore)
+                }
+                _ => vec![],
+            },
             Action::AttachSession(id) => self.attach(&id, true),
             Action::JumpBack => match self.session.jumplist.pop() {
                 Some(id) => self.attach(&id, false),
@@ -341,13 +363,18 @@ impl AppState {
                     [] => "no background processes".to_string(),
                     processes => processes
                         .iter()
-                        .map(|p| format!("{} `{}`", p.terminal, p.command))
+                        .map(|p| {
+                            // RFC 3339: the time of day it started.
+                            let since = p.started.get(11..16).unwrap_or(&p.started);
+                            format!("{} `{}` since {since}", p.terminal, p.command)
+                        })
                         .collect::<Vec<_>>()
                         .join(" \u{b7} "),
                 };
                 self.ui.flash(text, FlashLevel::Info);
                 vec![]
             }
+            Action::ShowProcess(terminal) => self.show_process(terminal),
             Action::StopProcess(id) => self.stop_process(id),
             Action::DiffSemantic => {
                 self.changes.toggle_semantic();
@@ -403,6 +430,9 @@ impl AppState {
             Action::ApprovalView => match self.approvals.current() {
                 Some(a) => vec![Effect::ViewText {
                     name: match a.kind {
+                        ApprovalKind::Recipe if a.recipe == "mcp.toml" => {
+                            format!("{}-mcp.toml", a.site)
+                        }
                         ApprovalKind::Recipe => format!("{}-{}.just", a.site, a.recipe),
                         ApprovalKind::Tool => format!("tool-{}.txt", a.request),
                         ApprovalKind::Mcp => format!("mcp-{}.json", a.request),
@@ -458,8 +488,13 @@ impl AppState {
                 self.picker.sites(sites);
                 vec![]
             }
-            Action::CatalogLoaded { sites, pages } => {
+            Action::CatalogLoaded {
+                sites,
+                pages,
+                harnesses,
+            } => {
                 (self.catalog.sites, self.catalog.pages) = (sites, pages);
+                self.catalog.harnesses = harnesses;
                 vec![]
             }
         }
@@ -507,6 +542,7 @@ impl AppState {
             && !self.ui.picker_open
             && !self.ui.help_open
             && self.approvals.current().is_none()
+            && self.ui.confirm_delete.is_none()
             && self.shown_terminal().is_some()
     }
 
@@ -576,6 +612,74 @@ impl AppState {
                 };
                 self.ui.flash(text, FlashLevel::Warn);
                 vec![]
+            }
+        }
+    }
+
+    /// `:ps <id>`: the process's terminal as a tab on the desk, shown; the desk's
+    /// `desk.changed` puts it on the stage.
+    fn show_process(&mut self, terminal: String) -> Vec<Effect> {
+        let Some(session) = self.session.current.clone() else {
+            self.ui.flash("no session", FlashLevel::Warn);
+            return vec![];
+        };
+        if !self
+            .terminals
+            .processes
+            .iter()
+            .any(|p| p.terminal == terminal)
+        {
+            self.ui.flash(
+                format!("no background process {terminal} (:ps lists them)"),
+                FlashLevel::Warn,
+            );
+            return vec![];
+        }
+        let effects = self.send(
+            ClientCommand::DeskOpen {
+                session,
+                tab: DeskTab::Terminal { id: terminal },
+                focus: true,
+            },
+            Pending::Ignore,
+        );
+        self.reduce(Action::FocusPane(Pane::Stage));
+        effects
+    }
+
+    /// A session was deleted (by any client): it leaves the lists; when it is the one shown,
+    /// the previous one is shown instead, or the newest, or a new one.
+    fn session_deleted(&mut self, id: &str) -> Vec<Effect> {
+        self.session.sessions.retain(|s| s.id != id);
+        self.session.jumplist.retain(|s| s != id);
+        if self.ui.confirm_delete.as_deref() == Some(id) {
+            self.ui.confirm_delete = None;
+        }
+        if self.session.current.as_deref() != Some(id) {
+            return vec![];
+        }
+        self.ui
+            .flash(format!("session #{id} deleted"), FlashLevel::Info);
+        let next = self.session.jumplist.pop().or_else(|| {
+            self.session
+                .sessions
+                .iter()
+                .find(|s| s.parent.is_none())
+                .map(|s| s.id.clone())
+        });
+        match next {
+            Some(next) => self.attach(&next, false),
+            None => {
+                let kind = self.default_kind;
+                self.send(
+                    ClientCommand::SessionCreate {
+                        kind,
+                        model: None,
+                        site: None,
+                        harness: None,
+                    },
+                    Pending::CreateSession,
+                )
             }
         }
     }
@@ -1048,6 +1152,9 @@ impl AppState {
                 self.session.upsert(session);
                 vec![]
             }
+            ServerMessage::SessionDeleted { session } => self.session_deleted(&session),
+            // No tool list is shown here.
+            ServerMessage::ToolsChanged { .. } => vec![],
             ServerMessage::Slots {
                 used,
                 total,
@@ -1524,6 +1631,98 @@ mod tests {
             (flash.text.as_str(), flash.level),
             ("no site `nope`", FlashLevel::Error)
         );
+    }
+
+    #[test]
+    fn delete_asks_first_and_the_event_moves_on() {
+        let (mut state, _) = connected();
+        state.session.upsert(info("s1", None));
+        state.session.upsert(info("s2", None));
+        state.session.current = Some("s2".into());
+        state.session.jumplist = vec!["s1".into()];
+
+        // Asked; anything but `y` keeps it.
+        assert!(state.reduce(Action::DeleteSession(None)).is_empty());
+        assert_eq!(state.ui.confirm_delete.as_deref(), Some("s2"));
+        assert!(state.reduce(Action::ConfirmDelete(false)).is_empty());
+        assert_eq!(state.ui.confirm_delete, None);
+
+        state.reduce(Action::DeleteSession(Some("s2".into())));
+        let effects = state.reduce(Action::ConfirmDelete(true));
+        assert_eq!(
+            sent(&effects)[0].1,
+            ClientCommand::SessionDelete {
+                session: "s2".into()
+            }
+        );
+        // Unknown ids are not asked about.
+        state.reduce(Action::DeleteSession(Some("nope".into())));
+        assert_eq!(state.ui.confirm_delete, None);
+
+        // The shown one went: back to the previous one.
+        let effects = state.reduce(Action::Server(ServerMessage::SessionDeleted {
+            session: "s2".into(),
+        }));
+        assert!(state.session.sessions.iter().all(|s| s.id != "s2"));
+        assert_eq!(state.session.current.as_deref(), Some("s1"));
+        assert!(!effects.is_empty());
+        // Another one: only the list changes.
+        state.session.upsert(info("s3", None));
+        let effects = state.reduce(Action::Server(ServerMessage::SessionDeleted {
+            session: "s3".into(),
+        }));
+        assert!(effects.is_empty());
+        assert_eq!(state.session.current.as_deref(), Some("s1"));
+        // tools.changed is fine to hear.
+        assert!(
+            state
+                .reduce(Action::Server(ServerMessage::ToolsChanged {
+                    session: "s1".into()
+                }))
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn new_session_names_its_harness() {
+        let (mut state, _) = connected();
+        let effects = state.reduce(Action::NewSession {
+            kind: Some(composer_protocol::RunKind::Agentic),
+            harness: Some("claude".into()),
+        });
+        assert!(matches!(
+            &sent(&effects)[0].1,
+            ClientCommand::SessionCreate { harness: Some(h), .. } if h == "claude"
+        ));
+        let effects = state.reduce(Action::NewSession {
+            kind: Some(composer_protocol::RunKind::Workflow),
+            harness: Some("claude".into()),
+        });
+        assert!(effects.is_empty());
+    }
+
+    #[test]
+    fn a_process_ending_is_a_line_not_your_message() {
+        let (mut state, _) = connected();
+        state.session.current = Some("s1".into());
+        state.reduce(Action::Server(ServerMessage::MessageDone {
+            session: "s1".into(),
+            seq: 1,
+            message: ChatMessage {
+                role: Role::User,
+                content: "[background process t1 (`npm run dev`) exited with code 1]\nIt printed nothing.".into(),
+                source: Some(composer_protocol::MessageSource::Process {
+                    terminal: "t1".into(),
+                    command: "npm run dev".into(),
+                }),
+                thinking: None,
+                ..assistant("")
+            },
+        }));
+        assert!(matches!(
+            state.session.items.as_slice(),
+            [ChatItem::ProcessEnded { terminal, .. }] if terminal == "t1"
+        ));
     }
 
     #[test]

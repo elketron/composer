@@ -166,6 +166,44 @@ pub fn chat_lines(state: &AppState, width: u16) -> Vec<Line<'static>> {
                 }
                 blocks.push((Speaker::System, lines));
             }
+            ChatItem::ProcessEnded {
+                terminal,
+                command,
+                text,
+            } => {
+                // "[background process t1 (`cmd`) exited with code 1]": the part after the command.
+                let how = text
+                    .lines()
+                    .next()
+                    .and_then(|line| line.trim_end_matches(']').rsplit_once("`)"))
+                    .map(|(_, how)| how.trim().to_string())
+                    .unwrap_or_else(|| "ended".into());
+                let marker = if state.ui.show_tool_details {
+                    "▾ "
+                } else {
+                    "▸ "
+                };
+                let mut lines = vec![Line::from(vec![
+                    Span::styled(marker, theme::faint()),
+                    Span::styled("process ", Style::new().fg(theme::WARN)),
+                    Span::styled(format!("{terminal} `{command}` "), theme::muted()),
+                    Span::styled(how, theme::faint()),
+                ])];
+                if state.ui.show_tool_details {
+                    for line in text.lines().skip(1).take(40) {
+                        let text: String = line
+                            .replace('\t', "  ")
+                            .chars()
+                            .take(inner.saturating_sub(2) as usize)
+                            .collect();
+                        lines.push(Line::from(vec![
+                            Span::styled("│ ", theme::faint()),
+                            Span::styled(text, theme::faint()),
+                        ]));
+                    }
+                }
+                blocks.push((Speaker::System, lines));
+            }
             ChatItem::System { text } => {
                 blocks.push((
                     Speaker::System,

@@ -141,14 +141,21 @@ impl SessionStore {
                 .content
                 .push_str(text),
             MessageDone { message, .. } => match message.role {
-                Role::User => self.items.push(ChatItem::User {
-                    text: message.content.clone(),
-                    source: match &message.source {
-                        Some(MessageSource::Watch { .. }) => Some("watch".into()),
-                        Some(MessageSource::Process { .. }) => Some("process".into()),
-                        _ => None,
+                // Not yours: the server telling the agent a background process ended.
+                Role::User => self.items.push(match &message.source {
+                    Some(MessageSource::Process { terminal, command }) => ChatItem::ProcessEnded {
+                        terminal: terminal.clone(),
+                        command: command.clone(),
+                        text: message.content.clone(),
                     },
-                    files: message.attachments.iter().map(|a| a.name.clone()).collect(),
+                    _ => ChatItem::User {
+                        text: message.content.clone(),
+                        source: match &message.source {
+                            Some(MessageSource::Watch { .. }) => Some("watch".into()),
+                            _ => None,
+                        },
+                        files: message.attachments.iter().map(|a| a.name.clone()).collect(),
+                    },
                 }),
                 Role::Assistant => {
                     self.streaming = None;

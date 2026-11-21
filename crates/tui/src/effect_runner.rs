@@ -65,10 +65,12 @@ impl EffectRunner {
             }
             Effect::LoadCatalog => {
                 tokio::spawn(async move {
-                    let (sites, pages) = tokio::join!(api.sites(), api.all_pages());
+                    let (sites, pages, info) =
+                        tokio::join!(api.sites(), api.all_pages(), api.info());
                     dispatcher.dispatch(Action::CatalogLoaded {
                         sites: sites.unwrap_or_default(),
                         pages: pages.unwrap_or_default(),
+                        harnesses: info.map(|i| i.harnesses).unwrap_or_default(),
                     });
                 });
             }

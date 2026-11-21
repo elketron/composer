@@ -80,7 +80,8 @@ impl App {
         let normal = self.state.mode() == Mode::Normal
             && !self.state.ui.picker_open
             && !self.state.ui.help_open
-            && self.state.approvals.current().is_none();
+            && self.state.approvals.current().is_none()
+            && self.state.ui.confirm_delete.is_none();
         let actions = if normal {
             match self.keymap.feed(key) {
                 KeyOutcome::Action(action) => vec![action],

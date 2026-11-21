@@ -3,7 +3,7 @@
 
 use composer_protocol::RunKind;
 
-use crate::commands::{COMMANDS, RUN_KINDS, kind_name};
+use crate::commands::{COMMANDS, RUN_KINDS, session_label};
 use crate::store::AppState;
 
 /// One choice in the menu.
@@ -47,9 +47,16 @@ pub fn complete(line: &str, state: &AppState) -> Completions {
     let name = &line[..space];
     let start = space + line[space..].len() - line[space..].trim_start().len();
     let arg = &line[start..];
+    // `:new` takes several words: the last one is completed.
+    if name == "new" {
+        let word = arg.trim_end_matches(|c: char| !c.is_whitespace()).len();
+        return Completions {
+            start: start + word,
+            items: new_args(&arg[..word], &arg[word..], state),
+        };
+    }
     let items = match name {
-        "attach" | "a" => sessions(arg, state),
-        "new" => kinds(arg),
+        "attach" | "a" | "delete" => sessions(arg, state),
         "open" | "o" => pages(arg, state),
         "site" => all_sites(arg, state),
         "model" | "m" => models(arg, state),
@@ -111,7 +118,7 @@ fn sessions(arg: &str, state: &AppState) -> Vec<Candidate> {
         all.iter()
             .filter(|s| {
                 let preview = s.preview.as_deref().unwrap_or("");
-                kind_name(s.kind).contains(&needle) || preview.to_lowercase().contains(&needle)
+                session_label(s).contains(&needle) || preview.to_lowercase().contains(&needle)
             })
             .collect()
     } else {
@@ -123,7 +130,7 @@ fn sessions(arg: &str, state: &AppState) -> Vec<Candidate> {
             text: s.id.clone(),
             detail: format!(
                 "{}  {}",
-                kind_name(s.kind),
+                session_label(s),
                 s.preview.as_deref().unwrap_or("")
             ),
         })
@@ -185,6 +192,31 @@ fn kinds(arg: &str) -> Vec<Candidate> {
             .to_string(),
         })
         .collect()
+}
+
+/// `:new`'s words: a run kind first, then `--harness` (agentic only), then a harness's name.
+/// `before`: the words already typed; `word`: the one being completed.
+fn new_args(before: &str, word: &str, state: &AppState) -> Vec<Candidate> {
+    let words: Vec<&str> = before.split_whitespace().collect();
+    let harnesses = &state.catalog.harnesses;
+    match words.as_slice() {
+        [.., "--harness"] => harnesses
+            .iter()
+            .filter(|h| starts_with(h, word))
+            .map(|h| Candidate {
+                text: h.clone(),
+                detail: format!("[acp.{h}] of config.toml runs it"),
+            })
+            .collect(),
+        [] if !word.starts_with('-') => kinds(word),
+        [] | ["agentic"] if !harnesses.is_empty() && starts_with("--harness", word) => {
+            vec![Candidate {
+                text: "--harness".into(),
+                detail: format!("an outside agent runs it: {}", harnesses.join(", ")),
+            }]
+        }
+        _ => Vec::new(),
+    }
 }
 
 /// Sites until a `/` is typed, then that site's pages (`memory/user`, without `.md`).
@@ -320,6 +352,7 @@ mod tests {
                 },
             ],
             default_model: "qwen3-coder".into(),
+            harnesses: vec!["claude".into(), "codex".into()],
         };
         state
     }
@@ -379,6 +412,13 @@ mod tests {
     fn run_kinds_for_new_sessions() {
         assert_eq!(texts("new "), ["agentic", "workflow", "single"]);
         assert_eq!(texts("new wo"), ["workflow"]);
+        assert_eq!(texts("new agentic "), ["--harness"]);
+        assert_eq!(texts("new --h"), ["--harness"]);
+        assert!(texts("new workflow ").is_empty());
+        assert_eq!(texts("new agentic --harness "), ["claude", "codex"]);
+        let completions = complete("new agentic --harness co", &state());
+        assert_eq!(completions.start, 22);
+        assert_eq!(texts("new agentic --harness co"), ["codex"]);
     }
 
     #[test]

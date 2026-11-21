@@ -12,6 +12,8 @@ pub struct UiStore {
     pub show_tool_details: bool,
     pub flash: Option<Flash>,
     pub quit: bool,
+    /// The session `:delete` asks about; modal until answered.
+    pub confirm_delete: Option<String>,
 }
 
 impl UiStore {
@@ -26,6 +28,7 @@ impl UiStore {
             show_tool_details: false,
             flash: None,
             quit: false,
+            confirm_delete: None,
         }
     }
 

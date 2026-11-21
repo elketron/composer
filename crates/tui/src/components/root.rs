@@ -8,8 +8,8 @@ use ratatui::{Frame, Terminal};
 
 use crate::action::Action;
 use crate::components::{
-    ApprovalPopup, ChangesView, ChatPane, CommandLine, Component, Help, PageViewer, Picker,
-    Selection, StatusBar, TabBar, TerminalView,
+    ApprovalPopup, ChangesView, ChatPane, CommandLine, Component, ConfirmPopup, Help, PageViewer,
+    Picker, Selection, StatusBar, TabBar, TerminalView,
 };
 use crate::store::AppState;
 use crate::store::StageTab;
@@ -33,6 +33,7 @@ pub struct Root {
     command: CommandLine,
     picker: Picker,
     approval: ApprovalPopup,
+    confirm: ConfirmPopup,
     help: Help,
     /// Text selected with the mouse (shown until the next click or key).
     pub selection: Option<Selection>,
@@ -53,6 +54,7 @@ impl Root {
             command: CommandLine::new(),
             picker: Picker,
             approval: ApprovalPopup,
+            confirm: ConfirmPopup,
             help: Help::new(bindings),
             selection: None,
             tab_click: None,
@@ -68,7 +70,11 @@ impl Root {
         screen: Rect,
         state: &AppState,
     ) -> Vec<Action> {
-        if state.ui.picker_open || state.ui.help_open || state.approvals.current().is_some() {
+        if state.ui.picker_open
+            || state.ui.help_open
+            || state.approvals.current().is_some()
+            || state.ui.confirm_delete.is_some()
+        {
             return vec![];
         }
         let at = Position::new(event.column, event.row);
@@ -236,6 +242,9 @@ impl Component for Root {
         if state.approvals.current().is_some() {
             return self.approval.handle_key(key, state);
         }
+        if state.ui.confirm_delete.is_some() {
+            return self.confirm.handle_key(key, state);
+        }
         if state.ui.help_open {
             return self.help.handle_key(key, state);
         }
@@ -299,6 +308,9 @@ impl Component for Root {
         }
         if state.ui.help_open {
             self.help.render(frame, area, state);
+        }
+        if state.ui.confirm_delete.is_some() {
+            self.confirm.render(frame, area, state);
         }
         if state.approvals.current().is_some() {
             self.approval.render(frame, area, state);
