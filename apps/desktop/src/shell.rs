@@ -1,4 +1,4 @@
-//! A workspace's window: the title bar, the chat column (the native conversation of the shown
+//! The home's window: the title bar, the chat column (the native conversation of the shown
 //! session) and the stage (its desk as tabs).
 
 use std::collections::{HashMap, HashSet};
@@ -9,7 +9,6 @@ use std::time::Instant;
 use base64::Engine;
 use composer_client::{Connection, Endpoint, Event, Store};
 use composer_core::LinkTarget;
-use composer_protocol::http::SiteSummary;
 use composer_protocol::{ClientCommand, CommandResult, DeskEntry, DeskTab, ServerMessage};
 use gpui::{
     Context, Entity, ExternalPaths, FocusHandle, Focusable, MouseButton, MouseDownEvent,
@@ -20,8 +19,8 @@ use tokio::sync::mpsc;
 use crate::browser_tabs::BrowserTabs;
 use crate::chat_pane::{ChatEvent, ChatPane};
 use crate::chat_width::ChatWidth;
-use crate::desktop::{self, Desktop};
-use crate::home_view::{HomeEvent, HomeTab, HomeView};
+use crate::desktop::Desktop;
+use crate::home_view::{HomeEvent, HomeView};
 use crate::link_state::LinkState;
 use crate::notice::Notice;
 use crate::outgoing::Outgoing;
@@ -29,13 +28,12 @@ use crate::overlay_frame::OverlayFrame;
 use crate::page_refresh;
 use crate::pick_lists;
 use crate::picker::{Item, Pick, Picker, PickerEvent};
-use crate::project_binding::ProjectBinding;
 use crate::refresher::{Refresher, SETTLE};
 use crate::stage_tabs;
 use crate::term_pane::{FONT, PaneEvent, TermPane};
 use crate::terminal_link::TerminalLink;
 use crate::theme::*;
-use crate::view_urls::{AuthCookie, auth_cookie, origin, paths_text, view_url};
+use crate::view_urls::{AuthCookie, auth_cookie, paths_text, view_url};
 use crate::web_pane::{WebEvent, WebPane};
 
 actions!(
@@ -47,17 +45,7 @@ actions!(
         NextTab,
         PrevTab,
         Palette,
-        PickWorkspace,
-        PickSession,
-        Workspace1,
-        Workspace2,
-        Workspace3,
-        Workspace4,
-        Workspace5,
-        Workspace6,
-        Workspace7,
-        Workspace8,
-        Workspace9
+        PickSession
     ]
 );
 
@@ -69,19 +57,15 @@ const STATUS_BAR: f32 = 26.;
 const HISTORY: u32 = 60;
 
 pub struct Shell {
-    workspace: String,
-    /// The workspace's colour (its stripe and name), so which one is in front is unmistakable.
-    colour: u32,
     /// The palette or a picker, over the window.
     overlay: Option<Entity<Picker>>,
     endpoint: Endpoint,
     connection: Connection,
     ids: Arc<AtomicU64>,
     store: Store,
-    project: ProjectBinding,
     link: LinkState,
     chat: Entity<ChatPane>,
-    /// The workspace home, shown instead of the chat and the stage.
+    /// The home, shown instead of the chat and the stage.
     home: Option<Entity<HomeView>>,
     /// Stage terminals, by terminal id.
     panes: HashMap<String, Entity<TermPane>>,
@@ -94,8 +78,6 @@ pub struct Shell {
     /// fires, finds nothing pending, and re-arms only if something waits by then.
     refresh_armed: bool,
     subscriptions: Vec<Subscription>,
-    /// The workspace's sites, as last fetched (the palette and the live view's name).
-    sites: Vec<SiteSummary>,
     chat_width: ChatWidth,
     dragging: bool,
     /// Show what the agent opens (else it is only marked unseen). The client's choice.
@@ -111,8 +93,6 @@ pub struct Shell {
 
 impl Shell {
     pub fn new(
-        workspace: String,
-        colour: u32,
         endpoint: Endpoint,
         connection: Connection,
         mut events: mpsc::UnboundedReceiver<Event>,
@@ -134,14 +114,11 @@ impl Shell {
             shell.on_chat(event.clone(), cx)
         })];
         Self {
-            workspace,
-            colour,
             overlay: None,
             endpoint,
             connection,
             ids: Arc::new(AtomicU64::new(FIRST_IDS)),
             store: Store::default(),
-            project: ProjectBinding::default(),
             link: LinkState::Connecting,
             chat,
             home: None,
@@ -150,7 +127,6 @@ impl Shell {
             refresh: Refresher::default(),
             refresh_armed: false,
             subscriptions,
-            sites: Vec::new(),
             chat_width: ChatWidth::DEFAULT,
             dragging: false,
             follow: true,
@@ -177,16 +153,13 @@ impl Shell {
                     },
                     cx,
                 );
-                self.project.reset();
                 self.store.reconnected();
-                self.chat.update(cx, |chat, _| chat.reconnected());
                 self.sync_approvals(cx);
                 self.sync_home(cx);
                 // All the sessions, for the switcher (updates follow as events); the first
                 // reply also picks the session to show.
                 self.ask(ClientCommand::SessionList, cx);
-                self.refresh_sites(cx);
-                // Stage panes start over from the server's scrollback; apps get fresh tokens.
+                // Stage panes start over from the server's scrollback.
                 self.panes.clear();
                 self.webs.clear();
                 if let Some(session) = self.store.attached.clone() {
@@ -252,9 +225,6 @@ impl Shell {
             // browser; this only routes and asks.
             ServerMessage::PageChanged { url, .. } => {
                 self.changed(page_refresh::page_tabs(&self.store.desk, url), cx)
-            }
-            ServerMessage::ProjectChanged { project, .. } => {
-                self.changed(page_refresh::changes_tabs(&self.store.desk, project), cx)
             }
             _ => {}
         }
@@ -338,7 +308,7 @@ impl Shell {
         cx.notify();
     }
 
-    /// The first session list: show the latest of the user's sessions, or start one.
+    /// The first session list: show the latest session, or start one.
     fn pick_first_session(&mut self, cx: &mut Context<Self>) {
         if self.store.attached.is_some() {
             return;
@@ -347,17 +317,17 @@ impl Shell {
             .store
             .sessions
             .iter()
-            .filter(|s| s.worker.is_none())
             .max_by(|a, b| a.updated.cmp(&b.updated))
             .map(|s| s.id.clone());
         match latest {
             Some(session) => self.show_session(session, cx),
-            None => self.new_session(None, cx),
+            None => self.new_session(cx),
         }
     }
 
-    /// Start a session as the orchestrator, in `project` or none.
-    fn new_session(&mut self, project: Option<String>, cx: &mut Context<Self>) {
+    /// Start a session as the default agent, in the shown session's project (none at first).
+    fn new_session(&mut self, cx: &mut Context<Self>) {
+        let project = self.shown_info().and_then(|info| info.project.clone());
         let connection = self.connection.clone();
         cx.spawn(async move |this, cx| {
             let created = connection.request(pick_lists::new_session(project)).await;
@@ -381,10 +351,6 @@ impl Shell {
 
     /// The shown session's agent, state and site, for the chat.
     fn sync_info(&mut self, cx: &mut Context<Self>) {
-        let project = self.shown_info().and_then(|info| info.project.clone());
-        for command in self.project.sync(project.as_deref()) {
-            self.ask(command, cx);
-        }
         let info = self
             .store
             .attached
@@ -409,18 +375,13 @@ impl Shell {
             .update(cx, |chat, cx| chat.set_approvals(waiting, cx));
     }
 
-    /// Shows the workspace home on `tab` (instead of the chat and the stage).
-    fn open_home(&mut self, tab: HomeTab, window: &mut Window, cx: &mut Context<Self>) {
+    /// Shows the home (instead of the chat and the stage).
+    fn open_home(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let home = match self.home.clone() {
-            Some(home) => {
-                home.update(cx, |home, cx| home.set_tab(tab, cx));
-                home
-            }
+            Some(home) => home,
             None => {
-                let (workspace, colour) = (self.workspace.clone(), self.colour);
-                let (connection, endpoint) = (self.connection.clone(), self.endpoint.clone());
-                let home =
-                    cx.new(|cx| HomeView::new(tab, workspace, colour, connection, endpoint, cx));
+                let connection = self.connection.clone();
+                let home = cx.new(|cx| HomeView::new(connection, cx));
                 self.subscriptions.push(cx.subscribe_in(
                     &home,
                     window,
@@ -461,13 +422,9 @@ impl Shell {
                 self.show_session(session, cx);
             }
             HomeEvent::Back => self.close_home(window, cx),
-            HomeEvent::NewSession(Some(project)) => {
+            HomeEvent::NewSession => {
                 self.close_home(window, cx);
-                self.new_session(Some(project), cx);
-            }
-            HomeEvent::NewSession(None) => {
-                self.close_home(window, cx);
-                self.open_new_session_menu(window, cx);
+                self.new_session(cx);
             }
             HomeEvent::Answer { request, decision } => {
                 self.ask(ClientCommand::ApprovalRespond { request, decision }, cx)
@@ -496,16 +453,12 @@ impl Shell {
             return;
         }
         let Some(session) = self.store.attached.clone() else {
-            // Nowhere to send it: a verdict the chat put in its outbox didn't go.
-            if let ChatEvent::Send { send, .. } = &event {
-                self.send_failed(send.clone(), cx);
-            }
             self.link = self.link.refused("no session yet".into());
             cx.notify();
             return;
         };
         match event {
-            // To the session it was written in (the chat's), which its outbox entry is under.
+            // To the session it was written in (the chat's).
             ChatEvent::Send { send, attachments } => self.send_message(send, attachments, cx),
             ChatEvent::Answer { request, decision } => {
                 self.ask(ClientCommand::ApprovalRespond { request, decision }, cx)
@@ -548,8 +501,7 @@ impl Shell {
         }
     }
 
-    /// A message from the chat. If it doesn't go, the chat gets `send` back: a verdict it shows
-    /// as sent (its outbox) is offered again rather than left saying it went.
+    /// A message from the chat.
     fn send_message(
         &mut self,
         send: Outgoing,
@@ -566,31 +518,18 @@ impl Shell {
         };
         cx.spawn(async move |this, cx| {
             let answer = connection.request(command).await;
-            let _ = this.update(cx, |shell, cx| shell.sent(answer, send, cx));
+            let _ = this.update(cx, |shell, cx| shell.sent(answer, cx));
         })
         .detach();
     }
 
     /// The server's answer to a message from the chat.
-    fn sent(
-        &mut self,
-        answer: Result<CommandResult, String>,
-        send: Outgoing,
-        cx: &mut Context<Self>,
-    ) {
+    fn sent(&mut self, answer: Result<CommandResult, String>, cx: &mut Context<Self>) {
         match answer {
             Ok(result) => self.on_result(result, cx),
-            Err(e) => {
-                self.send_failed(send, cx);
-                self.link = self.link.refused(e);
-            }
+            Err(e) => self.link = self.link.refused(e),
         }
         cx.notify();
-    }
-
-    /// `send` didn't go: back to the chat, which knows which session's outbox it was in.
-    fn send_failed(&mut self, send: Outgoing, cx: &mut Context<Self>) {
-        self.chat.update(cx, |chat, cx| chat.send_failed(&send, cx));
     }
 
     /// Sends `command`; its reply goes into the store and the panes.
@@ -887,8 +826,7 @@ impl Shell {
         }
     }
 
-    /// The shown tab's browser pane, if it is a browser tab and has none yet: a view's URL right
-    /// away, an app's from `app.open`.
+    /// The shown tab's browser pane, if it is a browser tab and has none yet.
     fn load_shown(&mut self, cx: &mut Context<Self>) {
         let Some(entry) = self.shown_entry().cloned() else {
             return;
@@ -896,46 +834,19 @@ impl Shell {
         if matches!(entry.tab, DeskTab::Terminal { .. }) || !self.webs.begin(&entry.id) {
             return;
         }
-        if let Some(url) = view_url(&self.endpoint, &entry.tab) {
-            let live = entry.tab == DeskTab::LiveView;
-            // A fresh browser session for the pane's cookie, never the token.
-            let session = self.web_session(cx);
-            cx.spawn(async move |this, cx| {
-                let session = session.await;
-                let _ = this.update(cx, |shell, cx| match session {
-                    Ok(cookie) => shell.show_web(entry.id, url, live, Some(cookie), cx),
-                    Err(e) => {
-                        shell.webs.failed(&entry.id);
-                        shell.link = shell.link.refused(format!("no browser session: {e}"));
-                        cx.notify();
-                    }
-                });
-            })
-            .detach();
-            return;
-        }
-        let DeskTab::App { site, project } = entry.tab else {
+        let Some(url) = view_url(&self.endpoint, &entry.tab) else {
             return;
         };
-        let session = self.store.attached.clone();
-        let command = ClientCommand::AppOpen {
-            site,
-            project,
-            session,
-        };
-        let connection = self.connection.clone();
+        let live = entry.tab == DeskTab::LiveView;
+        // A fresh browser session for the pane's cookie, never the token.
+        let session = self.web_session(cx);
         cx.spawn(async move |this, cx| {
-            let answer = connection.request(command).await;
-            let _ = this.update(cx, |shell, cx| match answer {
-                // The server knows the session it was opened from (the app is told on load).
-                Ok(CommandResult::AppOpened { opened }) => {
-                    let url = format!("{}{}", origin(shell.endpoint.base()), opened.url);
-                    shell.show_web(entry.id, url, false, None, cx);
-                }
-                Ok(_) => {}
+            let session = session.await;
+            let _ = this.update(cx, |shell, cx| match session {
+                Ok(cookie) => shell.show_web(entry.id, url, live, Some(cookie), cx),
                 Err(e) => {
                     shell.webs.failed(&entry.id);
-                    shell.link = shell.link.refused(e);
+                    shell.link = shell.link.refused(format!("no browser session: {e}"));
                     cx.notify();
                 }
             });
@@ -1043,12 +954,6 @@ impl Shell {
         cx.notify();
     }
 
-    fn open_workspaces(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let items = pick_lists::workspaces(cx.global::<Desktop>().workspaces(), &self.workspace);
-        let picker = cx.new(|cx| Picker::new("workspace", items, cx));
-        self.show_picker(picker, window, cx);
-    }
-
     fn open_sessions(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let items = pick_lists::sessions(
             &self.store.sessions,
@@ -1060,7 +965,7 @@ impl Shell {
             label: "All sessions…".into(),
             detail: "ctrl+shift+h".into(),
             note: String::new(),
-            group: "workspace",
+            group: "home",
             pick: Pick::Home,
         });
         let picker = cx.new(|cx| Picker::new("session", items, cx));
@@ -1070,49 +975,6 @@ impl Shell {
     fn shown_info(&self) -> Option<&composer_protocol::SessionInfo> {
         let id = self.store.attached.as_ref()?;
         self.store.sessions.iter().find(|s| &s.id == id)
-    }
-
-    /// The projects to put the shown session in (fetched as it opens).
-    fn open_projects_menu(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let current = self.shown_info().and_then(|s| s.project.clone());
-        self.open_project_list(
-            "project",
-            move |projects| pick_lists::projects(projects, current.as_deref()),
-            window,
-            cx,
-        );
-    }
-
-    /// New session: the projects it can start in (it always runs as the orchestrator).
-    fn open_new_session_menu(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.open_project_list("new-session", pick_lists::new_session_projects, window, cx);
-    }
-
-    /// A project picker over `GET /api/projects`, its rows built by `items` once they arrive.
-    fn open_project_list(
-        &mut self,
-        title: &'static str,
-        items: impl FnOnce(&[composer_protocol::http::ProjectSummary]) -> Vec<Item> + 'static,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        let picker = cx.new(|cx| Picker::new(title, vec![], cx));
-        let endpoint = self.endpoint.clone();
-        let fetched = cx.global::<Desktop>().spawn(async move {
-            endpoint
-                .get::<Vec<composer_protocol::http::ProjectSummary>>("/api/projects")
-                .await
-                .unwrap_or_default()
-        });
-        let weak = picker.downgrade();
-        cx.spawn(async move |_, cx| {
-            if let Ok(projects) = fetched.await {
-                let items = items(&projects);
-                let _ = weak.update(cx, |picker, cx| picker.extend(items, cx));
-            }
-        })
-        .detach();
-        self.show_picker(picker, window, cx);
     }
 
     /// The provider's models for the shown session.
@@ -1143,7 +1005,7 @@ impl Shell {
         self.show_picker(picker, window, cx);
     }
 
-    /// Commands, then sessions; the workspace's sites and Home apps join when fetched.
+    /// Commands, then sessions; the sites join when fetched.
     fn open_palette(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let mut items = pick_lists::commands(self.follow);
         items.extend(pick_lists::leave_site(self.session_site()));
@@ -1155,49 +1017,22 @@ impl Shell {
         let picker = cx.new(|cx| Picker::new("palette", items, cx));
         let endpoint = self.endpoint.clone();
         let fetched = cx.global::<Desktop>().spawn(async move {
-            let sites: Vec<composer_protocol::http::SiteSummary> =
-                endpoint.get("/api/sites").await.unwrap_or_default();
-            let apps: Option<composer_protocol::http::AppList> =
-                endpoint.get("/api/apps").await.ok();
-            let launchers: Vec<serde_json::Value> =
-                endpoint.get("/api/launcher").await.unwrap_or_default();
-            (sites, apps, launchers)
+            endpoint
+                .get::<Vec<composer_protocol::http::SiteSummary>>("/api/sites")
+                .await
+                .unwrap_or_default()
         });
         let weak = picker.downgrade();
         cx.spawn(async move |this, cx| {
-            let Ok((sites, apps, launchers)) = fetched.await else {
+            let Ok(sites) = fetched.await else {
                 return;
             };
             // The current site may have changed while the catalog was fetched.
-            let site_items = this
+            let mut more = this
                 .update(cx, |shell, _| {
-                    shell.sites = sites.clone();
                     pick_lists::sites(&sites, shell.session_site())
                 })
                 .unwrap_or_default();
-            let mut more: Vec<Item> = apps
-                .map(|list| list.apps)
-                .unwrap_or_default()
-                .into_iter()
-                .map(|app| Item {
-                    label: format!("app: {}", app.label),
-                    detail: app.site.clone(),
-                    note: String::new(),
-                    group: "stage",
-                    pick: Pick::App(app.site),
-                })
-                .collect();
-            more.extend(launchers.iter().filter_map(|l| {
-                let name = l["name"].as_str()?.to_string();
-                Some(Item {
-                    label: format!("launch: {name}"),
-                    detail: l["command"].as_str().unwrap_or_default().to_string(),
-                    note: String::new(),
-                    group: "launch",
-                    pick: Pick::Launch(name),
-                })
-            }));
-            more.extend(site_items);
             more.extend(sites.into_iter().map(|site| Item {
                 label: format!("page: {}", site.title),
                 detail: format!("site://{}", site.name),
@@ -1213,45 +1048,19 @@ impl Shell {
 
     fn picked(&mut self, pick: Pick, window: &mut Window, cx: &mut Context<Self>) {
         match pick {
-            Pick::Workspace(name) => cx.defer(move |cx| desktop::open(&name, cx)),
             Pick::Session(session) => self.show_session(session, cx),
-            Pick::NewSession => self.open_new_session_menu(window, cx),
-            Pick::NewSessionIn(project) => self.new_session(project, cx),
+            Pick::NewSession => self.new_session(cx),
             Pick::Page(url) => self.open_page(url, cx),
-            Pick::App(site) => {
-                if let Some(session) = self.store.attached.clone() {
-                    let tab = DeskTab::App {
-                        site,
-                        project: None,
-                    };
-                    self.ask(
-                        ClientCommand::DeskOpen {
-                            session,
-                            tab,
-                            focus: true,
-                        },
-                        cx,
-                    );
-                }
-            }
             Pick::Site(site) => self.switch_site(Some(site), cx),
             Pick::LeaveSite => self.switch_site(None, cx),
             Pick::NewTerminal => self.new_terminal(cx),
-            Pick::Launch(name) => self.launch(name, cx),
             Pick::AttachFile => self.attach_file(cx),
             Pick::ToggleFollow => self.follow = !self.follow,
-            Pick::Workspaces => self.open_workspaces(window, cx),
             Pick::Sessions => self.open_sessions(window, cx),
-            Pick::ProjectMenu => self.open_projects_menu(window, cx),
             Pick::ModelMenu => self.open_models_menu(window, cx),
             Pick::Compact => {
                 if let Some(session) = self.store.attached.clone() {
                     self.ask(ClientCommand::SessionCompact { session }, cx);
-                }
-            }
-            Pick::SetProject(path) => {
-                if let Some(session) = self.store.attached.clone() {
-                    self.ask(ClientCommand::ProjectSet { session, path }, cx);
                 }
             }
             Pick::SetModel(model) => {
@@ -1259,8 +1068,7 @@ impl Shell {
                     self.ask(ClientCommand::ModelSet { session, model }, cx);
                 }
             }
-            Pick::Home => self.open_home(HomeTab::Sessions, window, cx),
-            Pick::Projects => self.open_home(HomeTab::Projects, window, cx),
+            Pick::Home => self.open_home(window, cx),
         }
     }
 
@@ -1275,28 +1083,7 @@ impl Shell {
             .as_deref()
     }
 
-    /// The sites listing, for the live view's name and the palette.
-    fn refresh_sites(&mut self, cx: &mut Context<Self>) {
-        let endpoint = self.endpoint.clone();
-        let fetched = cx.global::<Desktop>().spawn(async move {
-            endpoint
-                .get::<Vec<SiteSummary>>("/api/sites")
-                .await
-                .unwrap_or_default()
-        });
-        cx.spawn(async move |this, cx| {
-            if let Ok(sites) = fetched.await {
-                let _ = this.update(cx, |shell, cx| {
-                    shell.sites = sites;
-                    cx.notify();
-                });
-            }
-        })
-        .detach();
-    }
-
-    /// `site.set` for the shown session: enters `site` (its application starts and
-    /// its live view opens on the stage), or leaves the current one. What the server answered,
+    /// `site.set` for the shown session: enters `site`, or leaves the current one. What the server answered,
     /// or why not, goes to a notice.
     fn switch_site(&mut self, site: Option<String>, cx: &mut Context<Self>) {
         let Some(session) = self.store.attached.clone() else {
@@ -1320,25 +1107,6 @@ impl Shell {
                 Notice::site(reply).show();
                 cx.notify();
             });
-        })
-        .detach();
-    }
-
-    /// Runs a `[[launcher]]` entry.
-    fn launch(&mut self, name: String, cx: &mut Context<Self>) {
-        let endpoint = self.endpoint.clone();
-        let path = format!("/api/launcher/{name}");
-        let done = cx
-            .global::<Desktop>()
-            .spawn(async move { endpoint.post::<serde_json::Value>(&path).await });
-        cx.spawn(async move |this, cx| {
-            let answer = done.await.unwrap_or_else(|e| Err(e.to_string()));
-            if let Err(e) = answer {
-                let _ = this.update(cx, |shell, cx| {
-                    shell.link = shell.link.refused(format!("launch {name}: {e}"));
-                    cx.notify();
-                });
-            }
         })
         .detach();
     }
@@ -1405,8 +1173,7 @@ impl Shell {
     /// A finished turn or an approval needed, while the window is behind: a notification.
     fn notify_if_away(&self, message: &ServerMessage) {
         if !self.active
-            && let Some(notice) =
-                Notice::of(message, self.store.attached.as_deref(), &self.workspace)
+            && let Some(notice) = Notice::of(message, self.store.attached.as_deref())
         {
             notice.show();
         }
@@ -1464,7 +1231,6 @@ impl Render for Shell {
         self.sync_web_visibility(cx);
         self.keep_stage_focus(window, cx);
         let shown = stage_tabs::shown(&self.store.desk).map(str::to_string);
-        let live_app = stage_tabs::live_app(self.session_site(), &self.sites).map(str::to_string);
         let tabs = self.store.desk.tabs.iter().map(|entry| {
             let id = entry.id.clone();
             let close = entry.id.clone();
@@ -1516,7 +1282,7 @@ impl Render for Shell {
                             .border_color(rgb(ACCENT_SOFT)),
                     )
                 })
-                .child(stage_tabs::label(&entry.tab, live_app.as_deref()))
+                .child(stage_tabs::label(&entry.tab))
                 .child(
                     div()
                         .id(gpui::SharedString::from(format!("close-{}", entry.id)))
@@ -1547,7 +1313,7 @@ impl Render for Shell {
             (None, Some(web), _) => web.clone().into_any_element(),
             (None, None, true) => placeholder("Opening…").into_any_element(),
             (None, None, false) => placeholder(
-                "Nothing on the stage. The agent can put apps and pages here; + opens a terminal.",
+                "Nothing on the stage. The agent can put pages here; + opens a terminal.",
             )
             .into_any_element(),
         };
@@ -1626,25 +1392,9 @@ impl Render for Shell {
             .track_focus(&self.focus)
             .on_action(cx.listener(|shell, _: &Palette, window, cx| shell.open_palette(window, cx)))
             .on_action(
-                cx.listener(|shell, _: &PickWorkspace, window, cx| {
-                    shell.open_workspaces(window, cx)
-                }),
-            )
-            .on_action(
                 cx.listener(|shell, _: &PickSession, window, cx| shell.open_sessions(window, cx)),
             )
-            .on_action(cx.listener(|_, _: &Workspace1, _, cx| jump(0, cx)))
-            .on_action(cx.listener(|_, _: &Workspace2, _, cx| jump(1, cx)))
-            .on_action(cx.listener(|_, _: &Workspace3, _, cx| jump(2, cx)))
-            .on_action(cx.listener(|_, _: &Workspace4, _, cx| jump(3, cx)))
-            .on_action(cx.listener(|_, _: &Workspace5, _, cx| jump(4, cx)))
-            .on_action(cx.listener(|_, _: &Workspace6, _, cx| jump(5, cx)))
-            .on_action(cx.listener(|_, _: &Workspace7, _, cx| jump(6, cx)))
-            .on_action(cx.listener(|_, _: &Workspace8, _, cx| jump(7, cx)))
-            .on_action(cx.listener(|_, _: &Workspace9, _, cx| jump(8, cx)))
-            .on_action(cx.listener(|shell, _: &Home, window, cx| {
-                shell.open_home(HomeTab::Sessions, window, cx)
-            }))
+            .on_action(cx.listener(|shell, _: &Home, window, cx| shell.open_home(window, cx)))
             .on_action(cx.listener(|shell, _: &FocusChat, window, cx| {
                 shell.close_home(window, cx);
                 window.focus(&shell.chat.read(cx).focus_handle(cx), cx);
@@ -1680,8 +1430,8 @@ impl Render for Shell {
                     cx.notify();
                 }),
             )
-            // The title bar: the workspace (its colour on the dot: which one, at a glance), the
-            // shown session, the link and follow; Sessions and Commands at the right.
+            // The title bar: the home, the shown session, the link and follow; Sessions and
+            // Commands at the right.
             .child(
                 div()
                     .h(px(TITLE_BAR))
@@ -1695,19 +1445,19 @@ impl Render for Shell {
                     .border_b_1()
                     .border_color(rgb(BORDER))
                     .text_size(px(TEXT_SIZE))
-                    .child(div().size(px(8.)).rounded(px(R_DOT)).bg(rgb(self.colour)))
+                    .child(div().size(px(8.)).rounded(px(R_DOT)).bg(rgb(ACCENT)))
                     .child(
-                        // The workspace's name opens its home.
+                        // Opens the home.
                         div()
-                            .id("workspace-name")
+                            .id("home-name")
                             .text_color(rgb(FG_BRIGHT))
                             .font_weight(gpui::FontWeight::SEMIBOLD)
                             .cursor_pointer()
                             .hover(|d| d.text_color(rgb(ACCENT_SOFT)))
-                            .on_click(cx.listener(|shell, _, window, cx| {
-                                shell.open_home(HomeTab::Sessions, window, cx)
-                            }))
-                            .child(self.workspace.clone()),
+                            .on_click(
+                                cx.listener(|shell, _, window, cx| shell.open_home(window, cx)),
+                            )
+                            .child("composer"),
                     )
                     .child(div().text_color(rgb(FG_FAINT)).child("/"))
                     .when(in_home, |d| {
@@ -1888,7 +1638,7 @@ impl Render for Shell {
                         ),
                 )
             })
-            // The status bar: what is live, what waits for you, workers; the keys at the right.
+            // The status bar: what waits for you; the keys at the right.
             .child(
                 div()
                     .h(px(STATUS_BAR))
@@ -1903,9 +1653,6 @@ impl Render for Shell {
                     .border_color(rgb(BORDER_2))
                     .text_size(px(TEXT_SMALL))
                     .text_color(rgb(FG_FAINT))
-                    .when_some(live_app.clone(), |d, app| {
-                        d.child(div().text_color(rgb(OK)).child(format!("● live · {app}")))
-                    })
                     .when(waiting > 0, |d| {
                         d.child(
                             div()
@@ -1913,7 +1660,6 @@ impl Render for Shell {
                                 .child(format!("! {waiting} waiting")),
                         )
                     })
-                    .child(workers_label(cx.global::<Desktop>().workers()))
                     .child(div().flex_1())
                     .child(
                         div()
@@ -1972,21 +1718,6 @@ impl Render for Shell {
                             .child(picker),
                     )
             }))
-    }
-}
-
-/// Shows the `n`th workspace's window (`ctrl+alt+1..9`).
-fn jump(n: usize, cx: &mut gpui::App) {
-    if let Some(name) = cx.global::<Desktop>().workspaces().get(n).cloned() {
-        cx.defer(move |cx| desktop::open(&name, cx));
-    }
-}
-
-fn workers_label(running: u64) -> String {
-    match running {
-        0 => "no workers running".into(),
-        1 => "1 worker running".into(),
-        n => format!("{n} workers running"),
     }
 }
 

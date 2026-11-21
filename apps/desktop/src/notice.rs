@@ -11,12 +11,12 @@ pub struct Notice {
 
 impl Notice {
     /// A finished turn of the shown session, or any approval waiting; nothing else.
-    pub fn of(message: &ServerMessage, shown: Option<&str>, workspace: &str) -> Option<Self> {
+    pub fn of(message: &ServerMessage, shown: Option<&str>) -> Option<Self> {
         match message {
             ServerMessage::TurnDone { session, .. } if shown == Some(session.as_str()) => {
                 Some(Self {
                     summary: "The agent is done",
-                    body: format!("{workspace} · #{session}"),
+                    body: format!("#{session}"),
                 })
             }
             ServerMessage::ApprovalRequest {
@@ -33,7 +33,7 @@ impl Notice {
                 };
                 Some(Self {
                     summary: "An approval is waiting",
-                    body: format!("{what} · {workspace} · #{session}"),
+                    body: format!("{what} · #{session}"),
                 })
             }
             _ => None,
@@ -76,7 +76,7 @@ mod tests {
 
     #[test]
     fn a_site_switch_says_what_happened_or_why_not() {
-        let said = "Entered 3d (3D). Started the blender application.";
+        let said = "Entered 3d (3D).";
         assert_eq!(Notice::site(Ok(said.into())).body, said);
         let refused = Notice::site(Err("no site `x`".into()));
         assert_eq!(refused.summary, "Site not changed");
@@ -91,14 +91,14 @@ mod tests {
             )
         };
         assert_eq!(
-            Notice::of(&done("a"), Some("a"), "lab"),
+            Notice::of(&done("a"), Some("a")),
             Some(Notice {
                 summary: "The agent is done",
-                body: "lab · #a".into()
+                body: "#a".into()
             })
         );
         assert_eq!(
-            Notice::of(&done("b"), Some("a"), "lab"),
+            Notice::of(&done("b"), Some("a")),
             None,
             "another session's turn"
         );
@@ -107,10 +107,10 @@ mod tests {
             "site": "cad", "recipe": "export", "args": [], "body": "", "hash": "h"
         }));
         assert_eq!(
-            Notice::of(&approval, Some("a"), "lab").map(|n| n.body),
-            Some("cad › export · lab · #b".into())
+            Notice::of(&approval, Some("a")).map(|n| n.body),
+            Some("cad › export · #b".into())
         );
         let other = message(serde_json::json!({"type": "turn.started", "session": "a", "seq": 2}));
-        assert_eq!(Notice::of(&other, Some("a"), "lab"), None);
+        assert_eq!(Notice::of(&other, Some("a")), None);
     }
 }

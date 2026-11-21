@@ -1,4 +1,4 @@
-//! A list to pick from by typing (the palette, the workspace picker, the session switcher): a
+//! A list to pick from by typing (the palette, the session switcher, the model menu): a
 //! query line, the matching items best first, ↑/↓ (or ctrl+p/ctrl+n) to move, Enter to pick,
 //! Escape to close.
 
@@ -13,16 +13,10 @@ use crate::theme::*;
 /// What picking an item does (the window carries it out).
 #[derive(Debug, Clone, PartialEq)]
 pub enum Pick {
-    Workspace(String),
     Session(String),
-    /// A new session: asks for its project (it always runs as the orchestrator).
+    /// A new session, as the default agent in the shown session's project.
     NewSession,
-    /// Start the new session in this project (a folder) or none.
-    NewSessionIn(Option<String>),
     Page(String),
-    App(String),
-    /// A `[[launcher]]` entry (it runs on this machine: the server's, on Linux).
-    Launch(String),
     AttachFile,
     NewTerminal,
     ToggleFollow,
@@ -30,18 +24,14 @@ pub enum Pick {
     Site(String),
     /// Leave the shown session's site.
     LeaveSite,
-    Workspaces,
     Sessions,
-    /// Pick the shown session's project, or its model; compact it.
-    ProjectMenu,
+    /// Pick the shown session's model; compact it.
     ModelMenu,
     Compact,
-    /// The shown session's project (a folder) or none; its model or the server's.
-    SetProject(Option<String>),
+    /// The shown session's model or the server's.
     SetModel(Option<String>),
-    /// The workspace home: its sessions, or its projects.
+    /// The home: its sessions.
     Home,
-    Projects,
 }
 
 #[derive(Debug, Clone)]
@@ -51,7 +41,7 @@ pub struct Item {
     pub detail: String,
     /// A second line under the label (a session's last words); empty for most.
     pub note: String,
-    /// The palette's section (session, site, stage, workspace, sessions…): headed while the query
+    /// The palette's section (session, site, stage, home, sessions…): headed while the query
     /// is empty, items of a group kept together.
     pub group: &'static str,
     pub pick: Pick,
@@ -75,16 +65,7 @@ pub struct Picker {
 const ROWS: usize = 12;
 
 /// The palette's sections, in the order they are shown while nothing is typed.
-const GROUPS: [&str; 8] = [
-    "session",
-    "site",
-    "stage",
-    "launch",
-    "pages",
-    "workspace",
-    "sessions",
-    "",
-];
+const GROUPS: [&str; 7] = ["session", "site", "stage", "pages", "home", "sessions", ""];
 
 impl EventEmitter<PickerEvent> for Picker {}
 
@@ -135,9 +116,6 @@ impl Picker {
     fn words(&self) -> (&'static str, &'static str, &'static str) {
         match self.title {
             "session" => ("Switch session", "Find a session", "session"),
-            "workspace" => ("Switch workspace", "Find a workspace", "workspace"),
-            "project" => ("Set the session's project", "Find a project", "project"),
-            "new-session" => ("New session · orchestrator", "Find a project", "project"),
             "model" => ("The session's model", "Find a model", "model"),
             _ => ("Commands", "Type a command", "command"),
         }

@@ -1,8 +1,7 @@
-//! Which stage tabs a page or project change is about.
+//! Which stage tabs a page change is about.
 //!
 //! The server broadcasts `page.changed` (scoped per page URL,
-//! `crates/server/src/api/event_scope.rs`) and `project.changed` (scoped per open project). A tab
-//! showing one of those must show the new text without the user reloading it — that is the "watch
+//! `crates/server/src/api/event_scope.rs`). A tab showing that page must show the new text without the user reloading it — that is the "watch
 //! the agent work in the page you asked it to change" half of the stage. This module answers one
 //! question and nothing else: *which tabs is this event about*. What a tab then does, and when, is
 //! [`crate::refresher`].
@@ -43,21 +42,12 @@ fn shown_page(entry: &DeskEntry) -> Option<&str> {
     Some(entry.page_url().unwrap_or(url))
 }
 
-/// The stage tabs showing page `url`, in desk order. A tab of any other kind never matches: an app,
-/// a live view or a terminal is a running program, not a page, and reloading one would interrupt it.
+/// The stage tabs showing page `url`, in desk order. A tab of any other kind never matches: a live
+/// view or a terminal is a running program, not a page, and reloading one would interrupt it.
 pub fn page_tabs(desk: &Desk, url: &str) -> Vec<String> {
     desk.tabs
         .iter()
         .filter(|entry| shown_page(entry).is_some_and(|shown| same_page(shown, url)))
-        .map(|entry| entry.id.clone())
-        .collect()
-}
-
-/// The stage tabs showing the changes of project `project`.
-pub fn changes_tabs(desk: &Desk, project: &str) -> Vec<String> {
-    desk.tabs
-        .iter()
-        .filter(|entry| matches!(&entry.tab, DeskTab::Changes { project: p } if p == project))
         .map(|entry| entry.id.clone())
         .collect()
 }
@@ -97,13 +87,6 @@ mod tests {
                 (x_id.as_str(), x_tab),
                 (other_id.as_str(), other_tab),
                 ("t3", DeskTab::Terminal { id: "t3".into() }),
-                (
-                    "t4",
-                    DeskTab::App {
-                        site: "video".into(),
-                        project: None,
-                    },
-                ),
                 ("t5", DeskTab::LiveView),
             ],
             Some(x_id.as_str()),
@@ -127,7 +110,7 @@ mod tests {
             page_tabs(&d, "site://plans/index.md").is_empty(),
             "a site's index is neither open page"
         );
-        // Exactly one tab matched: an app, a live view and a terminal are never reloaded by a
+        // Exactly one tab matched: a live view and a terminal are never reloaded by a
         // page change.
         assert_eq!(page_tabs(&d, "site://plans/x.md").len(), 1);
     }
@@ -244,30 +227,5 @@ mod tests {
         assert!(page_tabs(&d, "site://a.md").is_empty());
         assert!(page_tabs(&d, "site://a/bc.md").is_empty());
         assert!(page_tabs(&d, "site://a/b/c/d.md").is_empty(), "one deeper");
-    }
-
-    #[test]
-    fn changes_tabs_only_of_that_project() {
-        let (page_id, page_tab) = opened("site://plans/x.md");
-        let d = desk(
-            &[
-                (
-                    "c1",
-                    DeskTab::Changes {
-                        project: "game".into(),
-                    },
-                ),
-                (
-                    "c2",
-                    DeskTab::Changes {
-                        project: "other".into(),
-                    },
-                ),
-                (page_id.as_str(), page_tab),
-            ],
-            Some("c1"),
-        );
-        assert_eq!(changes_tabs(&d, "game"), ["c1"]);
-        assert!(changes_tabs(&d, "gone").is_empty());
     }
 }

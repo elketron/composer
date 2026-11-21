@@ -1,10 +1,9 @@
-//! What the workspace home lists (mockups/next 11, 12): sessions split into NEEDS YOU and
-//! RECENT, projects, and their ages; plain data from the store and `GET /api/projects`.
+//! What the home lists (mockups/next 11): sessions split into NEEDS YOU and RECENT, and their
+//! ages; plain data from the store.
 
 use std::collections::BTreeMap;
 
 use composer_client::Approval;
-use composer_protocol::http::ProjectSummary;
 use composer_protocol::{ApprovalKind, SessionInfo, TurnState};
 
 use crate::pick_lists::project_name;
@@ -23,26 +22,13 @@ pub struct SessionRow {
     pub age: String,
 }
 
-/// A project's row.
-#[derive(Debug, Clone, PartialEq)]
-pub struct ProjectRow {
-    pub name: String,
-    /// `! 1 approval`, empty when nothing waits.
-    pub waiting: String,
-    /// `2 sessions · 1 running`.
-    pub line: String,
-    pub path: String,
-    pub age: String,
-}
-
-/// The user's sessions (not workers'): those waiting for you, then the rest, each most recent
-/// first.
+/// The sessions: those waiting for you, then the rest, each most recent first.
 pub fn session_rows(
     sessions: &[SessionInfo],
     approvals: &BTreeMap<String, Approval>,
     now: i64,
 ) -> (Vec<SessionRow>, Vec<SessionRow>) {
-    let mut sessions: Vec<&SessionInfo> = sessions.iter().filter(|s| s.worker.is_none()).collect();
+    let mut sessions: Vec<&SessionInfo> = sessions.iter().collect();
     sessions.sort_by(|a, b| b.updated.cmp(&a.updated));
     let (mut needs, mut recent) = (Vec::new(), Vec::new());
     for s in sessions {
@@ -83,9 +69,7 @@ pub fn asked_line(approval: &Approval) -> String {
     match approval.kind {
         ApprovalKind::Recipe => format!("approve run {} › {}", approval.site, approval.recipe),
         _ if !approval.title.is_empty() => format!("approve {}", approval.title),
-        ApprovalKind::Merge => "approve merge".into(),
         ApprovalKind::Tool | ApprovalKind::Mcp => "approve a tool".into(),
-        ApprovalKind::Publish => "approve publish".into(),
     }
 }
 
@@ -96,37 +80,6 @@ pub fn state_word(state: TurnState) -> &'static str {
         TurnState::Waiting => "waiting",
         TurnState::AwaitingApproval => "approval",
     }
-}
-
-pub fn project_rows(projects: &[ProjectSummary], now: i64) -> Vec<ProjectRow> {
-    let mut rows: Vec<&ProjectSummary> = projects.iter().collect();
-    // Used most recently first; never used ones by their files' age.
-    let key = |p: &ProjectSummary| p.last_used.clone().unwrap_or_else(|| p.modified.clone());
-    rows.sort_by_key(|p| std::cmp::Reverse(key(p)));
-    rows.into_iter()
-        .map(|p| {
-            let plural =
-                |n: u32, word: &str| format!("{n} {word}{}", if n == 1 { "" } else { "s" });
-            let line = match (p.sessions, p.running) {
-                (0, _) => "no sessions".to_string(),
-                (n, 0) => plural(n, "session"),
-                (n, r) => format!("{} · {r} running", plural(n, "session")),
-            };
-            ProjectRow {
-                name: p.name.clone(),
-                waiting: if p.waiting > 0 {
-                    format!("! {}", plural(p.waiting, "approval"))
-                } else {
-                    String::new()
-                },
-                line,
-                path: p.path.clone(),
-                age: epoch_secs(&key(p))
-                    .map(|then| age(now, then))
-                    .unwrap_or_default(),
-            }
-        })
-        .collect()
 }
 
 /// How long ago: `now`, `6m`, `3h`, `2d`, then the date (`Nov 11`).
@@ -201,8 +154,8 @@ mod tests {
 
     fn session(id: &str, updated: &str, state: &str) -> SessionInfo {
         serde_json::from_value(serde_json::json!({
-            "id": id, "agent": "orchestrator", "project": "/home/u/Projects/game", "site": "3d",
-            "ticket": null, "parent": null, "state": state, "last_seq": 0,
+            "id": id, "agent": "default", "project": "/home/u/Projects/game", "site": "3d",
+            "parent": null, "state": state, "last_seq": 0,
             "preview": "hello", "updated": updated
         }))
         .unwrap()
@@ -249,33 +202,5 @@ mod tests {
         let ids: Vec<&str> = recent.iter().map(|r| r.id.as_str()).collect();
         assert_eq!(ids, ["c", "a"]);
         assert_eq!(recent[0].status, "running");
-    }
-
-    #[test]
-    fn projects_by_use() {
-        let project = |name: &str, used: Option<&str>, sessions, running, waiting| ProjectSummary {
-            name: name.into(),
-            path: format!("~/Projects/{name}"),
-            modified: "2026-11-01T00:00:00Z".into(),
-            folder: String::new(),
-            sessions,
-            running,
-            waiting,
-            last_used: used.map(str::to_string),
-            page: None,
-        };
-        let now = epoch_secs("2026-11-15T12:00:00Z").unwrap();
-        let rows = project_rows(
-            &[
-                project("old", None, 0, 0, 0),
-                project("game", Some("2026-11-15T11:00:00Z"), 2, 1, 1),
-            ],
-            now,
-        );
-        assert_eq!(rows[0].name, "game");
-        assert_eq!(rows[0].line, "2 sessions · 1 running");
-        assert_eq!(rows[0].waiting, "! 1 approval");
-        assert_eq!(rows[1].line, "no sessions");
-        assert_eq!(rows[1].age, "Nov 1");
     }
 }

@@ -10,7 +10,7 @@ pub enum LinkState {
 }
 
 impl LinkState {
-    /// What the title bar adds after the workspace and project ("" when all is well).
+    /// What the title bar adds after the session and project ("" when all is well).
     pub fn suffix(&self) -> String {
         match self {
             Self::Up => String::new(),

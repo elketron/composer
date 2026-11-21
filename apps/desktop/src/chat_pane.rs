@@ -27,7 +27,6 @@ use crate::prose::{head, thinking_preview};
 use crate::term_pane::FONT;
 use crate::theme::*;
 use crate::uploads::{Upload, Uploads};
-use crate::user_review::VerdictCard;
 
 /// The chat's prose font (bundled).
 pub const PROSE: &str = "Inter";
@@ -37,8 +36,7 @@ const SHOWN_LINES: usize = 24;
 /// What the chat asks of the window.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ChatEvent {
-    /// A message, and the files that go with it. A failed send hands `send` back
-    /// ([`ChatPane::send_failed`]).
+    /// A message, and the files that go with it.
     Send {
         send: Outgoing,
         attachments: Vec<Attachment>,
@@ -65,7 +63,7 @@ pub enum ChatEvent {
 }
 
 pub struct ChatPane {
-    /// The transcript, the turn state and the outbox: what is sent is decided there.
+    /// The transcript and the turn state: what is sent is decided there.
     model: ChatModel,
     /// The session's agent and site (from its `session.updated`).
     agent: String,
@@ -274,29 +272,6 @@ impl ChatPane {
 
     fn busy(&self) -> bool {
         self.model.state() != TurnState::Idle
-    }
-
-    /// `send` didn't go: if it was a verdict, its card (in the session it was sent in) offers
-    /// its buttons again.
-    pub fn send_failed(&mut self, send: &Outgoing, cx: &mut Context<Self>) {
-        if self.model.send_failed(send) {
-            cx.notify();
-        }
-    }
-
-    /// The connection is back: what was sent before may have been lost with the server's inbox.
-    pub fn reconnected(&mut self) {
-        self.model.reconnected();
-    }
-
-    /// Pass on the verdict card: the model sends it once; a second click gets nothing.
-    fn pass(&mut self, cx: &mut Context<Self>) {
-        if self.files.ready()
-            && let Some(send) = self.model.pass()
-        {
-            self.emit_send(send, cx);
-            cx.notify();
-        }
     }
 
     fn send(&mut self, text: String, cx: &mut Context<Self>) {
@@ -774,89 +749,6 @@ impl ChatPane {
             .into_any_element()
     }
 
-    /// The user review's verdict (site://coding): Pass sends `pass`; Changes… starts `fail: `
-    /// in the composer for the why. The notes themselves stay in Hunk. Once a verdict is in the
-    /// outbox the card says so in place of its buttons, until the message comes back.
-    fn verdict(&self, card: &VerdictCard, cx: &mut Context<Self>) -> AnyElement {
-        let what = if card.ticket.is_empty() {
-            "your review".to_string()
-        } else {
-            format!("your review of {}", card.ticket)
-        };
-        let hint = match &card.sent {
-            None => "Hunk is on the stage: notes with c, then your verdict",
-            Some(_) if self.busy() => "sent: the agent reads it when this turn ends",
-            Some(_) => "sent: waiting for the agent",
-        };
-        let row = div()
-            .flex()
-            .flex_row()
-            .items_center()
-            .gap(px(9.))
-            .px(px(10.))
-            .py(px(7.))
-            .border_1()
-            .border_color(rgb(if card.sent.is_some() {
-                BORDER
-            } else {
-                WARN_DEEP
-            }))
-            .bg(rgb(PANEL_2))
-            .rounded(px(R_CARD))
-            .font_family(FONT)
-            .text_size(px(TEXT_SMALL))
-            .child(
-                div()
-                    .flex_none()
-                    .text_color(rgb(if card.sent.is_some() { FG_DIM } else { WARN }))
-                    .child(format!("◆ {what}")),
-            )
-            .child(
-                div()
-                    .flex_1()
-                    .min_w(px(0.))
-                    .overflow_hidden()
-                    .whitespace_nowrap()
-                    .text_ellipsis()
-                    .text_color(rgb(FG_FAINT))
-                    .child(hint),
-            );
-        match &card.sent {
-            // Given: what you said, quietly, and nothing to click again.
-            Some(sent) => row
-                .child(
-                    div()
-                        .flex_none()
-                        .max_w(px(220.))
-                        .overflow_hidden()
-                        .whitespace_nowrap()
-                        .text_ellipsis()
-                        .text_color(rgb(OK))
-                        .child(format!("✓ {}", sent.trim())),
-                )
-                .into_any_element(),
-            None => row
-                .child(
-                    button("verdict-changes", "Changes…", false).on_click(cx.listener(
-                        |pane, _, window, cx| {
-                            pane.draft = Draft {
-                                text: "fail: ".into(),
-                                cursor: "fail: ".len(),
-                                mode: Mode::Insert,
-                            };
-                            window.focus(&pane.focus, cx);
-                            cx.notify();
-                        },
-                    )),
-                )
-                .child(
-                    button("verdict-pass", "Pass", true)
-                        .on_click(cx.listener(|pane, _, _, cx| pane.pass(cx))),
-                )
-                .into_any_element(),
-        }
-    }
-
     /// One thinking block throughout streaming and completion, opened on a click. Its first
     /// line stays put as new paragraphs arrive; expanded, all the thinking grows in place.
     fn thinking(&self, n: usize, text: &str, live: bool, cx: &mut Context<Self>) -> AnyElement {
@@ -911,9 +803,7 @@ impl ChatPane {
         let what = match approval.kind {
             ApprovalKind::Recipe => format!("run {} › {}", approval.site, approval.recipe),
             _ if !approval.title.is_empty() => approval.title.clone(),
-            ApprovalKind::Merge => "merge".into(),
             ApprovalKind::Tool | ApprovalKind::Mcp => "use a tool".into(),
-            ApprovalKind::Publish => "publish".into(),
         };
         let args = approval.args.join(" ");
         let open = self.opened.contains(&approval.request);
@@ -1182,13 +1072,6 @@ impl ChatPane {
                 body_label = Some(agent.to_string());
             }
             body.push(self.approval(approval, cx));
-        }
-        // A Hunk review open on the stage: your verdict goes back as a message.
-        if let Some(card) = self.model.verdict_card() {
-            if body.is_empty() && body_label.is_none() {
-                body_label = Some(agent.to_string());
-            }
-            body.push(self.verdict(&card, cx));
         }
         flush(&mut body, &mut body_label, &mut rows);
         if chat.loaded && rows.is_empty() {

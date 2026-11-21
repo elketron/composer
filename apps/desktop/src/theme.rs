@@ -34,8 +34,6 @@ pub const OK: u32 = 0x4caf82;
 /// Your rule in the transcript.
 pub const OK_TEXT: u32 = 0x3d8a65;
 pub const WARN: u32 = 0xd4a843;
-/// A waiting verdict's edge.
-pub const WARN_DEEP: u32 = 0x8a6e30;
 pub const ERR: u32 = 0xe05a5a;
 pub const ERR_TEXT: u32 = 0xc05050;
 

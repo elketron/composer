@@ -10,5 +10,5 @@ in PowerShell (replace Ubuntu and yourname with your WSL distribution and Linux 
   .\composer_desktop.exe
 
 WSL must be running, and the server must listen on an address reachable from Windows. The app
-reads the workspace's local token from that home. Keep all files in this folder together: the
+reads the server's local token from that home. Keep all files in this folder together: the
 Chromium runtime and its sandbox bootstrap are included. This Windows build is not code-signed.

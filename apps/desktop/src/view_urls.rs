@@ -4,7 +4,7 @@ use composer_client::Endpoint;
 use composer_protocol::DeskTab;
 use composer_protocol::http::WebSession;
 
-/// `http://host:port` of a workspace base like `http://host:port/w/default`.
+/// `http://host:port` of a server base like `http://host:port/some/path`.
 pub fn origin(base: &str) -> &str {
     let after_scheme = base.find("://").map_or(0, |i| i + 3);
     match base[after_scheme..].find('/') {
@@ -16,8 +16,7 @@ pub fn origin(base: &str) -> &str {
 /// The URL a page, changes or live view tab shows. It never carries the token: the pane
 /// authenticates with a browser session the server made for it, set as the server's cookie
 /// through CEF before the first load ([`auth_cookie`]), so neither the token nor the session is in
-/// `document.URL` or the profile's history. Apps
-/// get theirs from `app.open`. The live view is wayai's full page through the workspace's proxy
+/// `document.URL` or the profile's history. The live view is wayai's full page through the server's proxy
 /// (`<base>/view`, not `?bare=1`): its toolbar, annotations and Drive. Whether Drive is offered
 /// is the server's call, by the credential: a paired server's device token gets the page
 /// without it.
@@ -31,7 +30,7 @@ pub fn view_url(endpoint: &Endpoint, tab: &DeskTab) -> Option<String> {
     Some(endpoint.url(&path))
 }
 
-/// The workspace's auth cookie for the panes: a browser session the server made for this
+/// The server's auth cookie for the panes: a browser session the server made for this
 /// desktop's credential (`POST <base>/api/web-session`, [`WebSession`]), never the token itself.
 /// Host-only, `Path=<route base>/`, HttpOnly, SameSite=Strict, `Secure` over https; a session
 /// cookie, as the server's own `set_cookie` (`crates/server/src/api/auth.rs`) sets it.
@@ -45,7 +44,7 @@ pub struct AuthCookie {
     pub secure: bool,
 }
 
-/// The cookie that authenticates panes of the workspace at `endpoint` with `session`; `None` for
+/// The cookie that authenticates panes of the server at `endpoint` with `session`; `None` for
 /// a base that is not http(s).
 pub fn auth_cookie(endpoint: &Endpoint, session: &WebSession) -> Option<AuthCookie> {
     let parts = parts(endpoint.base())?;
@@ -132,7 +131,7 @@ pub fn same_origin(a: &str, b: &str) -> bool {
     }
 }
 
-/// `link` is on the workspace server's origin and carries no userinfo.
+/// `link` is on the server's origin and carries no userinfo.
 fn ours(link: &str, base: &str) -> bool {
     same_origin(link, base) && parts(link).is_some_and(|p| !p.userinfo)
 }
@@ -147,7 +146,7 @@ pub enum Navigation {
     },
 }
 
-/// Whether a pane may load `url`, in its main frame or a subframe. Only the workspace server's
+/// Whether a pane may load `url`, in its main frame or a subframe. Only the server's
 /// origin, the pane's own start URL (chosen by us) and `about:blank` (plus `about:srcdoc` and
 /// same-origin `blob:` in subframes). Whatever the page asks for (script, meta refresh,
 /// redirects) goes through this, user gesture or not; only a gesture link to http(s) or mail
@@ -168,7 +167,7 @@ pub fn navigation(url: &str, base: &str, start: &str, main: bool, gesture: bool)
     }
 }
 
-/// The page a clicked link means (`site://...`, or another page's view on this workspace), so it
+/// The page a clicked link means (`site://...`, or another page's view on this server), so it
 /// opens as a tab instead of replacing this one; `None` for anything else.
 pub fn page_for(link: &str, base: &str) -> Option<String> {
     if link.starts_with("site://") {
@@ -216,11 +215,11 @@ fn encode(segment: &str) -> String {
 mod tests {
     use super::*;
 
-    const BASE: &str = "http://127.0.0.1:7420/w/default";
+    const BASE: &str = "http://127.0.0.1:7420";
 
     #[test]
     fn origins_and_views() {
-        assert_eq!(origin(BASE), "http://127.0.0.1:7420");
+        assert_eq!(origin("http://127.0.0.1:7420/a/b"), "http://127.0.0.1:7420");
         assert_eq!(origin("http://h:1"), "http://h:1");
         let endpoint = Endpoint::new(BASE, "tok");
         let page = DeskTab::Page {
@@ -228,23 +227,23 @@ mod tests {
         };
         assert_eq!(
             view_url(&endpoint, &page).unwrap(),
-            "http://127.0.0.1:7420/w/default/view/plans/x.md"
+            "http://127.0.0.1:7420/view/plans/x.md"
         );
         let changes = DeskTab::Changes {
             project: "my game".into(),
         };
         assert_eq!(
             view_url(&endpoint, &changes).unwrap(),
-            "http://127.0.0.1:7420/w/default/view/changes/my%20game"
+            "http://127.0.0.1:7420/view/changes/my%20game"
         );
         assert_eq!(
             view_url(&endpoint, &DeskTab::Terminal { id: "t".into() }),
             None
         );
-        // The full viewer page of the workspace (not `?bare=1`); the cookie authenticates it.
+        // The full viewer page (not `?bare=1`); the cookie authenticates it.
         assert_eq!(
             view_url(&endpoint, &DeskTab::LiveView).unwrap(),
-            "http://127.0.0.1:7420/w/default/view"
+            "http://127.0.0.1:7420/view"
         );
     }
 
@@ -267,25 +266,16 @@ mod tests {
             Some("site://plans/x.md")
         );
         assert_eq!(
-            page_for(
-                &format!("{BASE}/view/orchestration/tickets/0178.md#result"),
-                BASE
-            )
-            .as_deref(),
-            Some("site://orchestration/tickets/0178.md")
+            page_for(&format!("{BASE}/view/plans/x/notes.md#result"), BASE).as_deref(),
+            Some("site://plans/x/notes.md")
         );
         assert_eq!(page_for(&format!("{BASE}/view/changes/game"), BASE), None);
         assert_eq!(
-            page_for(&format!("{BASE}/orchestration/"), BASE),
+            page_for(&format!("{BASE}/plans/"), BASE),
             None,
-            "an app"
+            "not a view"
         );
         assert_eq!(page_for("https://example.com/view/x", BASE), None);
-        assert_eq!(
-            page_for("http://127.0.0.1:7420/w/other/view/x.md", BASE),
-            None,
-            "another workspace"
-        );
     }
 
     #[test]
@@ -303,15 +293,10 @@ mod tests {
             let url = view_url(&endpoint, &tab).unwrap();
             assert!(!url.contains("token") && !url.contains("sekrit"), "{url}");
         }
-        for tab in [
-            DeskTab::Terminal { id: "t".into() },
-            DeskTab::App {
-                site: "s".into(),
-                project: None,
-            },
-        ] {
-            assert_eq!(view_url(&endpoint, &tab), None);
-        }
+        assert_eq!(
+            view_url(&endpoint, &DeskTab::Terminal { id: "t".into() }),
+            None
+        );
     }
 
     #[test]
@@ -321,15 +306,11 @@ mod tests {
             value: "ses_abc".into(),
             path: path.into(),
         };
-        let c = auth_cookie(
-            &Endpoint::new(BASE, "tok"),
-            &session("composer_token", "/w/default/"),
-        )
-        .unwrap();
+        let c = auth_cookie(&Endpoint::new(BASE, "tok"), &session("composer_token", "/")).unwrap();
         assert_eq!(c.name, "composer_token");
         assert_eq!(c.value, "ses_abc");
-        assert_eq!(c.path, "/w/default/");
-        assert_eq!(c.url, "http://127.0.0.1:7420/w/default/");
+        assert_eq!(c.path, "/");
+        assert_eq!(c.url, "http://127.0.0.1:7420/");
         assert!(!c.secure);
         let c = auth_cookie(
             &Endpoint::new("https://h.ts.net", "t"),
@@ -349,7 +330,7 @@ mod tests {
 
     #[test]
     fn origins_compare_exactly() {
-        let b = "http://127.0.0.1:7420/w/default";
+        let b = "http://127.0.0.1:7420";
         assert!(same_origin("http://127.0.0.1:7420/x?y#z", b));
         assert!(same_origin("HTTP://127.0.0.1:7420", b));
         assert!(
@@ -418,16 +399,10 @@ mod tests {
     #[test]
     fn what_a_pane_may_load() {
         use Navigation::*;
-        let start = "http://127.0.0.1:7420/w/default/view";
+        let start = "http://127.0.0.1:7420/view";
         let nav = |url, main, gesture| navigation(url, BASE, start, main, gesture);
-        assert_eq!(
-            nav("http://127.0.0.1:7420/w/default/view/a.md", true, false),
-            Allow
-        );
-        assert_eq!(
-            nav("http://127.0.0.1:7420/w/default/p/x/app/", true, true),
-            Allow
-        );
+        assert_eq!(nav("http://127.0.0.1:7420/view/a.md", true, false), Allow);
+        assert_eq!(nav("http://127.0.0.1:7420/api/sites", true, true), Allow);
         assert_eq!(nav("about:blank", true, false), Allow);
         assert_eq!(nav("about:srcdoc", false, false), Allow);
         assert_eq!(nav("about:srcdoc", true, false), Block { outside: false });
@@ -470,9 +445,6 @@ mod tests {
             nav("https://example.com/", false, true),
             Block { outside: false }
         );
-        assert_eq!(
-            nav("http://127.0.0.1:7420/w/default/view", false, false),
-            Allow
-        );
+        assert_eq!(nav("http://127.0.0.1:7420/view", false, false), Allow);
     }
 }

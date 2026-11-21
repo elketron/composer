@@ -1,13 +1,11 @@
-//! The workspace home (mockups/next 11, 12): outside any session, in place of the chat and the
-//! stage. Sessions (NEEDS YOU, RECENT) or projects on the left; the selected one on the right:
-//! a session's waiting approval, last messages and stage tabs; a project's branch, sites,
-//! harnesses, ticket branches, sessions and pages. It fetches what it previews itself; the
-//! sessions and approvals come from the shell's store.
+//! The home (mockups/next 11): outside any session, in place of the chat and the stage. Sessions
+//! (NEEDS YOU, RECENT) on the left; the selected one on the right: its waiting approval, last
+//! messages and stage tabs. It fetches what it previews itself; the sessions and approvals come
+//! from the shell's store.
 
 use std::collections::BTreeMap;
 
-use composer_client::{Approval, Chat, ChatItem, Connection, Endpoint};
-use composer_protocol::http::{ProjectOverview, ProjectSummary};
+use composer_client::{Approval, Chat, ChatItem, Connection};
 use composer_protocol::{
     ApprovalDecision, ClientCommand, CommandResult, Desk, ServerMessage, SessionInfo,
 };
@@ -17,19 +15,10 @@ use gpui::{
 };
 
 use crate::chat_pane::PROSE;
-use crate::desktop::Desktop;
-use crate::home_lists::{
-    ProjectRow, SessionRow, asked_line, now_secs, project_rows, session_rows, state_word,
-};
+use crate::home_lists::{SessionRow, asked_line, now_secs, session_rows, state_word};
 use crate::pick_lists::project_name;
 use crate::stage_tabs;
 use crate::theme::*;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum HomeTab {
-    Sessions,
-    Projects,
-}
 
 /// What the home asks of the window.
 #[derive(Debug, Clone, PartialEq)]
@@ -38,8 +27,8 @@ pub enum HomeEvent {
     Open(String),
     /// Back to the session shown before.
     Back,
-    /// A new session, in this project (by folder) or none.
-    NewSession(Option<String>),
+    /// A new session.
+    NewSession,
     Answer {
         request: String,
         decision: ApprovalDecision,
@@ -55,20 +44,14 @@ struct Preview {
 }
 
 pub struct HomeView {
-    tab: HomeTab,
     selected: usize,
-    workspace: String,
-    colour: u32,
     connection: Connection,
-    endpoint: Endpoint,
     sessions: Vec<SessionInfo>,
     approvals: BTreeMap<String, Approval>,
-    projects: Vec<ProjectSummary>,
     preview: Option<Preview>,
     /// The revision being fetched, and a generation to reject late replies.
     preview_request: Option<SessionInfo>,
     preview_generation: u64,
-    overview: Option<ProjectOverview>,
     scroll: ScrollHandle,
     focus: FocusHandle,
 }
@@ -85,41 +68,17 @@ impl Focusable for HomeView {
 const PREVIEW_ITEMS: usize = 4;
 
 impl HomeView {
-    pub fn new(
-        tab: HomeTab,
-        workspace: String,
-        colour: u32,
-        connection: Connection,
-        endpoint: Endpoint,
-        cx: &mut Context<Self>,
-    ) -> Self {
-        let mut home = Self {
-            tab,
+    pub fn new(connection: Connection, cx: &mut Context<Self>) -> Self {
+        Self {
             selected: 0,
-            workspace,
-            colour,
             connection,
-            endpoint,
             sessions: Vec::new(),
             approvals: BTreeMap::new(),
-            projects: Vec::new(),
             preview: None,
             preview_request: None,
             preview_generation: 0,
-            overview: None,
             scroll: ScrollHandle::new(),
             focus: cx.focus_handle(),
-        };
-        home.fetch_projects(cx);
-        home
-    }
-
-    pub fn set_tab(&mut self, tab: HomeTab, cx: &mut Context<Self>) {
-        if self.tab != tab {
-            self.tab = tab;
-            self.selected = 0;
-            self.selection_changed(cx);
-            cx.notify();
         }
     }
 
@@ -134,18 +93,11 @@ impl HomeView {
             let before = self.selected_session();
             self.sessions = sessions.to_vec();
             self.approvals = approvals.clone();
-            // Session reordering must not move the Projects tab's selection.
-            self.selected = preserve_session_selection(
-                self.tab,
-                self.selected,
-                before.as_deref(),
-                &self.session_order(),
-            );
+            self.selected =
+                preserve_session_selection(self.selected, before.as_deref(), &self.session_order());
             self.clamp();
-            if self.tab == HomeTab::Sessions {
-                // fetch_preview compares revisions, including a request already in flight.
-                self.selection_changed(cx);
-            }
+            // fetch_preview compares revisions, including a request already in flight.
+            self.selection_changed(cx);
             cx.notify();
         }
     }
@@ -165,9 +117,7 @@ impl HomeView {
                 // The pending desk snapshot may predate this event.
                 self.preview_request = None;
                 self.preview_generation += 1;
-                if self.tab == HomeTab::Sessions {
-                    self.selection_changed(cx);
-                }
+                self.selection_changed(cx);
             }
         }
     }
@@ -177,15 +127,8 @@ impl HomeView {
         needs.into_iter().chain(recent).collect()
     }
 
-    fn project_order(&self) -> Vec<ProjectRow> {
-        project_rows(&self.projects, now_secs())
-    }
-
     fn len(&self) -> usize {
-        match self.tab {
-            HomeTab::Sessions => self.session_order().len(),
-            HomeTab::Projects => self.projects.len(),
-        }
+        self.session_order().len()
     }
 
     fn clamp(&mut self) {
@@ -196,11 +139,6 @@ impl HomeView {
         self.session_order()
             .get(self.selected)
             .map(|r| r.id.clone())
-    }
-
-    fn selected_project(&self) -> Option<&ProjectSummary> {
-        let name = self.project_order().get(self.selected)?.name.clone();
-        self.projects.iter().find(|p| p.name == name)
     }
 
     fn select(&mut self, n: usize, cx: &mut Context<Self>) {
@@ -214,49 +152,9 @@ impl HomeView {
 
     /// Fetches what the selection previews.
     fn selection_changed(&mut self, cx: &mut Context<Self>) {
-        match self.tab {
-            HomeTab::Sessions => {
-                if let Some(session) = self.selected_session() {
-                    self.fetch_preview(session, cx);
-                }
-            }
-            HomeTab::Projects => {
-                if let Some(name) = self.selected_project().map(|p| p.name.clone()) {
-                    self.fetch_overview(name, cx);
-                }
-            }
+        if let Some(session) = self.selected_session() {
+            self.fetch_preview(session, cx);
         }
-    }
-
-    fn fetch_projects(&mut self, cx: &mut Context<Self>) {
-        let endpoint = self.endpoint.clone();
-        let fetched = cx.global::<Desktop>().spawn(async move {
-            endpoint
-                .get::<Vec<ProjectSummary>>("/api/projects")
-                .await
-                .unwrap_or_default()
-        });
-        cx.spawn(async move |this, cx| {
-            let Ok(projects) = fetched.await else {
-                return;
-            };
-            let _ = this.update(cx, |home, cx| {
-                let selected = home.selected_project().map(|p| p.name.clone());
-                home.projects = projects;
-                if home.tab == HomeTab::Projects
-                    && let Some(name) = selected
-                    && let Some(index) = home.project_order().iter().position(|p| p.name == name)
-                {
-                    home.selected = index;
-                }
-                home.clamp();
-                if home.tab == HomeTab::Projects {
-                    home.selection_changed(cx);
-                }
-                cx.notify();
-            });
-        })
-        .detach();
     }
 
     fn fetch_preview(&mut self, session: String, cx: &mut Context<Self>) {
@@ -305,10 +203,8 @@ impl HomeView {
                     return; // A newer revision was requested while this one was loading.
                 }
                 home.preview_request = None;
-                // Still the one selected, on the Sessions tab.
-                if home.tab == HomeTab::Sessions
-                    && home.selected_session().as_ref() == Some(&session)
-                {
+                // Still the one selected.
+                if home.selected_session().as_ref() == Some(&session) {
                     home.preview = Some(Preview {
                         session,
                         info,
@@ -322,51 +218,10 @@ impl HomeView {
         .detach();
     }
 
-    fn fetch_overview(&mut self, project: String, cx: &mut Context<Self>) {
-        if self.overview.as_ref().is_some_and(|o| o.name == project) {
-            return;
-        }
-        let connection = self.connection.clone();
-        cx.spawn(async move |this, cx| {
-            let answer = connection
-                .request(ClientCommand::ProjectOverview {
-                    project: project.clone(),
-                })
-                .await;
-            let _ = this.update(cx, |home, cx| {
-                if let Ok(CommandResult::Project { overview }) = answer {
-                    home.overview = Some(overview);
-                    cx.notify();
-                }
-            });
-        })
-        .detach();
-    }
-
-    /// Enter: open the session; for a project, its latest session, else a new one there.
+    /// Enter: open the session.
     fn activate(&mut self, cx: &mut Context<Self>) {
-        match self.tab {
-            HomeTab::Sessions => {
-                if let Some(session) = self.selected_session() {
-                    cx.emit(HomeEvent::Open(session));
-                }
-            }
-            HomeTab::Projects => {
-                let Some(project) = self.selected_project() else {
-                    return;
-                };
-                let folder = project.folder.clone();
-                let latest = self
-                    .sessions
-                    .iter()
-                    .filter(|s| s.worker.is_none() && s.project.as_deref() == Some(&folder))
-                    .max_by(|a, b| a.updated.cmp(&b.updated))
-                    .map(|s| s.id.clone());
-                cx.emit(match latest {
-                    Some(id) => HomeEvent::Open(id),
-                    None => HomeEvent::NewSession(Some(folder)),
-                });
-            }
+        if let Some(session) = self.selected_session() {
+            cx.emit(HomeEvent::Open(session));
         }
     }
 
@@ -380,36 +235,15 @@ impl HomeView {
             "up" | "k" => self.select(self.selected.saturating_sub(1), cx),
             "enter" => self.activate(cx),
             "escape" => cx.emit(HomeEvent::Back),
-            "tab" | "1" | "2" => {
-                let tab = match (ks.key.as_str(), self.tab) {
-                    ("1", _) | ("tab", HomeTab::Projects) => HomeTab::Sessions,
-                    _ => HomeTab::Projects,
-                };
-                self.set_tab(tab, cx);
-            }
-            "n" => {
-                let project = match self.tab {
-                    HomeTab::Projects => self.selected_project().map(|p| p.folder.clone()),
-                    HomeTab::Sessions => None,
-                };
-                cx.emit(HomeEvent::NewSession(project));
-            }
+            "n" => cx.emit(HomeEvent::NewSession),
             _ => return,
         }
         cx.stop_propagation();
     }
 }
 
-/// Preserve only a session selection when its rows reorder; project indices are unrelated.
-fn preserve_session_selection(
-    tab: HomeTab,
-    selected: usize,
-    before: Option<&str>,
-    rows: &[SessionRow],
-) -> usize {
-    if tab != HomeTab::Sessions {
-        return selected;
-    }
+/// Keep the selected session selected when its rows reorder.
+fn preserve_session_selection(selected: usize, before: Option<&str>, rows: &[SessionRow]) -> usize {
     before
         .and_then(|id| rows.iter().position(|row| row.id == id))
         .unwrap_or(selected)
@@ -457,7 +291,7 @@ fn side_label(text: &'static str) -> AnyElement {
         .into_any_element()
 }
 
-/// A bordered list of small rows (the stage tabs, tickets, sessions, pages).
+/// A bordered list of small rows (the stage tabs).
 fn desk_list(rows: Vec<AnyElement>) -> AnyElement {
     div()
         .flex()
@@ -635,67 +469,38 @@ impl HomeView {
 
     fn list(&self, cx: &mut Context<Self>) -> Vec<AnyElement> {
         let mut out = Vec::new();
-        match self.tab {
-            HomeTab::Sessions => {
-                let (needs, recent) = session_rows(&self.sessions, &self.approvals, now_secs());
-                let mut n = 0;
-                for (title, rows) in [("NEEDS YOU", needs), ("RECENT", recent)] {
-                    if rows.is_empty() {
-                        continue;
-                    }
-                    out.push(label(title, Some(rows.len()), title == "NEEDS YOU"));
-                    for r in rows {
-                        let dot = if r.waiting {
-                            WARN
-                        } else if r.status == "idle" {
-                            FG_FAINT
-                        } else {
-                            OK
-                        };
-                        let colour = if r.waiting { WARN } else { FG_FAINT };
-                        out.push(self.row(
-                            n,
-                            dot,
-                            r.agent,
-                            format!("#{}", r.id),
-                            (r.status, colour),
-                            r.preview,
-                            r.place,
-                            r.age,
-                            cx,
-                        ));
-                        n += 1;
-                    }
-                }
-                if n == 0 {
-                    out.push(empty("No sessions yet: n starts one."));
-                }
+        let (needs, recent) = session_rows(&self.sessions, &self.approvals, now_secs());
+        let mut n = 0;
+        for (title, rows) in [("NEEDS YOU", needs), ("RECENT", recent)] {
+            if rows.is_empty() {
+                continue;
             }
-            HomeTab::Projects => {
-                let rows = self.project_order();
-                out.push(label("PROJECTS", Some(rows.len()), false));
-                if rows.is_empty() {
-                    out.push(empty("No projects in this workspace's projects folder."));
-                }
-                for (n, r) in rows.into_iter().enumerate() {
-                    let dot = if !r.waiting.is_empty() {
-                        WARN
-                    } else {
-                        ACCENT_SOFT
-                    };
-                    out.push(self.row(
-                        n,
-                        dot,
-                        r.name,
-                        String::new(),
-                        (r.waiting, WARN),
-                        r.line,
-                        r.path,
-                        r.age,
-                        cx,
-                    ));
-                }
+            out.push(label(title, Some(rows.len()), title == "NEEDS YOU"));
+            for r in rows {
+                let dot = if r.waiting {
+                    WARN
+                } else if r.status == "idle" {
+                    FG_FAINT
+                } else {
+                    OK
+                };
+                let colour = if r.waiting { WARN } else { FG_FAINT };
+                out.push(self.row(
+                    n,
+                    dot,
+                    r.agent,
+                    format!("#{}", r.id),
+                    (r.status, colour),
+                    r.preview,
+                    r.place,
+                    r.age,
+                    cx,
+                ));
+                n += 1;
             }
+        }
+        if n == 0 {
+            out.push(empty("No sessions yet: n starts one."));
         }
         out
     }
@@ -870,7 +675,7 @@ impl HomeView {
                             .iter()
                             .map(|e| {
                                 desk_item(
-                                    stage_tabs::label(&e.tab, None),
+                                    stage_tabs::label(&e.tab),
                                     if e.unseen { "new" } else { "" },
                                     ACCENT_SOFT,
                                 )
@@ -889,172 +694,6 @@ impl HomeView {
                     action("open-session", "Open session  ⏎", true).on_click(
                         cx.listener(move |_, _, _, cx| cx.emit(HomeEvent::Open(id.clone()))),
                     ),
-                )
-                .into_any_element(),
-        );
-        out
-    }
-
-    fn project_side(&self, cx: &mut Context<Self>) -> Vec<AnyElement> {
-        let Some(project) = self.selected_project() else {
-            return vec![];
-        };
-        let folder = project.folder.clone();
-        let overview = self.overview.as_ref().filter(|o| o.name == project.name);
-        let mut out = vec![
-            div()
-                .flex()
-                .flex_row()
-                .gap(px(8.))
-                .text_size(px(TEXT_SIZE))
-                .child(
-                    div()
-                        .text_color(rgb(FG_BRIGHT))
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .child(project.name.clone()),
-                )
-                .when_some(overview.and_then(|o| o.branch.clone()), |d, b| {
-                    d.child(div().text_color(rgb(FG_FAINT)).child(b))
-                })
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w(px(0.))
-                        .overflow_hidden()
-                        .whitespace_nowrap()
-                        .text_ellipsis()
-                        .text_size(px(TEXT_SMALL))
-                        .text_color(rgb(FG_FAINT))
-                        .child(project.path.clone()),
-                )
-                .into_any_element(),
-        ];
-        match overview {
-            None => out.push(empty("loading…")),
-            Some(o) => {
-                let sites = o
-                    .sites
-                    .iter()
-                    .map(|s| s.site.as_str())
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                let harnesses = o
-                    .harnesses
-                    .iter()
-                    .filter(|h| h.on)
-                    .map(|h| h.entry.as_str())
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                out.push(context_line(&[
-                    (
-                        "sites",
-                        if sites.is_empty() {
-                            "–".into()
-                        } else {
-                            sites
-                        },
-                    ),
-                    (
-                        "harness",
-                        if harnesses.is_empty() {
-                            "composer".into()
-                        } else {
-                            harnesses
-                        },
-                    ),
-                    ("uncommitted", o.uncommitted.to_string()),
-                ]));
-                out.push(side_label("TICKETS"));
-                if o.branches.is_empty() {
-                    out.push(empty("No ticket branches waiting."));
-                } else {
-                    out.push(desk_list(
-                        o.branches
-                            .iter()
-                            .map(|t| {
-                                let status = t.status.clone().unwrap_or_else(|| "open".into());
-                                desk_item(
-                                    format!("{}  {}", t.ticket, t.title),
-                                    format!("{status} · {} commits", t.commits),
-                                    if status.contains("review") {
-                                        WARN
-                                    } else {
-                                        FG_FAINT
-                                    },
-                                )
-                            })
-                            .collect(),
-                    ));
-                }
-                out.push(side_label("PAGES"));
-                let pages: Vec<String> = o
-                    .page
-                    .iter()
-                    .chain(o.memory.as_ref().map(|m| &m.url))
-                    .cloned()
-                    .collect();
-                if pages.is_empty() {
-                    out.push(empty("No project page."));
-                } else {
-                    out.push(desk_list(
-                        pages
-                            .into_iter()
-                            .map(|p| desk_item(p, "page", FG_FAINT))
-                            .collect(),
-                    ));
-                }
-            }
-        }
-        out.push(side_label("SESSIONS"));
-        let mut sessions: Vec<&SessionInfo> = self
-            .sessions
-            .iter()
-            .filter(|s| s.worker.is_none() && s.project.as_deref() == Some(&folder))
-            .collect();
-        sessions.sort_by(|a, b| b.updated.cmp(&a.updated));
-        if sessions.is_empty() {
-            out.push(empty("No sessions here yet."));
-        } else {
-            out.push(desk_list(
-                sessions
-                    .into_iter()
-                    .map(|s| {
-                        let id = s.id.clone();
-                        let waiting = self.approvals.values().any(|a| a.session == s.id);
-                        div()
-                            .id(gpui::ElementId::Name(
-                                format!("project-session-{id}").into(),
-                            ))
-                            .cursor_pointer()
-                            .hover(|d| d.bg(rgb(PANEL_2)))
-                            .on_click(
-                                cx.listener(move |_, _, _, cx| {
-                                    cx.emit(HomeEvent::Open(id.clone()))
-                                }),
-                            )
-                            .child(desk_item(
-                                format!("{}  #{}", s.agent, s.id),
-                                if waiting {
-                                    "! waiting"
-                                } else {
-                                    state_word(s.state)
-                                },
-                                if waiting { WARN } else { FG_FAINT },
-                            ))
-                            .into_any_element()
-                    })
-                    .collect(),
-            ));
-        }
-        out.push(
-            div()
-                .pt(px(18.))
-                .flex()
-                .flex_row()
-                .child(
-                    action("new-here", "＋ New session here  n", true).on_click(cx.listener(
-                        move |_, _, _, cx| cx.emit(HomeEvent::NewSession(Some(folder.clone()))),
-                    )),
                 )
                 .into_any_element(),
         );
@@ -1105,29 +744,8 @@ fn context_line(parts: &[(&'static str, String)]) -> AnyElement {
 impl Render for HomeView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let list = self.list(cx);
-        let side = match self.tab {
-            HomeTab::Sessions => self.session_side(cx),
-            HomeTab::Projects => self.project_side(cx),
-        };
-        let sessions = self.sessions.iter().filter(|s| s.worker.is_none()).count();
-        let tab = |id: &'static str,
-                   name: &'static str,
-                   count: usize,
-                   this: HomeTab,
-                   current: HomeTab| {
-            div()
-                .id(id)
-                .flex()
-                .flex_row()
-                .gap(px(6.))
-                .pb(px(8.))
-                .border_b_2()
-                .border_color(rgb(if this == current { ACCENT } else { BG }))
-                .text_color(rgb(if this == current { FG_BRIGHT } else { FG_DIM }))
-                .cursor_pointer()
-                .child(name)
-                .child(div().text_color(rgb(FG_FAINT)).child(count.to_string()))
-        };
+        let side = self.session_side(cx);
+        let sessions = self.sessions.len();
         div()
             .id("home")
             .track_focus(&self.focus)
@@ -1162,27 +780,19 @@ impl Render for HomeView {
                                     .flex_row()
                                     .items_center()
                                     .gap(px(10.))
-                                    .child(
-                                        div().size(px(8.)).rounded(px(R_DOT)).bg(rgb(self.colour)),
-                                    )
+                                    .child(div().size(px(8.)).rounded(px(R_DOT)).bg(rgb(ACCENT)))
                                     .child(
                                         div()
                                             .text_size(px(16.))
                                             .font_weight(FontWeight::SEMIBOLD)
                                             .text_color(rgb(FG_BRIGHT))
-                                            .child(self.workspace.clone()),
-                                    )
-                                    .child(
-                                        div()
-                                            .text_size(px(TEXT_SMALL))
-                                            .text_color(rgb(FG_FAINT))
-                                            .child("workspace"),
+                                            .child("home"),
                                     )
                                     .child(div().flex_1())
                                     .child(
                                         action("home-new", "＋ New session  n", false).on_click(
                                             cx.listener(|_, _, _, cx| {
-                                                cx.emit(HomeEvent::NewSession(None))
+                                                cx.emit(HomeEvent::NewSession)
                                             }),
                                         ),
                                     ),
@@ -1194,32 +804,20 @@ impl Render for HomeView {
                                     .gap(px(22.))
                                     .text_size(px(TEXT_SIZE))
                                     .child(
-                                        tab(
-                                            "tab-sessions",
-                                            "sessions",
-                                            sessions,
-                                            HomeTab::Sessions,
-                                            self.tab,
-                                        )
-                                        .on_click(
-                                            cx.listener(|home, _, _, cx| {
-                                                home.set_tab(HomeTab::Sessions, cx)
-                                            }),
-                                        ),
-                                    )
-                                    .child(
-                                        tab(
-                                            "tab-projects",
-                                            "projects",
-                                            self.projects.len(),
-                                            HomeTab::Projects,
-                                            self.tab,
-                                        )
-                                        .on_click(
-                                            cx.listener(|home, _, _, cx| {
-                                                home.set_tab(HomeTab::Projects, cx)
-                                            }),
-                                        ),
+                                        div()
+                                            .flex()
+                                            .flex_row()
+                                            .gap(px(6.))
+                                            .pb(px(8.))
+                                            .border_b_2()
+                                            .border_color(rgb(ACCENT))
+                                            .text_color(rgb(FG_BRIGHT))
+                                            .child("sessions")
+                                            .child(
+                                                div()
+                                                    .text_color(rgb(FG_FAINT))
+                                                    .child(sessions.to_string()),
+                                            ),
                                     ),
                             ),
                     )
@@ -1258,14 +856,14 @@ mod tests {
 
     fn session(id: &str, updated: &str) -> SessionInfo {
         serde_json::from_value(serde_json::json!({
-            "id": id, "agent": "orchestrator", "project": null, "ticket": null, "parent": null,
+            "id": id, "agent": "default", "project": null, "parent": null,
             "state": "idle", "last_seq": 1, "preview": "old", "updated": updated
         }))
         .unwrap()
     }
 
     #[test]
-    fn session_updates_preserve_projects_and_follow_the_selected_session() {
+    fn session_updates_follow_the_selected_session() {
         let sessions = [
             session("b", "2026-11-15T12:00:00Z"),
             session("a", "2026-11-15T11:00:00Z"),
@@ -1273,14 +871,8 @@ mod tests {
         let (needs, recent) = session_rows(&sessions, &BTreeMap::new(), 0);
         let rows: Vec<_> = needs.into_iter().chain(recent).collect();
         // Previously b was at index 1; a turn has now moved it to index 0.
-        assert_eq!(
-            preserve_session_selection(HomeTab::Projects, 1, Some("b"), &rows),
-            1
-        );
-        assert_eq!(
-            preserve_session_selection(HomeTab::Sessions, 1, Some("b"), &rows),
-            0
-        );
+        assert_eq!(preserve_session_selection(1, Some("b"), &rows), 0);
+        assert_eq!(preserve_session_selection(1, Some("gone"), &rows), 1);
     }
 
     #[test]

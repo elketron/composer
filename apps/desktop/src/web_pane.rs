@@ -42,7 +42,7 @@ pub struct Shared {
     pub cursor: CursorStyle,
     /// Pages the user asked for (links, popups), for the window to open as tabs.
     pub open_pages: Vec<String>,
-    /// Links that leave the workspace, for the OS to open.
+    /// Links that leave the server, for the OS to open.
     pub open_outside: Vec<String>,
     /// Wheel delta waiting for the next pump (batched: a trackpad sends hundreds of events a
     /// second; one CEF wheel call per pump keeps the main thread free and scrolls smoothly).
@@ -56,7 +56,7 @@ pub struct Shared {
 #[derive(Clone)]
 struct Handler {
     shared: Rc<RefCell<Shared>>,
-    /// The workspace base, for telling page links from the rest.
+    /// The server's base, for telling page links from the rest.
     base: Rc<str>,
     /// The URL this pane was made to show (ours, so it always loads).
     start: Rc<str>,
@@ -625,7 +625,7 @@ pub struct WebPane {
 pub enum WebEvent {
     /// A link to a page: open it as a tab.
     OpenPage(String),
-    /// A link outside the workspace: the OS opens it.
+    /// A link outside the server: the OS opens it.
     OpenOutside(String),
     /// A pane that authenticates with a session cookie got 401/404: its session may be gone.
     /// The window gets a new one and calls [`WebPane::renew`] (once per pane).
@@ -635,7 +635,7 @@ pub enum WebEvent {
 impl EventEmitter<WebEvent> for WebPane {}
 
 impl WebPane {
-    /// A browser showing `url`; links to pages of the workspace at `base` become [`WebEvent`]s.
+    /// A browser showing `url`; links to pages of the server at `base` become [`WebEvent`]s.
     /// With `cookie`, it is stored in CEF first and the browser is made once it is there (so
     /// the token never appears in a URL). It is made directly on `url`: a browser started on
     /// `about:blank` and sent on with `load_url` never left `about:blank` (CEF 156,

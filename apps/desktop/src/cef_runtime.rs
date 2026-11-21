@@ -44,8 +44,8 @@ fn cache_root() -> PathBuf {
     cache.join("composer/cef")
 }
 
-/// Chromium switches for every CEF process. The browser shows the workspace's apps with their
-/// tokens, so nothing else runs in it: no extensions (Chromium's runtime otherwise loads the
+/// Chromium switches for every CEF process. The browser shows the server's pages with its
+/// session cookie, so nothing else runs in it: no extensions (Chromium's runtime otherwise loads the
 /// system's, like a desktop's browser integration), no sync, background networking or first-run
 /// UI.
 const SWITCHES: [&str; 7] = [
@@ -127,7 +127,7 @@ pub fn start(sandbox_info: *mut u8) -> Result<PathBuf, String> {
     let settings = Settings {
         windowless_rendering_enabled: 1,
         external_message_pump: 1,
-        // Chromium's own sandbox for the renderers (apps are agent-built JavaScript): on Linux
+        // Chromium's own sandbox for the renderers (pages can hold agent-written JavaScript): on Linux
         // through unprivileged user namespaces. `COMPOSER_CEF_NO_SANDBOX=1` turns it off where
         // the system doesn't allow them.
         no_sandbox: std::env::var_os("COMPOSER_CEF_NO_SANDBOX").is_some() as _,

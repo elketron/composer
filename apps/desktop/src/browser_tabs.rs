@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-/// The stage's browser panes by tab id, and the tabs whose pane is on its way (an app's URL is
+/// The stage's browser panes by tab id, and the tabs whose pane is on its way (its browser session is
 /// asked for first). Generic over the pane so it can be tested without a browser.
 pub struct BrowserTabs<P> {
     panes: HashMap<String, P>,
@@ -22,7 +22,7 @@ impl<P> BrowserTabs<P> {
         !self.panes.contains_key(tab) && self.loading.insert(tab.to_string())
     }
 
-    /// Its pane didn't come (the app couldn't open): it may be tried again.
+    /// Its pane didn't come (no browser session): it may be tried again.
     pub fn failed(&mut self, tab: &str) {
         self.loading.remove(tab);
     }
@@ -62,7 +62,7 @@ impl<P> BrowserTabs<P> {
         self.loading.retain(|id| tabs.contains(id.as_str()));
     }
 
-    /// All of them, made again when shown (a new connection: apps need new tokens).
+    /// All of them, made again when shown (a new connection: a new browser session).
     pub fn clear(&mut self) {
         self.panes.clear();
         self.loading.clear();
