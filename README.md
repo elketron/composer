@@ -1,56 +1,82 @@
 # composer
 
-A workspace where your agents (and you) browse memory, plans, agent definitions and scripts as a
-set of **sites**: folders of markdown pages, each with optional actions (a `justfile`, run after
-your approval) and an optional micro app (Svelte). Agents run on your own model server.
+One home for your workflows and memory. The home is a web of markdown **sites**: folders of
+pages that agents (and you) open, search and edit. Workflows are folders inside the sites, worked
+the [ICM](docs/icm.md) way. Agents run on your own model server.
 
-- **`composer serve`** — the server: sessions, the agent loop, sites, actions, micro apps, workers.
-- **`composer`** — the TUI: chat and page browser side by side, keyboard first.
-- **The app** (`apps/composer_app`, Flutter) — the same for Linux, Windows and Android, with several
-  servers at once, the micro apps in an embedded browser, and notifications.
-- **`site://chat`** — a small web chat for phones, no install.
+Every workflow runs in one of three kinds:
+
+| kind | what it may do | what comes back |
+|------|----------------|-----------------|
+| **single shot** | nothing: the workflow's instructions and the input go to the model once | the model's answer |
+| **workflow run** | reads the web, changes nothing, may take several steps | one value (`finish`) |
+| **agentic** | reads and writes, runs recipes, terminals and MCP tools | a session you follow |
+
+Composer's own agent loop runs all three. An agentic session can also run on an outside agent
+over the Agent Client Protocol (ACP); composer hands that agent itself as its MCP server.
+
+## What it does
+
+- **Sites.** A site's `index.md` is its homepage and its instructions. It can bring actions (a
+  `justfile`, each recipe run after your approval), MCP servers (`mcp.toml`, started once you
+  approve the file) and a folder outside the web it works on (`folder:` in its frontmatter).
+  Setting a site (`set_site`) changes the agent's tools to fit it.
+- **Composer's MCP server.** `composer mcp --session <id>` serves a session's tools over MCP on
+  stdio, to any harness. The list follows the session's site and announces changes.
+- **Webhooks.** `POST /api/hooks/<name>` starts a run of any kind with its own token, waits, and
+  answers with its value. The run is not kept unless the hook says `store = true`.
+- **Runs that start runs.** `spawn_run` starts any kind from an agentic session; an agentic child
+  posts its answer back when it ends.
+- **Terminals and background processes.** Each session has server-owned terminals. The agent can
+  read and type into them (each command approved) and start long commands in the background; it
+  hears when they exit.
+
+## Clients
+
+- **`composer`**: the TUI. Chat, page browser and the session's terminals, keyboard first.
+- **The desktop** (`apps/desktop`, gpui + CEF): the chat on the left, the stage on the right
+  (pages, terminals, the wayai live view). Linux and Windows.
+- **The phone app** (`apps/composer_app`, Flutter): Android only.
+
+Other devices reach the server over your tailnet: `tailscale serve --bg http://127.0.0.1:7420`,
+then `composer pair --name <device>` on the server prints a QR code for the phone and a
+`composer login` line for a computer. `composer devices` lists them; `composer devices revoke
+<name>` ends one.
 
 ## Requirements
 
-- Rust (stable, edition 2024) to build it; Linux is the main platform, Windows via [WSL](docs/wsl.md).
-- A model server with an OpenAI-compatible API: llama.cpp's `llama-server`, vLLM, Ollama, or a hosted provider
-  such as OpenRouter (`[provider]` in `config.toml`).
-- [`just`](https://github.com/casey/just) for site actions, and [`bun`](https://bun.sh) to build micro apps.
-- Optional: the Claude Code CLI, logged in, to run tickets with it; Flutter to build the app.
+- Rust (stable, edition 2024). Linux is the main platform; Windows via [WSL](docs/wsl.md).
+- A model server with an OpenAI-compatible API: llama.cpp's `llama-server`, vLLM, Ollama, or a
+  hosted provider such as OpenRouter.
+- [`just`](https://github.com/casey/just) for site actions.
+- Optional: an ACP agent (such as `claude-agent-acp`) for outside agents; the CEF runtime for the
+  desktop (`apps/desktop/scripts/fetch-cef.sh`); Flutter and the Android SDK for the phone app.
 
 ## Start
 
 ```sh
 cargo install --path crates/cli
-composer init                     # ~/.composer: sites, templates, config.toml (set your model server)
+composer init                     # ~/.composer (or $COMPOSER_HOME): sites, config.toml, state/
+$EDITOR ~/.composer/config.toml   # [provider]: your model server
 composer serve &                  # http://127.0.0.1:7420
 composer                          # the TUI
+composer ask "what's on my plans?"   # one question, answered on stdout
 ```
 
-After installing a new version, stop the server and run `composer update`: it brings the stock
-sites, agents and templates up to date, merges them with your changes, and leaves what it can't
-merge in `~/.composer/state/updates/` for you to look at.
-
-Other devices: expose the server to your tailnet (`tailscale serve --bg http://127.0.0.1:7420`)
-and pair them with `composer pair --name <device>`.
-
-Micro apps run sandboxed at `<server>/a/<app token>/` (opened from the TUI's `a`, the desktop or the app); their
-code can be written by an agent, so they never get the workspace's credentials. The chat client (`site://chat`)
-does: build it (`just ui-build` in its site), then approve that build with `composer app approve chat`. A changed
-build is refused until you approve it again.
+`config.toml` has these sections, each with defaults and explained in the file `init` writes:
+`[provider]`, `[server]`, `[agent]`, `[terminals]`, `[attachments]`, `[desktop]`, `[viewer]`,
+`[mcp.<name>]` (MCP servers in every session), `[hooks.<name>]` (webhooks) and `[acp.<name>]`
+(outside agents). Saving it applies most changes to the running server.
 
 ## Docs
 
-- [docs/plan.md](docs/plan.md) — design of the server, TUI and micro apps
-- [docs/plan-app.md](docs/plan-app.md) — the app
-- [docs/lean-orchestration.md](docs/lean-orchestration.md) — historical proposal for a small harness and site capabilities
-- [docs/workflows.md](docs/workflows.md) — historical design exploration; sites are not a separate workflow category
-- [docs/project-hub.md](docs/project-hub.md) — design: the project as the hub, with sites operating on it
-- [docs/tui-mode.md](docs/tui-mode.md) — TUI capabilities: a terminal program with a control adapter (Hunk)
-- [docs/wsl.md](docs/wsl.md) — running the server in WSL on Windows
-- [docs/releasing.md](docs/releasing.md) — releases and Android signing
-- [CLAUDE.md](CLAUDE.md) — conventions, and how to test the TUI and the app headlessly
-- [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md) — before exposing a server beyond your machine
+- [docs/icm.md](docs/icm.md): ICM, and how workflows map onto sites
+- [docs/tui-mode.md](docs/tui-mode.md): terminals on the stage, and `type: tui` pages
+- [docs/wsl.md](docs/wsl.md): the server in WSL on Windows
+- [docs/releasing.md](docs/releasing.md): releases and Android signing
+- [CLAUDE.md](CLAUDE.md): conventions, checks, and how to test the TUI and the app headlessly
+- [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md): read before exposing a server
+  beyond your machine
 
 ## License
 

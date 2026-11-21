@@ -8,24 +8,54 @@ Read this before exposing a server beyond your own machine.
 Please don't open a public issue. Use **Report a vulnerability** on the repository's Security tab
 (GitHub private vulnerability reporting).
 
-## What composer protects, and what it doesn't
+## Tokens
 
-- **The server binds to `127.0.0.1:7420`** by default. Every API call and WebSocket needs a token: the local
-  one in `~/.composer/state/token`, or a per-device token from `composer pair` (revocable). To reach it from
-  other devices, put it behind something that authenticates the network, such as `tailscale serve`; don't
-  bind it to a public interface.
-- **Agents' own tools reach the sites only** (`site://…` pages under `~/.composer/sites`), never
-  `~/.composer/state` (tokens, sessions, approvals).
-- **Recipes run after approval, as your user, unsandboxed.** Approving a recipe approves what it runs,
-  including project code it builds (a micro app's `ui-build` runs its `vite.config`). Approve with that in mind;
-  "always" rules live in `state/approvals.json`.
-- **Claude Code workers are off by default** and allowed per project in `config.toml` (not in the repository, so
-  a cloned repo can't switch itself on). They run with a cleared environment and a tool allowlist.
-- **Nothing composer starts is sandboxed** (decided 2026-11-19; the bwrap sandbox is gone). Recipes, Claude
-  Code runs, stdio MCP servers and terminals run as your user, with your `$HOME`, your login (`claude auth
-  login`) and the network. What separates workspaces is their tokens: an agent's own tools reach only its
-  workspace's sites, and an app's token reaches only its own site, project and data. A run you approve can do
-  whatever your user can.
-- **MCP servers** are started from `config.toml` only; their calls need approval unless `allow` matches.
-- **Prompt injection is not solved.** A page, a web result or an attachment can steer an agent. Approvals are
-  the boundary: read what you approve.
+- **The server binds to `127.0.0.1:7420`** by default. Every API call and WebSocket needs a token.
+  To reach it from other devices, put it behind something that authenticates the network, such as
+  `tailscale serve`; don't bind it to a public interface.
+- **The local token** is in `~/.composer/state/token`. The TUI, the desktop and `composer mcp` on
+  the same machine read it from there.
+- **Device tokens** come from pairing: `composer pair` makes a one-time code that expires after 10
+  minutes, and the device trades it for its own token. Only the token's hash is stored
+  (`state/devices.json`). `composer devices revoke <name>` ends it.
+- **A webhook token** (`[hooks.<name>]`, `token` or `token_file`) opens only
+  `POST /api/hooks/<name>`; device and local tokens don't open it, and it opens nothing else. It
+  starts a run of the kind, site, folder and harness the hook names, with the request body as the
+  input. The caller can't choose them, but it chooses the input, so treat the body as untrusted:
+  an `agentic` hook's run has every tool. A run that is not stored can't ask for approvals: the
+  first approval it needs stops it with an error. A stored run (`store = true`) asks in your
+  clients like any session.
+
+## Approvals
+
+What runs outside composer's own page tools waits for your answer in a client:
+
+- **Recipes.** A site's `justfile` recipe runs after you approve it, and again after it changes
+  (approved versions in `state/approvals.json`). Approving a recipe approves what it runs,
+  including code it builds.
+- **Terminal commands and background processes.** `terminal_send` and `process_start` ask for each
+  command. "Always" stores a `Bash(<command>:*)` rule for the site's folder
+  (`state/tool_rules.json`); it covers that command with more arguments, never one that chains,
+  substitutes or redirects (`;`, `&&`, `|`, `$`, `` ` ``, `>`, ...).
+- **MCP tools.** Servers in `config.toml` are in every session. A call to a tool outside the
+  server's `allow` list asks you; "always" remembers that tool.
+- **A site's `mcp.toml`.** Nothing in it starts until you approve the file's exact bytes. The
+  approval is kept by the file's hash, so any edit asks again.
+- **Outside agents (ACP).** An outside agent asks composer through `session/request_permission`;
+  composer shows that as an approval and passes your answer back. What the agent asks about, and
+  what it does without asking, is decided by the agent and its own settings, not by composer.
+
+## What composer does not protect
+
+- **Nothing composer starts is sandboxed.** Recipes, terminals, background processes, MCP servers
+  and outside agents run as your user, with your `$HOME`, your logins and the network. A run you
+  approve can do whatever your user can.
+- **`folder:` lets a site point the agent at any folder.** The page tools (`open`, `search`,
+  `write`, `edit`) work in `~/.composer/sites` and never reach `~/.composer/state`. But an agent
+  can edit any site's `index.md`, so it can set that site's `folder:` to any folder without an
+  approval. That folder is then where terminals and background processes start, what recipes get
+  as `COMPOSER_FOLDER`, where `open` may read image files, and a place a symlink inside a site may
+  point into, so `write` and `edit` follow such a symlink there. This is a known property of the
+  current design, not a bug.
+- **Prompt injection is not solved.** A page, a web result, an attachment or a webhook body can
+  steer an agent. Approvals are the boundary: read what you approve.

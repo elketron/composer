@@ -269,7 +269,7 @@ The WS message types are done (<span class="hint">d</span><span class="lnk">tick
       <div class="pane focus"><span class="title">site://memory/projects/composer.md</span>
         <div class="body"><span class="h1"># composer</span>
 
-Rust server + Ratatui TUI + Svelte micro apps.
+Rust server + Ratatui TUI.
 Agents browse a web of markdown sites.
 
 <span class="h2">## Links</span>
@@ -323,43 +323,6 @@ Added URL resolution with relative links and
   </div>
 </section>
 
-<!-- ============ 6. worker ============ -->
-<section class="screen">
-  <h2>6 · Attached to a worker, Insert mode</h2>
-  <p class="note">The worker replaces the main chat; the breadcrumb shows where you are. <code>ctrl-o</code> jumps back.</p>
-  <div class="term">
-    <div class="panes">
-      <div class="pane chat focus"><span class="title"><b>orchestrator</b> <span class="sep">›</span> <b>worker</b> #0003 <span class="sep">·</span> <span style="color:var(--warn)">running</span></span>
-        <div class="body"><div class="msg sys"><span class="who">ticket · from orchestrator</span>
-Implement HTTP page endpoints <span class="faint">site://orchestration/tickets/0003</span></div><div class="msg agent"><span class="who agent">worker</span>
-<span class="row"><span class="k">▸</span> <span class="n">open</span>    site://orchestration/tickets/0003</span>
-<span class="row"><span class="k">▾</span> thinking <span class="k">· 188 tok</span></span>
-<span class="think">The context links the API section of the plan. GET
-and PUT for pages, files separate. Frontmatter should
-come back parsed so apps don't need a YAML parser.</span>
-<span class="row"><span class="k">▸</span> <span class="n">open</span>    site://plans/server-api#http</span>
-<span class="row"><span class="k">▸</span> <span class="n">edit</span>    ~/Projects/composer/crates/server/src/http.rs</span>
-<span class="row"><span class="k">▸</span> <span class="n">run</span>     composer › test <span class="ok">✓</span></span>
-
-<span class="stream">GET and PUT are in. Writing the hash check for PUT</span></div></div>
-        <div class="input active">also return the etag header so the nvim round trip can use it<span class="cursor"> </span></div></div>
-      <div class="pane"><span class="title">site://plans/server-api</span>
-        <div class="body"><span class="fm">type <span class="tag">plan</span>   status <span class="dim">active</span>   project <span class="dim">composer</span></span>
-
-<span class="h1"># Server API</span>
-
-<span class="h2">## Steps</span>
-  <span class="ok">[x]</span> WS message types  <span class="lnk">0002</span>
-  <span class="faint">[ ]</span> HTTP endpoints  <span class="lnk">0003</span>  <span style="color:var(--warn)">claimed</span>
-  <span class="faint">[ ]</span> Device pairing  <span class="lnk">0004</span>
-
-<span class="h2">## Decisions</span>
-  • JSON over WS, seq-numbered events.
-    <span class="dim">Why: replay is reading the log.</span></div></div>
-    </div>
-    <div class="status"><span class="mode insert"> INSERT </span><span>~/Projects/composer</span><span>ctx 21K/160K</span><span>slots 2/2</span><span>ctrl-o back to orchestrator</span></div>
-  </div>
-</section>
 
 </body>
 </html>
