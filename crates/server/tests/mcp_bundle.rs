@@ -122,6 +122,7 @@ async fn a_bundle_is_an_mcp_server() {
             kind: composer_protocol::RunKind::Agentic,
             model: None,
             site: None,
+            harness: None,
         },
     )
     .await;

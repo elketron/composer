@@ -17,6 +17,7 @@ async fn create_session(socket: &mut Socket) -> String {
             kind: composer_protocol::RunKind::Agentic,
             model: None,
             site: None,
+            harness: None,
         },
     )
     .await;
@@ -625,6 +626,7 @@ async fn open_shows_an_image_to_the_model() {
             kind: composer_protocol::RunKind::Agentic,
             model: None,
             site: Some("game".into()),
+            harness: None,
         },
     )
     .await;
@@ -701,6 +703,7 @@ async fn a_sessions_model_goes_with_its_requests() {
                 kind: composer_protocol::RunKind::Agentic,
                 model: model.map(String::from),
                 site: None,
+                harness: None,
             },
         )
         .await;

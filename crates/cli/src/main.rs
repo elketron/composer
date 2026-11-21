@@ -48,6 +48,9 @@ enum Command {
         /// Also print the model's reasoning.
         #[arg(long, short = 't')]
         thinking: bool,
+        /// Run a new session on this outside agent (an `[acp.<name>]` of config.toml).
+        #[arg(long)]
+        harness: Option<String>,
     },
     /// Pair a device (phone, laptop) for remote access: prints a QR code and a login command.
     Pair {
@@ -136,7 +139,11 @@ async fn main() -> anyhow::Result<()> {
             tracing::info!("listening on http://{bind}");
             server.serve(listener).await?;
         }
-        Some(Command::Ask { text, thinking }) => {
+        Some(Command::Ask {
+            text,
+            thinking,
+            harness,
+        }) => {
             let text = text.join(" ");
             if text.trim().is_empty() {
                 anyhow::bail!("nothing to ask");
@@ -147,6 +154,7 @@ async fn main() -> anyhow::Result<()> {
                 kind: cli.kind.into(),
                 session: cli.session,
                 site: cli.site,
+                harness,
                 show_thinking: thinking,
                 server_url,
                 token,

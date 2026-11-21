@@ -134,6 +134,10 @@ pub enum ServerMessage {
     #[serde(rename = "session.updated")]
     SessionUpdated { session: SessionInfo },
 
+    /// The session was deleted (`session.delete`): clients drop it.
+    #[serde(rename = "session.deleted")]
+    SessionDeleted { session: SessionId },
+
     /// The tools a session has changed: its site was set (or left), or the site's MCP servers
     /// came up after the user approved its `mcp.toml`. An MCP client of the session lists them
     /// again (`composer mcp` tells its harness with `notifications/tools/list_changed`).

@@ -14,7 +14,7 @@ use crate::actions::{ApprovalWait, Approvals, PendingApprovals};
 use crate::config::Config;
 use crate::devices::Devices;
 use crate::error::{Result, ServerError};
-use crate::harness::ToolRules;
+use crate::harness::{AcpAgents, ToolRules};
 use crate::hash::content_hash;
 use crate::home::Home;
 use crate::hub::EventHub;
@@ -56,6 +56,8 @@ pub struct Server {
     pub watches: WatchRegistry,
     /// Tools the user said `always` to, per folder.
     pub tool_rules: ToolRules,
+    /// The outside agents running sessions (a session's `harness`).
+    pub acp: AcpAgents,
     listen_addr: OnceLock<SocketAddr>,
     /// Hash of each file as we last saw or wrote it; tells the watcher which changes are ours.
     known_hashes: Mutex<HashMap<PathBuf, String>>,
@@ -108,6 +110,7 @@ impl Server {
             terminals: crate::terminals::Terminals::default(),
             watches: WatchRegistry::load(home.state().join("watches.json")),
             tool_rules: ToolRules::load(home.state().join("tool_rules.json")),
+            acp: AcpAgents::default(),
             devices: Devices::new(&home.state()),
             listen_addr: OnceLock::new(),
             index: RwLock::new(index),
@@ -282,6 +285,7 @@ impl Server {
                 tracing::info!("shutting down");
             }
         }
+        self.acp.stop_all().await;
         Ok(())
     }
 

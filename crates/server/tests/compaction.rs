@@ -30,6 +30,7 @@ async fn session(socket: &mut Socket) -> String {
             kind: composer_protocol::RunKind::Agentic,
             model: None,
             site: None,
+            harness: None,
         },
     )
     .await;

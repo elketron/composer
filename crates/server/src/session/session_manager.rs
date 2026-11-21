@@ -45,11 +45,12 @@ impl SessionManager {
         model: Option<String>,
         site: Option<String>,
     ) -> Result<Arc<Session>> {
-        self.create_run(kind, model, site, None, None)
+        self.create_run(kind, model, site, None, None, None)
     }
 
-    /// A new session of `kind` in `site`, following the workflow `folder` there if given, and
-    /// spawned by `parent` if given (a webhook's stored run, `spawn_run`).
+    /// A new session of `kind` in `site`, following the workflow `folder` there if given,
+    /// spawned by `parent` if given (a webhook's stored run, `spawn_run`), and run by the outside
+    /// agent `harness` if given (checked by the caller).
     pub fn create_run(
         &self,
         kind: RunKind,
@@ -57,6 +58,7 @@ impl SessionManager {
         site: Option<String>,
         folder: Option<String>,
         parent: Option<SessionId>,
+        harness: Option<String>,
     ) -> Result<Arc<Session>> {
         let mut sessions = self.sessions.write().expect("sessions lock");
         let id = loop {
@@ -71,6 +73,7 @@ impl SessionManager {
             site,
             folder,
             parent,
+            harness,
             state: TurnState::Idle,
             last_seq: 0,
             context_tokens: 0,
@@ -91,6 +94,18 @@ impl SessionManager {
             .get(id)
             .cloned()
             .ok_or_else(|| ServerError::SessionNotFound(id.to_string()))
+    }
+
+    /// Forgets session `id` and deletes its folder.
+    pub fn remove(&self, id: &str) -> Result<Arc<Session>> {
+        let session = self
+            .sessions
+            .write()
+            .expect("sessions lock")
+            .remove(id)
+            .ok_or_else(|| ServerError::SessionNotFound(id.to_string()))?;
+        std::fs::remove_dir_all(session.dir()).map_err(|e| ServerError::io(session.dir(), e))?;
+        Ok(session)
     }
 
     /// Most recently updated first.

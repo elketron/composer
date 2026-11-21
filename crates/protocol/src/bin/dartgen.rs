@@ -553,6 +553,7 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
         site: Some("plans".into()),
         folder: None,
         parent: None,
+        harness: Some("claude".into()),
         state: TurnState::AwaitingApproval,
         last_seq: 42,
         context_tokens: 1200,
@@ -747,6 +748,7 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
         ServerMessage::SessionUpdated {
             session: info.clone(),
         },
+        ServerMessage::SessionDeleted { session: s() },
         ServerMessage::ToolsChanged { session: s() },
         ServerMessage::PageChanged {
             url: "site://memory/user.md".into(),
@@ -771,6 +773,13 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
             kind: RunKind::Workflow,
             model: Some("qwen3".into()),
             site: Some("plans".into()),
+            harness: None,
+        },
+        ClientCommand::SessionCreate {
+            kind: RunKind::Agentic,
+            model: None,
+            site: None,
+            harness: Some("claude".into()),
         },
         ClientCommand::SessionList,
         ClientCommand::SessionAttach {
@@ -783,6 +792,7 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
             messages: 50,
         },
         ClientCommand::SessionDetach { session: s() },
+        ClientCommand::SessionDelete { session: s() },
         ClientCommand::ModelList,
         ClientCommand::ModelSet {
             session: s(),

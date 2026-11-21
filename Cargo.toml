@@ -25,7 +25,7 @@ walkdir = "2.5.0"
 portable-pty = "0.9"
 tempfile = "3.27.0"
 tokio = { version = "1.53.3", features = ["full"] }
-tokio-util = "0.7.20"
+tokio-util = { version = "0.7.20", features = ["compat"] }
 axum = { version = "0.8.9", features = ["ws", "multipart"] }
 reqwest = { version = "0.13.5", features = ["json", "stream", "form", "multipart"] }
 futures = "0.3.34"
@@ -51,6 +51,7 @@ tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 ratatui = "0.30.2"
 crossterm = { version = "0.29.0", features = ["event-stream"] }
 unicode-width = "0.2.2"
+agent-client-protocol = "5.5.1"
 
 # Image decoding and resizing (attachments) is very slow unoptimized; keep debug builds usable.
 [profile.dev.package.image]

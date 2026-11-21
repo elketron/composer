@@ -4,17 +4,10 @@ use std::sync::Mutex;
 
 use serde_json::Value;
 
-/// Commands whose first word alone says little: their rule keeps the subcommand too
-/// (`Bash(git push:*)`, not `Bash(git:*)`).
-pub(crate) const SUBCOMMAND_TOOLS: &[&str] = &[
-    "git", "cargo", "npm", "pnpm", "yarn", "npx", "bun", "docker", "kubectl", "go", "pip", "uv",
-    "just", "dart", "flutter", "gh",
-];
-
 /// What the user said `always` to, per project: `state/tool_rules.json`,
-/// `{ "<project folder>": ["Bash(npm test:*)", "WebFetch(domain:docs.rs)"] }`. Outside agent
-/// reach. The rules are Claude Code's own permission syntax: they go to `--allowedTools` from
-/// the next run on.
+/// `{ "<folder>": ["Bash(npm test:*)", "<mcp tool>"] }`. Outside agent
+/// reach. The rules use Claude Code's permission syntax (`Bash(<command>:*)`, an MCP tool's
+/// name).
 pub struct ToolRules {
     file: PathBuf,
     rules: Mutex<BTreeMap<String, Vec<String>>>,
@@ -56,38 +49,8 @@ impl ToolRules {
     }
 }
 
-/// The rule `always` adds for this call, if it has a safe one: `Bash(<command>:*)` for a plain
-/// command (no shell operators), `WebFetch(domain:<host>)`, or the tool's name for tools that
-/// don't touch files. File tools outside the working folders get none: allow them once.
-pub fn rule_for(tool: &str, input: &Value) -> Option<String> {
-    match tool {
-        "Bash" => {
-            let command = input["command"].as_str()?;
-            if has_shell_operators(command) {
-                return None;
-            }
-            let words: Vec<&str> = command.split_whitespace().collect();
-            let first = *words.first()?;
-            let prefix = if SUBCOMMAND_TOOLS.contains(&first) {
-                // `git -C x push`: no subcommand to pin, and `git:*` would allow all of git.
-                let sub = words.get(1).filter(|s| !s.starts_with('-'))?;
-                format!("{first} {sub}")
-            } else {
-                first.to_string()
-            };
-            Some(format!("Bash({prefix}:*)"))
-        }
-        "WebFetch" => Some(format!(
-            "WebFetch(domain:{})",
-            host(input["url"].as_str()?)?
-        )),
-        "Read" | "Write" | "Edit" | "MultiEdit" | "NotebookEdit" | "Glob" | "Grep" => None,
-        _ => Some(tool.to_string()),
-    }
-}
-
-/// Whether `rule` covers `tool` with `input` (the subset of Claude Code's syntax that
-/// `rule_for` makes; anything else never matches here).
+/// Whether `rule` covers `tool` with `input` (`Bash(<prefix>:*)` or a tool's name; anything else
+/// never matches here).
 fn rule_matches(rule: &str, tool: &str, input: &Value) -> bool {
     let Some((name, pattern)) = rule.strip_suffix(')').and_then(|r| r.split_once('(')) else {
         return rule == tool;
@@ -100,9 +63,6 @@ fn rule_matches(rule: &str, tool: &str, input: &Value) -> bool {
             !has_shell_operators(command)
                 && (command == prefix || command.starts_with(&format!("{prefix} ")))
         }),
-        ("WebFetch", _) => pattern
-            .strip_prefix("domain:")
-            .is_some_and(|domain| input["url"].as_str().and_then(host).as_deref() == Some(domain)),
         _ => false,
     }
 }
@@ -130,53 +90,11 @@ fn has_shell_operators(command: &str) -> bool {
     quote.is_some()
 }
 
-fn host(url: &str) -> Option<String> {
-    let rest = url.split_once("://")?.1;
-    let host = rest.split(['/', '?', '#']).next()?;
-    let host = host.rsplit('@').next()?.split(':').next()?;
-    (!host.is_empty()).then(|| host.to_lowercase())
-}
-
 #[cfg(test)]
 mod tests {
     use serde_json::json;
 
     use super::*;
-
-    #[test]
-    fn rules_from_calls() {
-        let bash = |c: &str| rule_for("Bash", &json!({ "command": c }));
-        assert_eq!(
-            bash("python3 -c 'print(1)'").as_deref(),
-            Some("Bash(python3:*)")
-        );
-        assert_eq!(
-            bash("npm test -- --watch").as_deref(),
-            Some("Bash(npm test:*)")
-        );
-        assert_eq!(bash("git -C x status"), None);
-        assert_eq!(bash("make && rm -rf /"), None);
-        assert_eq!(bash("echo $(whoami)"), None);
-        assert_eq!(
-            bash("python3 -c 'print(6*7); x = \"$y\"'").as_deref(),
-            Some("Bash(python3:*)")
-        );
-        assert_eq!(bash("echo \"$(whoami)\""), None);
-        assert_eq!(bash("echo 'unclosed"), None);
-        assert_eq!(
-            rule_for(
-                "WebFetch",
-                &json!({ "url": "https://Docs.rs/serde/latest" })
-            )
-            .as_deref(),
-            Some("WebFetch(domain:docs.rs)")
-        );
-        assert_eq!(rule_for("Write", &json!({ "file_path": "/etc/x" })), None);
-        assert_eq!(
-            rule_for("WebSearch", &json!({})).as_deref(),
-            Some("WebSearch")
-        );
-    }
 
     #[test]
     fn matching() {
@@ -198,16 +116,6 @@ mod tests {
             &bash("npm test; curl evil")
         ));
         assert!(!rule_matches("Bash(npm:*)", "Read", &bash("npm")));
-        assert!(rule_matches(
-            "WebFetch(domain:docs.rs)",
-            "WebFetch",
-            &json!({ "url": "https://docs.rs/x" })
-        ));
-        assert!(!rule_matches(
-            "WebFetch(domain:docs.rs)",
-            "WebFetch",
-            &json!({ "url": "https://docs.rs.evil.com/x" })
-        ));
         assert!(rule_matches("WebSearch", "WebSearch", &json!({})));
     }
 

@@ -106,6 +106,7 @@ async fn a_watching_session_hears_when_files_land() {
             kind: composer_protocol::RunKind::Agentic,
             model: None,
             site: None,
+            harness: None,
         },
     )
     .await;
@@ -214,6 +215,7 @@ async fn a_steady_trickle_of_changes_is_still_delivered() {
             kind: composer_protocol::RunKind::Agentic,
             model: None,
             site: None,
+            harness: None,
         },
     )
     .await;

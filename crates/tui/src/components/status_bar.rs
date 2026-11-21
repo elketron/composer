@@ -146,6 +146,7 @@ mod tests {
             model: None,
             preview: None,
             updated: String::new(),
+            harness: None,
         });
         state.session.current = Some("s1".into());
         let mut terminal = Terminal::new(TestBackend::new(100, 1)).unwrap();

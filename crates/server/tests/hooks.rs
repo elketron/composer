@@ -27,6 +27,7 @@ fn hook(kind: RunKind, store: bool) -> HookConfig {
         site: Some("prompts".into()),
         folder: Some("krea".into()),
         prompt: "Improve: {{prompt}}".into(),
+        harness: None,
         store,
         timeout_secs: 30,
     }

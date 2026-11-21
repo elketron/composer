@@ -26,6 +26,9 @@ pub struct HookConfig {
     /// as itself), `{{field}}` one of its top-level fields. Empty: the body.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub prompt: String,
+    /// The outside agent (an `[acp.<name>]`) that runs it: agentic and stored runs only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub harness: Option<String>,
     /// Store the run as a session (its id comes back too). Off: nothing is written.
     #[serde(default)]
     pub store: bool,
@@ -106,6 +109,7 @@ mod tests {
             site: None,
             folder: None,
             prompt: prompt.into(),
+            harness: None,
             store: false,
             timeout_secs: 300,
         }

@@ -36,6 +36,7 @@ async fn run_tools(
             kind: composer_protocol::RunKind::Agentic,
             model: None,
             site: None,
+            harness: None,
         },
     )
     .await;

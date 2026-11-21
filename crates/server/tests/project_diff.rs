@@ -117,6 +117,7 @@ async fn endpoint_diffs_the_folder_of_the_session_site() {
             kind: composer_protocol::RunKind::Agentic,
             model: None,
             site: None,
+            harness: None,
         },
     )
     .await;
@@ -153,6 +154,7 @@ async fn endpoint_diffs_the_folder_of_the_session_site() {
             kind: composer_protocol::RunKind::Agentic,
             model: None,
             site: Some("game".into()),
+            harness: None,
         },
     )
     .await;

@@ -22,9 +22,8 @@ impl StoredRun {
     /// `waited`: whoever starts it waits for [`StoredRun::result`], so the parent is not told
     /// when that first turn ends.
     ///
-    /// Every run here is on composer's own harness. An agentic run on an outside agent (ACP)
-    /// starts here too, once that harness exists: the request picks it, and the session
-    /// records it.
+    /// An agentic run may be on an outside agent (`request.harness`): the session records it,
+    /// and its first turn starts the agent.
     pub fn start(
         server: &Arc<Server>,
         request: &RunRequest,
@@ -39,6 +38,7 @@ impl StoredRun {
                 request.site.clone(),
                 request.folder.clone(),
                 parent,
+                request.harness.clone(),
             )
             .map_err(|e| e.to_string())?;
         server.hub.send(ServerMessage::SessionUpdated {

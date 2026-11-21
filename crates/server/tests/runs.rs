@@ -212,6 +212,7 @@ async fn a_session_runs_its_kind() {
             kind: RunKind::Workflow,
             model: None,
             site: None,
+            harness: None,
         },
     )
     .await;

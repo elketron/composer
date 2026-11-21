@@ -17,6 +17,8 @@ pub struct AskOptions {
     pub session: Option<String>,
     /// The site a new session starts in.
     pub site: Option<String>,
+    /// The outside agent (an `[acp.<name>]`) a new session runs on.
+    pub harness: Option<String>,
     pub show_thinking: bool,
     /// `http(s)://host[:port]` of the server.
     pub server_url: String,
@@ -56,6 +58,7 @@ pub async fn ask(options: AskOptions) -> anyhow::Result<()> {
                     kind: options.kind,
                     model: None,
                     site: options.site,
+                    harness: options.harness,
                 }))
                 .await?;
             match next_reply(&mut socket).await? {

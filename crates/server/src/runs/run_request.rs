@@ -6,22 +6,28 @@ use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 
 use crate::agent::{RunSettings, Site, folder_instructions};
+use crate::config::Config;
+use crate::harness::AcpConfig;
 use crate::server::Server;
 use crate::session::run_once;
 
-/// A run to start: its kind, the site and workflow folder it is in, and its input.
+/// A run to start: its kind, the site and workflow folder it is in, its input, and the outside
+/// agent that runs it (an `[acp.<name>]`; agentic runs only).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RunRequest {
     pub kind: RunKind,
     pub site: Option<String>,
     pub folder: Option<String>,
     pub input: String,
+    pub harness: Option<String>,
 }
 
 impl RunRequest {
-    /// The request with its site's own name, after checking the site exists and the folder is
-    /// inside it with instructions (`CONTEXT.md` or `index.md`).
-    pub fn checked(mut self, web: &Web) -> Result<Self, String> {
+    /// The request with its site's own name, after checking the site exists, the folder is
+    /// inside it with instructions (`CONTEXT.md` or `index.md`), and the harness is one of
+    /// `config`'s that the run's kind may have.
+    pub fn checked(mut self, web: &Web, config: &Config) -> Result<Self, String> {
+        self.harness = AcpConfig::check(config, self.kind, self.harness.as_deref())?;
         self.site = match self.site.as_deref().map(str::trim) {
             None | Some("") => None,
             Some(name) => Some(Site::load(web, name)?.name),
@@ -51,6 +57,11 @@ impl RunRequest {
         server: &Arc<Server>,
         cancel: &CancellationToken,
     ) -> Result<Value, String> {
+        if let Some(harness) = &self.harness {
+            return Err(format!(
+                "a run on the outside agent `{harness}` is a session: store it"
+            ));
+        }
         run_once(
             server,
             &self.settings(),

@@ -86,6 +86,7 @@ async fn a_client_uses_a_sessions_tools_through_mcp() {
             kind: composer_protocol::RunKind::Agentic,
             model: None,
             site: None,
+            harness: None,
         },
     )
     .await;

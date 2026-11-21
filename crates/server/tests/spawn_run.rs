@@ -31,6 +31,7 @@ async fn parent(socket: &mut Socket, text: &str) -> SessionInfo {
             kind: RunKind::Agentic,
             model: None,
             site: None,
+            harness: None,
         },
     )
     .await;

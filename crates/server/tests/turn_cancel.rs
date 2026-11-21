@@ -40,6 +40,7 @@ async fn a_second_stop_leaves_the_queued_turn_it_had_not_seen() {
             kind: composer_protocol::RunKind::Agentic,
             model: None,
             site: None,
+            harness: None,
         },
     )
     .await;

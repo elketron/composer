@@ -25,6 +25,10 @@ pub struct SessionInfo {
     pub folder: Option<String>,
     /// The session that spawned this one (`spawn_run`), if any.
     pub parent: Option<SessionId>,
+    /// The outside agent (an `[acp.<name>]` of config.toml) that runs its turns; `None`:
+    /// composer's own.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub harness: Option<String>,
     pub state: TurnState,
     /// Last seq written to the transcript.
     pub last_seq: Seq,

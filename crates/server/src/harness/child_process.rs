@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use tokio::process::{Child, ChildStdout, Command};
+use tokio::process::{Child, ChildStdin, ChildStdout, Command};
 use tokio::sync::{Mutex, Notify};
 
 use crate::harness::WorkerScope;
@@ -42,6 +42,11 @@ impl ChildProcess {
     /// Its stdout, when piped; once.
     pub fn take_stdout(&self) -> Option<ChildStdout> {
         self.child.try_lock().ok()?.stdout.take()
+    }
+
+    /// Its stdin, when piped; once.
+    pub fn take_stdin(&self) -> Option<ChildStdin> {
+        self.child.try_lock().ok()?.stdin.take()
     }
 
     #[cfg(unix)]

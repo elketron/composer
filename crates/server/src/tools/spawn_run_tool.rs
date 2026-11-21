@@ -22,7 +22,8 @@ impl Tool for SpawnRunTool {
          starts a new session that you spawned, with every tool, and returns its id at once; \
          when its run ends, its last answer is posted here as a message. With `wait: true` an \
          agentic run is waited for and its answer returned instead. `site` (default: yours) and \
-         `folder`, a workflow folder inside that site, say whose instructions it follows."
+         `folder`, a workflow folder inside that site, say whose instructions it follows. \
+         `harness` (agentic only) runs it on an outside agent from config.toml's [acp.<name>]."
     }
 
     fn parameters(&self) -> Value {
@@ -39,6 +40,10 @@ impl Tool for SpawnRunTool {
                     "description": "a workflow folder inside the site, e.g. krea2_prompt_improver"
                 },
                 "prompt": { "type": "string", "description": "its input" },
+                "harness": {
+                    "type": "string",
+                    "description": "agentic only: the outside agent that runs it; default: composer"
+                },
                 "wait": {
                     "type": "boolean",
                     "description": "agentic only: wait for its answer instead of a message later"
@@ -64,8 +69,9 @@ impl Tool for SpawnRunTool {
             site,
             folder: args["folder"].as_str().map(str::to_string),
             input: prompt.to_string(),
+            harness: args["harness"].as_str().map(str::to_string),
         }
-        .checked(&context.server.web)?;
+        .checked(&context.server.web, &context.server.config())?;
 
         if kind != RunKind::Agentic {
             let value = request

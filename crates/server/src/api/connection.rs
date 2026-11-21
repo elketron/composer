@@ -12,6 +12,7 @@ use crate::api::event_scope::{EventScope, scope};
 use crate::api::glob::url_matches;
 use crate::api::viewer_proxy;
 use crate::attachments::resolve;
+use crate::harness::AcpConfig;
 use crate::server::Server;
 use crate::session::{compact_now, submit};
 use crate::tools::ToolContext;
@@ -176,7 +177,13 @@ impl Connection {
 
     fn run(&self, server: &Arc<Server>, command: ClientCommand) -> Result<CommandResult, String> {
         match command {
-            ClientCommand::SessionCreate { kind, model, site } => {
+            ClientCommand::SessionCreate {
+                kind,
+                model,
+                site,
+                harness,
+            } => {
+                let harness = AcpConfig::check(&server.config(), kind, harness.as_deref())?;
                 let model = model
                     .map(|m| m.trim().to_string())
                     .filter(|m| !m.is_empty());
@@ -188,8 +195,15 @@ impl Connection {
                     .transpose()?;
                 let session = server
                     .sessions
-                    .create(kind, model, site)
+                    .create_run(kind, model, site, None, None, harness)
                     .map_err(|e| e.to_string())?;
+                // An outside agent starts with its session.
+                if session.info().harness.is_some()
+                    && let Err(error) = server.acp.start(server, &session)
+                {
+                    let _ = server.sessions.remove(session.id());
+                    return Err(error);
+                }
                 server.hub.send(ServerMessage::SessionUpdated {
                     session: session.info(),
                 });
@@ -247,6 +261,14 @@ impl Connection {
                 Ok(CommandResult::History { events, more })
             }
             ClientCommand::SessionDetach { session } => {
+                self.attached
+                    .lock()
+                    .expect("attached lock")
+                    .remove(&session);
+                Ok(CommandResult::Done)
+            }
+            ClientCommand::SessionDelete { session } => {
+                delete_session(server, &session)?;
                 self.attached
                     .lock()
                     .expect("attached lock")
@@ -395,6 +417,25 @@ impl Connection {
             }
         }
     }
+}
+
+/// `session.delete`: its turn stops, its outside agent, terminals and watches end, its folder
+/// goes, and every client hears it.
+fn delete_session(server: &Arc<Server>, id: &str) -> Result<(), String> {
+    let session = server.sessions.get(id).map_err(|e| e.to_string())?;
+    session.cancel(None);
+    server.acp.stop(id);
+    for tab in session.desk().tabs {
+        if let DeskTab::Terminal { id: terminal } = tab.tab {
+            let _ = server.terminals.close(server, &terminal);
+        }
+    }
+    server.watches.drop_session(id);
+    server.sessions.remove(id).map_err(|e| e.to_string())?;
+    server.hub.send(ServerMessage::SessionDeleted {
+        session: id.to_string(),
+    });
+    Ok(())
 }
 
 /// A client's attachment references, checked against the session's own uploads.

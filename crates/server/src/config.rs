@@ -32,6 +32,10 @@ pub struct Config {
     /// Webhooks by name, `[hooks.krea]`: `POST /api/hooks/krea`.
     #[serde(default)]
     pub hooks: BTreeMap<String, crate::runs::HookConfig>,
+    /// Outside agents over the Agent Client Protocol by name, `[acp.claude]`: a session's
+    /// `harness`.
+    #[serde(default)]
+    pub acp: BTreeMap<String, crate::harness::AcpConfig>,
 }
 
 impl Config {

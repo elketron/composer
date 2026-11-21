@@ -90,6 +90,7 @@ async fn session(socket: &mut Socket, site: &str) -> String {
             kind: RunKind::Agentic,
             model: None,
             site: None,
+            harness: None,
         },
     )
     .await

@@ -49,8 +49,9 @@ pub async fn call(
         site: hook.site.clone(),
         folder: hook.folder.clone(),
         input,
+        harness: hook.harness.clone(),
     }
-    .checked(&server.web)
+    .checked(&server.web, &server.config())
     .map_err(|e| {
         ApiError(
             StatusCode::INTERNAL_SERVER_ERROR,

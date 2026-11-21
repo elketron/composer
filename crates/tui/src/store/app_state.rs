@@ -227,6 +227,7 @@ impl AppState {
                         kind,
                         model: None,
                         site,
+                        harness: None,
                     },
                     Pending::CreateSession,
                 )
@@ -1057,6 +1058,7 @@ impl AppState {
                     kind: startup.kind,
                     model: None,
                     site: startup.site,
+                    harness: None,
                 },
                 Pending::CreateSession,
             ),
@@ -1159,6 +1161,7 @@ mod tests {
             site: None,
             folder: None,
             parent: parent.map(Into::into),
+            harness: None,
             state: TurnState::Idle,
             last_seq: 0,
             context_tokens: 0,

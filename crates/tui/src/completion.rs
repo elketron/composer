@@ -268,6 +268,7 @@ mod tests {
             model: None,
             preview: Some(preview.into()),
             updated: String::new(),
+            harness: None,
         };
         state.session.sessions = vec![
             session("a3f1", RunKind::Agentic, "fix the login bug"),

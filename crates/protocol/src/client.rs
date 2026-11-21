@@ -28,6 +28,10 @@ pub enum ClientCommand {
         /// The site it starts in.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         site: Option<String>,
+        /// The outside agent (an `[acp.<name>]` of config.toml) that runs it; default: composer's
+        /// own. Agentic sessions only.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        harness: Option<String>,
     },
 
     #[serde(rename = "session.list")]
@@ -52,6 +56,11 @@ pub enum ClientCommand {
 
     #[serde(rename = "session.detach")]
     SessionDetach { session: SessionId },
+
+    /// Deletes a session: its running turn stops, its outside agent and terminals end, and its
+    /// folder goes. Every client hears `session.deleted`. The reply is `done`.
+    #[serde(rename = "session.delete")]
+    SessionDelete { session: SessionId },
 
     /// Queued if the agent is mid-turn.
     #[serde(rename = "message.send")]

@@ -7,6 +7,7 @@ use composer_protocol::{ChatMessage, MessageSource, ServerMessage, TurnState};
 
 use crate::agent::RunSettings;
 use crate::attachments::{ForModel, for_model};
+use crate::harness::run_acp_turn;
 use crate::provider::ModelMessage;
 use crate::server::Server;
 use crate::session::compaction::compact;
@@ -38,17 +39,24 @@ async fn drive(server: Arc<Server>, session: Arc<Session>) {
             return;
         }
         let id = session.id().to_string();
-        for message in messages {
-            accept_user_message(&server, &session, message);
-        }
+        let texts: Vec<String> = messages
+            .into_iter()
+            .map(|message| accept_user_message(&server, &session, message))
+            .collect();
 
         let started = session.emit(&server.hub, |seq| ServerMessage::TurnStarted {
             session: id.clone(),
             seq,
         });
         let cancel = session.new_turn_token(Some(started));
-        let settings = RunSettings::for_session(&session.info());
-        let outcome = run(&server, &settings, server.sink(&session), &cancel).await;
+        let info = session.info();
+        let outcome = match info.harness {
+            Some(_) => run_acp_turn(&server, &session, texts.join("\n\n"), &cancel).await,
+            None => {
+                let settings = RunSettings::for_session(&info);
+                run(&server, &settings, server.sink(&session), &cancel).await
+            }
+        };
         if let Err(error) = &outcome {
             tracing::warn!("session {id}: {error}");
             let message = system_message(format!("Turn stopped: {error}"));
@@ -72,7 +80,13 @@ async fn drive(server: Arc<Server>, session: Arc<Session>) {
     }
 }
 
-fn accept_user_message(server: &Arc<Server>, session: &Arc<Session>, message: ChatMessage) {
+/// Records a user message (in the transcript, and as the model sees it in history) and gives
+/// that model text: attachments and pages named, files inlined.
+fn accept_user_message(
+    server: &Arc<Server>,
+    session: &Arc<Session>,
+    message: ChatMessage,
+) -> String {
     let mut content = message.content.clone();
     if !message.pages.is_empty() {
         content.push_str("\n\nAttached pages:\n");
@@ -109,7 +123,10 @@ fn accept_user_message(server: &Arc<Server>, session: &Arc<Session>, message: Ch
     if let Some(MessageSource::Watch { pattern }) = &message.source {
         content = format!("[files changed under your watch {pattern}]\n{content}")
     }
-    let stored = session.push_history(ModelMessage::User { content, images });
+    let stored = session.push_history(ModelMessage::User {
+        content: content.clone(),
+        images,
+    });
     if let Err(e) = stored {
         tracing::error!("session {}: {e}", session.id());
     }
@@ -120,10 +137,16 @@ fn accept_user_message(server: &Arc<Server>, session: &Arc<Session>, message: Ch
         message,
     });
     session.update_info(&server.hub, |info| info.preview = Some(preview));
+    content
 }
 
 /// Compacts an idle session now (`:compact`). Errors if a turn is running.
 pub fn compact_now(server: &Arc<Server>, session: &Arc<Session>) -> Result<(), String> {
+    if let Some(harness) = session.info().harness {
+        return Err(format!(
+            "`{harness}` keeps its own context; composer doesn't compact it"
+        ));
+    }
     if !session.try_start() {
         return Err("a turn is running; compact when it is done".into());
     }
