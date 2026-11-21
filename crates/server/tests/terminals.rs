@@ -68,6 +68,7 @@ async fn a_sessions_terminal_runs_in_the_folder_of_its_site() {
         ),
     )
     .unwrap();
+    approve_folder(&server, "game");
     let session = server
         .sessions
         .create(

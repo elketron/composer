@@ -169,11 +169,19 @@ pub async fn project_diff(
     Path(id): Path<String>,
 ) -> Result<Json<ProjectDiff>, ApiError> {
     let session = server.sessions.get(&id)?;
-    let Some(folder) = server.session_folder(&session.info()) else {
-        return Err(ApiError(
-            StatusCode::NOT_FOUND,
-            "the session's site names no folder (`folder:` in its index.md)".into(),
-        ));
+    let info = session.info();
+    let Some(folder) = server.session_folder(&info) else {
+        // Why not: no site, no folder named, or one the user has not approved.
+        let why = info
+            .site
+            .as_deref()
+            .and_then(|site| crate::agent::Site::load(&server.web, site).ok())
+            .filter(|site| site.declared_folder().is_ok())
+            .and_then(|site| site.existing_folder(&server.approvals).err())
+            .unwrap_or_else(|| {
+                "the session's site names no folder (`folder:` in its index.md)".into()
+            });
+        return Err(ApiError(StatusCode::NOT_FOUND, why));
     };
     let diff = crate::project::project_diff(&folder, None)
         .await

@@ -33,6 +33,7 @@ async fn the_agent_puts_things_on_the_stage() {
             root.join("game").display()
         ),
     );
+    approve_folder(&server, "game");
     let session = server
         .sessions
         .create(

@@ -618,6 +618,7 @@ async fn open_shows_an_image_to_the_model() {
         ),
     )
     .unwrap();
+    approve_folder(&server, "game");
     let mut socket = connect(addr, &server.token).await;
     send(
         &mut socket,

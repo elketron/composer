@@ -117,7 +117,7 @@ inline_max_kb = 100
 # Outside agents over the Agent Client Protocol (ACP): a session started with `harness = "<name>"`
 # (agentic sessions only) runs on that agent instead of composer's own loop. Composer starts
 # `command` with `args` and `env` (added to composer's own environment) in the session site's
-# `folder:` and hands it composer itself as its MCP server, so it has composer's tools. Its
+# `folder:` (once you approved it) and hands it composer itself as its MCP server, so it has composer's tools. Its
 # permission requests come to your clients as approvals.
 # [acp.claude]
 # command = "claude-agent-acp"

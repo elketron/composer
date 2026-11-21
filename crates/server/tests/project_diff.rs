@@ -109,6 +109,7 @@ async fn endpoint_diffs_the_folder_of_the_session_site() {
         ),
     )
     .unwrap();
+    approve_folder(&server, "game");
     let mut socket = connect(addr, &server.token).await;
     send(
         &mut socket,

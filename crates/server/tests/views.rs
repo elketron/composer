@@ -100,6 +100,12 @@ async fn a_sites_folder_changes_render() {
         ),
     );
     let token = server.token.clone();
+    // Not approved yet: no changes view, and it says why.
+    let unapproved = get(addr, "/view/changes/game", Some(&token)).await;
+    assert_eq!(unapproved.status(), 404);
+    let html = unapproved.text().await.unwrap();
+    assert!(html.contains("is not approved"), "{html}");
+    approve_folder(&server, "game");
 
     let changes = get(addr, "/view/changes/game", Some(&token)).await;
     assert_eq!(changes.status(), 200);

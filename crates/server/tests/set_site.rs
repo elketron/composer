@@ -89,6 +89,7 @@ async fn a_site_brings_its_page_and_tools() {
         system_prompt(
             &settings,
             &server.web,
+            &server.approvals,
             &index,
             session.info().site.as_deref(),
             session.id(),

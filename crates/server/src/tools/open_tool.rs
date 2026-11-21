@@ -186,7 +186,7 @@ fn folder_file(context: &ToolContext, raw: &str) -> Result<PathBuf, String> {
         .site
         .as_ref()
         .ok_or("you are in no site with a folder: open a site's picture with a site:// URL")?
-        .existing_folder()?;
+        .existing_folder(&context.server.approvals)?;
     let path = if raw.starts_with('/') || raw.starts_with('~') {
         expand_home(raw)
     } else {

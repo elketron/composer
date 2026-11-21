@@ -19,8 +19,8 @@ over the Agent Client Protocol (ACP); composer hands that agent itself as its MC
 
 - **Sites.** A site's `index.md` is its homepage and its instructions. It can bring actions (a
   `justfile`, each recipe run after your approval), MCP servers (`mcp.toml`, started once you
-  approve the file) and a folder outside the web it works on (`folder:` in its frontmatter).
-  Setting a site (`set_site`) changes the agent's tools to fit it.
+  approve the file) and a folder outside the web it works on (`folder:` in its frontmatter, used
+  once you approve that folder). Setting a site (`set_site`) changes the agent's tools to fit it.
 - **Composer's MCP server.** `composer mcp --session <id>` serves a session's tools over MCP on
   stdio, to any harness. The list follows the session's site and announces changes.
 - **Webhooks.** `POST /api/hooks/<name>` starts a run of any kind with its own token, waits, and

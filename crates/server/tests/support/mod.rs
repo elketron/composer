@@ -110,3 +110,21 @@ pub fn finished(tool_calls: Vec<ModelToolCall>) -> ModelEvent {
         finish_reason: None,
     }
 }
+
+/// What the user's yes to `site`'s `folder:` records: the folder the site names now counts.
+#[allow(dead_code)]
+pub fn approve_folder(server: &composer_server::Server, site: &str) {
+    let folder = composer_server::agent::Site::load(&server.web, site)
+        .unwrap()
+        .declared_folder()
+        .unwrap();
+    server
+        .approvals
+        .approve(
+            site,
+            composer_server::agent::FOLDER_APPROVAL,
+            &composer_server::agent::folder_hash(&folder),
+        )
+        .unwrap();
+    server.refresh_mounts();
+}

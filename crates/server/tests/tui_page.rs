@@ -36,6 +36,7 @@ async fn a_tui_page_starts_in_the_sites_folder() {
             project.display()
         ),
     );
+    approve_folder(&server, "flow");
     write(
         &dir.path().join("sites/flow/review.md"),
         "---\ntitle: Review\ntype: tui\ncommand: hunk diff\ncontrol: hunk\ncwd: folder\n---\n# Review\n",

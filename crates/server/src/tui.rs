@@ -89,7 +89,7 @@ impl TuiPage {
                 .site
                 .as_ref()
                 .ok_or("this TUI runs in the site's folder, and the session is in no site")?
-                .existing_folder()?,
+                .existing_folder(&context.server.approvals)?,
             "site" => site.clone(),
             "home" => context.server.home.root().to_path_buf(),
             other => {
@@ -118,7 +118,7 @@ impl TuiPage {
         let folder = context
             .site
             .as_ref()
-            .and_then(|site| site.existing_folder().ok());
+            .and_then(|site| site.existing_folder(&context.server.approvals).ok());
         let allowed = path.starts_with(&site)
             || path.as_path() == context.server.home.root()
             || folder

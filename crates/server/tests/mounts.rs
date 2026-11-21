@@ -55,6 +55,7 @@ async fn listen() -> (
     let projects = tempfile::tempdir().unwrap();
     let (home, server, _p, addr) = start_with(Config::defaults(), vec![]).await;
     plans_folder(&home.path().join("sites"), projects.path());
+    approve_folder(&server, "plans");
     server.reindex();
     // The watcher comes up when serve runs; let it, as the other watcher tests do.
     tokio::time::sleep(Duration::from_millis(500)).await;
@@ -118,6 +119,15 @@ async fn a_mount_existing_at_server_start_is_scanned() {
     std::os::unix::fs::symlink(&mounted, home.sites().join("plans/mounted")).unwrap();
 
     plans_folder(&home.sites(), projects.path());
+    // Approved before the server starts: the mount counts from the start.
+    composer_server::actions::Approvals::load(&home.approvals_file())
+        .unwrap()
+        .approve(
+            "plans",
+            composer_server::agent::FOLDER_APPROVAL,
+            &composer_server::agent::folder_hash(&projects.path().canonicalize().unwrap()),
+        )
+        .unwrap();
     let provider = Arc::new(MockProvider::new(vec![]));
     let server = composer_server::Server::new(home, Config::defaults(), provider).unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();

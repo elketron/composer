@@ -207,15 +207,20 @@ impl Connection {
                 server.hub.send(ServerMessage::SessionUpdated {
                     session: session.info(),
                 });
-                // Started in a site: its `mcp.toml` is asked about and its servers started as
-                // when the site is set; the reply does not wait for that.
-                if let Some(site) = session.info().site {
+                // Started in a site: its `folder:` and `mcp.toml` are asked about and its
+                // servers started as when the site is set; the reply does not wait for that.
+                if let Some(site) = session
+                    .info()
+                    .site
+                    .and_then(|site| crate::agent::Site::load(&server.web, &site).ok())
+                {
                     let (server, session) = (server.clone(), session.clone());
                     tokio::spawn(async move {
                         let sink = server.sink(&session);
                         let cancel = tokio_util::sync::CancellationToken::new();
-                        let note = crate::site_mcp::enter(&server, &*sink, &site, &cancel).await;
-                        if note.approved {
+                        let (folder, mcp) =
+                            crate::agent::enter_site(&server, &*sink, &site, &cancel).await;
+                        if mcp.approved || folder.approved {
                             server.hub.send(ServerMessage::ToolsChanged {
                                 session: session.id().to_string(),
                             });

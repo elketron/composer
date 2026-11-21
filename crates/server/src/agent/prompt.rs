@@ -2,6 +2,7 @@ use std::path::Path;
 
 use composer_core::{Index, SiteUrl, Web};
 
+use crate::actions::Approvals;
 use crate::agent::RunSettings;
 
 /// Memory pages listed in the prompt, at most.
@@ -12,6 +13,7 @@ const MEMORY_LIST_MAX: usize = 60;
 pub fn system_prompt(
     settings: &RunSettings,
     workspace: &Web,
+    approvals: &Approvals,
     index: &Index,
     site: Option<&str>,
     id: &str,
@@ -82,7 +84,7 @@ pub fn system_prompt(
     }
     // Last, as it changes most often: the sections before it stay a
     // stable prefix for the provider's prompt cache.
-    sections.push(folder_section(site.as_ref()));
+    sections.push(folder_section(site.as_ref(), approvals));
 
     sections.join("\n\n---\n\n")
 }
@@ -131,15 +133,23 @@ pub fn folder_instructions(
     ))
 }
 
-/// The folder of the session's site, if it names one, with its git branch.
-fn folder_section(site: Option<&crate::agent::Site>) -> String {
-    match site.and_then(|site| site.existing_folder().ok()) {
-        Some(folder) => format!(
+/// The folder of the session's site, if it names one the user approved, with its git branch.
+fn folder_section(site: Option<&crate::agent::Site>, approvals: &Approvals) -> String {
+    let Some(site) = site else {
+        return "# Folder\n\nNone.".to_string();
+    };
+    match (site.existing_folder(approvals), site.declared_folder()) {
+        (Ok(folder), _) => format!(
             "# Folder\n\nThe site works on {}{}: terminals start there.",
             folder.display(),
             git_branch(&folder)
         ),
-        None => "# Folder\n\nNone.".to_string(),
+        (Err(_), Ok(folder)) => format!(
+            "# Folder\n\nNone yet: the site names {}, but the user has not approved it, so \
+             terminals and processes don't start there. Setting the site again asks them.",
+            folder.display()
+        ),
+        (Err(_), Err(_)) => "# Folder\n\nNone.".to_string(),
     }
 }
 

@@ -82,7 +82,7 @@ fn shown(view: Result<Response, ApiError>) -> Response {
 
 async fn render_changes(server: &Server, site: &str) -> Result<Response, ApiError> {
     let folder = crate::agent::Site::load(&server.web, site)
-        .and_then(|site| site.existing_folder())
+        .and_then(|site| site.existing_folder(&server.approvals))
         .map_err(|e| ApiError(StatusCode::NOT_FOUND, e))?;
     let diff = crate::project::project_diff_plain(&folder, None)
         .await

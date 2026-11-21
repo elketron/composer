@@ -80,7 +80,8 @@ impl Server {
         // Scoped mounts (ticket 0122): a symlink inside a site may point into a site's folder;
         // one that lands elsewhere is refused, not followed.
         let web = Web::with_allowed(home.sites(), vec![]);
-        web.set_allowed(site_folders(&web));
+        let approvals = Approvals::load(&home.approvals_file())?;
+        web.set_allowed(site_folders(&web, &approvals));
         if !web.root().is_dir() {
             return Err(ServerError::Invalid(format!(
                 "{} does not exist; run `composer init` first",
@@ -104,7 +105,7 @@ impl Server {
                 home.sites(),
             ))),
             site_mcp: crate::site_mcp::ActiveSites::default(),
-            approvals: Approvals::load(&home.approvals_file())?,
+            approvals,
             pending_approvals: PendingApprovals::default(),
             web_sessions: crate::api::WebSessions::default(),
             terminals: crate::terminals::Terminals::default(),
@@ -244,20 +245,29 @@ impl Server {
         ))
     }
 
-    /// The folder of the site `session` is in (`folder:`), when it names one that exists.
+    /// The folder of the site `session` is in (`folder:`), when it names one that exists and the
+    /// user approved it for the site.
     pub fn session_folder(&self, session: &SessionInfo) -> Option<PathBuf> {
         let site = crate::agent::Site::load(&self.web, session.site.as_deref()?).ok()?;
-        site.existing_folder().ok()
+        site.existing_folder(&self.approvals).ok()
     }
 
     /// Builds the index again from the web as it is now (a mount closed, a site's folder
-    /// changed), and the folders mounts may point into.
+    /// changed or approved), and the folders mounts may point into.
     pub fn reindex(&self) {
-        self.web.set_allowed(site_folders(&self.web));
+        self.refresh_mounts();
         match Index::build(&self.web) {
             Ok(index) => *self.index.write().expect("index lock") = index,
             Err(e) => tracing::warn!("reindexing: {e}"),
         }
+    }
+
+    /// The folders mounts may point into, again: the approved folders the sites name now. A site's
+    /// `index.md` changing calls it, so a `folder:` edited away from its approved folder stops
+    /// being reachable through a mount at once.
+    pub fn refresh_mounts(&self) {
+        self.web
+            .set_allowed(site_folders(&self.web, &self.approvals));
     }
 
     /// Starts what runs whether or not anyone is connected: the file watcher and watches.
@@ -508,6 +518,10 @@ impl Server {
             let page = Page::parse(url.clone(), content.to_string());
             self.index.write().expect("index lock").upsert(&page);
         }
+        // A site's `folder:` may have changed.
+        if url.path() == "index.md" {
+            self.refresh_mounts();
+        }
     }
 }
 
@@ -544,14 +558,15 @@ pub(crate) async fn shutdown_signal() {
     let _ = tokio::signal::ctrl_c().await;
 }
 
-/// The folders the sites name (`folder:`): where a mount inside a site may point.
-fn site_folders(web: &Web) -> Vec<PathBuf> {
+/// The folders the sites name (`folder:`) that the user approved for them: where a mount inside a
+/// site may point.
+fn site_folders(web: &Web, approvals: &Approvals) -> Vec<PathBuf> {
     let Ok(sites) = web.sites() else {
         return Vec::new();
     };
     sites
         .iter()
         .filter_map(|site| crate::agent::Site::load(web, &site.name).ok())
-        .filter_map(|site| site.existing_folder().ok())
+        .filter_map(|site| site.existing_folder(approvals).ok())
         .collect()
 }

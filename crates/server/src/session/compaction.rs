@@ -59,6 +59,7 @@ pub async fn compact(
         content: system_prompt(
             &settings,
             &server.web,
+            &server.approvals,
             &server.index.read().expect("index lock"),
             info.site.as_deref(),
             &info.id,

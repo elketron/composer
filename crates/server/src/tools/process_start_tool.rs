@@ -52,7 +52,7 @@ impl Tool for ProcessStartTool {
         let home = context
             .site
             .as_ref()
-            .and_then(|site| site.existing_folder().ok())
+            .and_then(|site| site.existing_folder(&server.approvals).ok())
             .or_else(|| server.session_folder(&session.info()))
             .unwrap_or_else(|| server.home.sites());
         let cwd = match args["cwd"]

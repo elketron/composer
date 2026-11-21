@@ -33,8 +33,10 @@ servers in its `mcp.toml`, once the user approved that file. `set_site(null)` le
 keeps the conversation.
 
 A site's frontmatter can name `folder: ~/Projects/x`, a folder outside the web the site works on.
-Terminals and background processes start there, recipes get it as `COMPOSER_FOLDER`, and the
-changes view shows its diff.
+It counts once the user approved that folder for the site (`set_site` asks them; changing
+`folder:` asks again). Then terminals and background processes start there, recipes get it as
+`COMPOSER_FOLDER`, and the changes view shows its diff. Until then the site works as if it named no
+folder; the `# Folder` section of your prompt says which.
 
 ## Kinds of run
 

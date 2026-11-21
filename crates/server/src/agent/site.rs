@@ -1,13 +1,29 @@
 //! A site as a capability: its `index.md` is the prompt and its `tools:` are the verbs that
 //! exist only while the agent is inside it. Its MCP servers are in its `mcp.toml`
-//! ([`crate::site_mcp`]).
+//! ([`crate::site_mcp`]). Its `folder:` counts once the user approved it
+//! ([`crate::agent::ensure_folder_approved`]).
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use composer_core::{SiteUrl, Web};
 use serde_json::Value;
 
+use crate::actions::Approvals;
 use crate::project::expand_home;
+
+/// The name a site's `folder:` approval is kept and asked under, in the recipe approval store
+/// (as `mcp.toml` is for the site's MCP servers). Clients show it as "Let <site> work in <path>",
+/// the path being the request's one argument.
+pub const FOLDER_APPROVAL: &str = "folder:";
+
+/// What a `folder:` approval is recorded against: sha256 of the canonical path it resolved to.
+/// The resolved folder, not the frontmatter text, because the folder is what the user approves
+/// (the request shows that absolute path): writing the same folder another way (`~/x`,
+/// `/home/me/x`) asks nothing new, while a different folder, or a symlink in the path now
+/// pointing elsewhere, is a different hash and asks again.
+pub fn folder_hash(folder: &Path) -> String {
+    crate::content_hash(folder.as_os_str().as_encoded_bytes())
+}
 
 /// A site a session can be in (`set_site`).
 #[derive(Debug, Clone)]
@@ -17,7 +33,8 @@ pub struct Site {
     /// `tools:`: the site tools ([`crate::tools::SITE_TOOLS`]) it brings.
     pub tools: Vec<String>,
     /// `folder:`: a folder outside the web the site works on (`~/Projects/composer`), `~`
-    /// expanded. Terminals start there and the changes view diffs it.
+    /// expanded, as the page says it. It counts only once the user approved it: use
+    /// [`Site::existing_folder`]. Then terminals start there and the changes view diffs it.
     pub folder: Option<PathBuf>,
     /// The site's `index.md` body, put in the prompt after the agent's.
     pub prompt: String,
@@ -64,8 +81,25 @@ impl Site {
         self.tools.iter().any(|t| t == tool)
     }
 
-    /// Its folder, when it names one that exists: canonical.
-    pub fn existing_folder(&self) -> Result<PathBuf, String> {
+    /// Its folder, when it names one that exists and the user approved that folder for the
+    /// site: canonical. Everything that works in a site's folder goes through this, so an
+    /// unapproved (or changed since approved) `folder:` is as if the site named none.
+    pub fn existing_folder(&self, approvals: &Approvals) -> Result<PathBuf, String> {
+        let folder = self.declared_folder()?;
+        match approvals.is_approved(&self.name, FOLDER_APPROVAL, &folder_hash(&folder)) {
+            true => Ok(folder),
+            false => Err(format!(
+                "site://{}'s folder {} is not approved: the user is asked when a session sets \
+                 the site",
+                self.name,
+                crate::project::tilde(&folder)
+            )),
+        }
+    }
+
+    /// The folder `folder:` names, when it exists: canonical, approved or not. Only for asking
+    /// about it; what works there uses [`Site::existing_folder`].
+    pub fn declared_folder(&self) -> Result<PathBuf, String> {
         let folder = self
             .folder
             .as_ref()

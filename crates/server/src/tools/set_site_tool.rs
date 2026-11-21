@@ -15,7 +15,7 @@ impl Tool for SetSiteTool {
     fn description(&self) -> &'static str {
         "Set the site you work in: from your next turn its index.md is part of your context, its \
          `tools:` and the MCP servers of its mcp.toml (once the user approved the file) join your \
-         tools, and its `folder:` is where terminals start. `site: null` leaves it."
+         tools, and its `folder:` (once the user approved that folder) is where terminals start. `site: null` leaves it."
     }
 
     fn parameters(&self) -> Value {

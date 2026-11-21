@@ -41,6 +41,13 @@ What runs outside composer's own page tools waits for your answer in a client:
   server's `allow` list asks you; "always" remembers that tool.
 - **A site's `mcp.toml`.** Nothing in it starts until you approve the file's exact bytes. The
   approval is kept by the file's hash, so any edit asks again.
+- **A site's `folder:`.** The folder a site names counts only once you approve that folder for
+  that site ("Let <site> work in <path>"), asked when a session sets the site or starts in it.
+  The approval is kept by a hash of the resolved absolute folder (in `state/approvals.json`), so
+  `folder:` naming another folder asks again, and the old folder stops counting at once. Until
+  then the site works as if it named no folder: no terminals, background processes or outside
+  agents start there, recipes get an empty `COMPOSER_FOLDER`, there is no changes view, and no mount
+  may point into it. A run that is not stored can't ask, so it only uses an earlier approval.
 - **Outside agents (ACP).** An outside agent asks composer through `session/request_permission`;
   composer shows that as an approval and passes your answer back. What the agent asks about, and
   what it does without asking, is decided by the agent and its own settings, not by composer.
@@ -50,12 +57,10 @@ What runs outside composer's own page tools waits for your answer in a client:
 - **Nothing composer starts is sandboxed.** Recipes, terminals, background processes, MCP servers
   and outside agents run as your user, with your `$HOME`, your logins and the network. A run you
   approve can do whatever your user can.
-- **`folder:` lets a site point the agent at any folder.** The page tools (`open`, `search`,
-  `write`, `edit`) work in `~/.composer/sites` and never reach `~/.composer/state`. But an agent
-  can edit any site's `index.md`, so it can set that site's `folder:` to any folder without an
-  approval. That folder is then where terminals and background processes start, what recipes get
-  as `COMPOSER_FOLDER`, where `open` may read image files, and a place a symlink inside a site may
-  point into, so `write` and `edit` follow such a symlink there. This is a known property of the
-  current design, not a bug.
+- **An approved folder is open to the page tools.** The page tools (`open`, `search`, `write`,
+  `edit`) work in `~/.composer/sites` and never reach `~/.composer/state`. Once you approve a
+  site's `folder:`, `open` may read image files there and a symlink inside a site may point into
+  it, so `write` and `edit` follow such a symlink there. "Always" rules for terminal commands are
+  kept per folder and apply through any site whose approved folder it is.
 - **Prompt injection is not solved.** A page, a web result, an attachment or a webhook body can
   steer an agent. Approvals are the boundary: read what you approve.

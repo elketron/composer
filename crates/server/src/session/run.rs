@@ -90,6 +90,7 @@ pub async fn run(
             _ => Some(system_prompt(
                 settings,
                 &server.web,
+                &server.approvals,
                 &server.index.read().expect("index lock"),
                 sink.site().as_deref(),
                 sink.id(),

@@ -468,6 +468,7 @@ async fn the_sh_escape_hatch_takes_one_command_with_quotes_and_newlines() {
         ),
     )
     .unwrap();
+    approve_folder(&server, "work");
     let session = server
         .sessions
         .create(

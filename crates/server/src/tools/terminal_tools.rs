@@ -36,7 +36,7 @@ pub(crate) async fn approve_command(
         context
             .site
             .as_ref()
-            .and_then(|site| site.existing_folder().ok())
+            .and_then(|site| site.existing_folder(&server.approvals).ok())
             .map_or_else(|| "home".into(), |folder| folder.display().to_string())
     );
     let input = json!({ "command": command });
