@@ -42,6 +42,14 @@ class _NewChatSheetState extends State<NewChatSheet> {
   /// The outside agent that runs it; null: composer's own. Agentic only.
   String? _harness;
 
+  final _scroll = ScrollController();
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
   static const _kinds = [
     (RunKind.agentic, 'a conversation with every tool'),
     (RunKind.workflow, 'read-only tools; ends with a result'),
@@ -93,43 +101,64 @@ class _NewChatSheetState extends State<NewChatSheet> {
       );
     }
 
-    Widget siteChip(String? site) => ChoiceChip(
-          key: Key('new-chat-site-${site ?? 'none'}'),
-          label: Text(site ?? 'no site', style: mono(size: 12)),
-          selected: site == _site,
-          onSelected: (_) => setState(() => _site = site),
+    // The selected state the kind rows use: a faint accent fill and edge, the label in full text colour.
+    Widget chip({required Key key, required String label, required bool selected, required VoidCallback onSelected}) => ChoiceChip(
+          key: key,
+          label: Text(label, style: mono(size: 12, color: selected ? t.text : t.muted)),
+          selected: selected,
+          selectedColor: t.accent.withValues(alpha: 0.12),
+          backgroundColor: Colors.transparent,
+          checkmarkColor: t.accent,
+          side: BorderSide(color: selected ? t.accent.withValues(alpha: 0.55) : t.border),
+          onSelected: (_) => onSelected(),
         );
 
-    Widget harnessChip(String? harness) => ChoiceChip(
+    Widget siteChip(String? site) => chip(
+          key: Key('new-chat-site-${site ?? 'none'}'),
+          label: site ?? 'no site',
+          selected: site == _site,
+          onSelected: () => setState(() => _site = site),
+        );
+
+    Widget harnessChip(String? harness) => chip(
           key: Key('new-chat-harness-${harness ?? 'composer'}'),
-          label: Text(harness ?? 'composer', style: mono(size: 12)),
+          label: harness ?? 'composer',
           selected: harness == _harness,
-          onSelected: (_) => setState(() => _harness = harness),
+          onSelected: () => setState(() => _harness = harness),
         );
 
     final names = {for (final s in sites) s.name, ?widget.site};
+    // Everything above Start scrolls when it does not fit (a server can have many sites), so every
+    // site is reachable and Start stays in view.
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          const Text('New chat', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 12),
-          Text('KIND', style: mono(size: 10.5, color: t.faint)),
-          const SizedBox(height: 8),
-          for (final (kind, description) in _kinds) choice(kind, description),
-          if (_kind == RunKind.agentic && harnesses.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            Text('AGENT', style: mono(size: 10.5, color: t.faint)),
-            const SizedBox(height: 8),
-            Wrap(spacing: 6, runSpacing: 6, children: [harnessChip(null), for (final h in harnesses) harnessChip(h)]),
-          ],
-          const SizedBox(height: 10),
-          Text('SITE', style: mono(size: 10.5, color: t.faint)),
-          const SizedBox(height: 8),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 160),
-            child: SingleChildScrollView(
-              child: Wrap(spacing: 6, runSpacing: 6, children: [siteChip(null), for (final name in names) siteChip(name)]),
+          Flexible(
+            child: Scrollbar(
+              controller: _scroll,
+              thumbVisibility: true,
+              child: SingleChildScrollView(
+                key: const Key('new-chat-scroll'),
+                controller: _scroll,
+                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  const Text('New chat', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 12),
+                  Text('KIND', style: mono(size: 10.5, color: t.faint)),
+                  const SizedBox(height: 8),
+                  for (final (kind, description) in _kinds) choice(kind, description),
+                  if (_kind == RunKind.agentic && harnesses.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Text('AGENT', style: mono(size: 10.5, color: t.faint)),
+                    const SizedBox(height: 8),
+                    Wrap(spacing: 6, runSpacing: 6, children: [harnessChip(null), for (final h in harnesses) harnessChip(h)]),
+                  ],
+                  const SizedBox(height: 10),
+                  Text('SITE', style: mono(size: 10.5, color: t.faint)),
+                  const SizedBox(height: 8),
+                  Wrap(spacing: 6, runSpacing: 6, children: [siteChip(null), for (final name in names) siteChip(name)]),
+                ]),
+              ),
             ),
           ),
           const SizedBox(height: 18),
