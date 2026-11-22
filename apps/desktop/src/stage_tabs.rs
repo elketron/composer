@@ -15,6 +15,7 @@ pub fn label(tab: &DeskTab, site: Option<&str>) -> String {
         DeskTab::Terminal { .. } => "terminal".into(),
         DeskTab::Changes { site } => format!("changes · {site}"),
         DeskTab::LiveView => site.map_or(LIVE_VIEW.into(), |site| format!("live · {site}")),
+        DeskTab::App { name, .. } => format!("app · {name}"),
     }
 }
 
