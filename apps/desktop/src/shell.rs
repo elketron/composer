@@ -22,6 +22,7 @@ use crate::browser_tabs::BrowserTabs;
 use crate::chat_pane::{ChatEvent, ChatPane};
 use crate::chat_width::ChatWidth;
 use crate::desktop::Desktop;
+use crate::focus_rule::{self, Holder, HoverFocus, Scene, Target};
 use crate::home_view::{HomeEvent, HomeView};
 use crate::link_state::LinkState;
 use crate::notice::Notice;
@@ -92,6 +93,10 @@ pub struct Shell {
     active: bool,
     /// Drawn once (start-up timing).
     drawn: bool,
+    /// A session was just shown: the chat takes the keyboard on the next draw.
+    focus_chat: bool,
+    /// Where the pointer was: a panel takes the keyboard when the pointer moves over it.
+    hover: HoverFocus,
     visibility_observed: bool,
     window_visible: bool,
     focus: FocusHandle,
@@ -140,6 +145,8 @@ impl Shell {
             processes: Vec::new(),
             active: true,
             drawn: false,
+            focus_chat: true,
+            hover: HoverFocus::default(),
             visibility_observed: false,
             window_visible: true,
             focus: cx.focus_handle(),
@@ -326,6 +333,7 @@ impl Shell {
             self.ask(ClientCommand::SessionDetach { session: previous }, cx);
         }
         self.store.attach(&session);
+        self.focus_chat = true;
         self.processes.clear();
         self.fetch_processes(session.clone(), cx);
         self.chat.update(cx, |chat, cx| chat.open(&session, cx));
@@ -887,41 +895,77 @@ impl Shell {
         self.webs.get(&self.shown_entry()?.id)
     }
 
-    /// The keyboard follows the stage's shown tab. When the tab changes (ctrl+tab, a pick in the
-    /// palette, the agent) while a pane now hidden has the keyboard, the shown pane takes it;
-    /// otherwise no pane, and none of the desktop's own keys, work until the pointer moves.
-    fn keep_stage_focus(&self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.overlay.is_some() {
-            return;
-        }
-        let shown_term = self.shown_pane();
-        let shown_web = self.shown_web();
-        let Some(handle) = shown_term
+    /// The keyboard stays with something on screen: an open picker, the home, the chat or the
+    /// stage's shown tab (the rules: [crate::focus_rule]). When the shown tab changes while a
+    /// pane now hidden has the keyboard, the shown pane takes it; when what had it is gone (a
+    /// closed picker's way back, a closed tab), the chat does. A session just shown gives it to
+    /// the chat.
+    fn keep_focus(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let overlay = self.overlay.as_ref().map(|p| p.read(cx).focus_handle(cx));
+        let home = self.home.as_ref().map(|h| h.read(cx).focus_handle(cx));
+        let chat = self.chat.read(cx).focus_handle(cx);
+        let shown_term = self.shown_pane().cloned();
+        let shown_web = self.shown_web().cloned();
+        let stage = shown_term
+            .as_ref()
             .map(|pane| pane.read(cx).focus_handle(cx))
-            .or_else(|| shown_web.map(|web| web.read(cx).focus_handle(cx)))
-        else {
+            .or_else(|| shown_web.as_ref().map(|web| web.read(cx).focus_handle(cx)));
+        let focused =
+            |handle: &Option<FocusHandle>| handle.as_ref().is_some_and(|h| h.is_focused(window));
+        let holder = if focused(&overlay) {
+            Holder::Overlay
+        } else if focused(&home) {
+            Holder::Home
+        } else if chat.is_focused(window) {
+            Holder::Chat
+        } else if focused(&stage) {
+            Holder::ShownStage
+        } else {
+            let shown_tab = stage_tabs::shown(&self.store.desk);
+            let hidden = self
+                .panes
+                .values()
+                .filter(|pane| Some(pane.entity_id()) != shown_term.as_ref().map(|p| p.entity_id()))
+                .map(|pane| pane.read(cx).focus_handle(cx))
+                .chain(
+                    self.webs
+                        .hidden(shown_tab)
+                        .map(|web| web.read(cx).focus_handle(cx)),
+                )
+                .any(|hidden| hidden.is_focused(window));
+            if hidden {
+                Holder::HiddenStage
+            } else {
+                Holder::Other
+            }
+        };
+        let scene = Scene {
+            overlay: overlay.is_some(),
+            home: home.is_some(),
+            stage: stage.is_some(),
+        };
+        // (Kept while a picker or the home is open: it applies once they close.)
+        let wanted = if self.focus_chat && !scene.overlay && !scene.home {
+            self.focus_chat = false;
+            (holder != Holder::Chat).then_some(Target::Chat)
+        } else {
+            focus_rule::target(scene, holder)
+        };
+        let handle = match wanted {
+            None => return,
+            Some(Target::Overlay) => overlay,
+            Some(Target::Home) => home,
+            Some(Target::Chat) => Some(chat),
+            Some(Target::ShownStage) => stage,
+        };
+        let Some(handle) = handle else {
             return;
         };
-        if handle.is_focused(window) {
-            return;
-        }
-        let shown_tab = stage_tabs::shown(&self.store.desk);
-        let stray = self
-            .panes
-            .values()
-            .filter(|pane| Some(pane.entity_id()) != shown_term.map(|p| p.entity_id()))
-            .map(|pane| pane.read(cx).focus_handle(cx))
-            .chain(
-                self.webs
-                    .hidden(shown_tab)
-                    .map(|web| web.read(cx).focus_handle(cx)),
-            )
-            .any(|hidden| hidden.is_focused(window));
-        if !stray {
-            return;
-        }
         window.focus(&handle, cx);
-        if let Some(web) = shown_web.cloned() {
+        if wanted == Some(Target::ShownStage)
+            && shown_term.is_none()
+            && let Some(web) = shown_web
+        {
             // CEF has its own focus: without it the page sees no keys.
             web.update(cx, |web, _| web.browser_focus(true));
         }
@@ -1199,7 +1243,7 @@ impl Shell {
             Pick::LeaveSite => self.switch_site(None, cx),
             Pick::NewTerminal => self.new_terminal(cx),
             Pick::AttachFile => self.attach_file(cx),
-            Pick::ToggleFollow => self.follow = !self.follow,
+            Pick::ToggleFollow => self.set_follow(!self.follow, cx),
             Pick::Sessions => self.open_sessions(window, cx),
             Pick::ModelMenu => self.open_models_menu(window, cx),
             Pick::Compact => {
@@ -1214,6 +1258,14 @@ impl Shell {
             }
             Pick::Home => self.open_home(window, cx),
         }
+    }
+
+    /// Follow the agent (show what it opens, keep its newest messages in view), or stop.
+    fn set_follow(&mut self, follow: bool, cx: &mut Context<Self>) {
+        self.follow = follow;
+        self.chat
+            .update(cx, |chat, cx| chat.set_following(follow, cx));
+        cx.notify();
     }
 
     /// The site the shown session is in.
@@ -1364,15 +1416,19 @@ impl Render for Shell {
         if !self.drawn {
             self.drawn = true;
             crate::trace("first draw");
-            // Keys go to the chat from the start.
-            window.focus(&self.chat.read(cx).focus_handle(cx), cx);
         }
         let total = f32::from(window.viewport_size().width);
         self.chat_width = self.chat_width.within(total);
-        self.active = window.is_window_active();
+        let active = window.is_window_active();
+        if active && !self.active {
+            // Back in front: the pointer arriving over a panel doesn't take the keyboard.
+            self.hover.reset();
+        }
+        self.active = active;
         self.load_shown(cx);
         self.sync_web_visibility(cx);
-        self.keep_stage_focus(window, cx);
+        // Keys go to the chat from the start (the rules make it so).
+        self.keep_focus(window, cx);
         let shown = stage_tabs::shown(&self.store.desk).map(str::to_string);
         let tabs = self.store.desk.tabs.iter().map(|entry| {
             let id = entry.id.clone();
@@ -1448,8 +1504,7 @@ impl Render for Shell {
                 "not following"
             })
             .on_click(cx.listener(|shell, _, _, cx| {
-                shell.follow = !shell.follow;
-                cx.notify();
+                shell.set_follow(!shell.follow, cx);
             }));
         let stage_body = match (self.shown_pane(), self.shown_web(), shown.is_some()) {
             (Some(pane), _, _) => pane.clone().into_any_element(),
@@ -1561,6 +1616,8 @@ impl Render for Shell {
                 }
             }))
             .on_mouse_move(cx.listener(move |shell, ev: &MouseMoveEvent, _, cx| {
+                // After the panels' own listeners (this is their parent): they compare with it.
+                shell.hover.seen_at(ev.position);
                 if shell.dragging {
                     shell.chat_width = ChatWidth::dragged_to(f32::from(ev.position.x), total);
                     cx.notify();
@@ -1671,15 +1728,19 @@ impl Render for Shell {
                                     shell.upload(paths.paths().to_vec(), cx);
                                 }))
                                 // The panel follows the pointer: hover the chat, type into the chat.
-                                .on_mouse_move(cx.listener(|shell, _, window, cx| {
-                                    if shell.overlay.is_some() {
-                                        return;
-                                    }
-                                    let handle = shell.chat.read(cx).focus_handle(cx);
-                                    if !handle.is_focused(window) {
-                                        window.focus(&handle, cx);
-                                    }
-                                }))
+                                .on_mouse_move(cx.listener(
+                                    |shell, ev: &MouseMoveEvent, window, cx| {
+                                        if shell.overlay.is_some()
+                                            || !shell.hover.moves_to(ev.position)
+                                        {
+                                            return;
+                                        }
+                                        let handle = shell.chat.read(cx).focus_handle(cx);
+                                        if !handle.is_focused(window) {
+                                            window.focus(&handle, cx);
+                                        }
+                                    },
+                                ))
                                 .child(chat),
                         )
                         .child(
@@ -1756,26 +1817,31 @@ impl Render for Shell {
                                             },
                                         ))
                                         // The panel follows the pointer: hover the stage, type into it.
-                                        .on_mouse_move(cx.listener(|shell, _, window, cx| {
-                                            if shell.overlay.is_some() {
-                                                return;
-                                            }
-                                            if let Some(pane) = shell.shown_pane() {
-                                                let handle = pane.read(cx).focus_handle(cx);
-                                                if !handle.is_focused(window) {
-                                                    window.focus(&handle, cx);
+                                        .on_mouse_move(cx.listener(
+                                            |shell, ev: &MouseMoveEvent, window, cx| {
+                                                if shell.overlay.is_some()
+                                                    || !shell.hover.moves_to(ev.position)
+                                                {
+                                                    return;
                                                 }
-                                            } else if let Some(web) = shell.shown_web().cloned() {
-                                                let handle = web.read(cx).focus_handle(cx);
-                                                if !handle.is_focused(window) {
-                                                    window.focus(&handle, cx);
-                                                    // CEF has its own focus: without it the page sees no keys.
-                                                    web.update(cx, |web, _| {
-                                                        web.browser_focus(true)
-                                                    });
+                                                if let Some(pane) = shell.shown_pane() {
+                                                    let handle = pane.read(cx).focus_handle(cx);
+                                                    if !handle.is_focused(window) {
+                                                        window.focus(&handle, cx);
+                                                    }
+                                                } else if let Some(web) = shell.shown_web().cloned()
+                                                {
+                                                    let handle = web.read(cx).focus_handle(cx);
+                                                    if !handle.is_focused(window) {
+                                                        window.focus(&handle, cx);
+                                                        // CEF has its own focus: without it the page sees no keys.
+                                                        web.update(cx, |web, _| {
+                                                            web.browser_focus(true)
+                                                        });
+                                                    }
                                                 }
-                                            }
-                                        }))
+                                            },
+                                        ))
                                         .child(stage_body),
                                 ),
                         ),
@@ -1868,7 +1934,11 @@ impl Render for Shell {
                             }),
                     )
                     .child(
+                        // The panel takes its own clicks (the query line, a head, a gap between
+                        // rows): only a click beside it, on the scrim, closes the picker.
                         div()
+                            .id("picker-panel")
+                            .occlude()
                             .ml(px(frame.left(window_width)))
                             .w(px(frame.width()))
                             .max_h(px(frame.max_height()))

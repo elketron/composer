@@ -26,19 +26,36 @@ pub fn score(query: &str, text: &str) -> Option<i64> {
     Some(1000 - gaps * 10 - start - if word_start { 0 } else { 50 })
 }
 
-/// The indexes of `items` matching `query`, best first (ties keep their order).
-pub fn ranked<'a>(query: &str, items: impl Iterator<Item = &'a str>) -> Vec<usize> {
+/// The indexes of `items` (a label and a detail: a site, a key, a path) matching `query`, best
+/// first (ties keep their order): by the label; when the label alone doesn't match, the label
+/// and the detail together do, below every label match ("agentic chat" finds "agentic session"
+/// with "in chat").
+pub fn ranked_with_detail<'a>(
+    query: &str,
+    items: impl Iterator<Item = (&'a str, &'a str)>,
+) -> Vec<usize> {
     let mut scored: Vec<(usize, i64)> = items
         .enumerate()
-        .filter_map(|(i, text)| score(query, text).map(|s| (i, s)))
+        .filter_map(|(i, (label, detail))| {
+            score(query, label)
+                .or_else(|| score(query, &format!("{label} {detail}")).map(|s| s - DETAIL_ONLY))
+                .map(|s| (i, s))
+        })
         .collect();
     scored.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
     scored.into_iter().map(|(i, _)| i).collect()
 }
 
+/// What matching only with the detail costs: more than any label match can lose.
+const DETAIL_ONLY: i64 = 100_000;
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn ranked<'a>(query: &str, items: impl Iterator<Item = &'a str>) -> Vec<usize> {
+        ranked_with_detail(query, items.map(|label| (label, "")))
+    }
 
     #[test]
     fn subsequences_ranked() {
@@ -62,6 +79,30 @@ mod tests {
             ranked("", items.iter().copied()),
             vec![0, 1, 2, 3],
             "all, in order"
+        );
+    }
+
+    #[test]
+    fn the_detail_counts_after_the_label() {
+        let items = [
+            ("agentic session", "no site"),
+            ("agentic session", "in chat"),
+            ("workflow session", "in chat"),
+            ("chat helper", "in plans"),
+        ];
+        assert_eq!(
+            ranked_with_detail("agentic chat", items.iter().copied()),
+            vec![1],
+            "the site picks among the same labels"
+        );
+        let chat = ranked_with_detail("chat", items.iter().copied());
+        assert_eq!(chat[0], 3, "a label match first");
+        let mut by_detail = chat[1..].to_vec();
+        by_detail.sort();
+        assert_eq!(by_detail, [1, 2], "then the detail's");
+        assert_eq!(
+            ranked_with_detail("", items.iter().copied()),
+            vec![0, 1, 2, 3]
         );
     }
 }

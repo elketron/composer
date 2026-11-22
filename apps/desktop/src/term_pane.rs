@@ -304,11 +304,16 @@ impl TermPane {
     fn on_key_down(&mut self, ev: &KeyDownEvent, _w: &mut Window, cx: &mut Context<Self>) {
         let ks = &ev.keystroke;
         let m = &ks.modifiers;
+        // The window's shortcuts (the palette, the sessions, the home) are ctrl+shift: they are
+        // never the terminal's, only copy and paste below are.
+        if m.control && m.shift && !matches!(ks.key.as_str(), "c" | "v") {
+            return;
+        }
         if self.ended {
             if ks.key == "enter" {
                 cx.emit(PaneEvent::Reopen);
+                cx.stop_propagation();
             }
-            cx.stop_propagation();
             return;
         }
         // Copy and paste: ctrl+shift+c / ctrl+shift+v (bracketed when the program asked for it).

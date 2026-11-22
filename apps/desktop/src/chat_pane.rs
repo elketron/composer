@@ -19,6 +19,7 @@ use gpui::{
 
 use composer_core::{LinkTarget, SiteUrl};
 
+use crate::chat_follow::Follow;
 use crate::chat_model::ChatModel;
 use crate::draft::{Draft, DraftKey, Mode};
 use crate::home_lists::{folder_use, is_folder, is_mcp_start, mcp_start};
@@ -79,6 +80,10 @@ pub struct ChatPane {
     /// Where the draft is drawn (an input method puts its candidates by it).
     draft_bounds: Bounds<Pixels>,
     scroll: ScrollHandle,
+    /// Whether the newest content stays in view (the rules: [crate::chat_follow]).
+    follow: Follow,
+    /// The client follows the agent (the title bar's toggle): new items come into view.
+    following_agent: bool,
     focus: FocusHandle,
 }
 
@@ -103,6 +108,8 @@ impl ChatPane {
             marked: None,
             draft_bounds: Bounds::default(),
             scroll: ScrollHandle::new(),
+            follow: Follow::default(),
+            following_agent: true,
             focus: cx.focus_handle(),
         }
     }
@@ -149,7 +156,7 @@ impl ChatPane {
             let more = approvals.len() > self.approvals.len();
             self.approvals = approvals;
             if more {
-                self.scroll.scroll_to_bottom();
+                self.follow.stick_to_end();
             }
             cx.notify();
         }
@@ -164,7 +171,7 @@ impl ChatPane {
         cx: &mut Context<Self>,
     ) {
         if self.model.history_loaded(session, events, more) {
-            self.scroll.scroll_to_bottom();
+            self.follow.stick_to_end();
             cx.notify();
         }
     }
@@ -180,21 +187,32 @@ impl ChatPane {
         if let Some(added) = self.model.older_loaded(session, events, more) {
             self.loading_older = false;
             if added > 0 {
+                self.follow.away();
                 self.scroll.scroll_to_top_of_item(added);
             }
             cx.notify();
         }
     }
 
-    /// A transcript event; the view follows the end when it was there.
+    /// A transcript event; a pinned view follows it (see [`Follow`]).
     pub fn apply(&mut self, message: &ServerMessage, cx: &mut Context<Self>) {
-        let at_end = self.at_end();
+        let items = |model: &ChatModel| model.chat().map_or(0, |c| c.items.len());
+        let before = items(&self.model);
         if self.model.apply(message) {
-            if at_end {
-                self.scroll.scroll_to_bottom();
+            if items(&self.model) > before {
+                self.follow.new_item(self.following_agent);
             }
             cx.notify();
         }
+    }
+
+    /// The client follows the agent or stops; turned on, the chat goes to its end.
+    pub fn set_following(&mut self, following: bool, cx: &mut Context<Self>) {
+        if following && !self.following_agent {
+            self.follow.stick_to_end();
+            cx.notify();
+        }
+        self.following_agent = following;
     }
 
     /// Files from the picker or a drop, as they upload.
@@ -256,10 +274,11 @@ impl ChatPane {
         }
     }
 
-    fn at_end(&self) -> bool {
+    /// How far (in pixels) the transcript's view is above its end, as last laid out.
+    fn distance_to_end(&self) -> f32 {
         let max = self.scroll.max_offset().y;
         let offset = -self.scroll.offset().y;
-        max - offset < px(40.)
+        f32::from(max - offset).max(0.)
     }
 
     fn busy(&self) -> bool {
@@ -278,7 +297,7 @@ impl ChatPane {
         let Some(attachments) = self.files.take() else {
             return;
         };
-        self.scroll.scroll_to_bottom();
+        self.follow.stick_to_end();
         cx.emit(ChatEvent::Send { send, attachments });
     }
 
@@ -318,12 +337,13 @@ impl ChatPane {
         if self.draft.mode == Mode::Normal && !control {
             match ks.key_char.as_deref().unwrap_or(&ks.key) {
                 "G" => {
-                    self.scroll.scroll_to_bottom();
+                    self.follow.stick_to_end();
                     cx.notify();
                     cx.stop_propagation();
                     return;
                 }
                 "g" => {
+                    self.follow.away();
                     self.scroll.scroll_to_item(0);
                     cx.notify();
                     cx.stop_propagation();
@@ -1388,6 +1408,9 @@ impl ChatPane {
 
 impl Render for ChatPane {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if self.follow.frame(self.distance_to_end()) {
+            self.scroll.scroll_to_bottom();
+        }
         let rows = self.transcript(cx);
         let opening = self.model.chat().is_some_and(|c| !c.loaded);
         let composer = self.composer(window, cx);
@@ -1414,6 +1437,11 @@ impl Render for ChatPane {
                     .min_h(px(0.))
                     .overflow_y_scroll()
                     .track_scroll(&self.scroll)
+                    // The reader scrolls: away from the end unpins, back to it pins again.
+                    .on_scroll(cx.listener(|pane, _, _, cx| {
+                        pane.follow.scrolled();
+                        cx.notify();
+                    }))
                     .px(px(24.))
                     .pt(px(22.))
                     .pb(px(12.))

@@ -7,7 +7,7 @@ use gpui::{
     div, prelude::*, px, rgb,
 };
 
-use crate::matcher::ranked;
+use crate::matcher::ranked_with_detail;
 use crate::theme::*;
 
 /// What picking an item does (the window carries it out).
@@ -113,7 +113,12 @@ impl Picker {
     }
 
     fn refilter(&mut self) {
-        self.shown = ranked(&self.query, self.items.iter().map(|i| i.label.as_str()));
+        self.shown = ranked_with_detail(
+            &self.query,
+            self.items
+                .iter()
+                .map(|i| (i.label.as_str(), i.detail.as_str())),
+        );
         // Nothing typed: grouped, each group in the order it came. Typed: best match first.
         if self.query.is_empty() {
             let rank = |group: &str| {
@@ -139,6 +144,8 @@ impl Picker {
         match self.title {
             "session" => ("Switch session", "Find a session", "session"),
             "model" => ("The session's model", "Find a model", "model"),
+            "new session" => ("New session", "Find a kind or a site", "kind"),
+            "process" => ("Background processes", "Find a process", "process"),
             _ => ("Commands", "Type a command", "command"),
         }
     }
@@ -375,7 +382,11 @@ impl Render for Picker {
                     .child("↑↓ move")
                     .child(format!(
                         "Enter {}",
-                        if noun == "command" { "run" } else { "open" }
+                        match noun {
+                            "command" => "run",
+                            "kind" => "start",
+                            _ => "open",
+                        }
                     ))
                     .child("Esc close")
                     .child(div().flex_1())
