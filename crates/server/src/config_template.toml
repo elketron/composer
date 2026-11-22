@@ -31,6 +31,9 @@ base_url = ""
 api_key = ""
 # A decision that takes longer is forwarded to you.
 timeout_secs = 15
+# Sent as `reasoning_effort` (none, low, medium, high), like [agent] reasoning_effort: a decision
+# needs little thought. Empty: not sent, the provider decides.
+reasoning_effort = "low"
 
 [server]
 # Keep it on localhost; reach it from other devices with `tailscale serve` (see `composer pair`).

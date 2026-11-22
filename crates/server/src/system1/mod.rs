@@ -9,11 +9,15 @@
 //! output or the agent's text, so nothing injected into a file or page can talk it into a yes.
 //! Each decision is a line in the session's chat. Off (no model), failing, slow or unclear: the
 //! user is asked, as without it. It never answers `always`.
+//!
+//! It asks for a strict JSON schema answer; an endpoint that refuses that `response_format` is
+//! asked once with `json_object`, then once with none, and the form that worked is remembered per
+//! base URL and model while the server runs.
 
 mod policy;
 mod prompt;
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -24,7 +28,9 @@ use tokio_util::sync::CancellationToken;
 use crate::actions::{Answer, Ask, DecidedBy};
 use crate::config::Config;
 use crate::config_sections::ProviderConfig;
-use crate::provider::{ModelEvent, ModelMessage, ModelRequest, OpenAiProvider, Provider};
+use crate::provider::{
+    CallError, ModelEvent, ModelMessage, ModelRequest, OpenAiProvider, Provider,
+};
 use crate::server::Server;
 use crate::session::Session;
 
@@ -36,6 +42,32 @@ pub struct System1 {
     /// Policy page versions (site, hash) the user refused since the server started: not asked
     /// about again until they change.
     refused: Mutex<HashSet<(String, String)>>,
+    /// The structured-output form each endpoint (base URL, model) took, once one worked.
+    formats: Mutex<HashMap<(String, String), Format>>,
+}
+
+/// How system-1 asks for its JSON answer, strictest first: an endpoint that refuses one is asked
+/// with the next.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Format {
+    /// `json_schema`, strict: the decision is one of three words.
+    Schema,
+    /// `json_object`: any JSON object.
+    JsonObject,
+    /// No `response_format`: the instructions and the lenient parser do it.
+    Plain,
+}
+
+impl Format {
+    const ALL: [Format; 3] = [Format::Schema, Format::JsonObject, Format::Plain];
+
+    fn response_format(self) -> Option<Value> {
+        match self {
+            Format::Schema => Some(response_format()),
+            Format::JsonObject => Some(json!({ "type": "json_object" })),
+            Format::Plain => None,
+        }
+    }
 }
 
 /// What became of an [`Ask`] system-1 was given.
@@ -119,6 +151,21 @@ impl System1 {
             .contains(&(site.to_string(), hash.to_string()))
     }
 
+    fn format(&self, endpoint: &(String, String)) -> Option<Format> {
+        self.formats
+            .lock()
+            .expect("system1 lock")
+            .get(endpoint)
+            .copied()
+    }
+
+    fn remember_format(&self, endpoint: (String, String), format: Format) {
+        self.formats
+            .lock()
+            .expect("system1 lock")
+            .insert(endpoint, format);
+    }
+
     fn refuse(&self, site: &str, hash: &str) {
         self.refused
             .lock()
@@ -136,33 +183,58 @@ async fn complete(
 ) -> Result<String, String> {
     let settings = &config.system1;
     let own_endpoint = !settings.base_url.trim().is_empty();
+    let base_url = if own_endpoint {
+        settings.base_url.clone()
+    } else {
+        config.provider.base_url.clone()
+    };
+    let model = settings.model.trim().to_string();
     let provider = OpenAiProvider::connect(&ProviderConfig {
-        base_url: if own_endpoint {
-            settings.base_url.clone()
-        } else {
-            config.provider.base_url.clone()
-        },
+        base_url: base_url.clone(),
         api_key: if own_endpoint || !settings.api_key.is_empty() {
             settings.api_key.clone()
         } else {
             config.provider.api_key.clone()
         },
-        model: settings.model.trim().to_string(),
+        model: model.clone(),
         tool_images: false,
     })
     .await?;
-    let request = ModelRequest {
-        messages,
+    let request = |format: Format| ModelRequest {
+        messages: messages.clone(),
         tools: vec![],
         model: None,
-        reasoning_effort: None,
-        response_format: Some(response_format()),
+        reasoning_effort: Some(settings.reasoning_effort.trim().to_string())
+            .filter(|e| !e.is_empty()),
+        response_format: format.response_format(),
     };
     let _slot = match own_endpoint {
         true => None,
         false => Some(server.slots.acquire().await?),
     };
-    let mut stream = provider.stream(request).await?;
+    // The form that worked here before, else the strictest; a refused form tries the next once.
+    let endpoint = (base_url, model);
+    let first = server.system1.format(&endpoint).unwrap_or(Format::Schema);
+    let mut forms = Format::ALL
+        .into_iter()
+        .skip_while(|f| *f != first)
+        .peekable();
+    let mut stream = loop {
+        let format = forms.next().expect("one form at least");
+        match provider.stream(request(format)).await {
+            Ok(stream) => {
+                server.system1.remember_format(endpoint, format);
+                break stream;
+            }
+            Err(CallError::Refused(e)) if forms.peek().is_some() && refuses_format(&e) => {
+                tracing::info!(
+                    "system1 ({}): {format:?} refused ({e}); trying the next",
+                    endpoint.1
+                );
+            }
+            Err(e) => return Err(e.to_string()),
+        }
+    };
     let mut text = String::new();
     while let Some(event) = stream.recv().await {
         match event? {
@@ -172,6 +244,16 @@ async fn complete(
         }
     }
     Ok(text)
+}
+
+/// Whether a refused call is the endpoint not taking the `response_format`: a 400 or 422, or an
+/// error that names it.
+fn refuses_format(error: &str) -> bool {
+    let lower = error.to_lowercase();
+    error.starts_with("400")
+        || error.starts_with("422")
+        || lower.contains("response_format")
+        || lower.contains("json_schema")
 }
 
 /// Structured output: one object with the decision and a reason.

@@ -39,6 +39,14 @@ pub struct System1Config {
     /// A decision that takes longer is forwarded to the user.
     #[serde(default = "default_system1_timeout")]
     pub timeout_secs: u64,
+    /// Its `reasoning_effort` (none, low, medium, high): a decision needs little thought. Empty:
+    /// not sent.
+    #[serde(default = "default_low")]
+    pub reasoning_effort: String,
+}
+
+fn default_low() -> String {
+    "low".into()
 }
 
 fn default_system1_timeout() -> u64 {

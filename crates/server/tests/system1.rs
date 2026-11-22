@@ -30,18 +30,36 @@ struct Fake {
     answer: Arc<Mutex<String>>,
     delay: Arc<Mutex<Duration>>,
     asked: Arc<Mutex<Vec<Value>>>,
+    /// `response_format` types it answers 400 to (`"none"`: a request without one).
+    refuses: Arc<Mutex<Vec<String>>>,
 }
 
 impl Fake {
     /// An OpenAI-compatible endpoint that streams the answer, at `http://…/v1`.
     async fn start(&self) -> String {
-        async fn complete(State(fake): State<Fake>, body: axum::Json<Value>) -> String {
+        async fn complete(
+            State(fake): State<Fake>,
+            body: axum::Json<Value>,
+        ) -> (axum::http::StatusCode, String) {
+            let format = body.0["response_format"]["type"]
+                .as_str()
+                .unwrap_or("none")
+                .to_string();
             fake.asked.lock().unwrap().push(body.0);
+            if fake.refuses.lock().unwrap().contains(&format) {
+                return (
+                    axum::http::StatusCode::BAD_REQUEST,
+                    format!("{{\"error\": \"response_format {format} is not supported\"}}"),
+                );
+            }
             let delay = *fake.delay.lock().unwrap();
             tokio::time::sleep(delay).await;
             let content = fake.answer.lock().unwrap().clone();
             let chunk = json!({ "choices": [{ "delta": { "content": content }, "finish_reason": "stop" }] });
-            format!("data: {chunk}\n\ndata: [DONE]\n\n")
+            (
+                axum::http::StatusCode::OK,
+                format!("data: {chunk}\n\ndata: [DONE]\n\n"),
+            )
         }
         let app = Router::new()
             .route("/v1/chat/completions", post(complete))
@@ -226,6 +244,7 @@ async fn system1_approves_rejects_and_forwards_actions() {
     );
     let request = fake.asked()[0].clone();
     assert_eq!(request["model"], "tiny");
+    assert_eq!(request["reasoning_effort"], "low");
     assert_eq!(request["messages"][0]["role"], "system");
     assert!(
         request["messages"][0]["content"]
@@ -633,4 +652,75 @@ async fn a_rejected_process_tells_the_agent_why() {
         vec!["system-1 rejected `rm -rf build` — the user never asked to delete anything"]
     );
     assert!(server.terminals.processes(session.id()).is_empty());
+}
+
+#[tokio::test]
+async fn an_endpoint_refusing_the_schema_gets_simpler_forms_and_they_are_remembered() {
+    let fake = Fake::default();
+    fake.answer(r#"{"decision": "approve", "reason": "fine"}"#);
+    *fake.refuses.lock().unwrap() = vec!["json_schema".into(), "json_object".into()];
+    let (_dir, server) = server_with(Some(&fake), 15).await;
+    let user = User::start(&server);
+    let session = server
+        .sessions
+        .create(RunKind::Agentic, None, None)
+        .unwrap();
+    let cancel = CancellationToken::new();
+    let formats = |fake: &Fake| -> Vec<String> {
+        fake.asked()
+            .iter()
+            .map(|r| {
+                r["response_format"]["type"]
+                    .as_str()
+                    .unwrap_or("none")
+                    .to_string()
+            })
+            .collect()
+    };
+
+    // Schema refused, json_object refused, none works: decided, not forwarded.
+    let answer = server.ask(&session, cargo_test(), &cancel).await;
+    assert_eq!(answer, by_system1(ApprovalDecision::Approve, "fine"));
+    assert_eq!(formats(&fake), vec!["json_schema", "json_object", "none"]);
+    assert!(user.shown().is_empty());
+    // Remembered: the next call goes straight to the form that worked.
+    server.ask(&session, cargo_test(), &cancel).await;
+    assert_eq!(formats(&fake).len(), 4);
+    assert_eq!(formats(&fake)[3], "none");
+
+    // Another endpoint that only refuses the schema settles on json_object.
+    let other = Fake::default();
+    other.answer(r#"{"decision": "reject", "reason": "no"}"#);
+    *other.refuses.lock().unwrap() = vec!["json_schema".into()];
+    let (_dir2, server2) = server_with(Some(&other), 15).await;
+    let session2 = server2
+        .sessions
+        .create(RunKind::Agentic, None, None)
+        .unwrap();
+    let answer = server2.ask(&session2, cargo_test(), &cancel).await;
+    assert_eq!(answer, by_system1(ApprovalDecision::Deny, "no"));
+    server2.ask(&session2, cargo_test(), &cancel).await;
+    assert_eq!(
+        formats(&other),
+        vec!["json_schema", "json_object", "json_object"]
+    );
+}
+
+#[tokio::test]
+async fn reasoning_effort_is_not_sent_when_empty() {
+    let fake = Fake::default();
+    fake.answer(r#"{"decision": "approve", "reason": "fine"}"#);
+    let mut config = Config::defaults();
+    config.system1.model = "tiny".into();
+    config.system1.base_url = fake.start().await;
+    config.system1.reasoning_effort = String::new();
+    let (_dir, server, _provider, _addr) = start_with(config, vec![]).await;
+    let session = server
+        .sessions
+        .create(RunKind::Agentic, None, None)
+        .unwrap();
+    server
+        .ask(&session, cargo_test(), &CancellationToken::new())
+        .await;
+    assert!(fake.asked()[0].get("reasoning_effort").is_none());
 }
