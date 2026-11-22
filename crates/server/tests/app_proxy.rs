@@ -118,7 +118,7 @@ async fn echo(State(app): State<Shared>, headers: HeaderMap, request: Request) -
         format!(
             "{method} {} {}",
             body.len(),
-            &body[..body.len().min(5)].escape_ascii()
+            body[..body.len().min(5)].escape_ascii()
         ),
     )
         .into_response()
