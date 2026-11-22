@@ -23,6 +23,17 @@ over the Agent Client Protocol (ACP); composer hands that agent itself as its MC
   once you approve that folder). Setting a site (`set_site`) changes the agent's tools to fit it.
 - **Composer's MCP server.** `composer mcp --session <id>` serves a session's tools over MCP on
   stdio, to any harness. The list follows the session's site and announces changes.
+- **MCP events.** An MCP server composer runs (`[mcp.<name>]`, or a site's `mcp.toml`) can tell
+  a session what the user did in its app. Every `tools/call` composer sends carries the calling
+  session's id as `params._meta["composer/session"]`. The server sends the notification
+  `notifications/composer/event` with params `{"session"?: string, "text": string, "data"?: any}`
+  (over stdio, or on the GET event stream of a streamable-HTTP server). It goes to `session` when
+  that is a session with the server's tools (the server is `config.toml`'s, or the session is in
+  the site whose `mcp.toml` started it), else, without `session`, to the session that called one
+  of the server's tools last; otherwise it is dropped with a warning in the log. The session gets
+  `[automatic notice: <server> event] <text>` with `data` as compact JSON below it (each cut at
+  4 KB): it wakes an idle agent and waits behind a running turn. A session gets at most one notice
+  per server a second; events that come meanwhile go together in the next one.
 - **Webhooks.** `POST /api/hooks/<name>` starts a run of any kind with its own token, waits, and
   answers with its value. The run is not kept unless the hook says `store = true`.
 - **Runs that start runs.** `spawn_run` starts any kind from an agentic session; an agentic child

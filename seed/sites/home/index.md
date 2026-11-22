@@ -77,6 +77,7 @@ instructions for one kind of job. A webhook or `spawn_run` names it with `site` 
 - **Waiting:** `watch` sends you a message when files in a site change.
 - **MCP:** servers in `config.toml` are there in every session; a site's `mcp.toml`
   (`[servers.<name>]`) adds its own. Calls outside a server's `allow` list ask the user first.
+  A server can tell you what the user did in its app: an `[automatic notice: <server> event]`.
 
 ## How to work
 

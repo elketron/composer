@@ -72,6 +72,8 @@ inline_max_kb = 100
 # ("always" remembers the tool). `${VAR}` comes from composer's environment.
 # A server only some sites need goes in that site's own `mcp.toml` instead (`[servers.<name>]`,
 # the same fields): nothing in it starts until you approve the file, and again after each edit.
+# A server can wake a session with `notifications/composer/event` (`{"session"?, "text", "data"?}`;
+# each call it gets names its session in `_meta["composer/session"]`): see the README, MCP events.
 # [mcp.github]
 # command = "github-mcp-server"
 # args = ["stdio"]
