@@ -2,6 +2,7 @@ import 'package:composer_protocol/composer_protocol.dart';
 
 import 'actions.dart';
 import 'approval_text.dart';
+import 'apps.dart';
 import 'app_state.dart';
 import 'chat_events.dart';
 import 'chat_rows.dart';
@@ -60,6 +61,9 @@ import 'types.dart';
       SessionDeleteRequested(:final url, :final session) => _delete(s, url, session),
       ProcessesLoaded(:final url, :final session, :final processes) =>
         (_withChat(s, url, (c) => c.session == session ? c.copyWith(processes: processes) : c), const []),
+      DeskLoaded(:final url, :final session, :final desk) =>
+        (_withChat(s, url, (c) => c.session == session ? c.copyWith(desk: desk) : c), const []),
+      AppOpened(:final url, :final name) => (s, _openApp(s, url, name)),
       ProcessStopRequested(:final url, :final terminal) => (s, [SendCommand(url, ClientCommandProcessStop(terminal: terminal))]),
       SiteChosen(:final url, :final site, :final session) => _siteChosen(s, url, site, session),
       PreferencesLoaded(:final liveViewSize) => (s.copyWith(liveViewSize: liveViewSize), const []),
@@ -237,7 +241,7 @@ import 'types.dart';
     next,
     [
       FetchCatalog(url),
-      if (chat != null) ...[_reattach(url, chat), FetchProcesses(url, chat.session)],
+      if (chat != null) ...[_reattach(url, chat), FetchProcesses(url, chat.session), _fetchDesk(url, chat.session)],
     ],
   );
 }
@@ -246,6 +250,23 @@ import 'types.dart';
 AppEffect _reattach(String url, ChatState chat) => chat.loaded
     ? SendCommand(url, ClientCommandSessionAttach(session: chat.session, since: chat.lastSeq))
     : FetchHistory(url, chat.session, null);
+
+AppEffect _fetchDesk(String url, String session) => DeskCommand(url, session, ClientCommandDeskGet(session: session));
+
+/// App [name] by the user's hand: put on the open session's desk at its page when it is not there
+/// (not focused: another client's shown tab stays), focused when the agent put it there and it is
+/// still unseen. Already there and seen: nothing to tell.
+List<AppEffect> _openApp(AppState s, String url, String name) {
+  final chat = s.status[url]?.chat;
+  if (chat == null) return const [];
+  final session = chat.session;
+  final entry = chat.desk.tabs.where((e) => e.id == appTabId(name)).firstOrNull;
+  if (entry == null) {
+    return [DeskCommand(url, session, ClientCommandDeskOpen(session: session, tab: DeskTabApp(name: name, path: '')))];
+  }
+  if (entry.unseen) return [DeskCommand(url, session, ClientCommandDeskFocus(session: session, tab: entry.id))];
+  return const [];
+}
 
 /// The messages before the oldest shown, once at a time.
 (AppState, List<AppEffect>) _older(AppState s, String url, String session) {
@@ -304,6 +325,7 @@ AppState _scrolled(AppState s, String url, String session, bool atBottom) {
       if (attach) ...[
         SendCommand(url, ClientCommandSessionAttach(session: session, since: events == null ? null : since)),
         FetchProcesses(url, session),
+        _fetchDesk(url, session),
       ],
     ],
   );
@@ -505,6 +527,8 @@ AppState _event(AppState s, String url, ServerMessage message) => switch (messag
             chat: x.chat?.session == session ? null : x.chat,
           ),
         ),
+      ServerMessageDeskChanged(:final session, :final desk) =>
+        _withChat(s, url, (c) => c.session == session ? c.copyWith(desk: desk) : c),
       ServerMessageProcessesChanged(:final session, :final processes) =>
         _withChat(s, url, (c) => c.session == session ? c.copyWith(processes: processes) : c),
       ServerMessageOk(result: final CommandResultModels models) => _updateStatus(s, url, (x) => x.copyWith(models: models)),

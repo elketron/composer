@@ -3,12 +3,16 @@ import 'package:flutter/material.dart';
 
 import '../../state/actions.dart';
 import '../../theme/tokens.dart' as t;
+import '../apps/app_screen.dart';
 import '../pages/page_navigation.dart';
 import '../store_scope.dart';
 import 'model_sheet.dart';
 
-/// ⋮ for the open chat: pages, the model, compacting and stopping. The same on phones (app bar)
+/// ⋮ for the open chat: pages, the local apps, the model, compacting and stopping. The same on phones (app bar)
 /// and wide screens (chat header).
+/// A menu value naming an app: this, then its name.
+const _app = 'app:';
+
 class ChatMenu extends StatelessWidget {
   const ChatMenu({super.key, required this.url, required this.session});
 
@@ -32,10 +36,14 @@ class ChatMenu extends StatelessWidget {
         'compact' => store.dispatch(CompactRequested(url)),
         'stop' => store.dispatch(CancelRequested(url)),
         'delete' => _delete(context, session!),
+        final app when app.startsWith(_app) => openApp(context, url, app.substring(_app.length)),
         _ => null,
       },
       itemBuilder: (_) => [
         const PopupMenuItem(key: Key('pages'), value: 'pages', child: Text('Pages')),
+        // The server's local apps (`[apps.*]`): put one on this session's desk and look at it.
+        for (final app in status.info?.apps ?? const <AppInfo>[])
+          PopupMenuItem(key: Key('open-app-${app.name}'), value: '$_app${app.name}', child: Text('App: ${app.title.isEmpty ? app.name : app.title}')),
         if (session != null)
           PopupMenuItem(value: 'model', child: Text(session.model == null ? 'Model…' : 'Model: ${session.model}…')),
         const PopupMenuItem(value: 'compact', child: Text('Compact (save memory, summarize)')),

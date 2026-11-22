@@ -24,6 +24,7 @@ class ChatState {
     this.atBottom = true,
     this.newSince = 0,
     this.processes = const [],
+    this.desk = const Desk(),
   });
 
   final String session;
@@ -67,6 +68,9 @@ class ChatState {
   /// Its background processes that are running (`process.list`, `processes.changed`).
   final List<ProcessInfo> processes;
 
+  /// Its desk (`desk.get`, `desk.changed`): the phone shows its app tabs.
+  final Desk desk;
+
   ChatState copyWith({
     List<ChatItem>? items,
     Object? streaming = _keep,
@@ -82,6 +86,7 @@ class ChatState {
     bool? atBottom,
     int? newSince,
     List<ProcessInfo>? processes,
+    Desk? desk,
   }) =>
       ChatState(
         session: session,
@@ -100,5 +105,6 @@ class ChatState {
         atBottom: atBottom ?? this.atBottom,
         newSince: newSince ?? this.newSince,
         processes: processes ?? this.processes,
+        desk: desk ?? this.desk,
       );
 }

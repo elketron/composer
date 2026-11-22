@@ -82,6 +82,14 @@ final class FetchProcesses extends AppEffect {
   final String session;
 }
 
+/// A `desk.*` command for a session; its reply (the desk now) comes back as `DeskLoaded`.
+final class DeskCommand extends AppEffect {
+  const DeskCommand(this.url, this.session, this.command);
+  final String url;
+  final String session;
+  final ClientCommand command;
+}
+
 /// Read the device's saved preferences (`PreferencesLoaded`).
 final class LoadPreferences extends AppEffect {
   const LoadPreferences();

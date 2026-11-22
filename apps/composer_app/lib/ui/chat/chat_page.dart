@@ -4,11 +4,13 @@ import 'package:composer_protocol/composer_protocol.dart';
 import 'package:flutter/material.dart';
 
 import '../../state/actions.dart';
+import '../../state/apps.dart';
 import '../../state/sites.dart';
 import '../../state/server_mark.dart';
 import '../../theme/tokens.dart' as t;
 import '../store_scope.dart';
 import '../server_badge.dart';
+import '../apps/app_tabs_row.dart';
 import 'chat_menu.dart';
 import 'chat_title.dart';
 import 'chat_view.dart';
@@ -28,6 +30,7 @@ import 'site_row.dart';
 class ChatPage extends StatefulWidget {
   static const _siteRow = 52.0;
   static const _handle = 44.0;
+  static const _appTabs = 44.0;
 
   /// What the chat and the message bar keep below the live view.
   static const _chatMinimum = 220.0;
@@ -135,6 +138,7 @@ class _ChatPageState extends State<ChatPage> {
       final chatColumn = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         header,
         ServerStrip(mark: mark),
+        AppTabsRow(url: url, status: status),
         Expanded(child: chatView),
       ]);
       return Scaffold(
@@ -182,11 +186,14 @@ class _ChatPageState extends State<ChatPage> {
       body: LayoutBuilder(
         builder: (context, box) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           SiteRow(url: url, status: status, session: session),
+          AppTabsRow(url: url, status: status),
           if (hasLive)
             hidden
                 ? Expanded(child: live(fill: true, maxHeight: box.maxHeight))
                 // The chat keeps room for the message bar and a few lines, keyboard or not.
-                : live(fill: false, maxHeight: box.maxHeight - ChatPage._siteRow - ChatPage._handle - ChatPage._chatMinimum),
+                : live(
+                    fill: false,
+                    maxHeight: box.maxHeight - ChatPage._siteRow - (appTabs(chat.desk).isEmpty ? 0 : ChatPage._appTabs) - ChatPage._handle - ChatPage._chatMinimum),
           if (hidden) Offstage(child: SizedBox(height: box.maxHeight, child: chatView)) else Expanded(child: chatView),
         ]),
       ),

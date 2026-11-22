@@ -152,6 +152,22 @@ final class ProcessesLoaded extends AppAction {
   final List<ProcessInfo> processes;
 }
 
+/// A session's desk as a `desk.*` command answered.
+final class DeskLoaded extends AppAction {
+  const DeskLoaded(this.url, this.session, this.desk);
+  final String url;
+  final String session;
+  final Desk desk;
+}
+
+/// The user opens app [name] for the open session: it goes on the session's desk (unless it is
+/// there), and an agent-opened tab the user had not looked at is focused (seen).
+final class AppOpened extends AppAction {
+  const AppOpened(this.url, this.name);
+  final String url;
+  final String name;
+}
+
 /// Stop a background process of the open session.
 final class ProcessStopRequested extends AppAction {
   const ProcessStopRequested(this.url, this.terminal);
