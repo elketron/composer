@@ -50,6 +50,25 @@ over the Agent Client Protocol (ACP); composer hands that agent itself as its MC
   `mcp.toml`, policy pages) always come to you, `always` rules still skip the question, and it
   never answers `always` itself. Each decision is a `system-1 …` line in the chat; an error,
   timeout or unclear answer forwards to you.
+  It can be a chat model (`api = "chat"`: a JSON decision and a reason) or a decision model
+  such as LiquidAI d1-2B under llama-server (`api = "systemone"`: `POST <base_url>/systemone`
+  with the same content as a JSON state and one approve/reject/forward question). A decision
+  model writes no text, only probabilities: it approves or rejects only at `approve_threshold` /
+  `reject_threshold` (0.9) or above, and the chat line shows the numbers (``system-1 approved
+  `cargo test` (approve 0.94, reject 0.02, forward 0.04)``) so you can tune them on real use.
+  Its prompt must fit one llama.cpp ubatch, so its state is cut to about 20,000 characters (your
+  older messages first, then the request body, the policy pages last, with a note). The default
+  `api = "auto"` picks `systemone` when `GET <base_url>/models` lists the model with
+  `decisions` among its `architecture.output_modalities`, else `chat`:
+
+  ```toml
+  [system1]
+  model = "d1-2B"
+  api = "systemone"   # or "auto"
+  base_url = "https://inferk.example/v1"
+  approve_threshold = 0.9
+  reject_threshold = 0.9
+  ```
 
 ## Clients
 

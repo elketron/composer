@@ -10,15 +10,24 @@
 //! Each decision is a line in the session's chat. Off (no model), failing, slow or unclear: the
 //! user is asked, as without it. It never answers `always`.
 //!
-//! It asks for a strict JSON schema answer; an endpoint that refuses that `response_format` is
-//! asked once with `json_object`, then once with none, and the form that worked is remembered per
-//! base URL and model while the server runs.
+//! Two ways to ask (`[system1] api`):
+//! - `chat`: chat completions with a strict JSON schema answer (a decision and a reason); an
+//!   endpoint that refuses that `response_format` is asked once with `json_object`, then once with
+//!   none, and the form that worked is remembered per base URL and model while the server runs.
+//! - `systemone`: a decision model (LiquidAI d1-2B under llama-server) at
+//!   `POST <base_url>/systemone`, given the same content as a JSON `state` and one `choice`
+//!   question; it writes no text, only probabilities, and `approve_threshold` /
+//!   `reject_threshold` decide what counts as a yes or a no. The chat line shows them. The state
+//!   is capped to [`prompt::STATE_CHARS`] so the prompt fits one llama.cpp ubatch.
+//! - `auto` (the default): `systemone` when `GET <base_url>/models` lists the model with
+//!   `decisions` among its `architecture.output_modalities`, else `chat`; remembered per base URL
+//!   and model while the server runs (a failed lookup means `chat` this time, and is tried again).
 
 mod policy;
 mod prompt;
 
 use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
 use composer_protocol::{ApprovalDecision, ChatMessage, MessageSource, Role, ServerMessage};
@@ -27,7 +36,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::actions::{Answer, Ask, DecidedBy};
 use crate::config::Config;
-use crate::config_sections::ProviderConfig;
+use crate::config_sections::{ProviderConfig, System1Api, System1Config};
 use crate::provider::{
     CallError, ModelEvent, ModelMessage, ModelRequest, OpenAiProvider, Provider,
 };
@@ -44,6 +53,8 @@ pub struct System1 {
     refused: Mutex<HashSet<(String, String)>>,
     /// The structured-output form each endpoint (base URL, model) took, once one worked.
     formats: Mutex<HashMap<(String, String), Format>>,
+    /// What `api = "auto"` found each endpoint (base URL, model) to be.
+    apis: Mutex<HashMap<(String, String), System1Api>>,
 }
 
 /// How system-1 asks for its JSON answer, strictest first: an endpoint that refuses one is asked
@@ -109,27 +120,46 @@ pub async fn decide(
     let Some(policies) = policy::approved(server, session, site.as_deref(), cancel).await else {
         return Ruling::Cancelled;
     };
-    let messages = prompt::messages(server, session, ask, site.as_deref(), &policies);
+    let context = prompt::Context::new(server, session, ask, site.as_deref(), &policies);
+    let asked = async {
+        let api = api(server, &config).await;
+        let answer = match api {
+            System1Api::Systemone => systemone(server, &config, context.state()).await,
+            System1Api::Chat | System1Api::Auto => {
+                complete(server, &config, context.messages()).await
+            }
+        };
+        (api, answer)
+    };
     let timeout = Duration::from_secs(settings.timeout_secs.max(1));
     let answer = tokio::select! {
-        answer = tokio::time::timeout(timeout, complete(server, &config, messages)) => answer,
+        answer = tokio::time::timeout(timeout, asked) => answer,
         _ = cancel.cancelled() => return Ruling::Cancelled,
     };
-    let verdict = match answer {
-        Err(_) => Verdict::Forward(format!("it didn't answer within {}s", timeout.as_secs())),
-        Ok(Err(e)) => {
+    let (verdict, detail) = match answer {
+        Err(_) => with_reason(Verdict::Forward(format!(
+            "it didn't answer within {}s",
+            timeout.as_secs()
+        ))),
+        Ok((_, Err(e))) => {
             tracing::warn!("system1 ({}): {e}; the user decides", settings.model);
-            Verdict::Forward(shortened(&format!("it failed: {e}")))
+            with_reason(Verdict::Forward(shortened(&format!("it failed: {e}"))))
         }
-        Ok(Ok(text)) => verdict(&text).unwrap_or_else(|| {
-            tracing::warn!(
-                "system1 ({}) answered {text:?}; the user decides",
-                settings.model
-            );
-            Verdict::Forward("its answer wasn't a decision".into())
-        }),
+        Ok((api, Ok(text))) => {
+            let decided = match api {
+                System1Api::Systemone => odds(&text, settings),
+                System1Api::Chat | System1Api::Auto => verdict(&text).map(with_reason),
+            };
+            decided.unwrap_or_else(|| {
+                tracing::warn!(
+                    "system1 ({}) answered {text:?}; the user decides",
+                    settings.model
+                );
+                with_reason(Verdict::Forward("its answer wasn't a decision".into()))
+            })
+        }
     };
-    line(server, session, &ask.what, &verdict);
+    line(server, session, &ask.what, &verdict, &detail);
     let decided = |decision, reason| {
         Ruling::Decided(Answer {
             decision,
@@ -174,28 +204,119 @@ impl System1 {
     }
 }
 
-/// One call to the `[system1]` model, its whole answer as text. Its own endpoint, else the
-/// provider's (sharing its slots, and its key unless one is set).
+/// Where the `[system1]` model is: its own endpoint, else the provider's (sharing its slots, and
+/// its key unless one is set).
+struct Endpoint {
+    base_url: String,
+    api_key: String,
+    /// Its own: no provider slot is taken.
+    own: bool,
+}
+
+impl Endpoint {
+    fn of(config: &Config) -> Self {
+        let settings = &config.system1;
+        let own = !settings.base_url.trim().is_empty();
+        Self {
+            base_url: match own {
+                true => settings.base_url.trim().to_string(),
+                false => config.provider.base_url.clone(),
+            },
+            api_key: match own || !settings.api_key.is_empty() {
+                true => settings.api_key.clone(),
+                false => config.provider.api_key.clone(),
+            },
+            own,
+        }
+    }
+}
+
+/// How to ask the `[system1]` model: as configured, or for `auto`, what its endpoint lists it as
+/// (remembered; `chat` when that can't be found out).
+async fn api(server: &Server, config: &Config) -> System1Api {
+    let settings = &config.system1;
+    if settings.api != System1Api::Auto {
+        return settings.api;
+    }
+    let endpoint = Endpoint::of(config);
+    let key = (endpoint.base_url.clone(), settings.model.trim().to_string());
+    if let Some(api) = server.system1.apis.lock().expect("system1 lock").get(&key) {
+        return *api;
+    }
+    match lookup(&endpoint, &key.1).await {
+        Ok(api) => {
+            tracing::info!("system1 ({}): {api:?}, as {}/models lists it", key.1, key.0);
+            server
+                .system1
+                .apis
+                .lock()
+                .expect("system1 lock")
+                .insert(key, api);
+            api
+        }
+        Err(e) => {
+            tracing::warn!("system1 ({}): {e}; asking it as a chat model", key.1);
+            System1Api::Chat
+        }
+    }
+}
+
+/// `GET <base_url>/models`: `systemone` if `model` is listed with `decisions` among its
+/// `architecture.output_modalities`, else `chat`.
+async fn lookup(endpoint: &Endpoint, model: &str) -> Result<System1Api, String> {
+    let url = format!("{}/models", endpoint.base_url.trim_end_matches('/'));
+    let mut request = client().get(&url);
+    if !endpoint.api_key.is_empty() {
+        request = request.bearer_auth(&endpoint.api_key);
+    }
+    let response = request
+        .send()
+        .await
+        .map_err(|e| format!("listing models at {url}: {e}"))?;
+    let status = response.status();
+    if !status.is_success() {
+        return Err(format!("listing models at {url}: {status}"));
+    }
+    let body: Value = response
+        .json()
+        .await
+        .map_err(|e| format!("listing models at {url}: {e}"))?;
+    let decides = body["data"].as_array().is_some_and(|models| {
+        models.iter().any(|m| {
+            m["id"].as_str() == Some(model)
+                && m["architecture"]["output_modalities"]
+                    .as_array()
+                    .is_some_and(|out| out.iter().any(|o| o == "decisions"))
+        })
+    });
+    Ok(match decides {
+        true => System1Api::Systemone,
+        false => System1Api::Chat,
+    })
+}
+
+/// The HTTP client for the decision endpoint and the models lookup.
+fn client() -> &'static reqwest::Client {
+    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+    CLIENT.get_or_init(reqwest::Client::new)
+}
+
+/// `api = "chat"`: one call to the `[system1]` model, its whole answer as text.
 async fn complete(
     server: &Server,
     config: &Config,
     messages: Vec<ModelMessage>,
 ) -> Result<String, String> {
     let settings = &config.system1;
-    let own_endpoint = !settings.base_url.trim().is_empty();
-    let base_url = if own_endpoint {
-        settings.base_url.clone()
-    } else {
-        config.provider.base_url.clone()
-    };
+    let Endpoint {
+        base_url,
+        api_key,
+        own: own_endpoint,
+    } = Endpoint::of(config);
     let model = settings.model.trim().to_string();
     let provider = OpenAiProvider::connect(&ProviderConfig {
         base_url: base_url.clone(),
-        api_key: if own_endpoint || !settings.api_key.is_empty() {
-            settings.api_key.clone()
-        } else {
-            config.provider.api_key.clone()
-        },
+        api_key,
         model: model.clone(),
         tool_images: false,
     })
@@ -244,6 +365,101 @@ async fn complete(
         }
     }
     Ok(text)
+}
+
+/// `api = "systemone"`: one `POST <base_url>/systemone` with the state and the decision
+/// question, its answer's body as text.
+async fn systemone(server: &Server, config: &Config, state: Value) -> Result<String, String> {
+    let endpoint = Endpoint::of(config);
+    let url = format!("{}/systemone", endpoint.base_url.trim_end_matches('/'));
+    let body = json!({ "state": state, "questions": prompt::questions() });
+    let _slot = match endpoint.own {
+        true => None,
+        false => Some(server.slots.acquire().await?),
+    };
+    let mut request = client()
+        .post(&url)
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
+        .body(body.to_string());
+    if !endpoint.api_key.is_empty() {
+        request = request.bearer_auth(&endpoint.api_key);
+    }
+    let response = request
+        .send()
+        .await
+        .map_err(|e| format!("reaching {url}: {e}"))?;
+    let status = response.status();
+    let text = response
+        .text()
+        .await
+        .map_err(|e| format!("reading {url}: {e}"))?;
+    if !status.is_success() {
+        return Err(format!("{status}: {text}"));
+    }
+    Ok(text)
+}
+
+/// A decision model's answer to the `decision` question, through the thresholds: the verdict and
+/// its probabilities for the chat line. `None` if it isn't one.
+fn odds(answer: &str, settings: &System1Config) -> Option<(Verdict, String)> {
+    let json: Value = serde_json::from_str(answer).ok()?;
+    let answer = &json["answers"][prompt::QUESTION];
+    let choice = answer["choice"].as_str()?.trim();
+    let p = |name: &str| answer["probabilities"][name].as_f64();
+    if !CHOICES.contains(&choice) {
+        return None;
+    }
+    let chosen = p(choice).or_else(|| answer["confidence"].as_f64())?;
+    if !(0.0..=1.0).contains(&chosen) {
+        return None;
+    }
+    let rest = CHOICES
+        .iter()
+        .filter(|name| **name != choice)
+        .filter_map(|name| p(name).map(|v| format!("{name} {v:.2}")))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let joined = |head: String, sep: &str| match rest.is_empty() {
+        true => head,
+        false => format!("{head}{sep}{rest}"),
+    };
+    let all = joined(format!("{choice} {chosen:.2}"), ", ");
+    let threshold = match choice {
+        "approve" => settings.approve_threshold,
+        "reject" => settings.reject_threshold,
+        _ => f64::INFINITY,
+    };
+    let (verdict, shown) = match choice {
+        "approve" if chosen >= threshold => (Verdict::Approve(all.clone()), all),
+        "reject" if chosen >= threshold => (
+            Verdict::Reject(format!(
+                "its decision model judged that the policy forbids it or it is clearly harmful \
+                 or outside the task ({all})"
+            )),
+            all,
+        ),
+        "forward" => (Verdict::Forward(all.clone()), all),
+        _ => {
+            let below = joined(format!("{choice} {chosen:.2} below {threshold:.2}"), "; ");
+            (Verdict::Forward(below.clone()), below)
+        }
+    };
+    Some((verdict, format!("({shown})")))
+}
+
+/// What a decision model may choose.
+const CHOICES: [&str; 3] = ["approve", "reject", "forward"];
+
+/// A verdict with its reason after a dash on the chat line (chat answers and failures).
+fn with_reason(verdict: Verdict) -> (Verdict, String) {
+    let reason = match &verdict {
+        Verdict::Approve(r) | Verdict::Reject(r) | Verdict::Forward(r) => r,
+    };
+    let detail = match reason.is_empty() {
+        true => String::new(),
+        false => format!("— {reason}"),
+    };
+    (verdict, detail)
 }
 
 /// Whether a refused call is the endpoint not taking the `response_format`: a 400 or 422, or an
@@ -298,16 +514,16 @@ fn shortened(text: &str) -> String {
     }
 }
 
-/// The decision, as a line in the session's chat (the model never reads it).
-fn line(server: &Server, session: &Session, what: &str, verdict: &Verdict) {
-    let (said, reason) = match verdict {
-        Verdict::Approve(reason) => (format!("approved {what}"), reason),
-        Verdict::Reject(reason) => (format!("rejected {what}"), reason),
-        Verdict::Forward(reason) => (format!("forwarded {what} to you"), reason),
+/// The decision, as a line in the session's chat (the model never reads it), `detail` after it.
+fn line(server: &Server, session: &Session, what: &str, verdict: &Verdict, detail: &str) {
+    let said = match verdict {
+        Verdict::Approve(_) => format!("approved {what}"),
+        Verdict::Reject(_) => format!("rejected {what}"),
+        Verdict::Forward(_) => format!("forwarded {what} to you"),
     };
-    let content = match reason.is_empty() {
+    let content = match detail.is_empty() {
         true => format!("system-1 {said}"),
-        false => format!("system-1 {said} — {reason}"),
+        false => format!("system-1 {said} {detail}"),
     };
     session.emit(&server.hub, |seq| ServerMessage::MessageDone {
         session: session.id().to_string(),
@@ -347,6 +563,69 @@ mod tests {
         assert_eq!(verdict(r#"{"decision": "maybe"}"#), None);
         assert_eq!(verdict("approve"), None);
         assert_eq!(verdict("} {"), None);
+    }
+
+    #[test]
+    fn odds_through_the_thresholds() {
+        let settings = Config::defaults().system1;
+        let answer = |choice: &str, p: [f64; 3]| {
+            json!({ "answers": { "decision": {
+                "choice": choice,
+                "confidence": 0.5,
+                "probabilities": { "approve": p[0], "reject": p[1], "forward": p[2] }
+            } } })
+            .to_string()
+        };
+        let all = "approve 0.94, reject 0.02, forward 0.04";
+        assert_eq!(
+            odds(&answer("approve", [0.94, 0.02, 0.04]), &settings),
+            Some((Verdict::Approve(all.into()), format!("({all})")))
+        );
+        assert_eq!(
+            odds(&answer("approve", [0.71, 0.2, 0.09]), &settings),
+            Some((
+                Verdict::Forward("approve 0.71 below 0.90; reject 0.20, forward 0.09".into()),
+                "(approve 0.71 below 0.90; reject 0.20, forward 0.09)".into()
+            ))
+        );
+        let Some((Verdict::Reject(reason), shown)) =
+            odds(&answer("reject", [0.03, 0.95, 0.02]), &settings)
+        else {
+            panic!("not a rejection")
+        };
+        assert!(
+            reason.ends_with("(reject 0.95, approve 0.03, forward 0.02)"),
+            "{reason}"
+        );
+        assert_eq!(shown, "(reject 0.95, approve 0.03, forward 0.02)");
+        assert!(matches!(
+            odds(&answer("reject", [0.2, 0.6, 0.2]), &settings),
+            Some((Verdict::Forward(_), _))
+        ));
+        assert!(matches!(
+            odds(&answer("forward", [0.01, 0.01, 0.98]), &settings),
+            Some((Verdict::Forward(_), _))
+        ));
+        // No probabilities: the confidence counts.
+        let bare = r#"{"answers": {"decision": {"choice": "approve", "confidence": 0.95}}}"#;
+        assert_eq!(
+            odds(bare, &settings),
+            Some((
+                Verdict::Approve("approve 0.95".into()),
+                "(approve 0.95)".into()
+            ))
+        );
+        for garbage in [
+            "",
+            "approve",
+            "{}",
+            r#"{"answers": {"decision": {"choice": "always", "confidence": 1}}}"#,
+            r#"{"answers": {"decision": {"choice": "approve"}}}"#,
+            r#"{"answers": {"decision": {"choice": "approve", "confidence": 1.5}}}"#,
+            r#"{"answers": {"other": {"choice": "approve", "confidence": 1}}}"#,
+        ] {
+            assert_eq!(odds(garbage, &settings), None, "{garbage}");
+        }
     }
 
     #[test]

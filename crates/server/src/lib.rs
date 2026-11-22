@@ -39,7 +39,7 @@ pub mod watches;
 pub use config::Config;
 pub use config_sections::{
     AgentConfig, AppConfig, AttachmentsConfig, McpServerConfig, ProviderConfig, ServerConfig,
-    System1Config,
+    System1Api, System1Config,
 };
 pub use error::{Result, ServerError};
 pub use hash::content_hash;

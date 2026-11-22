@@ -24,16 +24,36 @@ tool_images = true
 # or the agent's text) and the policy pages site://home/approvals.md and <site>/approvals.md, each
 # only in a version you approved (you are asked when it first needs a new version). Each decision
 # is a line in the chat. Any error, timeout or unclear answer forwards the request to you.
-# Empty: off.
+# Empty: off. With api = "systemone" it is only shown in logs.
 model = ""
+# How it is asked:
+# "auto": "systemone" when GET <base_url>/models lists the model with "decisions" among its
+#   architecture.output_modalities (llama-server does for a decision model), else "chat".
+# "chat": chat completions, answering {"decision": approve|reject|forward, "reason": ...} (a
+#   strict JSON schema, falling back to json_object, then none).
+# "systemone": a decision model such as LiquidAI d1-2B served by llama-server, at
+#   POST <base_url>/systemone. It writes no text: it answers one choice question with
+#   probabilities, and the thresholds below turn them into approve, reject or forward. Its
+#   whole prompt must fit in one llama.cpp ubatch (e.g. 8192 tokens), so what it is shown is cut
+#   to about 20,000 characters: your older messages first, then the request body, and only then
+#   the policy pages (with a note saying so). E.g.
+#     model = "d1-2B"
+#     api = "systemone"     # or leave it "auto"
+#     base_url = "https://inferk.example/v1"
+api = "auto"
 # Empty: [provider]'s base_url (sharing its slots), and its api_key unless api_key is set.
 base_url = ""
 api_key = ""
 # A decision that takes longer is forwarded to you.
 timeout_secs = 15
-# Sent as `reasoning_effort` (none, low, medium, high), like [agent] reasoning_effort: a decision
-# needs little thought. Empty: not sent, the provider decides.
+# api = "chat" only. Sent as `reasoning_effort` (none, low, medium, high), like [agent]
+# reasoning_effort: a decision needs little thought. Empty: not sent, the provider decides.
 reasoning_effort = "low"
+# api = "systemone" only: it approves only when it chooses approve with P(approve) at least
+# approve_threshold, rejects only when it chooses reject with P(reject) at least reject_threshold;
+# anything else comes to you. The chat line shows the probabilities: tune these on your own use.
+approve_threshold = 0.9
+reject_threshold = 0.9
 
 [server]
 # Keep it on localhost; reach it from other devices with `tailscale serve` (see `composer pair`).

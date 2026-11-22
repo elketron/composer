@@ -29,6 +29,10 @@ pub struct System1Config {
     /// Empty: off, every approval goes to the user.
     #[serde(default)]
     pub model: String,
+    /// How it is asked: a chat model, or a decision model's `POST <base_url>/systemone`; `auto`
+    /// (default) asks `GET <base_url>/models` which it is.
+    #[serde(default)]
+    pub api: System1Api,
     /// OpenAI-compatible base URL, including `/v1`. Empty: `[provider]`'s (sharing its slots, and
     /// its key unless `api_key` is set).
     #[serde(default)]
@@ -43,6 +47,31 @@ pub struct System1Config {
     /// not sent.
     #[serde(default = "default_low")]
     pub reasoning_effort: String,
+    /// `api = "systemone"`: approve only when it chooses approve with at least this probability.
+    #[serde(default = "default_system1_threshold")]
+    pub approve_threshold: f64,
+    /// `api = "systemone"`: reject only when it chooses reject with at least this probability.
+    #[serde(default = "default_system1_threshold")]
+    pub reject_threshold: f64,
+}
+
+/// How `[system1]` asks its model.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum System1Api {
+    /// `systemone` if `GET <base_url>/models` lists the model with `decisions` among its
+    /// `architecture.output_modalities`, else `chat` (also when the lookup fails).
+    #[default]
+    Auto,
+    /// Chat completions with a JSON answer: a decision and a reason.
+    Chat,
+    /// A decision model (e.g. LiquidAI d1-2B under llama-server) at `POST <base_url>/systemone`:
+    /// one `choice` question, answered with probabilities, no text.
+    Systemone,
+}
+
+fn default_system1_threshold() -> f64 {
+    0.9
 }
 
 fn default_low() -> String {
