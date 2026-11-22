@@ -74,6 +74,7 @@ ChatState _done(ChatState chat, ChatMessage message) => switch (message.role) {
 
 String? _source(MessageSource? source) => switch (source) {
       MessageSourceWatch() => 'watch',
+      MessageSourceMcp(:final server) => server,
       _ => null,
     };
 

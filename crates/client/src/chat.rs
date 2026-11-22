@@ -167,6 +167,7 @@ fn source_label(source: Option<&MessageSource>) -> Option<String> {
     match source? {
         MessageSource::Watch { .. } => Some("watch".into()),
         MessageSource::Process { .. } => Some("process".into()),
+        MessageSource::Mcp { server } => Some(server.clone()),
         _ => None,
     }
 }

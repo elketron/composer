@@ -7,8 +7,8 @@ use composer_protocol::{ApprovalDecision, ApprovalKind, RunKind};
 use serde_json::Value;
 
 use crate::McpServerConfig;
-use crate::mcp_clients::McpClient;
 use crate::mcp_clients::types::{Slot, glob_matches, tool_name, transport_kind};
+use crate::mcp_clients::{McpClient, McpEvents};
 use crate::provider::ToolSpec;
 use crate::site_mcp::SiteServers;
 use crate::tools::ToolContext;
@@ -41,6 +41,8 @@ pub struct McpServers {
     workspace: BTreeMap<String, String>,
     /// The sites folder: where a stdio server without a `cwd` starts.
     sites: std::path::PathBuf,
+    /// Where servers' events go; shared with the next config's `McpServers`.
+    events: Arc<McpEvents>,
 }
 
 impl McpServers {
@@ -48,6 +50,7 @@ impl McpServers {
         configs: &BTreeMap<String, McpServerConfig>,
         workspace: BTreeMap<String, String>,
         sites: std::path::PathBuf,
+        events: Arc<McpEvents>,
     ) -> Self {
         let mut usable = BTreeMap::new();
         for (name, config) in configs {
@@ -62,6 +65,7 @@ impl McpServers {
             pool: Arc::default(),
             workspace,
             sites,
+            events,
         }
     }
 
@@ -69,7 +73,12 @@ impl McpServers {
     /// is kept, every other one is dropped (its process stops once no call is using it). Sites'
     /// servers are made again from the new config on next use.
     pub fn reconfigured(&self, configs: &BTreeMap<String, McpServerConfig>) -> Self {
-        let next = Self::new(configs, self.workspace.clone(), self.sites.clone());
+        let next = Self::new(
+            configs,
+            self.workspace.clone(),
+            self.sites.clone(),
+            self.events.clone(),
+        );
         let keep: Vec<String> = next.configs.values().map(pool_key).collect();
         let old = self.pool.lock().expect("pool lock");
         *next.pool.lock().expect("pool lock") = old
@@ -111,11 +120,12 @@ impl McpServers {
         config: &McpServerConfig,
         retry: bool,
     ) -> Result<Arc<McpClient>, String> {
+        let key = pool_key(config);
         let slot = self
             .pool
             .lock()
             .expect("pool lock")
-            .entry(pool_key(config))
+            .entry(key.clone())
             .or_default()
             .clone();
         let mut slot = slot.lock().await;
@@ -130,7 +140,11 @@ impl McpServers {
         {
             return Err(error.clone());
         }
-        match McpClient::connect(name, config, &self.workspace, &self.sites).await {
+        let on_event = {
+            let (events, name) = (self.events.clone(), name.to_string());
+            Arc::new(move |params: Value| events.received(&key, &name, &params))
+        };
+        match McpClient::connect(name, config, &self.workspace, &self.sites, on_event).await {
             Ok(client) => {
                 let client = Arc::new(client);
                 tracing::info!(
@@ -169,15 +183,32 @@ impl McpServers {
         }
     }
 
+    /// Whether a run of `kind` gets any tool of a server configured as `config` (it would be
+    /// started for it).
+    fn kind_offers(kind: RunKind, config: &McpServerConfig) -> bool {
+        match kind {
+            RunKind::Agentic => true,
+            RunKind::Workflow => !config.read_only.is_empty(),
+            RunKind::SingleShot => false,
+        }
+    }
+
+    /// The name a run of `kind` in `site` knows the connection `key` ([`pool_key`]) by, when it
+    /// has that server's tools.
+    pub fn reaching(&self, kind: RunKind, site: Option<&SiteServers>, key: &str) -> Option<String> {
+        self.entries(site)
+            .into_iter()
+            .find(|entry| Self::kind_offers(kind, entry.config) && pool_key(entry.config) == key)
+            .map(|entry| entry.name.to_string())
+    }
+
     /// Every tool a run of `kind` has from `config.toml`'s servers and `site`'s (the approved
     /// servers of the site it is in), from the servers reachable now.
     pub async fn specs_for(&self, kind: RunKind, site: Option<&SiteServers>) -> Vec<ToolSpec> {
         let mut specs = Vec::new();
         for entry in self.entries(site) {
             // Nothing to offer: don't start the server for it.
-            if kind == RunKind::SingleShot
-                || (kind == RunKind::Workflow && entry.config.read_only.is_empty())
-            {
+            if !Self::kind_offers(kind, entry.config) {
                 continue;
             }
             // A failed connect is logged where it happens; the turn goes on without it.
@@ -249,7 +280,13 @@ impl McpServers {
             .ok_or_else(|| format!("unknown tool `{name}`"))?;
         self.approve(context, entry, &tool.name, name, &args)
             .await?;
-        client.call(&tool.name, args).await
+        // The server learns which session called (`_meta`), and its events without one go to
+        // the session that called last.
+        let session = context.run.session().map(|s| s.id().to_string());
+        if let Some(session) = &session {
+            self.events.called(&pool_key(entry.config), session);
+        }
+        client.call(&tool.name, args, session.as_deref()).await
     }
 
     /// Asks the user unless `allow` or an earlier `always` covers the tool. A site's server keeps

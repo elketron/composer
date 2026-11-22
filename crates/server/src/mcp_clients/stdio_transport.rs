@@ -10,7 +10,8 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, Command};
 use tokio::sync::oneshot;
 
-use crate::mcp_clients::types::Transport;
+use crate::mcp_clients::EVENT_METHOD;
+use crate::mcp_clients::types::{EventSink, Transport};
 
 type Waiting = Arc<Mutex<HashMap<u64, oneshot::Sender<Result<Value, String>>>>>;
 
@@ -28,12 +29,13 @@ pub struct StdioTransport {
 }
 
 impl StdioTransport {
-    /// Starts `command` (`program`) with its stdio piped.
+    /// Starts `command` (`program`) with its stdio piped; the events it sends go to `on_event`.
     pub fn spawn(
         name: &str,
         program: &str,
         mut command: Command,
         timeout: Duration,
+        on_event: EventSink,
     ) -> Result<Self, String> {
         let mut child = command
             .stdin(Stdio::piped())
@@ -69,7 +71,7 @@ impl StdioTransport {
                         tracing::debug!("mcp {name}: not JSON-RPC: {line}");
                         continue;
                     };
-                    handle_message(&message, &waiting, &tools_changed, &replies);
+                    handle_message(&message, &waiting, &tools_changed, &replies, &on_event);
                 }
                 alive.store(false, Ordering::SeqCst);
                 // Give its stderr a moment to arrive.
@@ -133,12 +135,13 @@ async fn write_line(stdin: &tokio::sync::Mutex<ChildStdin>, line: &str) -> Resul
 }
 
 /// A response settles its waiting request; a request from the server gets a reply; a
-/// notification may say the tools changed.
+/// notification may say the tools changed, or be an event for a session.
 fn handle_message(
     message: &Value,
     waiting: &Waiting,
     tools_changed: &AtomicBool,
     replies: &tokio::sync::mpsc::UnboundedSender<String>,
+    on_event: &EventSink,
 ) {
     let method = message.get("method").and_then(Value::as_str);
     match (message.get("id"), method) {
@@ -166,6 +169,9 @@ fn handle_message(
         }
         (None, Some("notifications/tools/list_changed")) => {
             tools_changed.store(true, Ordering::SeqCst);
+        }
+        (None, Some(EVENT_METHOD)) => {
+            on_event(message.get("params").cloned().unwrap_or(Value::Null));
         }
         _ => {}
     }

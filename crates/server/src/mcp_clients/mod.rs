@@ -5,10 +5,14 @@
 
 mod http_transport;
 mod mcp_client;
+mod mcp_event;
+mod mcp_events;
 mod mcp_servers;
 mod stdio_transport;
 mod types;
 
 pub use mcp_client::{McpClient, expand, output_text};
+pub use mcp_event::{EVENT_METHOD, McpEvent, SESSION_META};
+pub use mcp_events::{COALESCE, McpEvents};
 pub use mcp_servers::McpServers;
-pub use types::{RemoteTool, Transport, glob_matches, tool_name};
+pub use types::{EventSink, RemoteTool, Transport, glob_matches, tool_name};

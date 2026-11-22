@@ -19,7 +19,7 @@ use crate::hash::content_hash;
 use crate::home::Home;
 use crate::hub::EventHub;
 use crate::init::local_token;
-use crate::mcp_clients::McpServers;
+use crate::mcp_clients::{McpEvents, McpServers};
 use crate::provider::{OpenAiProvider, Provider};
 use crate::session::{Session, SessionManager};
 use crate::slot_pool::SlotPool;
@@ -91,9 +91,11 @@ impl Server {
         let index = Index::build(&web)?;
         tracing::info!("indexed {} pages", index.len());
         let hub = EventHub::new(4096);
-        Ok(Arc::new(Self {
-            token: local_token(&home)?,
-            sessions: SessionManager::load(&home.sessions())?,
+        let token = local_token(&home)?;
+        let sessions = SessionManager::load(&home.sessions())?;
+        Ok(Arc::new_cyclic(|server| Self {
+            token,
+            sessions,
             slots: SlotPool::new(config.agent.slots, hub.clone()),
             tools: ToolRegistry::standard(),
             mcp: RwLock::new(Arc::new(McpServers::new(
@@ -103,6 +105,7 @@ impl Server {
                     .map(|(k, v)| (k.to_string(), v))
                     .collect(),
                 home.sites(),
+                Arc::new(McpEvents::new(server.clone())),
             ))),
             site_mcp: crate::site_mcp::ActiveSites::default(),
             approvals,

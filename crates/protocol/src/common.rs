@@ -101,6 +101,11 @@ pub enum MessageSource {
         terminal: String,
         command: String,
     },
+    /// An MCP server told the session something (`notifications/composer/event`); `server` is
+    /// the name the session knows it by.
+    Mcp {
+        server: String,
+    },
 }
 
 /// A complete chat message, as stored in the transcript.

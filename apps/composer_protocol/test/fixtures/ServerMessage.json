@@ -312,6 +312,15 @@
     }
   },
   {
+    "type": "turn.queued",
+    "session": "a3f1",
+    "seq": 7,
+    "source": {
+      "kind": "mcp",
+      "server": "canvas"
+    }
+  },
+  {
     "type": "processes.changed",
     "session": "a3f1",
     "processes": [
