@@ -28,6 +28,7 @@ pub mod session;
 pub mod site_mcp;
 mod slot_guard;
 mod slot_pool;
+pub mod system1;
 pub mod terminals;
 pub mod tools;
 pub mod tui;

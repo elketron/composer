@@ -79,6 +79,14 @@ instructions for one kind of job. A webhook or `spawn_run` names it with `site` 
   (`[servers.<name>]`) adds its own. Calls outside a server's `allow` list ask the user first.
   A server can tell you what the user did in its app: an `[automatic notice: <server> event]`.
 
+## Approvals
+
+What you do that the user approves (terminal commands, background processes, MCP calls outside a
+server's `allow`, recipe runs) may be decided for them by system-1, a small model, when they set
+`[system1]`: it approves, rejects with a reason (don't try to get around it), or asks the user. It
+follows the policy in [approvals.md](site://home/approvals.md) and a site's own `approvals.md`,
+each only in a version the user approved: an edit to one goes back to them.
+
 ## How to work
 
 - **Browse, don't guess.** `open` a page to read it, `search` to find pages.

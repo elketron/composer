@@ -21,6 +21,7 @@ use tokio::sync::watch;
 use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 use tokio_util::sync::CancellationToken;
 
+use crate::actions::Ask;
 use crate::harness::{AcpConfig, AcpTurn, ChildProcess, WorkerScope};
 use crate::home::Home;
 use crate::server::Server;
@@ -289,9 +290,12 @@ impl AcpAgent {
             body.push_str(&format!("The agent's options: {}", names.join(" / ")));
             let always = option(&request.options, &[PermissionOptionKind::AllowAlways])
                 .map(|o| o.name.clone());
+            let what = format!("`{title}`");
+            let ask = Ask::action(ApprovalKind::Tool, what, title, body, always);
             let decision = server
-                .ask_approval(&session, ApprovalKind::Tool, title, body, always, &cancel)
-                .await;
+                .ask(&session, ask, &cancel)
+                .await
+                .map(|answer| answer.decision);
             let outcome = outcome(&request.options, decision);
             if let Err(e) = responder.respond(RequestPermissionResponse::new(outcome)) {
                 tracing::warn!("session {}: answering the agent: {e}", session.id());

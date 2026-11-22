@@ -11,7 +11,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use composer_protocol::ApprovalDecision;
+use crate::actions::Ask;
 use tokio_util::sync::CancellationToken;
 
 use crate::agent::{FOLDER_APPROVAL, FolderNote, Site, folder_hash};
@@ -45,21 +45,17 @@ pub async fn ensure_folder_approved(
     let Some(session) = session else {
         return note(false);
     };
-    let answer = server
-        .request_approval(
-            session,
-            &site.name,
-            FOLDER_APPROVAL,
-            &[folder.display().to_string()],
-            asking(&site.name, &folder),
-            &hash,
-            cancel,
-        )
-        .await;
-    let yes = matches!(
-        answer,
-        Some(ApprovalDecision::Approve | ApprovalDecision::Always)
+    let ask = Ask::trust(
+        &site.name,
+        FOLDER_APPROVAL,
+        vec![folder.display().to_string()],
+        asking(&site.name, &folder),
+        &hash,
     );
+    let yes = server
+        .ask(session, ask, cancel)
+        .await
+        .is_some_and(|answer| answer.approved());
     if yes {
         if let Err(e) = server.approvals.approve(&site.name, FOLDER_APPROVAL, &hash) {
             tracing::warn!("remembering that {}'s folder is approved: {e}", site.name);

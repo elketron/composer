@@ -8,7 +8,7 @@
 
 use std::sync::Arc;
 
-use composer_protocol::ApprovalDecision;
+use crate::actions::Ask;
 use tokio_util::sync::CancellationToken;
 
 use crate::server::Server;
@@ -63,21 +63,11 @@ pub async fn ensure_approved(
             note: note(false),
         };
     };
-    let answer = server
-        .request_approval(
-            session,
-            site,
-            MCP_FILE,
-            &[],
-            asking(site, file),
-            &file.hash,
-            cancel,
-        )
-        .await;
-    let yes = matches!(
-        answer,
-        Some(ApprovalDecision::Approve | ApprovalDecision::Always)
-    );
+    let ask = Ask::trust(site, MCP_FILE, vec![], asking(site, file), &file.hash);
+    let yes = server
+        .ask(session, ask, cancel)
+        .await
+        .is_some_and(|answer| answer.approved());
     if yes && let Err(e) = server.approvals.approve(site, MCP_FILE, &file.hash) {
         tracing::warn!("remembering that {site}'s {MCP_FILE} is approved: {e}");
     }

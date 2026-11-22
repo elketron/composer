@@ -4,13 +4,11 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
 
 use composer_core::{Index, Page, SiteUrl, Web};
-use composer_protocol::{
-    ApprovalDecision, ApprovalKind, ChangedBy, PageChangeKind, ServerMessage, SessionInfo,
-};
+use composer_protocol::{ApprovalDecision, ChangedBy, PageChangeKind, ServerMessage, SessionInfo};
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
-use crate::actions::{ApprovalWait, Approvals, PendingApprovals};
+use crate::actions::{Answer, Answerer, ApprovalWait, Approvals, Ask, PendingApprovals};
 use crate::config::Config;
 use crate::devices::Devices;
 use crate::error::{Result, ServerError};
@@ -23,6 +21,7 @@ use crate::mcp_clients::{McpEvents, McpServers};
 use crate::provider::{OpenAiProvider, Provider};
 use crate::session::{Session, SessionManager};
 use crate::slot_pool::SlotPool;
+use crate::system1::{Ruling, System1};
 use crate::tools::ToolRegistry;
 use crate::watches::{WRITER, WatchRegistry};
 
@@ -44,6 +43,8 @@ pub struct Server {
     pub site_mcp: crate::site_mcp::ActiveSites,
     pub approvals: Approvals,
     pub pending_approvals: PendingApprovals,
+    /// What the `[system1]` model remembers between decisions.
+    pub system1: System1,
     /// Required on every request (header or `?token=`).
     pub token: String,
     /// Paired devices (remote access), each with its own token.
@@ -110,6 +111,7 @@ impl Server {
             site_mcp: crate::site_mcp::ActiveSites::default(),
             approvals,
             pending_approvals: PendingApprovals::default(),
+            system1: System1::default(),
             web_sessions: crate::api::WebSessions::default(),
             terminals: crate::terminals::Terminals::default(),
             watches: WatchRegistry::load(home.state().join("watches.json")),
@@ -400,78 +402,35 @@ impl Server {
         self.watches.changed(&url.to_string(), kind, None);
     }
 
-    /// Asks attached clients to approve a recipe version and waits for the answer.
-    /// The session shows `needs approval` meanwhile. `None` if the turn was cancelled.
-    #[allow(clippy::too_many_arguments)]
-    pub async fn request_approval(
+    /// Asks for `ask` in `session` and waits for the answer: the `[system1]` model first when the
+    /// ask lets it decide ([`Answerer::System1ThenUser`]) and it is on, else (or when it forwards)
+    /// the user's clients. `None` if `cancel` fired first.
+    pub async fn ask(
         self: &Arc<Self>,
         session: &Session,
-        site: &str,
-        recipe: &str,
-        args: &[String],
-        body: String,
-        hash: &str,
+        ask: Ask,
         cancel: &CancellationToken,
-    ) -> Option<ApprovalDecision> {
-        self.ask_clients(
-            session,
-            |request| ServerMessage::ApprovalRequest {
-                request,
-                session: session.id().to_string(),
-                kind: ApprovalKind::Recipe,
-                title: String::new(),
-                site: site.to_string(),
-                recipe: recipe.to_string(),
-                args: args.to_vec(),
-                body,
-                hash: hash.to_string(),
-                rule: None,
-            },
-            cancel,
-        )
-        .await
+    ) -> Option<Answer> {
+        if ask.answerer() == Answerer::System1ThenUser {
+            match crate::system1::decide(self, session, &ask, cancel).await {
+                Ruling::Decided(answer) => return Some(answer),
+                Ruling::Cancelled => return None,
+                Ruling::User => {}
+            }
+        }
+        self.ask_user(session, &ask, cancel).await.map(Answer::user)
     }
 
-    /// Asks this server's clients to approve something other than a recipe (a terminal input, an
-    /// MCP tool) and waits. `None` if `cancel` fired first.
-    pub async fn ask_approval(
+    /// Sends `ask` to every client and waits for the user's answer; the session shows `needs
+    /// approval` meanwhile. Nothing else answers it.
+    pub(crate) async fn ask_user(
         self: &Arc<Self>,
         session: &Session,
-        kind: ApprovalKind,
-        title: String,
-        body: String,
-        rule: Option<String>,
-        cancel: &CancellationToken,
-    ) -> Option<ApprovalDecision> {
-        self.ask_clients(
-            session,
-            |request| ServerMessage::ApprovalRequest {
-                request,
-                session: session.id().to_string(),
-                kind,
-                title,
-                site: String::new(),
-                recipe: String::new(),
-                args: vec![],
-                body,
-                hash: String::new(),
-                rule,
-            },
-            cancel,
-        )
-        .await
-    }
-
-    /// Sends the approval request `message` (given its id) to every client and waits for an
-    /// answer; the session shows `needs approval` meanwhile.
-    async fn ask_clients(
-        self: &Arc<Self>,
-        session: &Session,
-        message: impl FnOnce(String) -> ServerMessage,
+        ask: &Ask,
         cancel: &CancellationToken,
     ) -> Option<ApprovalDecision> {
         let request = format!("{:08x}", rand::random::<u32>());
-        let message = message(request.clone());
+        let message = ask.message(request.clone(), session.id());
         let mut wait = ApprovalWait::new(self, session, request.clone());
         let answer = self.pending_approvals.add(&request, message.clone());
         wait.set_announced();

@@ -2,6 +2,7 @@
 
 mod approval_wait;
 mod approvals;
+mod ask;
 mod check_args;
 mod ensure_approved;
 mod justfile;
@@ -12,6 +13,7 @@ mod types;
 
 pub use approval_wait::ApprovalWait;
 pub use approvals::Approvals;
+pub use ask::{Answer, Answerer, Ask, DecidedBy};
 pub use check_args::check_args;
 pub use ensure_approved::ensure_approved;
 pub use justfile::Justfile;

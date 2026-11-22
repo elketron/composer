@@ -6,14 +6,17 @@ use include_dir::{Dir, include_dir};
 use crate::actions::{Approvals, Justfile};
 use crate::config::Config;
 use crate::error::{Result, ServerError};
+use crate::hash::content_hash;
 use crate::home::Home;
+use crate::system1::POLICY_FILE;
 
 static SEED: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/../../seed/sites");
 
 /// Creates the composer home: its config, the stock sites, state folders and token. Never
 /// overwrites existing files: the stock is seeded once, never merged later. Recipes of newly
 /// created stock justfiles are pre-approved (needs `just`; otherwise they are approved on first
-/// use). Returns the paths it created.
+/// use), and so are newly created stock policy pages (`approvals.md`). Returns the paths it
+/// created.
 pub async fn init_home(home: &Home) -> Result<Vec<String>> {
     let mut created = Vec::new();
     for dir in [home.sites(), home.sessions()] {
@@ -22,7 +25,9 @@ pub async fn init_home(home: &Home) -> Result<Vec<String>> {
     copy_seed(&SEED, &home.sites(), &mut created)?;
     write_new(&home.config_file(), Config::TEMPLATE, &mut created)?;
     write_new(&home.token_file(), &new_token(), &mut created)?;
-    approve_recipes_in(&Approvals::load(&home.approvals_file())?, &created).await?;
+    let approvals = Approvals::load(&home.approvals_file())?;
+    approve_recipes_in(&approvals, &created).await?;
+    approve_policies_in(&approvals, &created)?;
     Ok(created)
 }
 
@@ -56,6 +61,25 @@ async fn approve_recipes_in(approvals: &Approvals, created: &[String]) -> Result
         for recipe in justfile.recipes() {
             approvals.approve(site, &recipe.name, &justfile.hash(&recipe.name))?;
         }
+    }
+    Ok(())
+}
+
+/// Pre-approves the stock policy pages among `created`: they are composer's words, not an
+/// agent's.
+fn approve_policies_in(approvals: &Approvals, created: &[String]) -> Result<()> {
+    let suffix = format!("/{POLICY_FILE}");
+    for path in created.iter().filter(|p| p.ends_with(&suffix)) {
+        let path = Path::new(path);
+        let Some(site) = path
+            .parent()
+            .and_then(Path::file_name)
+            .and_then(|n| n.to_str())
+        else {
+            continue;
+        };
+        let bytes = fs::read(path).map_err(|e| ServerError::io(path, e))?;
+        approvals.approve(site, POLICY_FILE, &content_hash(&bytes))?;
     }
     Ok(())
 }

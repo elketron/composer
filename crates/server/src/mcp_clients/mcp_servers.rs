@@ -7,6 +7,7 @@ use composer_protocol::{ApprovalDecision, ApprovalKind, RunKind};
 use serde_json::Value;
 
 use crate::McpServerConfig;
+use crate::actions::Ask;
 use crate::mcp_clients::types::{Slot, glob_matches, tool_name, transport_kind};
 use crate::mcp_clients::{McpClient, McpEvents};
 use crate::provider::ToolSpec;
@@ -313,29 +314,32 @@ impl McpServers {
             return Ok(());
         }
         let body = serde_json::to_string_pretty(args).unwrap_or_default();
-        let decision = server_ref
-            .ask_approval(
-                &*context.approval_session(&format!("`{name}` (MCP {})", entry.name))?,
-                ApprovalKind::Mcp,
-                format!("MCP {}: {tool}", entry.name),
-                body,
-                Some(name.to_string()),
-                &context.cancel,
-            )
-            .await;
-        match decision {
-            Some(ApprovalDecision::Approve) => Ok(()),
-            Some(ApprovalDecision::Always) => {
+        let session = context.approval_session(&format!("`{name}` (MCP {})", entry.name))?;
+        let what = format!("`{name}`");
+        let ask = Ask::action(
+            ApprovalKind::Mcp,
+            what.clone(),
+            format!("MCP {}: {tool}", entry.name),
+            body,
+            Some(name.to_string()),
+        );
+        let Some(answer) = server_ref.ask(&session, ask, &context.cancel).await else {
+            return Err("cancelled".into());
+        };
+        match answer.decision {
+            ApprovalDecision::Approve => Ok(()),
+            ApprovalDecision::Always => {
                 if let Err(e) = server_ref.tool_rules.add(&rules_key, name) {
                     tracing::warn!("saving the rule for {name}: {e}");
                 }
                 Ok(())
             }
-            Some(ApprovalDecision::Deny) => Err(format!(
-                "The user denied `{name}`. Don't try to get around it: do without, or say what \
-                 you needed it for."
-            )),
-            None => Err("cancelled".into()),
+            ApprovalDecision::Deny => Err(answer.refusal(&what, || {
+                format!(
+                    "The user denied `{name}`. Don't try to get around it: do without, or say \
+                     what you needed it for."
+                )
+            })),
         }
     }
 

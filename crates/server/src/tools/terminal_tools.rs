@@ -6,6 +6,8 @@ use serde_json::{Value, json};
 
 use composer_protocol::{ApprovalDecision, ApprovalKind};
 
+use crate::actions::Ask;
+
 use crate::terminals::{Terminal, owned};
 use crate::tools::ToolContext;
 
@@ -24,7 +26,7 @@ pub(crate) fn terminal(
 }
 
 /// The user's yes to running `command`: a rule they said `always` to in this folder, as for
-/// Claude Code's Bash (`Bash(<command>:*)`), or their answer to `title` now.
+/// Claude Code's Bash (`Bash(<command>:*)`), or the answer to `title` now (system-1's, or theirs).
 pub(crate) async fn approve_command(
     context: &ToolContext,
     command: &str,
@@ -44,27 +46,27 @@ pub(crate) async fn approve_command(
         return Ok(());
     }
     let rule = format!("Bash({}:*)", command.trim());
-    let decision = server
-        .ask_approval(
-            &*context.session()?,
-            ApprovalKind::Tool,
-            title,
-            command.to_string(),
-            Some(rule.clone()),
-            &context.cancel,
-        )
-        .await;
-    match decision {
-        Some(ApprovalDecision::Approve) => Ok(()),
-        Some(ApprovalDecision::Always) => {
+    let what = format!("`{}`", command.trim());
+    let ask = Ask::action(
+        ApprovalKind::Tool,
+        what.clone(),
+        title,
+        command.to_string(),
+        Some(rule.clone()),
+    );
+    let Some(answer) = server.ask(&*context.session()?, ask, &context.cancel).await else {
+        return Err("cancelled".into());
+    };
+    match answer.decision {
+        ApprovalDecision::Approve => Ok(()),
+        ApprovalDecision::Always => {
             if let Err(e) = server.tool_rules.add(&key, &rule) {
                 tracing::warn!("saving the rule {rule}: {e}");
             }
             Ok(())
         }
-        Some(ApprovalDecision::Deny) => Err(format!(
-            "The user didn't let you run `{command}`. Don't try to get around it."
-        )),
-        None => Err("cancelled".into()),
+        ApprovalDecision::Deny => Err(answer.refusal(&what, || {
+            format!("The user didn't let you run `{command}`. Don't try to get around it.")
+        })),
     }
 }
