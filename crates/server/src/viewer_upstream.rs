@@ -35,6 +35,13 @@ pub(crate) fn read_bearer(file: &std::path::Path) -> Result<String, String> {
     Ok(token.to_string())
 }
 
+/// Whether `url`'s host is this machine: `localhost`, `127.0.0.0/8` or `::1`.
+pub(crate) fn is_loopback(url: &Url) -> bool {
+    let host = url.host_str().unwrap_or("").trim_matches(['[', ']']);
+    host.eq_ignore_ascii_case("localhost")
+        || host.parse::<IpAddr>().is_ok_and(|ip| ip.is_loopback())
+}
+
 impl ViewerUpstream {
     /// The upstream the config names: `[viewer] url`, else `[mcp.wayai]`'s address with path
     /// `/view`. `Ok(None)` when neither is set; `Err` (why) for an address that isn't usable,
@@ -97,10 +104,7 @@ impl ViewerUpstream {
         if !matches!(page.scheme(), "http" | "https") {
             return Err(format!("{setting} `{text}` must be an http(s) URL"));
         }
-        let host = page.host_str().unwrap_or("").trim_matches(['[', ']']);
-        let loopback = host.eq_ignore_ascii_case("localhost")
-            || host.parse::<IpAddr>().is_ok_and(|ip| ip.is_loopback());
-        if !loopback {
+        if !is_loopback(&page) {
             return Err(format!(
                 "{setting} `{text}` is not a loopback address (127.0.0.1, ::1 or localhost); \
                  only those are allowed for now"

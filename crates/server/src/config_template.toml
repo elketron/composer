@@ -67,6 +67,15 @@ inline_max_kb = 100
 # url = "http://127.0.0.1:7878/view"
 # bearer_file = "~/.local/share/wayai/token"
 
+# Your own web servers on this machine, shown on the desk (the agent's `show_page app://canvas/`)
+# and served to your devices at `/apps/<name>/` behind the server's token: any request, event
+# streams and WebSockets are forwarded; your token, composer's cookie and `Authorization` are not.
+# Loopback addresses only (127.0.0.1, ::1, localhost). The app must use relative URLs (`api/x`,
+# not `/api/x`). `title`: what the clients call it (empty: its name).
+# [apps.canvas]
+# url = "http://127.0.0.1:4477"
+# title = "Canvas"
+
 # MCP servers in every session: an agentic run gets all their tools (`github__get_issue`), a
 # workflow run the ones `read_only` names (none by default); calls outside `allow` ask you first
 # ("always" remembers the tool). `${VAR}` comes from composer's environment.

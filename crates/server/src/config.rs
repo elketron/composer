@@ -4,7 +4,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::config_sections::{
-    AgentConfig, AttachmentsConfig, DesktopConfig, McpServerConfig, ProviderConfig, ServerConfig,
+    AgentConfig, AppConfig, AttachmentsConfig, DesktopConfig, McpServerConfig, ProviderConfig, ServerConfig,
     TerminalsConfig, ViewerConfig,
 };
 use crate::error::{Result, ServerError};
@@ -36,6 +36,9 @@ pub struct Config {
     /// `harness`.
     #[serde(default)]
     pub acp: BTreeMap<String, crate::harness::AcpConfig>,
+    /// The user's own local web servers by name, `[apps.canvas]`: served at `/apps/canvas/`.
+    #[serde(default)]
+    pub apps: BTreeMap<String, AppConfig>,
 }
 
 impl Config {
@@ -48,7 +51,9 @@ impl Config {
     }
 
     pub fn parse(text: &str) -> Result<Self> {
-        toml::from_str(text).map_err(|e| ServerError::Config(e.to_string()))
+        let config: Self = toml::from_str(text).map_err(|e| ServerError::Config(e.to_string()))?;
+        crate::app_upstream::check(&config.apps).map_err(ServerError::Config)?;
+        Ok(config)
     }
 
     /// Reads the file; a missing file gives the defaults.

@@ -3,6 +3,7 @@
 pub mod actions;
 pub mod agent;
 pub mod api;
+pub mod app_upstream;
 pub mod attachments;
 
 mod config;
@@ -36,7 +37,7 @@ pub mod watches;
 
 pub use config::Config;
 pub use config_sections::{
-    AgentConfig, AttachmentsConfig, McpServerConfig, ProviderConfig, ServerConfig,
+    AgentConfig, AppConfig, AttachmentsConfig, McpServerConfig, ProviderConfig, ServerConfig,
 };
 pub use error::{Result, ServerError};
 pub use hash::content_hash;

@@ -1,6 +1,7 @@
 //! The WS/HTTP API. Every route requires a token, except pairing.
 
 mod api_error;
+pub(crate) mod app_proxy;
 mod attachment_routes;
 mod auth;
 mod connection;
@@ -64,6 +65,8 @@ pub fn router(server: Arc<Server>) -> Router {
         // wayai's live view, proxied view-only. Its fixed paths come before the page views'
         // `/view/{site}`, which they would otherwise match.
         .merge(viewer_proxy::router())
+        // The user's own local web servers (`[apps.<name>]`), proxied.
+        .merge(app_proxy::router())
         // Read-only HTML views of pages and changes (the desktop's tabs).
         .route("/view/changes/{site}", get(view_routes::changes))
         .route("/view/{site}", get(view_routes::site_index))
