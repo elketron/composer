@@ -22,3 +22,15 @@ String linkLabel(LinkState link) => switch (link) {
 
 /// `https://home.tail1234.ts.net` → `home.tail1234.ts.net`.
 String shortUrl(String url) => url.replaceFirst(RegExp(r'^https?://'), '');
+
+final _processNotice = RegExp(r'^\[(?:automatic notice: )?background process \S+ \(`(.*?)`\) ([^\]\n]*)\]');
+
+/// A session's last-message preview: the server's note that a background process ended
+/// (`[automatic notice: background process t… (`cmd`) was stopped by the user]…`) reads as
+/// `process stopped · cmd`, as in the chat; anything else as is.
+String previewText(String preview) {
+  final m = _processNotice.firstMatch(preview);
+  if (m == null) return preview;
+  final how = m.group(2)!.contains('stopped') ? 'stopped' : 'ended';
+  return 'process $how · ${m.group(1)}';
+}

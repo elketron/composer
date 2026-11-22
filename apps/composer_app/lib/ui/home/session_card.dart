@@ -50,7 +50,7 @@ class SessionCard extends StatelessWidget {
             ]),
             if (session.preview != null) ...[
               const SizedBox(height: 3),
-              Text(session.preview!, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13, color: t.muted)),
+              Text(previewText(session.preview!), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13, color: t.muted)),
             ],
             const SizedBox(height: 7),
             Row(children: [

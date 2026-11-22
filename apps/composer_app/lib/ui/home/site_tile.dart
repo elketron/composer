@@ -6,6 +6,7 @@ import '../../state/server_status.dart';
 import '../../theme/composer_theme.dart';
 import '../../theme/tokens.dart' as t;
 import '../chat/navigation.dart';
+import '../format.dart';
 import 'activity_dot.dart';
 import 'new_chat_sheet.dart';
 
@@ -75,7 +76,7 @@ class SiteTile extends StatelessWidget {
                 const SizedBox(width: 6),
                 Text('#${s.id}', style: mono(size: 11, color: t.faint)),
                 const SizedBox(width: 8),
-                Expanded(child: Text(s.preview ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: t.muted))),
+                Expanded(child: Text(previewText(s.preview ?? ''), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: t.muted))),
               ]),
             ),
           ),
