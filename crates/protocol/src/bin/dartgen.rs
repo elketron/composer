@@ -12,8 +12,8 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use composer_protocol::http::{
-    ChangedFile, HookReply, PageResponse, ProjectDiff, PutPageRequest, PutPageResponse, SearchHit,
-    ServerInfo, SiteSummary, WebSession,
+    AppInfo, ChangedFile, HookReply, PageResponse, ProjectDiff, PutPageRequest, PutPageResponse,
+    SearchHit, ServerInfo, SiteSummary, WebSession,
 };
 use composer_protocol::*;
 use serde_json::{Map, Value, json};
@@ -887,6 +887,10 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
             slots: 2,
             viewer: Some("/view".into()),
             harnesses: vec!["claude".into()],
+            apps: vec![AppInfo {
+                name: "canvas".into(),
+                title: "Canvas".into(),
+            }],
         }),
         serde_json::to_value(SiteSummary {
             name: "memory".into(),

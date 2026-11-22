@@ -17,6 +17,14 @@ pub enum DeskTab {
     /// The live view of the user's application (wayai's viewer, proxied at `/view`).
     /// It names no site; one per desk (id `live`). Wire form: `{"kind":"live_view"}`.
     LiveView,
+    /// One of the user's own local web servers (`[apps.<name>]`, served at `/apps/<name>/`), at
+    /// `path` relative to its root (`""`: its page; may carry `?query`). One per app per desk
+    /// (id `app:<name>`): opening it at another path moves that tab there.
+    App {
+        name: String,
+        #[serde(default)]
+        path: String,
+    },
 }
 
 /// A tab on a desk.
@@ -24,7 +32,7 @@ pub enum DeskTab {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct DeskEntry {
-    /// `page:site://x`, `terminal:<id>`, `changes:<site>`, `live`.
+    /// `page:site://x`, `terminal:<id>`, `changes:<site>`, `live`, `app:<name>`.
     pub id: String,
     pub tab: DeskTab,
     /// Opened by the agent and not looked at yet (a badge, for a client not following it).

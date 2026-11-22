@@ -25,6 +25,20 @@ pub struct ServerInfo {
     /// The outside agents (`[acp.<name>]` in config.toml) an agentic session may run on.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub harnesses: Vec<String>,
+    /// The user's own local web servers (`[apps.<name>]` in config.toml), served at
+    /// `/apps/<name>/` (needs the token, like the rest); a desk's `app` tab shows one.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub apps: Vec<AppInfo>,
+}
+
+/// A local web server composer serves at `/apps/<name>/`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct AppInfo {
+    pub name: String,
+    /// What to call it: its `title`, else its name.
+    pub title: String,
 }
 
 /// `GET /api/sites`

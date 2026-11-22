@@ -7,6 +7,12 @@
     "viewer": "/view",
     "harnesses": [
       "claude"
+    ],
+    "apps": [
+      {
+        "name": "canvas",
+        "title": "Canvas"
+      }
     ]
   },
   {

@@ -80,6 +80,17 @@ pub struct ViewerConfig {
     pub bearer_file: String,
 }
 
+/// `[apps.<name>]`: one of the user's own local web servers, which composer serves to its clients
+/// at `/apps/<name>/` (see [`crate::app_upstream`]).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct AppConfig {
+    /// Where it listens, e.g. `http://127.0.0.1:4477`; loopback hosts only.
+    pub url: String,
+    /// What clients call it; empty: its name.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub title: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentConfig {
     /// Concurrent model requests across all sessions (the provider's parallelism).

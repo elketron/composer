@@ -37,6 +37,7 @@ pub async fn info(State(server): State<Arc<Server>>) -> Json<ServerInfo> {
         slots: config.agent.slots,
         viewer: crate::api::viewer_proxy::viewer_path(&server),
         harnesses: config.acp.keys().cloned().collect(),
+        apps: crate::app_upstream::listed(&config),
     })
 }
 

@@ -201,7 +201,7 @@ fn upstream_query(query: Option<&str>, rest: &str, may_drive: bool) -> String {
 }
 
 /// A query parameter's name as a server reads it: `%XX` decoded, `+` a space.
-fn percent_decoded(name: &str) -> String {
+pub(crate) fn percent_decoded(name: &str) -> String {
     let bytes = name.as_bytes();
     let hex = |b: u8| (b as char).to_digit(16).map(|d| d as u8);
     let (mut out, mut at) = (Vec::with_capacity(bytes.len()), 0);
