@@ -17,7 +17,11 @@
 //! - `systemone`: a decision model (LiquidAI d1-2B under llama-server) at
 //!   `POST <base_url>/systemone`, given the same content as a JSON `state` and one `choice`
 //!   question; it writes no text, only probabilities, and `approve_threshold` /
-//!   `reject_threshold` decide what counts as a yes or a no. The chat line shows them.
+//!   `reject_threshold` decide what counts as a yes or a no. The chat line shows them. The state
+//!   is capped to [`prompt::STATE_CHARS`] so the prompt fits one llama.cpp ubatch.
+//! - `auto` (the default): `systemone` when `GET <base_url>/models` lists the model with
+//!   `decisions` among its `architecture.output_modalities`, else `chat`; remembered per base URL
+//!   and model while the server runs (a failed lookup means `chat` this time, and is tried again).
 
 mod policy;
 mod prompt;
@@ -49,6 +53,8 @@ pub struct System1 {
     refused: Mutex<HashSet<(String, String)>>,
     /// The structured-output form each endpoint (base URL, model) took, once one worked.
     formats: Mutex<HashMap<(String, String), Format>>,
+    /// What `api = "auto"` found each endpoint (base URL, model) to be.
+    apis: Mutex<HashMap<(String, String), System1Api>>,
 }
 
 /// How system-1 asks for its JSON answer, strictest first: an endpoint that refuses one is asked
@@ -116,10 +122,14 @@ pub async fn decide(
     };
     let context = prompt::Context::new(server, session, ask, site.as_deref(), &policies);
     let asked = async {
-        match settings.api {
-            System1Api::Chat => complete(server, &config, context.messages()).await,
+        let api = api(server, &config).await;
+        let answer = match api {
             System1Api::Systemone => systemone(server, &config, context.state()).await,
-        }
+            System1Api::Chat | System1Api::Auto => {
+                complete(server, &config, context.messages()).await
+            }
+        };
+        (api, answer)
     };
     let timeout = Duration::from_secs(settings.timeout_secs.max(1));
     let answer = tokio::select! {
@@ -131,14 +141,14 @@ pub async fn decide(
             "it didn't answer within {}s",
             timeout.as_secs()
         ))),
-        Ok(Err(e)) => {
+        Ok((_, Err(e))) => {
             tracing::warn!("system1 ({}): {e}; the user decides", settings.model);
             with_reason(Verdict::Forward(shortened(&format!("it failed: {e}"))))
         }
-        Ok(Ok(text)) => {
-            let decided = match settings.api {
-                System1Api::Chat => verdict(&text).map(with_reason),
+        Ok((api, Ok(text))) => {
+            let decided = match api {
                 System1Api::Systemone => odds(&text, settings),
+                System1Api::Chat | System1Api::Auto => verdict(&text).map(with_reason),
             };
             decided.unwrap_or_else(|| {
                 tracing::warn!(
@@ -221,6 +231,76 @@ impl Endpoint {
     }
 }
 
+/// How to ask the `[system1]` model: as configured, or for `auto`, what its endpoint lists it as
+/// (remembered; `chat` when that can't be found out).
+async fn api(server: &Server, config: &Config) -> System1Api {
+    let settings = &config.system1;
+    if settings.api != System1Api::Auto {
+        return settings.api;
+    }
+    let endpoint = Endpoint::of(config);
+    let key = (endpoint.base_url.clone(), settings.model.trim().to_string());
+    if let Some(api) = server.system1.apis.lock().expect("system1 lock").get(&key) {
+        return *api;
+    }
+    match lookup(&endpoint, &key.1).await {
+        Ok(api) => {
+            tracing::info!("system1 ({}): {api:?}, as {}/models lists it", key.1, key.0);
+            server
+                .system1
+                .apis
+                .lock()
+                .expect("system1 lock")
+                .insert(key, api);
+            api
+        }
+        Err(e) => {
+            tracing::warn!("system1 ({}): {e}; asking it as a chat model", key.1);
+            System1Api::Chat
+        }
+    }
+}
+
+/// `GET <base_url>/models`: `systemone` if `model` is listed with `decisions` among its
+/// `architecture.output_modalities`, else `chat`.
+async fn lookup(endpoint: &Endpoint, model: &str) -> Result<System1Api, String> {
+    let url = format!("{}/models", endpoint.base_url.trim_end_matches('/'));
+    let mut request = client().get(&url);
+    if !endpoint.api_key.is_empty() {
+        request = request.bearer_auth(&endpoint.api_key);
+    }
+    let response = request
+        .send()
+        .await
+        .map_err(|e| format!("listing models at {url}: {e}"))?;
+    let status = response.status();
+    if !status.is_success() {
+        return Err(format!("listing models at {url}: {status}"));
+    }
+    let body: Value = response
+        .json()
+        .await
+        .map_err(|e| format!("listing models at {url}: {e}"))?;
+    let decides = body["data"].as_array().is_some_and(|models| {
+        models.iter().any(|m| {
+            m["id"].as_str() == Some(model)
+                && m["architecture"]["output_modalities"]
+                    .as_array()
+                    .is_some_and(|out| out.iter().any(|o| o == "decisions"))
+        })
+    });
+    Ok(match decides {
+        true => System1Api::Systemone,
+        false => System1Api::Chat,
+    })
+}
+
+/// The HTTP client for the decision endpoint and the models lookup.
+fn client() -> &'static reqwest::Client {
+    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+    CLIENT.get_or_init(reqwest::Client::new)
+}
+
 /// `api = "chat"`: one call to the `[system1]` model, its whole answer as text.
 async fn complete(
     server: &Server,
@@ -290,7 +370,6 @@ async fn complete(
 /// `api = "systemone"`: one `POST <base_url>/systemone` with the state and the decision
 /// question, its answer's body as text.
 async fn systemone(server: &Server, config: &Config, state: Value) -> Result<String, String> {
-    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
     let endpoint = Endpoint::of(config);
     let url = format!("{}/systemone", endpoint.base_url.trim_end_matches('/'));
     let body = json!({ "state": state, "questions": prompt::questions() });
@@ -298,8 +377,7 @@ async fn systemone(server: &Server, config: &Config, state: Value) -> Result<Str
         true => None,
         false => Some(server.slots.acquire().await?),
     };
-    let mut request = CLIENT
-        .get_or_init(reqwest::Client::new)
+    let mut request = client()
         .post(&url)
         .header(reqwest::header::CONTENT_TYPE, "application/json")
         .body(body.to_string());

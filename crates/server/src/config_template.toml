@@ -27,15 +27,20 @@ tool_images = true
 # Empty: off. With api = "systemone" it is only shown in logs.
 model = ""
 # How it is asked:
+# "auto": "systemone" when GET <base_url>/models lists the model with "decisions" among its
+#   architecture.output_modalities (llama-server does for a decision model), else "chat".
 # "chat": chat completions, answering {"decision": approve|reject|forward, "reason": ...} (a
 #   strict JSON schema, falling back to json_object, then none).
 # "systemone": a decision model such as LiquidAI d1-2B served by llama-server, at
 #   POST <base_url>/systemone. It writes no text: it answers one choice question with
-#   probabilities, and the thresholds below turn them into approve, reject or forward. E.g.
+#   probabilities, and the thresholds below turn them into approve, reject or forward. Its
+#   whole prompt must fit in one llama.cpp ubatch (e.g. 8192 tokens), so what it is shown is cut
+#   to about 20,000 characters: your older messages first, then the request body, and only then
+#   the policy pages (with a note saying so). E.g.
 #     model = "d1-2B"
-#     api = "systemone"
+#     api = "systemone"     # or leave it "auto"
 #     base_url = "https://inferk.example/v1"
-api = "chat"
+api = "auto"
 # Empty: [provider]'s base_url (sharing its slots), and its api_key unless api_key is set.
 base_url = ""
 api_key = ""

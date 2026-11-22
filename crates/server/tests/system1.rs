@@ -36,6 +36,9 @@ struct Fake {
     decided: Arc<Mutex<Vec<Value>>>,
     /// The status `/v1/systemone` answers with (0: 200).
     status: Arc<Mutex<u16>>,
+    /// What `GET /v1/models` lists (`None`: 404), and how often it was asked.
+    models: Arc<Mutex<Option<Value>>>,
+    lookups: Arc<Mutex<usize>>,
 }
 
 impl Fake {
@@ -81,7 +84,15 @@ impl Fake {
                 fake.answer.lock().unwrap().clone(),
             )
         }
+        async fn models(State(fake): State<Fake>) -> (axum::http::StatusCode, String) {
+            *fake.lookups.lock().unwrap() += 1;
+            match fake.models.lock().unwrap().clone() {
+                Some(models) => (axum::http::StatusCode::OK, models.to_string()),
+                None => (axum::http::StatusCode::NOT_FOUND, "not found".into()),
+            }
+        }
         let app = Router::new()
+            .route("/v1/models", axum::routing::get(models))
             .route("/v1/chat/completions", post(complete))
             .route("/v1/systemone", post(decide))
             .with_state(self.clone());
@@ -97,6 +108,10 @@ impl Fake {
 
     fn asked(&self) -> Vec<Value> {
         self.asked.lock().unwrap().clone()
+    }
+
+    fn lookups(&self) -> usize {
+        *self.lookups.lock().unwrap()
     }
 
     fn decided(&self) -> Vec<Value> {
@@ -883,6 +898,7 @@ async fn a_decision_model_decides_through_the_thresholds() {
         lines(&session)
     );
     assert!(fake.asked().is_empty(), "the chat endpoint was asked");
+    assert_eq!(fake.lookups(), 0, "an explicit api looked the model up");
 }
 
 #[tokio::test]
@@ -1066,4 +1082,83 @@ async fn a_process_a_decision_model_rejects_tells_the_agent_not_to_get_around_it
     );
     assert!(user.shown().is_empty());
     assert!(server.terminals.processes(session.id()).is_empty());
+}
+
+#[tokio::test]
+async fn auto_asks_the_models_list_which_api_and_remembers() {
+    let cancel = CancellationToken::new();
+    let auto = |config: &mut Config| config.system1.api = System1Api::Auto;
+
+    // Listed with "decisions" among its output modalities: a decision model, looked up once.
+    let fake = Fake::default();
+    *fake.models.lock().unwrap() = Some(json!({ "object": "list", "data": [
+        { "id": "lfm2", "architecture": { "output_modalities": ["text"] } },
+        { "id": "d1-2B", "architecture": { "input_modalities": ["text"], "output_modalities": ["decisions"] } }
+    ] }));
+    fake.odds("approve", 0.97, 0.01, 0.02);
+    let (_dir, server) = systemone_server(&fake, auto).await;
+    let session = server
+        .sessions
+        .create(RunKind::Agentic, None, None)
+        .unwrap();
+    for _ in 0..2 {
+        let answer = server.ask(&session, cargo_test(), &cancel).await;
+        assert_eq!(
+            answer,
+            by_system1(
+                ApprovalDecision::Approve,
+                "approve 0.97, reject 0.01, forward 0.02"
+            )
+        );
+    }
+    assert_eq!(fake.decided().len(), 2);
+    assert!(fake.asked().is_empty());
+    assert_eq!(fake.lookups(), 1);
+
+    // Listed without an architecture: a chat model, remembered too.
+    let chat = Fake::default();
+    *chat.models.lock().unwrap() = Some(json!({ "data": [{ "id": "d1-2B" }] }));
+    chat.answer(r#"{"decision": "approve", "reason": "asked for"}"#);
+    let (_dir2, server2) = systemone_server(&chat, auto).await;
+    let session2 = server2
+        .sessions
+        .create(RunKind::Agentic, None, None)
+        .unwrap();
+    for _ in 0..2 {
+        let answer = server2.ask(&session2, cargo_test(), &cancel).await;
+        assert_eq!(answer, by_system1(ApprovalDecision::Approve, "asked for"));
+    }
+    assert_eq!(chat.asked().len(), 2);
+    assert!(chat.decided().is_empty());
+    assert_eq!(chat.lookups(), 1);
+
+    // No models list: chat, and looked up again next time.
+    let unlisted = Fake::default();
+    unlisted.answer(r#"{"decision": "reject", "reason": "no"}"#);
+    let (_dir3, server3) = systemone_server(&unlisted, auto).await;
+    let session3 = server3
+        .sessions
+        .create(RunKind::Agentic, None, None)
+        .unwrap();
+    for _ in 0..2 {
+        let answer = server3.ask(&session3, cargo_test(), &cancel).await;
+        assert_eq!(answer, by_system1(ApprovalDecision::Deny, "no"));
+    }
+    assert_eq!(unlisted.asked().len(), 2);
+    assert_eq!(unlisted.lookups(), 2);
+
+    // An explicit "chat" never looks.
+    let explicit = Fake::default();
+    *explicit.models.lock().unwrap() = fake.models.lock().unwrap().clone();
+    explicit.answer(r#"{"decision": "approve", "reason": "fine"}"#);
+    let (_dir4, server4) =
+        systemone_server(&explicit, |config| config.system1.api = System1Api::Chat).await;
+    let session4 = server4
+        .sessions
+        .create(RunKind::Agentic, None, None)
+        .unwrap();
+    let answer = server4.ask(&session4, cargo_test(), &cancel).await;
+    assert_eq!(answer, by_system1(ApprovalDecision::Approve, "fine"));
+    assert_eq!(explicit.lookups(), 0);
+    assert!(explicit.decided().is_empty());
 }

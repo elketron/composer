@@ -24,6 +24,15 @@ const USER_CHARS: usize = 6000;
 const SCAN_MESSAGES: usize = 200;
 /// The longest request body shown.
 const BODY_CHARS: usize = 4000;
+/// A decision model's whole state, as JSON, in characters: its prompt must fit in one llama.cpp
+/// ubatch (8192 tokens on the user's server), so the user's older messages go first, then the
+/// request body is cut (down to [`BODY_FLOOR`]), and only then the policy pages, with a note.
+pub const STATE_CHARS: usize = 20_000;
+/// The request body is cut no shorter than this to fit [`STATE_CHARS`].
+const BODY_FLOOR: usize = 500;
+/// Where a policy page was cut to fit [`STATE_CHARS`].
+const POLICY_CUT: &str = "\n…(cut: the policy pages were too long for the decision model; the rest \
+was left out)";
 
 /// When to approve, reject and forward: the same words for both forms.
 const APPROVE: &str = "the request plainly serves what the user asked for in their messages, or \
@@ -83,6 +92,7 @@ pub fn questions() -> Value {
 }
 
 /// Everything system-1 judges by, gathered once for either form.
+#[derive(Clone)]
 pub struct Context {
     /// The approved policy pages: (url, text).
     policies: Vec<(String, String)>,
@@ -91,6 +101,7 @@ pub struct Context {
     request: Request,
 }
 
+#[derive(Clone)]
 struct Request {
     kind: &'static str,
     title: String,
@@ -191,8 +202,47 @@ impl Context {
         text
     }
 
-    /// The decision model's state: the same content as the chat question, as one JSON object.
+    /// The decision model's state: the same content as the chat question, as one JSON object of
+    /// at most [`STATE_CHARS`] characters (see there for what goes first).
     pub fn state(&self) -> Value {
+        let size = |context: &Context| context.state_json().to_string().chars().count();
+        let mut context = self.clone();
+        while size(&context) > STATE_CHARS && context.said.len() > 1 {
+            context.said.remove(0);
+        }
+        let over = size(&context).saturating_sub(STATE_CHARS);
+        let body = context.request.body.chars().count();
+        if over > 0 && body > BODY_FLOOR {
+            let keep = body.saturating_sub(over + "\n…(cut)".len()).max(BODY_FLOOR);
+            context.request.body = cut(&context.request.body, keep);
+        }
+        // The last resort: the longest policy page loses what is still too much.
+        for _ in 0..2 * context.policies.len() {
+            let over = size(&context).saturating_sub(STATE_CHARS);
+            if over == 0 {
+                break;
+            }
+            let Some((_, text)) = context
+                .policies
+                .iter_mut()
+                .max_by_key(|(_, text)| text.chars().count())
+            else {
+                break;
+            };
+            let kept = text.trim_end_matches(POLICY_CUT);
+            let keep = kept
+                .chars()
+                .count()
+                .saturating_sub(over + POLICY_CUT.chars().count() + 16);
+            *text = format!(
+                "{}{POLICY_CUT}",
+                kept.chars().take(keep).collect::<String>()
+            );
+        }
+        context.state_json()
+    }
+
+    fn state_json(&self) -> Value {
         let request = &self.request;
         let mut fields = serde_json::Map::new();
         fields.insert("kind".into(), json!(request.kind));
@@ -276,5 +326,74 @@ fn cut(text: &str, max: usize) -> String {
     match text.char_indices().nth(max) {
         Some((at, _)) => format!("{}\n…(cut)", &text[..at]),
         None => text.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn context(policy: usize, messages: usize, body: usize) -> Context {
+        Context {
+            policies: vec![
+                ("site://home/approvals.md".into(), "p".repeat(policy)),
+                ("site://game/approvals.md".into(), "GAME-RULE".into()),
+            ],
+            said: (0..messages)
+                .map(|i| format!("message {i} {}", "m".repeat(1400)))
+                .collect(),
+            request: Request {
+                kind: "a tool call",
+                title: "Type into terminal t1".into(),
+                recipe: None,
+                site: None,
+                body: "b".repeat(body),
+            },
+        }
+    }
+
+    fn chars(state: &Value) -> usize {
+        state.to_string().chars().count()
+    }
+
+    #[test]
+    fn a_small_state_is_whole() {
+        let context = context(1000, 4, 3000);
+        let state = context.state();
+        assert_eq!(state, context.state_json());
+        assert_eq!(state["user_messages"].as_array().unwrap().len(), 4);
+    }
+
+    #[test]
+    fn older_messages_go_first_then_the_body() {
+        // 4 messages of ~1410, a 4000 body, a 16000 policy: still over with one message left.
+        let state = context(16_000, 4, 4000).state();
+        assert!(chars(&state) <= STATE_CHARS, "{}", chars(&state));
+        let said = state["user_messages"].as_array().unwrap();
+        assert_eq!(said.len(), 1);
+        assert!(said[0].as_str().unwrap().starts_with("message 3 "));
+        let body = state["request"]["body"].as_str().unwrap();
+        assert!(body.len() < 4000 && body.len() > 1000, "{}", body.len());
+        assert!(body.ends_with("…(cut)"));
+        assert_eq!(state["policies"][0]["text"].as_str().unwrap().len(), 16_000);
+    }
+
+    #[test]
+    fn policy_pages_are_cut_last_with_a_note() {
+        let state = context(60_000, 6, 4000).state();
+        assert!(chars(&state) <= STATE_CHARS, "{}", chars(&state));
+        assert!(
+            chars(&state) > STATE_CHARS - 200,
+            "cut too much: {}",
+            chars(&state)
+        );
+        assert_eq!(state["user_messages"].as_array().unwrap().len(), 1);
+        assert_eq!(
+            state["request"]["body"].as_str().unwrap().chars().count(),
+            BODY_FLOOR + "\n…(cut)".chars().count()
+        );
+        let home = state["policies"][0]["text"].as_str().unwrap();
+        assert!(home.ends_with(POLICY_CUT), "{home}");
+        assert_eq!(state["policies"][1]["text"], "GAME-RULE");
     }
 }

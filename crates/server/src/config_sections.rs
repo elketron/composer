@@ -29,7 +29,8 @@ pub struct System1Config {
     /// Empty: off, every approval goes to the user.
     #[serde(default)]
     pub model: String,
-    /// How it is asked: a chat model, or a decision model's `POST <base_url>/systemone`.
+    /// How it is asked: a chat model, or a decision model's `POST <base_url>/systemone`; `auto`
+    /// (default) asks `GET <base_url>/models` which it is.
     #[serde(default)]
     pub api: System1Api,
     /// OpenAI-compatible base URL, including `/v1`. Empty: `[provider]`'s (sharing its slots, and
@@ -58,8 +59,11 @@ pub struct System1Config {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum System1Api {
-    /// Chat completions with a JSON answer: a decision and a reason.
+    /// `systemone` if `GET <base_url>/models` lists the model with `decisions` among its
+    /// `architecture.output_modalities`, else `chat` (also when the lookup fails).
     #[default]
+    Auto,
+    /// Chat completions with a JSON answer: a decision and a reason.
     Chat,
     /// A decision model (e.g. LiquidAI d1-2B under llama-server) at `POST <base_url>/systemone`:
     /// one `choice` question, answered with probabilities, no text.
