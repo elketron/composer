@@ -45,6 +45,7 @@ wait connected
 wait session
 keys :term<Enter>
 wait text term \u{b7} 10
+wait text $ 10
 keys echo typed-$((6*7))<Enter>
 wait text typed-42 10
 snap terminal
@@ -53,6 +54,8 @@ keys :ps<Enter>
 wait text no background processes 10
 snap chat
 ";
+    // Typing waits for the shell's prompt: keys sent before the shell reads its input can be lost
+    // (CI once ran `cho typed-…`).
     let snaps = run_script(options, script, out.path()).await.unwrap();
     assert_eq!(snaps.len(), 2);
     let terminal = std::fs::read_to_string(out.path().join("terminal.txt")).unwrap();
