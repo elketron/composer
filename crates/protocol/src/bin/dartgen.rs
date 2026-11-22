@@ -775,6 +775,13 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
                 command: "npm run dev".into(),
             },
         },
+        ServerMessage::TurnQueued {
+            session: s(),
+            seq: 7,
+            source: MessageSource::Mcp {
+                server: "canvas".into(),
+            },
+        },
         ServerMessage::ProcessesChanged {
             session: s(),
             processes: vec![ProcessInfo {

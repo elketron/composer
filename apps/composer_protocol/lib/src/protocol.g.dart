@@ -1447,6 +1447,7 @@ sealed class MessageSource {
         'server' => MessageSourceServer.fromJson(json),
         'watch' => MessageSourceWatch.fromJson(json),
         'process' => MessageSourceProcess.fromJson(json),
+        'mcp' => MessageSourceMcp.fromJson(json),
         _ => MessageSourceUnknown(json),
       };
 
@@ -1513,6 +1514,25 @@ final class MessageSourceProcess extends MessageSource {
         'kind': 'process',
         'terminal': terminal,
         'command': command,
+      };
+}
+
+/// An MCP server told the session something (`notifications/composer/event`); `server` is
+/// the name the session knows it by.
+final class MessageSourceMcp extends MessageSource {
+  const MessageSourceMcp({
+    required this.server,
+  });
+
+  final String server;
+
+  factory MessageSourceMcp.fromJson(Map<String, Object?> json) => MessageSourceMcp(
+        server: json['server'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'kind': 'mcp',
+        'server': server,
       };
 }
 

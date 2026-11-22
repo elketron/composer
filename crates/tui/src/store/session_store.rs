@@ -152,6 +152,7 @@ impl SessionStore {
                         text: message.content.clone(),
                         source: match &message.source {
                             Some(MessageSource::Watch { .. }) => Some("watch".into()),
+                            Some(MessageSource::Mcp { server }) => Some(server.clone()),
                             _ => None,
                         },
                         files: message.attachments.iter().map(|a| a.name.clone()).collect(),

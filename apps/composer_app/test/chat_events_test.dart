@@ -63,12 +63,18 @@ void main() {
         seq: 2,
         message: const ChatMessage(role: Role.user, content: 'done'),
       ),
-      ServerMessageMessageDelta(session: 'a', seq: 3, text: 'par'),
-      ServerMessageTurnDone(session: 'a', seq: 4, cancelled: true),
+      ServerMessageMessageDone(
+        session: 'a',
+        seq: 3,
+        message: const ChatMessage(role: Role.user, content: 'clicked', source: MessageSourceMcp(server: 'canvas')),
+      ),
+      ServerMessageMessageDelta(session: 'a', seq: 4, text: 'par'),
+      ServerMessageTurnDone(session: 'a', seq: 5, cancelled: true),
     ]);
     expect((chat.items[0] as UserItem).source, 'watch');
     expect((chat.items[1] as UserItem).source, isNull);
-    expect((chat.items[2] as NoteItem).text, 'cancelled');
+    expect((chat.items[2] as UserItem).source, 'canvas');
+    expect((chat.items[3] as NoteItem).text, 'cancelled');
     expect(chat.streaming, isNull);
   });
 
