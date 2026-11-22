@@ -41,6 +41,15 @@ over the Agent Client Protocol (ACP); composer hands that agent itself as its MC
 - **Terminals and background processes.** Each session has server-owned terminals. The agent can
   read and type into them (each command approved) and start long commands in the background; it
   hears when they exit.
+- **System-1 approvals.** With `[system1] model` set, a small fast model decides action
+  approvals for you in one call (terminal input, background processes, MCP and outside agents'
+  tool calls, recipe runs): approve, reject with a reason the agent is told, or forward to you.
+  It reads the request, your own recent messages in the session (never tool output or the agent's
+  text) and the policy pages `site://home/approvals.md` and `<site>/approvals.md`, each only in a
+  version you approved (asked when it first needs a new one). Trust changes (`folder:`,
+  `mcp.toml`, policy pages) always come to you, `always` rules still skip the question, and it
+  never answers `always` itself. Each decision is a `system-1 …` line in the chat; an error,
+  timeout or unclear answer forwards to you.
 
 ## Clients
 
