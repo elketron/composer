@@ -51,7 +51,7 @@ x.fillStyle='#8fb3e8';x.fillRect(n*17%1700,80,220,900);requestAnimationFrame(dra
             "data:text/html;base64,{}",
             base64::engine::general_purpose::STANDARD.encode(html)
         );
-        let pane = cx.new(|cx| WebPane::new(&url, "http://127.0.0.1:1", None, cx));
+        let pane = cx.new(|cx| WebPane::new(&url, "http://127.0.0.1:1", None, None, cx));
         pane.update(cx, |pane, cx| pane.set_visible(true, cx));
         eprintln!("frame-soak phase 0: {}", LABELS[0]);
         cx.spawn(async move |this, cx| {

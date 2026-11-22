@@ -30,6 +30,10 @@ pub enum Pick {
     OpenProcess(String),
     StopProcess(String),
     Page(String),
+    /// Put this app (by name) on the stage, at its page.
+    App(String),
+    /// Load the shown browser tab again.
+    ReloadTab,
     AttachFile,
     NewTerminal,
     ToggleFollow,

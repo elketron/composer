@@ -1,12 +1,14 @@
 //! The stage's tab strip, from the session's desk.
 
+use composer_protocol::http::AppInfo;
 use composer_protocol::{Desk, DeskTab};
 
 /// The live view tab's label while the session is in no site.
 pub const LIVE_VIEW: &str = "Live view";
 
-/// A tab's label in the strip; the live view is named after `site`, the session's, when it has one.
-pub fn label(tab: &DeskTab, site: Option<&str>) -> String {
+/// A tab's label in the strip; the live view is named after `site`, the session's, when it has one,
+/// an app by its title among the server's `apps` (else its name).
+pub fn label(tab: &DeskTab, site: Option<&str>, apps: &[AppInfo]) -> String {
     match tab {
         DeskTab::Page { url } => url
             .trim_start_matches("site://")
@@ -15,7 +17,10 @@ pub fn label(tab: &DeskTab, site: Option<&str>) -> String {
         DeskTab::Terminal { .. } => "terminal".into(),
         DeskTab::Changes { site } => format!("changes · {site}"),
         DeskTab::LiveView => site.map_or(LIVE_VIEW.into(), |site| format!("live · {site}")),
-        DeskTab::App { name, .. } => format!("app · {name}"),
+        DeskTab::App { name, .. } => apps
+            .iter()
+            .find(|app| app.name == *name)
+            .map_or_else(|| name.clone(), |app| app.title.clone()),
     }
 }
 
@@ -80,12 +85,26 @@ mod tests {
         let page = DeskTab::Page {
             url: "site://plans/x.md".into(),
         };
-        assert_eq!(label(&page, None), "plans/x");
-        assert_eq!(label(&DeskTab::LiveView, None), "Live view");
-        assert_eq!(label(&DeskTab::LiveView, Some("3d")), "live · 3d");
+        assert_eq!(label(&page, None, &[]), "plans/x");
+        assert_eq!(label(&DeskTab::LiveView, None, &[]), "Live view");
+        assert_eq!(label(&DeskTab::LiveView, Some("3d"), &[]), "live · 3d");
         let changes = DeskTab::Changes {
             site: "game".into(),
         };
-        assert_eq!(label(&changes, Some("3d")), "changes · game");
+        assert_eq!(label(&changes, Some("3d"), &[]), "changes · game");
+        let canvas = DeskTab::App {
+            name: "canvas".into(),
+            path: "board/1".into(),
+        };
+        let apps = [AppInfo {
+            name: "canvas".into(),
+            title: "Agent canvas".into(),
+        }];
+        assert_eq!(label(&canvas, None, &apps), "Agent canvas");
+        assert_eq!(
+            label(&canvas, None, &[]),
+            "canvas",
+            "not (or no longer) configured"
+        );
     }
 }

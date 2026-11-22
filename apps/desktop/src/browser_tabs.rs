@@ -56,6 +56,12 @@ impl<P> BrowserTabs<P> {
             .map(|(_, pane)| pane)
     }
 
+    /// Drops `tab`'s pane (its tab now shows something else); it is made again when shown.
+    pub fn remove(&mut self, tab: &str) {
+        self.panes.remove(tab);
+        self.loading.remove(tab);
+    }
+
     /// Only the tabs still on the desk keep their panes.
     pub fn keep(&mut self, tabs: &HashSet<&str>) {
         self.panes.retain(|id, _| tabs.contains(id.as_str()));

@@ -25,6 +25,10 @@ pub fn view_url(endpoint: &Endpoint, tab: &DeskTab) -> Option<String> {
         DeskTab::Page { url } => format!("/view/{}", url.strip_prefix("site://")?),
         DeskTab::Changes { site } => format!("/view/changes/{}", encode(site)),
         DeskTab::LiveView => "/view".to_string(),
+        // Through composer's proxy, so the same address works wherever composer does.
+        DeskTab::App { name, path } if valid_app_name(name) => {
+            format!("/apps/{name}/{}", path.trim_start_matches('/'))
+        }
         _ => return None,
     };
     Some(endpoint.url(&path))
@@ -136,6 +140,55 @@ fn ours(link: &str, base: &str) -> bool {
     same_origin(link, base) && parts(link).is_some_and(|p| !p.userinfo)
 }
 
+/// Whether `name` can be an app's name (as the server's `app_upstream::valid_name`): a path
+/// segment of letters, digits, `-` and `_`.
+fn valid_app_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 64
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_'))
+}
+
+/// What a pane shows, and so where it may go: composer's own pages, or one app.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Scope<'a> {
+    /// A page, the changes or the live view: the server's origin, except its apps.
+    Pages,
+    /// The app of this name: only under `/apps/<name>/`.
+    App(&'a str),
+}
+
+impl<'a> Scope<'a> {
+    pub fn of(tab: &'a DeskTab) -> Self {
+        match tab {
+            DeskTab::App { name, .. } => Scope::App(name),
+            _ => Scope::Pages,
+        }
+    }
+}
+
+/// The app a link on this server is in, and the path in it (as a desk's `App` tab has it,
+/// `?query` and `#fragment` kept): `<base>/apps/<name>[/<path>]`. `None` for anything else, a
+/// link with userinfo, or a path that tries to climb out (`..`, encoded dots).
+pub fn app_for(link: &str, base: &str) -> Option<(String, String)> {
+    if !ours(link, base) {
+        return None;
+    }
+    let rest = link.strip_prefix(base)?.strip_prefix("/apps/")?;
+    let end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
+    let (name, after) = rest.split_at(end);
+    if !valid_app_name(name) {
+        return None;
+    }
+    let path = after.strip_prefix('/').unwrap_or(after);
+    let route = path.split(['?', '#']).next().unwrap_or("");
+    if route.split('/').any(|s| s == "..") || route.to_ascii_lowercase().contains("%2e") {
+        return None;
+    }
+    Some((name.to_string(), path.to_string()))
+}
+
 /// What a pane does with a navigation.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Navigation {
@@ -147,13 +200,32 @@ pub enum Navigation {
 }
 
 /// Whether a pane may load `url`, in its main frame or a subframe. Only the server's
-/// origin, the pane's own start URL (chosen by us) and `about:blank` (plus `about:srcdoc` and
-/// same-origin `blob:` in subframes). Whatever the page asks for (script, meta refresh,
-/// redirects) goes through this, user gesture or not; only a gesture link to http(s) or mail
-/// from the main frame opens outside.
-pub fn navigation(url: &str, base: &str, start: &str, main: bool, gesture: bool) -> Navigation {
-    if url == start || url == "about:blank" || (!main && url == "about:srcdoc") || ours(url, base) {
+/// origin within the pane's [`Scope`] (a page pane: anything but `/apps/`; an app pane: its own
+/// `/apps/<name>/`, iframes included), the pane's own start URL (chosen by us) and
+/// `about:blank` (plus `about:srcdoc` and same-origin `blob:` in subframes). Whatever the page
+/// asks for (script, meta refresh, redirects) goes through this, user gesture or not; only a
+/// gesture link to http(s) or mail from the main frame opens outside. (A gesture link to a
+/// page or to another app is turned into a tab before this: [`page_for`], [`app_for`].)
+pub fn navigation(
+    url: &str,
+    base: &str,
+    start: &str,
+    scope: Scope,
+    main: bool,
+    gesture: bool,
+) -> Navigation {
+    if url == start || url == "about:blank" || (!main && url == "about:srcdoc") {
         return Navigation::Allow;
+    }
+    if ours(url, base) {
+        let app = app_for(url, base);
+        let inside = match scope {
+            Scope::Pages => app.is_none() && !in_apps(url, base),
+            Scope::App(name) => app.is_some_and(|(n, _)| n == name),
+        };
+        if inside {
+            return Navigation::Allow;
+        }
     }
     if let Some(inner) = url.strip_prefix("blob:")
         && ours(inner, base)
@@ -165,6 +237,13 @@ pub fn navigation(url: &str, base: &str, start: &str, main: bool, gesture: bool)
     Navigation::Block {
         outside: main && gesture && (web || mail),
     }
+}
+
+/// `link` is under `<base>/apps` at all (a valid app or not).
+fn in_apps(link: &str, base: &str) -> bool {
+    link.strip_prefix(base)
+        .and_then(|rest| rest.strip_prefix("/apps"))
+        .is_some_and(|rest| rest.is_empty() || rest.starts_with(['/', '?', '#']))
 }
 
 /// The page a clicked link means (`site://...`, or another page's view on this server), so it
@@ -368,7 +447,14 @@ mod tests {
         assert!(!ours("http://u@127.0.0.1:7420/", b));
         assert!(!ours("http://127.0.0.1:7420@evil.example/", b));
         assert_eq!(
-            navigation("http://127.0.0.1:7420@evil.example/", b, "", true, true),
+            navigation(
+                "http://127.0.0.1:7420@evil.example/",
+                b,
+                "",
+                Scope::Pages,
+                true,
+                true
+            ),
             Navigation::Block { outside: true }
         );
         // malformed is never the same origin
@@ -398,7 +484,7 @@ mod tests {
     fn what_a_pane_may_load() {
         use Navigation::*;
         let start = "http://127.0.0.1:7420/view";
-        let nav = |url, main, gesture| navigation(url, BASE, start, main, gesture);
+        let nav = |url, main, gesture| navigation(url, BASE, start, Scope::Pages, main, gesture);
         assert_eq!(nav("http://127.0.0.1:7420/view/a.md", true, false), Allow);
         assert_eq!(nav("http://127.0.0.1:7420/api/sites", true, true), Allow);
         assert_eq!(nav("about:blank", true, false), Allow);
@@ -444,5 +530,141 @@ mod tests {
             Block { outside: false }
         );
         assert_eq!(nav("http://127.0.0.1:7420/view", false, false), Allow);
+        // a page pane never goes into an app (a followed link becomes the app's tab first)
+        assert_eq!(
+            nav("http://127.0.0.1:7420/apps/canvas/", true, false),
+            Block { outside: false }
+        );
+        assert_eq!(
+            nav("http://127.0.0.1:7420/apps/canvas/x", false, false),
+            Block { outside: false }
+        );
+        assert_eq!(
+            nav("http://127.0.0.1:7420/apps", true, false),
+            Block { outside: false }
+        );
+        assert_eq!(nav("http://127.0.0.1:7420/appsx/y", true, false), Allow);
+    }
+
+    #[test]
+    fn app_tabs_load_through_the_proxy() {
+        let endpoint = Endpoint::new(BASE, "sekrit-tok");
+        let app = |name: &str, path: &str| DeskTab::App {
+            name: name.into(),
+            path: path.into(),
+        };
+        assert_eq!(
+            view_url(&endpoint, &app("canvas", "")).unwrap(),
+            "http://127.0.0.1:7420/apps/canvas/"
+        );
+        assert_eq!(
+            view_url(&endpoint, &app("canvas", "board/1?zoom=2")).unwrap(),
+            "http://127.0.0.1:7420/apps/canvas/board/1?zoom=2"
+        );
+        assert_eq!(
+            view_url(&endpoint, &app("canvas", "/x")).unwrap(),
+            "http://127.0.0.1:7420/apps/canvas/x"
+        );
+        assert_eq!(view_url(&endpoint, &app("../api", "")), None);
+        assert_eq!(view_url(&endpoint, &app("", "")), None);
+        assert_eq!(Scope::of(&app("canvas", "")), Scope::App("canvas"));
+        assert_eq!(Scope::of(&DeskTab::LiveView), Scope::Pages);
+    }
+
+    #[test]
+    fn links_that_are_apps() {
+        let app = |link: &str| app_for(link, BASE);
+        let some = |name: &str, path: &str| Some((name.to_string(), path.to_string()));
+        assert_eq!(app(&format!("{BASE}/apps/canvas")), some("canvas", ""));
+        assert_eq!(app(&format!("{BASE}/apps/canvas/")), some("canvas", ""));
+        assert_eq!(
+            app(&format!("{BASE}/apps/canvas/api/nodes/7/app?x=1#top")),
+            some("canvas", "api/nodes/7/app?x=1#top")
+        );
+        assert_eq!(
+            app(&format!("{BASE}/apps/canvas?x=1")),
+            some("canvas", "?x=1")
+        );
+        assert_eq!(app(&format!("{BASE}/apps/")), None);
+        assert_eq!(app(&format!("{BASE}/apps")), None);
+        assert_eq!(app(&format!("{BASE}/apps/a%20b/")), None);
+        assert_eq!(app(&format!("{BASE}/apps/canvas/../../api")), None);
+        assert_eq!(app(&format!("{BASE}/apps/canvas/%2E%2E/api")), None);
+        assert_eq!(app(&format!("{BASE}/view/x.md")), None);
+        assert_eq!(app("http://127.0.0.1:7421/apps/canvas/"), None, "port");
+        assert_eq!(
+            app("http://u@127.0.0.1:7420/apps/canvas/"),
+            None,
+            "userinfo"
+        );
+        assert_eq!(app("https://example.com/apps/canvas/"), None);
+    }
+
+    #[test]
+    fn what_an_app_pane_may_load() {
+        use Navigation::*;
+        let start = "http://127.0.0.1:7420/apps/canvas/";
+        let nav =
+            |url, main, gesture| navigation(url, BASE, start, Scope::App("canvas"), main, gesture);
+        assert_eq!(nav(start, true, false), Allow);
+        // its own pages, links and iframes (cards) stay in the pane
+        assert_eq!(
+            nav("http://127.0.0.1:7420/apps/canvas/board", true, true),
+            Allow
+        );
+        assert_eq!(nav("http://127.0.0.1:7420/apps/canvas", true, false), Allow);
+        assert_eq!(
+            nav(
+                "http://127.0.0.1:7420/apps/canvas/api/nodes/n1/app",
+                false,
+                false
+            ),
+            Allow
+        );
+        assert_eq!(nav("about:srcdoc", false, false), Allow);
+        assert_eq!(nav("blob:http://127.0.0.1:7420/uuid", false, false), Allow);
+        // composer's own pages and other apps: never loaded in the pane (a followed link to one
+        // is turned into its tab before this)
+        assert_eq!(
+            nav("http://127.0.0.1:7420/view/plans/x.md", true, false),
+            Block { outside: false }
+        );
+        assert_eq!(
+            nav("http://127.0.0.1:7420/view", false, false),
+            Block { outside: false }
+        );
+        assert_eq!(
+            nav("http://127.0.0.1:7420/api/sites", false, false),
+            Block { outside: false }
+        );
+        assert_eq!(
+            nav("http://127.0.0.1:7420/apps/other/", true, false),
+            Block { outside: false }
+        );
+        assert_eq!(
+            nav("http://127.0.0.1:7420/apps/canvasx/", false, false),
+            Block { outside: false }
+        );
+        assert_eq!(
+            nav("http://127.0.0.1:7420/apps/canvas/../../api", false, false),
+            Block { outside: false }
+        );
+        // the app's own server directly, or anything else: outside when followed, else nothing
+        assert_eq!(
+            nav("http://127.0.0.1:4477/", true, true),
+            Block { outside: true }
+        );
+        assert_eq!(
+            nav("http://127.0.0.1:4477/", false, false),
+            Block { outside: false }
+        );
+        assert_eq!(
+            nav("https://example.com/", true, true),
+            Block { outside: true }
+        );
+        assert_eq!(
+            nav("https://example.com/", true, false),
+            Block { outside: false }
+        );
     }
 }
