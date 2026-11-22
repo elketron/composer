@@ -36,7 +36,7 @@ use crate::stage_tabs;
 use crate::term_pane::{FONT, PaneEvent, TermPane};
 use crate::terminal_link::TerminalLink;
 use crate::theme::*;
-use crate::view_urls::{AuthCookie, auth_cookie, paths_text, view_url};
+use crate::view_urls::{AuthCookie, Scope, auth_cookie, paths_text, view_url};
 use crate::web_pane::{WebEvent, WebPane};
 
 actions!(
@@ -87,6 +87,8 @@ pub struct Shell {
     follow: bool,
     /// The outside agents (ACP) the server can run an agentic session with.
     harnesses: Vec<String>,
+    /// The user's local web servers the server shows (`[apps.*]`): tab labels, the palette.
+    apps: Vec<composer_protocol::http::AppInfo>,
     /// The shown session's background processes.
     processes: Vec<ProcessInfo>,
     /// The window is in front (as of its last draw): notifications only when it isn't.
@@ -142,6 +144,7 @@ impl Shell {
             dragging: false,
             follow: true,
             harnesses: Vec::new(),
+            apps: Vec::new(),
             processes: Vec::new(),
             active: true,
             drawn: false,
@@ -282,7 +285,7 @@ impl Shell {
         self.sync_home(cx);
     }
 
-    /// The harnesses the server offers (`/api/info`), for the new-session menu.
+    /// The harnesses the server offers (`/api/info`), for the new-session menu, and its apps.
     fn fetch_harnesses(&mut self, cx: &mut Context<Self>) {
         let endpoint = self.endpoint.clone();
         let fetched = cx.global::<Desktop>().spawn(async move {
@@ -292,7 +295,15 @@ impl Shell {
         });
         cx.spawn(async move |this, cx| {
             if let Ok(Ok(info)) = fetched.await {
-                let _ = this.update(cx, |shell, _| shell.harnesses = info.harnesses);
+                let _ = this.update(cx, |shell, cx| {
+                    shell.harnesses = info.harnesses;
+                    shell.apps = info.apps;
+                    if let Some(home) = shell.home.clone() {
+                        let apps = shell.apps.clone();
+                        home.update(cx, |home, cx| home.set_apps(apps, cx));
+                    }
+                    cx.notify();
+                });
             }
         })
         .detach();
@@ -496,7 +507,8 @@ impl Shell {
             Some(home) => home,
             None => {
                 let connection = self.connection.clone();
-                let home = cx.new(|cx| HomeView::new(connection, cx));
+                let apps = self.apps.clone();
+                let home = cx.new(|cx| HomeView::new(connection, apps, cx));
                 self.subscriptions.push(cx.subscribe_in(
                     &home,
                     window,
@@ -736,6 +748,23 @@ impl Shell {
         let tabs: HashSet<&str> = self.store.desk.tabs.iter().map(|t| t.id.as_str()).collect();
         self.webs.keep(&tabs);
         self.refresh.keep(&tabs);
+        // A tab that shows something else now (an app the agent opened at another path): its pane
+        // goes, and a new one loads the new address when the tab is shown.
+        let moved: Vec<String> = self
+            .store
+            .desk
+            .tabs
+            .iter()
+            .filter(|entry| {
+                self.webs.get(&entry.id).is_some_and(|pane| {
+                    view_url(&self.endpoint, &entry.tab).as_deref() != Some(pane.read(cx).url())
+                })
+            })
+            .map(|entry| entry.id.clone())
+            .collect();
+        for id in moved {
+            self.webs.remove(&id);
+        }
         for id in on_desk {
             if self.panes.contains_key(&id) {
                 continue;
@@ -991,12 +1020,16 @@ impl Shell {
             return;
         };
         let live = entry.tab == DeskTab::LiveView;
+        let app = match Scope::of(&entry.tab) {
+            Scope::App(name) => Some(name.to_string()),
+            Scope::Pages => None,
+        };
         // A fresh browser session for the pane's cookie, never the token.
         let session = self.web_session(cx);
         cx.spawn(async move |this, cx| {
             let session = session.await;
             let _ = this.update(cx, |shell, cx| match session {
-                Ok(cookie) => shell.show_web(entry.id, url, live, Some(cookie), cx),
+                Ok(cookie) => shell.show_web(entry.id, url, live, app, Some(cookie), cx),
                 Err(e) => {
                     shell.webs.failed(&entry.id);
                     shell.link = shell.link.refused(format!("no browser session: {e}"));
@@ -1025,21 +1058,37 @@ impl Shell {
 
     /// A browser pane for `tab`. `drive`: the page is the live view, whose Drive mode needs the
     /// pane to pass on modifier keys, repeats and drags that leave it (see `WebPane::set_drive`).
+    /// `app`: the pane shows that app and stays inside it.
     fn show_web(
         &mut self,
         tab: String,
         url: String,
         drive: bool,
+        app: Option<String>,
         cookie: Option<AuthCookie>,
         cx: &mut Context<Self>,
     ) {
+        // The tab moved (or went) while its session was fetched: made again for what it is now.
+        let current = self
+            .store
+            .desk
+            .tabs
+            .iter()
+            .find(|entry| entry.id == tab)
+            .and_then(|entry| view_url(&self.endpoint, &entry.tab));
+        if current.as_deref() != Some(url.as_str()) {
+            self.webs.failed(&tab);
+            cx.notify();
+            return;
+        }
         let base = self.endpoint.base().to_string();
-        let pane = cx.new(|cx| WebPane::new(&url, &base, cookie, cx));
+        let pane = cx.new(|cx| WebPane::new(&url, &base, app.as_deref(), cookie, cx));
         pane.update(cx, |pane, _| pane.set_drive(drive));
         self.subscriptions.push(cx.subscribe(
             &pane,
             |shell, pane, event: &WebEvent, cx| match event {
                 WebEvent::OpenPage(url) => shell.open_page(url.clone(), cx),
+                WebEvent::OpenApp(name, path) => shell.open_app(name.clone(), path.clone(), cx),
                 // Expired, or the server restarted: a new session, and the page again (once).
                 WebEvent::SessionLost => {
                     let session = shell.web_session(cx);
@@ -1071,6 +1120,21 @@ impl Shell {
                 ClientCommand::DeskOpen {
                     session,
                     tab: DeskTab::Page { url },
+                    focus: true,
+                },
+                cx,
+            );
+        }
+    }
+
+    /// Puts the app `name` on the stage at `path` (`""`: its page), as the agent's `show_page`
+    /// would.
+    fn open_app(&mut self, name: String, path: String, cx: &mut Context<Self>) {
+        if let Some(session) = self.store.attached.clone() {
+            self.ask(
+                ClientCommand::DeskOpen {
+                    session,
+                    tab: DeskTab::App { name, path },
                     focus: true,
                 },
                 cx,
@@ -1169,6 +1233,7 @@ impl Shell {
     fn open_palette(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let mut items = pick_lists::commands(self.follow);
         items.extend(pick_lists::leave_site(self.session_site()));
+        items.extend(pick_lists::apps(&self.apps));
         items.extend(pick_lists::sessions(
             &self.store.sessions,
             self.store.attached.as_deref(),
@@ -1239,6 +1304,12 @@ impl Shell {
             }
             Pick::StopProcess(terminal) => self.ask(ClientCommand::ProcessStop { terminal }, cx),
             Pick::Page(url) => self.open_page(url, cx),
+            Pick::App(name) => self.open_app(name, String::new(), cx),
+            Pick::ReloadTab => {
+                if let Some(id) = self.shown_entry().map(|e| e.id.clone()) {
+                    self.load_again(&id, cx);
+                }
+            }
             Pick::Site(site) => self.switch_site(Some(site), cx),
             Pick::LeaveSite => self.switch_site(None, cx),
             Pick::NewTerminal => self.new_terminal(cx),
@@ -1481,7 +1552,11 @@ impl Render for Shell {
                             .border_color(rgb(ACCENT_SOFT)),
                     )
                 })
-                .child(stage_tabs::label(&entry.tab, self.session_site()))
+                .child(stage_tabs::label(
+                    &entry.tab,
+                    self.session_site(),
+                    &self.apps,
+                ))
                 .child(
                     div()
                         .id(gpui::SharedString::from(format!("close-{}", entry.id)))

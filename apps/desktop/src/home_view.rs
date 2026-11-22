@@ -6,6 +6,7 @@
 use std::collections::BTreeMap;
 
 use composer_client::{Approval, Chat, ChatItem, Connection};
+use composer_protocol::http::AppInfo;
 use composer_protocol::{
     ApprovalDecision, ClientCommand, CommandResult, Desk, ServerMessage, SessionInfo,
 };
@@ -54,6 +55,8 @@ pub struct HomeView {
     preview_generation: u64,
     scroll: ScrollHandle,
     focus: FocusHandle,
+    /// The server's apps, for naming app tabs.
+    apps: Vec<AppInfo>,
 }
 
 impl EventEmitter<HomeEvent> for HomeView {}
@@ -68,7 +71,7 @@ impl Focusable for HomeView {
 const PREVIEW_ITEMS: usize = 4;
 
 impl HomeView {
-    pub fn new(connection: Connection, cx: &mut Context<Self>) -> Self {
+    pub fn new(connection: Connection, apps: Vec<AppInfo>, cx: &mut Context<Self>) -> Self {
         Self {
             selected: 0,
             connection,
@@ -79,7 +82,14 @@ impl HomeView {
             preview_generation: 0,
             scroll: ScrollHandle::new(),
             focus: cx.focus_handle(),
+            apps,
         }
+    }
+
+    /// The server's apps (`/api/info`), when they arrive after the home opened.
+    pub fn set_apps(&mut self, apps: Vec<AppInfo>, cx: &mut Context<Self>) {
+        self.apps = apps;
+        cx.notify();
     }
 
     /// The store's sessions and approvals, as they change.
@@ -667,7 +677,7 @@ impl HomeView {
                             .iter()
                             .map(|e| {
                                 desk_item(
-                                    stage_tabs::label(&e.tab, info.site.as_deref()),
+                                    stage_tabs::label(&e.tab, info.site.as_deref(), &self.apps),
                                     if e.unseen { "new" } else { "" },
                                     ACCENT_SOFT,
                                 )

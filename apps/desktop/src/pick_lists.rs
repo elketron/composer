@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 
 use composer_client::Approval;
-use composer_protocol::http::SiteSummary;
+use composer_protocol::http::{AppInfo, SiteSummary};
 use composer_protocol::{ClientCommand, ModelInfo, ProcessInfo, RunKind, SessionInfo};
 
 use crate::home_lists::{age, epoch_secs};
@@ -193,6 +193,13 @@ pub fn commands(following: bool) -> Vec<Item> {
             pick: Pick::NewTerminal,
         },
         Item {
+            label: "Reload tab".into(),
+            detail: "the shown page or app".into(),
+            note: String::new(),
+            group: "stage",
+            pick: Pick::ReloadTab,
+        },
+        Item {
             label: "Sessions overview".into(),
             detail: "ctrl+shift+h".into(),
             note: String::new(),
@@ -200,6 +207,19 @@ pub fn commands(following: bool) -> Vec<Item> {
             pick: Pick::Home,
         },
     ]
+}
+
+/// The server's apps (`[apps.*]`), each to put on the stage.
+pub fn apps(apps: &[AppInfo]) -> Vec<Item> {
+    apps.iter()
+        .map(|app| Item {
+            label: format!("app: {}", app.title),
+            detail: format!("/apps/{}/", app.name),
+            note: String::new(),
+            group: "apps",
+            pick: Pick::App(app.name.clone()),
+        })
+        .collect()
 }
 
 /// The confirm for deleting `session`: one item; Escape keeps it.
@@ -400,7 +420,7 @@ mod tests {
             groups,
             [
                 "session", "session", "session", "session", "session", "session", "session",
-                "session", "stage", "home"
+                "session", "stage", "stage", "home"
             ],
             "grouped as shown"
         );
@@ -520,5 +540,19 @@ mod tests {
         assert_eq!(items[0].pick, Pick::OpenProcess("t7".into()));
         assert_eq!(items[1].label, "stop: cargo run");
         assert_eq!(items[1].pick, Pick::StopProcess("t7".into()));
+    }
+
+    #[test]
+    fn apps_go_on_the_stage() {
+        let items = apps(&[AppInfo {
+            name: "canvas".into(),
+            title: "Agent canvas".into(),
+        }]);
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].label, "app: Agent canvas");
+        assert_eq!(items[0].detail, "/apps/canvas/");
+        assert_eq!(items[0].group, "apps");
+        assert_eq!(items[0].pick, Pick::App("canvas".into()));
+        assert!(apps(&[]).is_empty());
     }
 }

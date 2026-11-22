@@ -17,7 +17,7 @@ use std::{
 use crate::browser_frame::BrowserFrame;
 use crate::browser_pump;
 use crate::dom_keys::{Held, codes, modifier_changes};
-use crate::view_urls::{AuthCookie, Navigation, navigation, page_for};
+use crate::view_urls::{AuthCookie, Navigation, Scope, app_for, navigation, page_for};
 use cef::{rc::Rc as _, *};
 use gpui::{
     App, Bounds, Context, CursorStyle, ElementInputHandler, Entity, EntityInputHandler,
@@ -42,14 +42,16 @@ pub struct Shared {
     pub cursor: CursorStyle,
     /// Pages the user asked for (links, popups), for the window to open as tabs.
     pub open_pages: Vec<String>,
+    /// Apps (name, path) the user followed a link to from outside them, to open as tabs.
+    pub open_apps: Vec<(String, String)>,
     /// Links that leave the server, for the OS to open.
     pub open_outside: Vec<String>,
     /// Wheel delta waiting for the next pump (batched: a trackpad sends hundreds of events a
     /// second; one CEF wheel call per pump keeps the main thread free and scrolls smoothly).
     pub wheel: (i32, i32),
     pub wheel_at: Option<(Point<Pixels>, Modifiers)>,
-    /// The page answered 401 or 404: the pane's session may be gone (expired, or the server
-    /// restarted).
+    /// The page answered 401 or 404 (an app pane: 401 only, a 404 is the app's own answer): the
+    /// pane's session may be gone (expired, or the server restarted).
     pub session_lost: bool,
 }
 
@@ -60,20 +62,32 @@ struct Handler {
     base: Rc<str>,
     /// The URL this pane was made to show (ours, so it always loads).
     start: Rc<str>,
+    /// The app this pane shows (it stays inside `/apps/<name>/`); `None`: composer's pages.
+    app: Option<Rc<str>>,
 }
 
 impl Handler {
     /// Whether to cancel a navigation of this pane. Every main-frame and subframe navigation
     /// goes through here, whatever started it (a click, script, meta refresh, a redirect).
     fn cancels(&self, url: &str, main: bool, gesture: bool) -> bool {
-        if main
-            && gesture
-            && let Some(page) = page_for(url, &self.base)
-        {
-            self.shared.borrow_mut().open_pages.push(page);
-            return true;
+        let scope = match &self.app {
+            Some(name) => Scope::App(name),
+            None => Scope::Pages,
+        };
+        if main && gesture {
+            if let Some(page) = page_for(url, &self.base) {
+                self.shared.borrow_mut().open_pages.push(page);
+                return true;
+            }
+            // Another app (or, from a page, any app): its own tab, never this pane.
+            if let Some((name, path)) = app_for(url, &self.base)
+                && scope != Scope::App(&name)
+            {
+                self.shared.borrow_mut().open_apps.push((name, path));
+                return true;
+            }
         }
-        match navigation(url, &self.base, &self.start, main, gesture) {
+        match navigation(url, &self.base, &self.start, scope, main, gesture) {
             Navigation::Allow => false,
             Navigation::Block { outside } => {
                 if outside {
@@ -457,7 +471,11 @@ wrap_load_handler! {
             if main {
                 crate::trace(&format!("pane: page loaded, status {http_status_code}"));
             }
-            if main && matches!(http_status_code, 401 | 404) {
+            let lost = match self.handler.app {
+                None => matches!(http_status_code, 401 | 404),
+                Some(_) => http_status_code == 401,
+            };
+            if main && lost {
                 self.handler.shared.borrow_mut().session_lost = true;
             }
         }
@@ -625,6 +643,8 @@ pub struct WebPane {
 pub enum WebEvent {
     /// A link to a page: open it as a tab.
     OpenPage(String),
+    /// A link to an app (name, path) from outside it: open it as a tab.
+    OpenApp(String, String),
     /// A link outside the server: the OS opens it.
     OpenOutside(String),
     /// A pane that authenticates with a session cookie got 401/404: its session may be gone.
@@ -639,8 +659,14 @@ impl WebPane {
     /// With `cookie`, it is stored in CEF first and the browser is made once it is there (so
     /// the token never appears in a URL). It is made directly on `url`: a browser started on
     /// `about:blank` and sent on with `load_url` never left `about:blank` (CEF 156,
-    /// windowless).
-    pub fn new(url: &str, base: &str, cookie: Option<AuthCookie>, cx: &mut Context<Self>) -> Self {
+    /// windowless). With `app`, the pane shows that app and stays inside it.
+    pub fn new(
+        url: &str,
+        base: &str,
+        app: Option<&str>,
+        cookie: Option<AuthCookie>,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let shared = Rc::new(RefCell::new(Shared {
             size: (800, 600),
             scale: 1.0,
@@ -650,6 +676,7 @@ impl WebPane {
             shared: shared.clone(),
             base: base.into(),
             start: url.into(),
+            app: app.map(Into::into),
         };
         let client = ClientBuilder::new(
             RenderHandlerBuilder::new(handler.clone()),
@@ -712,6 +739,11 @@ impl WebPane {
         }
     }
 
+    /// The URL it was made to show.
+    pub fn url(&self) -> &str {
+        &self.url
+    }
+
     /// Stores `cookie` (a new session) and loads the pane's page again.
     pub fn renew(&mut self, cookie: AuthCookie) {
         self.pending = Some(store_cookie(&cookie));
@@ -766,7 +798,7 @@ impl WebPane {
             return;
         }
         if let Some(browser) = self.browser.as_ref() {
-            crate::trace("pane: loading its page again (it changed on the server)");
+            crate::trace("pane: loading its page again (changed on the server, or asked for)");
             // The cache is skipped: the point of this is the new text, and a view's own answer is
             // never worth revalidating.
             browser.reload_ignore_cache();
@@ -828,10 +860,11 @@ impl WebPane {
         let started = std::time::Instant::now();
         self.load_when_ready();
         self.reload_now();
-        let (pages, outside, lost) = {
+        let (pages, apps, outside, lost) = {
             let mut s = self.shared.borrow_mut();
             (
                 std::mem::take(&mut s.open_pages),
+                std::mem::take(&mut s.open_apps),
                 std::mem::take(&mut s.open_outside),
                 std::mem::take(&mut s.session_lost),
             )
@@ -841,6 +874,9 @@ impl WebPane {
         }
         for page in pages {
             cx.emit(WebEvent::OpenPage(page));
+        }
+        for (name, path) in apps {
+            cx.emit(WebEvent::OpenApp(name, path));
         }
         for url in outside {
             cx.emit(WebEvent::OpenOutside(url));
@@ -1332,12 +1368,60 @@ mod tests {
     use super::*;
 
     #[test]
+    fn followed_links_become_tabs_and_an_app_keeps_its_own() {
+        let base = "http://127.0.0.1:7420";
+        let pane = |app: Option<&str>| Handler {
+            shared: Rc::new(RefCell::new(Shared::default())),
+            base: base.into(),
+            start: match app {
+                Some(_) => "http://127.0.0.1:7420/apps/canvas/",
+                None => "http://127.0.0.1:7420/view/plans/x.md",
+            }
+            .into(),
+            app: app.map(Into::into),
+        };
+        let canvas = pane(Some("canvas"));
+        // inside the app: stays in the pane, link or iframe
+        assert!(!canvas.cancels("http://127.0.0.1:7420/apps/canvas/b?x", true, true));
+        assert!(!canvas.cancels(
+            "http://127.0.0.1:7420/apps/canvas/api/nodes/1/app",
+            false,
+            false
+        ));
+        // a composer page: its tab
+        assert!(canvas.cancels("http://127.0.0.1:7420/view/plans/x.md", true, true));
+        assert_eq!(canvas.shared.borrow().open_pages, ["site://plans/x.md"]);
+        // another app: its tab; silently (no gesture): nothing
+        assert!(canvas.cancels("http://127.0.0.1:7420/apps/notes/n/1", true, true));
+        assert!(canvas.cancels("http://127.0.0.1:7420/apps/notes/", true, false));
+        assert_eq!(
+            canvas.shared.borrow().open_apps,
+            [("notes".to_string(), "n/1".to_string())]
+        );
+        // elsewhere: the user's browser
+        assert!(canvas.cancels("https://example.com/", true, true));
+        assert_eq!(
+            canvas.shared.borrow().open_outside,
+            ["https://example.com/"]
+        );
+        // from a page, an app is a tab of its own too, never the page's pane
+        let page = pane(None);
+        assert!(page.cancels("http://127.0.0.1:7420/apps/canvas/", true, true));
+        assert!(page.cancels("http://127.0.0.1:7420/apps/canvas/", false, false));
+        assert_eq!(
+            page.shared.borrow().open_apps,
+            [("canvas".to_string(), String::new())]
+        );
+    }
+
+    #[test]
     fn late_paints_for_hidden_tabs_are_ignored_and_visible_paints_still_arrive() {
         let shared = Rc::new(RefCell::new(Shared::default()));
         let handler = RenderHandlerBuilder::new(Handler {
             shared: shared.clone(),
             base: "http://127.0.0.1:1".into(),
             start: "about:blank".into(),
+            app: None,
         });
         let pixels = [7_u8; 16];
         let view = PaintElementType::from(sys::cef_paint_element_type_t::PET_VIEW);
