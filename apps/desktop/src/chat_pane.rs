@@ -22,7 +22,7 @@ use composer_core::{LinkTarget, SiteUrl};
 use crate::chat_follow::Follow;
 use crate::chat_model::ChatModel;
 use crate::draft::{Draft, DraftKey, Mode};
-use crate::home_lists::{folder_use, is_folder, is_mcp_start, mcp_start};
+use crate::home_lists::{folder_use, is_folder, is_mcp_start, is_policy, mcp_start, policy_use};
 use crate::markdown;
 use crate::outgoing::Outgoing;
 use crate::prose::{head, thinking_preview};
@@ -826,6 +826,7 @@ impl ChatPane {
             ApprovalKind::Recipe if is_folder(approval) => {
                 folder_use(&approval.site, &approval.args)
             }
+            ApprovalKind::Recipe if is_policy(approval) => policy_use(&approval.site),
             ApprovalKind::Recipe => format!("run {} › {}", approval.site, approval.recipe),
             _ if !approval.title.is_empty() => approval.title.clone(),
             ApprovalKind::Tool | ApprovalKind::Mcp => "use a tool".into(),
@@ -835,10 +836,10 @@ impl ChatPane {
             true => String::new(),
             false => approval.args.join(" "),
         };
-        // A site's MCP servers or folder: what they are (the body) shows from the start; the
-        // toggle flips it.
+        // A site's MCP servers, folder or policy: what they are (the body) shows from the start;
+        // the toggle flips it.
         let open = self.opened.contains(&approval.request)
-            != (is_mcp_start(approval) || is_folder(approval));
+            != (is_mcp_start(approval) || is_folder(approval) || is_policy(approval));
         let request = approval.request.clone();
         let answer = |decision: ApprovalDecision| {
             let request = approval.request.clone();
@@ -1057,7 +1058,7 @@ impl ChatPane {
                     rows.push(message(true, Some(label), parts));
                     last = Some(true);
                 }
-                ChatItem::System { text } => {
+                ChatItem::System { text } | ChatItem::System1 { text } => {
                     flush_tools(&mut tools, &mut body, self, cx);
                     flush(&mut body, &mut body_label, &mut rows);
                     rows.push(event(text.clone()));

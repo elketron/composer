@@ -90,6 +90,23 @@ void main() {
     expect((item.command, item.text), ('make', 'exited 0'));
   });
 
+  test("system-1's decisions are their own line, apart from other system notes", () {
+    final chat = play([
+      ServerMessageMessageDone(
+        session: 'a',
+        seq: 1,
+        message: const ChatMessage(role: Role.system, content: 'system-1 approved `cargo test` — asked for', source: MessageSourceSystem1()),
+      ),
+      ServerMessageMessageDone(
+        session: 'a',
+        seq: 2,
+        message: const ChatMessage(role: Role.system, content: 'Turn stopped: x', source: MessageSourceServer()),
+      ),
+    ]);
+    expect((chat.items[0] as System1Item).text, 'system-1 approved `cargo test` — asked for');
+    expect((chat.items[1] as NoteItem).text, 'Turn stopped: x');
+  });
+
   test('tool arguments on one line', () {
     expect(summarizeArgs({'url': 'site://home'}), 'site://home');
     expect(summarizeArgs(<String, Object?>{}), '');

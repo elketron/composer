@@ -70,6 +70,10 @@ pub enum ChatItem {
     System {
         text: String,
     },
+    /// A decision of system-1 (the `[system1]` model) on an approval: `system-1 approved …`.
+    System1 {
+        text: String,
+    },
     /// Older messages were summarized; `T` shows the summary.
     Compacted {
         summary: String,

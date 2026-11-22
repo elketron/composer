@@ -69,6 +69,9 @@ pub fn asked_line(approval: &Approval) -> String {
         ApprovalKind::Recipe if is_folder(approval) => {
             format!("approve: {}", folder_use(&approval.site, &approval.args))
         }
+        ApprovalKind::Recipe if is_policy(approval) => {
+            format!("approve: {}", policy_use(&approval.site))
+        }
         ApprovalKind::Recipe => format!("approve run {} › {}", approval.site, approval.recipe),
         _ if !approval.title.is_empty() => format!("approve {}", approval.title),
         ApprovalKind::Tool | ApprovalKind::Mcp => "approve a tool".into(),
@@ -102,6 +105,19 @@ pub fn folder_use(site: &str, args: &[String]) -> String {
         "Let {site} work in {}",
         args.first().map(String::as_str).unwrap_or("its folder")
     )
+}
+
+/// What a site's policy page for system-1 is asked under.
+pub const POLICY: &str = "approvals.md";
+
+/// The approval of a site's policy page for system-1 (its `approvals.md`), not a recipe run.
+pub fn is_policy(approval: &Approval) -> bool {
+    approval.kind == ApprovalKind::Recipe && approval.recipe == POLICY
+}
+
+/// What approving a site's `approvals.md` does.
+pub fn policy_use(site: &str) -> String {
+    format!("let system-1 follow {site}'s approvals.md")
 }
 
 pub fn state_word(state: TurnState) -> &'static str {

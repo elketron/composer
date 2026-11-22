@@ -204,6 +204,16 @@ pub fn chat_lines(state: &AppState, width: u16) -> Vec<Line<'static>> {
                 }
                 blocks.push((Speaker::System, lines));
             }
+            ChatItem::System1 { text } => {
+                let rest = text.strip_prefix("system-1").unwrap_or(text);
+                blocks.push((
+                    Speaker::System,
+                    vec![Line::from(vec![
+                        Span::styled("system-1", Style::new().fg(theme::INFO)),
+                        Span::styled(rest.to_string(), theme::muted()),
+                    ])],
+                ));
+            }
             ChatItem::System { text } => {
                 blocks.push((
                     Speaker::System,
