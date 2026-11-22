@@ -164,3 +164,63 @@ async fn the_agent_puts_the_live_view_on_the_stage_when_there_is_one() {
         }
     }
 }
+
+#[tokio::test]
+async fn the_agent_puts_a_local_app_on_the_stage() {
+    let mut config = Config::defaults();
+    config.apps.insert(
+        "canvas".into(),
+        composer_server::AppConfig {
+            url: "http://127.0.0.1:9".into(),
+            title: "Canvas".into(),
+        },
+    );
+    let (_dir, server, _provider, _addr) = start_with(config, vec![]).await;
+    let session = server
+        .sessions
+        .create(composer_protocol::RunKind::Agentic, None, None)
+        .unwrap();
+    let context = ToolContext {
+        server: server.clone(),
+        run: server.sink(&session),
+        kind: composer_protocol::RunKind::Agentic,
+        only: None,
+        site: None,
+        cancel: CancellationToken::new(),
+    };
+    let tool = |name: &'static str, args: Value| {
+        let (server, context) = (server.clone(), &context);
+        async move { server.tools.call_value(context, name, args).await }
+    };
+
+    let listed = tool("desk", json!({})).await;
+    assert!(
+        listed.text.contains("app://canvas/ (Canvas)"),
+        "{}",
+        listed.text
+    );
+    let shown = tool("show_page", json!({ "url": "app://canvas/board/2" })).await;
+    assert!(
+        !shown.is_error && shown.text.contains("app:canvas"),
+        "{}",
+        shown.text
+    );
+    let desk = session.desk();
+    assert_eq!(
+        desk.tabs[0].tab,
+        composer_protocol::DeskTab::App {
+            name: "canvas".into(),
+            path: "board/2".into()
+        }
+    );
+    assert!(desk.tabs[0].unseen);
+    let unknown = tool("show_page", json!({ "url": "app://nope/" })).await;
+    assert!(
+        unknown.is_error && unknown.text.contains("app://canvas/"),
+        "{}",
+        unknown.text
+    );
+    let climbing = tool("show_page", json!({ "url": "app://canvas/../x" })).await;
+    assert!(climbing.is_error, "{}", climbing.text);
+    assert_eq!(session.desk().tabs.len(), 1);
+}

@@ -56,8 +56,9 @@ impl Tool for DeskTool {
             point(context, desk, tab);
             return Ok(format!("pointed the user at {tab}"));
         }
+        let apps = apps_line(&context.server.config());
         if desk.tabs.is_empty() {
-            return Ok("The stage is empty.".into());
+            return Ok(format!("The stage is empty.{apps}"));
         }
         let lines: Vec<String> = desk
             .tabs
@@ -72,6 +73,22 @@ impl Tool for DeskTool {
                 format!("- {}{mark}", t.id)
             })
             .collect();
-        Ok(lines.join("\n"))
+        Ok(format!("{}{apps}", lines.join("\n")))
     }
+}
+
+/// The user's local apps, which `show_page app://<name>/` puts on the stage; empty without any.
+fn apps_line(config: &crate::Config) -> String {
+    let apps = crate::app_upstream::listed(config);
+    if apps.is_empty() {
+        return String::new();
+    }
+    let names: Vec<String> = apps
+        .iter()
+        .map(|a| match a.title == a.name {
+            true => format!("app://{}/", a.name),
+            false => format!("app://{}/ ({})", a.name, a.title),
+        })
+        .collect();
+    format!("\nApps (show_page): {}", names.join(", "))
 }
