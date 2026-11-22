@@ -101,6 +101,11 @@ impl Chat {
                         });
                     }
                 }
+                Role::System if message.source == Some(MessageSource::System1) => {
+                    self.items.push(ChatItem::System1 {
+                        text: message.content.clone(),
+                    })
+                }
                 Role::System | Role::Tool => self.items.push(ChatItem::System {
                     text: message.content.clone(),
                 }),
@@ -320,6 +325,28 @@ mod tests {
             ChatItem::Text {
                 text: "Hello".into()
             }
+        );
+    }
+
+    #[test]
+    fn a_system1_decision_is_its_own_item() {
+        let mut chat = Chat::new("a");
+        let mut line = done(1, Role::System, "system-1 rejected `rm -rf /` — no");
+        if let ServerMessage::MessageDone { message, .. } = &mut line {
+            message.source = Some(MessageSource::System1);
+        }
+        chat.apply(&line);
+        chat.apply(&done(2, Role::System, "Turn stopped: x"));
+        assert_eq!(
+            chat.items,
+            vec![
+                ChatItem::System1 {
+                    text: "system-1 rejected `rm -rf /` — no".into()
+                },
+                ChatItem::System {
+                    text: "Turn stopped: x".into()
+                },
+            ]
         );
     }
 

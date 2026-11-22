@@ -3,12 +3,13 @@ use std::sync::Arc;
 use composer_protocol::ApprovalDecision;
 use tokio_util::sync::CancellationToken;
 
-use crate::actions::{Justfile, Recipe, Refusal};
+use crate::actions::{Answer, Ask, DecidedBy, Justfile, Recipe, Refusal};
 use crate::server::Server;
 use crate::session::Session;
 
 /// Makes sure this version of `recipe` is approved, asking the session's clients when it is not,
-/// and answers `Ok` when it may run. An approval the user gave is remembered.
+/// and answers `Ok` when it may run. An approval the user gave is remembered; system-1's (see
+/// [`crate::system1`]) is for this run only.
 pub async fn ensure_approved(
     server: &Arc<Server>,
     session: &Session,
@@ -23,21 +24,28 @@ pub async fn ensure_approved(
         return Ok(());
     }
     let body = justfile.show(&recipe.name).await.map_err(Refusal::Denied)?;
-    let answer = server
-        .request_approval(session, site, &recipe.name, args, body, &hash, cancel)
-        .await;
-    match answer {
-        Some(ApprovalDecision::Approve | ApprovalDecision::Always) => {
-            server
-                .approvals
-                .approve(site, &recipe.name, &hash)
-                .map_err(|e| Refusal::Denied(e.to_string()))?;
+    let ask = Ask::recipe_run(site, &recipe.name, args, body, &hash);
+    let what = ask.what.clone();
+    match server.ask(session, ask, cancel).await {
+        // Only the user's yes is remembered: system-1's holds for this run.
+        Some(Answer {
+            decision: ApprovalDecision::Approve | ApprovalDecision::Always,
+            by,
+        }) => {
+            if by == DecidedBy::User {
+                server
+                    .approvals
+                    .approve(site, &recipe.name, &hash)
+                    .map_err(|e| Refusal::Denied(e.to_string()))?;
+            }
         }
-        Some(ApprovalDecision::Deny) => {
-            return Err(Refusal::Denied(format!(
-                "the user denied running `{}`; ask them why before trying again",
-                recipe.name
-            )));
+        Some(answer) => {
+            return Err(Refusal::Denied(answer.refusal(&what, || {
+                format!(
+                    "the user denied running `{}`; ask them why before trying again",
+                    recipe.name
+                )
+            })));
         }
         None => return Err(Refusal::Denied("cancelled by the user".into())),
     }

@@ -436,6 +436,9 @@ impl AppState {
                         ApprovalKind::Recipe if a.recipe == "folder:" => {
                             format!("{}-folder.txt", a.site)
                         }
+                        ApprovalKind::Recipe if a.recipe == "approvals.md" => {
+                            format!("{}-approvals.md", a.site)
+                        }
                         ApprovalKind::Recipe => format!("{}-{}.just", a.site, a.recipe),
                         ApprovalKind::Tool => format!("tool-{}.txt", a.request),
                         ApprovalKind::Mcp => format!("mcp-{}.json", a.request),
@@ -1725,6 +1728,27 @@ mod tests {
         assert!(matches!(
             state.session.items.as_slice(),
             [ChatItem::ProcessEnded { terminal, .. }] if terminal == "t1"
+        ));
+    }
+
+    #[test]
+    fn a_system1_decision_is_its_own_line() {
+        let (mut state, _) = connected();
+        state.session.current = Some("s1".into());
+        state.reduce(Action::Server(ServerMessage::MessageDone {
+            session: "s1".into(),
+            seq: 1,
+            message: ChatMessage {
+                role: Role::System,
+                content: "system-1 approved `cargo test` — asked for".into(),
+                source: Some(composer_protocol::MessageSource::System1),
+                thinking: None,
+                ..assistant("")
+            },
+        }));
+        assert!(matches!(
+            state.session.items.as_slice(),
+            [ChatItem::System1 { text }] if text.starts_with("system-1 approved")
         ));
     }
 

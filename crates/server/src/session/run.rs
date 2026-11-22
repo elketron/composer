@@ -110,6 +110,7 @@ pub async fn run(
             tools: tools.clone(),
             model: settings.model.clone(),
             reasoning_effort: settings.reasoning.clone(),
+            response_format: None,
         };
         let step = model_step_continuing(server, &*sink, request, cancel, true).await?;
         let written: String = step

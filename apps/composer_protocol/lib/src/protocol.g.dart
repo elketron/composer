@@ -1487,7 +1487,8 @@ class McpServerInfo {
       };
 }
 
-/// Where a user-side message came from.
+/// Where a message from outside the model came from: a user-side message, or a line the server
+/// adds to the chat (`System1`).
 sealed class MessageSource {
   const MessageSource();
 
@@ -1497,6 +1498,7 @@ sealed class MessageSource {
         'watch' => MessageSourceWatch.fromJson(json),
         'process' => MessageSourceProcess.fromJson(json),
         'mcp' => MessageSourceMcp.fromJson(json),
+        'system1' => MessageSourceSystem1.fromJson(json),
         _ => MessageSourceUnknown(json),
       };
 
@@ -1582,6 +1584,19 @@ final class MessageSourceMcp extends MessageSource {
   Map<String, Object?> toJson() => {
         'kind': 'mcp',
         'server': server,
+      };
+}
+
+/// The `[system1]` model decided an approval for the user (a system line: approved, rejected
+/// or forwarded, with its reason). Shown in the chat; the model never reads it.
+final class MessageSourceSystem1 extends MessageSource {
+  const MessageSourceSystem1();
+
+  factory MessageSourceSystem1.fromJson(Map<String, Object?> json) => MessageSourceSystem1(
+      );
+
+  Map<String, Object?> toJson() => {
+        'kind': 'system1',
       };
 }
 

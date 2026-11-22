@@ -28,6 +28,7 @@ pub mod session;
 pub mod site_mcp;
 mod slot_guard;
 mod slot_pool;
+pub mod system1;
 pub mod terminals;
 pub mod tools;
 pub mod tui;
@@ -38,6 +39,7 @@ pub mod watches;
 pub use config::Config;
 pub use config_sections::{
     AgentConfig, AppConfig, AttachmentsConfig, McpServerConfig, ProviderConfig, ServerConfig,
+    System1Config,
 };
 pub use error::{Result, ServerError};
 pub use hash::content_hash;

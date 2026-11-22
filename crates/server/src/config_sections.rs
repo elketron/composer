@@ -21,6 +21,38 @@ pub struct ProviderConfig {
     pub tool_images: bool,
 }
 
+/// `[system1]`: a small fast model that decides action approvals (terminal input, background
+/// processes, MCP and outside agents' tool calls, recipe runs) for the user: approve, reject, or
+/// forward to the user. Trust changes (`folder:`, `mcp.toml`, policy pages) always go to the user.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct System1Config {
+    /// Empty: off, every approval goes to the user.
+    #[serde(default)]
+    pub model: String,
+    /// OpenAI-compatible base URL, including `/v1`. Empty: `[provider]`'s (sharing its slots, and
+    /// its key unless `api_key` is set).
+    #[serde(default)]
+    pub base_url: String,
+    /// Sent as a bearer token when non-empty.
+    #[serde(default)]
+    pub api_key: String,
+    /// A decision that takes longer is forwarded to the user.
+    #[serde(default = "default_system1_timeout")]
+    pub timeout_secs: u64,
+    /// Its `reasoning_effort` (none, low, medium, high): a decision needs little thought. Empty:
+    /// not sent.
+    #[serde(default = "default_low")]
+    pub reasoning_effort: String,
+}
+
+fn default_low() -> String {
+    "low".into()
+}
+
+fn default_system1_timeout() -> u64 {
+    15
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ServerConfig {
     /// Keep on localhost; expose to the tailnet with `tailscale serve`.

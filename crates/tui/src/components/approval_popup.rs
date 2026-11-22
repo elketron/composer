@@ -52,9 +52,11 @@ impl Component for ApprovalPopup {
         let more = state.approvals.count().saturating_sub(1);
         let mcp_toml = is_mcp_toml(approval);
         let folder = is_folder(approval);
+        let policy = is_policy(approval);
         let question = match approval.kind {
             ApprovalKind::Recipe if mcp_toml => "start MCP servers?",
             ApprovalKind::Recipe if folder => "let the site work there?",
+            ApprovalKind::Recipe if policy => "let system-1 follow this policy?",
             ApprovalKind::Recipe => "run recipe?",
             ApprovalKind::Tool => "allow tool?",
             ApprovalKind::Mcp => "allow MCP tool?",
@@ -86,6 +88,10 @@ impl Component for ApprovalPopup {
                 vec![value(format!("Start {}'s MCP servers", approval.site))]
             }
             ApprovalKind::Recipe if folder => vec![value(folder_headline(approval))],
+            ApprovalKind::Recipe if policy => vec![value(format!(
+                "Let system-1 follow {}'s approvals.md",
+                approval.site
+            ))],
             ApprovalKind::Recipe => vec![
                 label("site "),
                 value(approval.site.clone()),
@@ -131,6 +137,12 @@ impl Component for ApprovalPopup {
             }
             ApprovalKind::Recipe if folder => {
                 "the site's folder: · approval lasts until folder: names another folder".to_string()
+            }
+            ApprovalKind::Recipe if policy => {
+                let short_hash: String = approval.hash.chars().take(8).collect();
+                format!(
+                    "sha256 {short_hash} · the site's approvals.md · approval lasts until it changes"
+                )
             }
             ApprovalKind::Recipe => {
                 let short_hash: String = approval.hash.chars().take(8).collect();
@@ -179,6 +191,12 @@ fn is_mcp_toml(approval: &crate::store::types::PendingApproval) -> bool {
 /// Not a recipe: the site's `folder:`, which counts once approved. Its one argument is the folder.
 fn is_folder(approval: &crate::store::types::PendingApproval) -> bool {
     approval.kind == ApprovalKind::Recipe && approval.recipe == "folder:"
+}
+
+/// Not a recipe: the site's policy page for system-1 (`approvals.md`), which counts once
+/// approved. The body is the page.
+fn is_policy(approval: &crate::store::types::PendingApproval) -> bool {
+    approval.kind == ApprovalKind::Recipe && approval.recipe == "approvals.md"
 }
 
 /// "Let <site> work in <path>".

@@ -682,6 +682,20 @@ fn fixtures() -> Vec<(&'static str, Vec<Value>)> {
             seq: 6,
             message: message.clone(),
         },
+        ServerMessage::MessageDone {
+            session: s(),
+            seq: 6,
+            message: ChatMessage {
+                role: Role::System,
+                content: "system-1 approved `cargo test` — the user asked to run the tests".into(),
+                thinking: None,
+                tool_calls: vec![],
+                pages: vec![],
+                images: vec![],
+                attachments: vec![],
+                source: Some(MessageSource::System1),
+            },
+        },
         ServerMessage::ToolCallStarted {
             session: s(),
             seq: 7,

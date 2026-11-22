@@ -54,6 +54,12 @@ final class NoteItem extends ChatItem {
   final String text;
 }
 
+/// A decision of system-1 (the `[system1]` model) on an approval: `system-1 approved …`.
+final class System1Item extends ChatItem {
+  const System1Item(this.text);
+  final String text;
+}
+
 /// A background process the agent started ended; `text` is what the agent was told.
 final class ProcessEndedItem extends ChatItem {
   const ProcessEndedItem(this.command, this.text);

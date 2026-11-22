@@ -173,6 +173,11 @@ impl SessionStore {
                         });
                     }
                 }
+                Role::System if message.source == Some(MessageSource::System1) => {
+                    self.items.push(ChatItem::System1 {
+                        text: message.content.clone(),
+                    })
+                }
                 Role::System | Role::Tool => self.items.push(ChatItem::System {
                     text: message.content.clone(),
                 }),

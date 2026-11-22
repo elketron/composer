@@ -69,6 +69,7 @@ ChatState _done(ChatState chat, ChatMessage message) => switch (message.role) {
           if (message.thinking?.trim().isNotEmpty ?? false) ThinkingItem(message.thinking!),
           if (message.content.trim().isNotEmpty) TextItem(message.content),
         ]),
+      Role.system when message.source is MessageSourceSystem1 => chat.copyWith(items: [...chat.items, System1Item(message.content)]),
       Role.system || Role.tool => chat.copyWith(items: [...chat.items, NoteItem(message.content)]),
     };
 
