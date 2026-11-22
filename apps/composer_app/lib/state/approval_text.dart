@@ -29,7 +29,7 @@ String approvalNote(ServerMessageApprovalRequest a) => switch (a.kind ?? Approva
       ApprovalKind.recipe => 'Once approved, this recipe runs without asking until it changes.',
       ApprovalKind.tool => a.rule == null
           ? 'Claude Code wants a tool outside its allowlist.'
-          : 'Always allows ${a.rule} in this project from now on.',
+          : 'Always allows ${a.rule} in this folder from now on.',
       ApprovalKind.mcp => a.rule == null
           ? "A call to an MCP server's tool."
           : 'Always allows ${a.rule} from now on, for any agent that lists it.',

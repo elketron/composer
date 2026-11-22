@@ -510,6 +510,7 @@ fn button(
 ) -> gpui::Stateful<gpui::Div> {
     div()
         .id(gpui::ElementId::Name(id.into()))
+        .flex_none()
         .px(px(9.))
         .py(px(3.))
         .rounded(px(R_CONTROL))
@@ -849,7 +850,11 @@ impl ChatPane {
                     .py(px(7.))
                     .child(
                         div()
-                            .flex_none()
+                            .flex_shrink(1.)
+                            .min_w(px(0.))
+                            .overflow_hidden()
+                            .whitespace_nowrap()
+                            .text_ellipsis()
                             .text_color(rgb(ACCENT_SOFT))
                             .child(format!("⚑ {what}")),
                     )
@@ -921,7 +926,7 @@ impl ChatPane {
                         .px(px(10.))
                         .pb(px(7.))
                         .text_color(rgb(FG_FAINT))
-                        .child(format!("always allows {rule} in this project")),
+                        .child(format!("always allows {rule} in this folder")),
                 )
             })
             .into_any_element()
