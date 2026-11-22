@@ -6,3 +6,4 @@ mod wrap;
 
 pub use renderer::render;
 pub use types::{Rendered, RenderedLink};
+pub use wrap::{hard_wrap, wrap_spans};

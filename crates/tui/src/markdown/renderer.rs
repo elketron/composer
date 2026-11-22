@@ -8,7 +8,7 @@ use ratatui::text::{Line, Span};
 use unicode_width::UnicodeWidthStr;
 
 use crate::markdown::types::Seg;
-use crate::markdown::wrap::{truncate, wrap};
+use crate::markdown::wrap::{hard_wrap, truncate, wrap};
 use crate::markdown::{Rendered, RenderedLink};
 use crate::theme;
 
@@ -249,20 +249,22 @@ impl Renderer<'_> {
         let style = Style::new().fg(theme::TEXT).bg(theme::RAISED);
         let inner = self.width.saturating_sub(4);
         for line in code.trim_end_matches('\n').lines() {
-            let text: String = truncate(line, inner);
-            let pad = inner.saturating_sub(text.width());
-            self.out.push(vec![
-                Seg {
-                    text: "  ".into(),
-                    style: self.base_style,
-                    link: None,
-                },
-                Seg {
-                    text: format!(" {text}{} ", " ".repeat(pad)),
-                    style,
-                    link: None,
-                },
-            ]);
+            // Long lines wrap by character: none of the code is cut off.
+            for text in hard_wrap(line, inner) {
+                let pad = inner.saturating_sub(text.width());
+                self.out.push(vec![
+                    Seg {
+                        text: "  ".into(),
+                        style: self.base_style,
+                        link: None,
+                    },
+                    Seg {
+                        text: format!(" {text}{} ", " ".repeat(pad)),
+                        style,
+                        link: None,
+                    },
+                ]);
+            }
         }
         self.blank();
     }

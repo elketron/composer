@@ -5,6 +5,7 @@ use ratatui::layout::Rect;
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
+use unicode_width::UnicodeWidthStr;
 
 use crate::action::Action;
 use crate::components::Component;
@@ -41,7 +42,14 @@ impl Component for ApprovalPopup {
         };
         dim(frame.buffer_mut(), area);
 
-        let body: Vec<&str> = approval.body.lines().collect();
+        // The popup's text width: `centered` keeps it inside the screen, then borders and padding.
+        let text_width = 92.min(area.width.saturating_sub(4)).saturating_sub(4) as usize;
+        // Long lines wrap by character, so none of the command or file is hidden past the edge.
+        let body: Vec<String> = approval
+            .body
+            .lines()
+            .flat_map(|line| crate::markdown::hard_wrap(line, text_width.saturating_sub(1)))
+            .collect();
         let max_body = area.height.saturating_sub(12).max(3) as usize;
         let shown = body.len().min(max_body);
         let overflow = u16::from(body.len() > shown);
@@ -114,8 +122,8 @@ impl Component for ApprovalPopup {
         let code_style = Style::new().fg(theme::TEXT).bg(theme::BG);
         let mut lines = vec![Line::from(header), Line::raw("")];
         for line in body.iter().take(shown) {
-            let text: String = line.chars().take(width.saturating_sub(2)).collect();
-            let pad = width.saturating_sub(text.chars().count() + 1);
+            let text = line;
+            let pad = width.saturating_sub(text.width() + 1);
             lines.push(Line::from(Span::styled(
                 format!(" {text}{}", " ".repeat(pad)),
                 code_style,

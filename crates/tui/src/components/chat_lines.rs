@@ -2,6 +2,7 @@
 
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
+use unicode_width::UnicodeWidthStr;
 
 use crate::components::widgets::band;
 use crate::markdown;
@@ -92,13 +93,25 @@ pub fn chat_lines(state: &AppState, width: u16) -> Vec<Line<'static>> {
                 } else {
                     ("▸ ", "  │ ")
                 };
-                blocks[i].1.push(Line::from(vec![
-                    Span::styled(marker, theme::faint()),
-                    // Long names keep a space before the summary.
-                    Span::styled(format!("{name:<7} "), Style::new().fg(theme::INFO)),
-                    Span::styled(summary.clone(), theme::muted()),
-                    status,
-                ]));
+                // Long names keep a space before the summary.
+                let name = format!("{name:<7} ");
+                // A long summary wraps under itself, or under the name when that leaves too little.
+                let hang = marker.width() + name.width();
+                let hang = if hang * 3 <= inner as usize {
+                    hang
+                } else {
+                    marker.width()
+                };
+                blocks[i].1.extend(markdown::wrap_spans(
+                    vec![
+                        Span::styled(marker, theme::faint()),
+                        Span::styled(name, Style::new().fg(theme::INFO)),
+                        Span::styled(summary.clone(), theme::muted()),
+                        status,
+                    ],
+                    inner as usize,
+                    vec![Span::raw(" ".repeat(hang))],
+                ));
                 if let Some(detail) = detail.as_ref().filter(|_| state.ui.show_tool_details) {
                     for line in detail.lines().take(40) {
                         // The terminal widget drops tabs.
@@ -108,14 +121,9 @@ pub fn chat_lines(state: &AppState, width: u16) -> Vec<Line<'static>> {
                             Some('-') => Style::new().fg(theme::ERR),
                             _ => theme::muted(),
                         };
-                        let text: String = line
-                            .chars()
-                            .take(inner.saturating_sub(bar.len() as u16 + 2) as usize)
-                            .collect();
-                        blocks[i].1.push(Line::from(vec![
-                            Span::styled(bar, theme::faint()),
-                            Span::styled(text, style),
-                        ]));
+                        blocks[i]
+                            .1
+                            .extend(barred(&line, bar, inner as usize, style));
                     }
                 }
                 if let Some(result) = result
@@ -128,15 +136,10 @@ pub fn chat_lines(state: &AppState, width: u16) -> Vec<Line<'static>> {
                         theme::faint()
                     };
                     for line in result.lines().take(8) {
-                        let text: String = line
-                            .replace('\t', "  ")
-                            .chars()
-                            .take(inner.saturating_sub(4) as usize)
-                            .collect();
-                        blocks[i].1.push(Line::from(vec![
-                            Span::styled(bar, theme::faint()),
-                            Span::styled(text, style),
-                        ]));
+                        let line = line.replace('\t', "  ");
+                        blocks[i]
+                            .1
+                            .extend(barred(&line, bar, inner as usize, style));
                     }
                 }
             }
@@ -183,23 +186,20 @@ pub fn chat_lines(state: &AppState, width: u16) -> Vec<Line<'static>> {
                 } else {
                     "▸ "
                 };
-                let mut lines = vec![Line::from(vec![
-                    Span::styled(marker, theme::faint()),
-                    Span::styled("process ", Style::new().fg(theme::WARN)),
-                    Span::styled(format!("{terminal} `{command}` "), theme::muted()),
-                    Span::styled(how, theme::faint()),
-                ])];
+                let mut lines = markdown::wrap_spans(
+                    vec![
+                        Span::styled(marker, theme::faint()),
+                        Span::styled("process ", Style::new().fg(theme::WARN)),
+                        Span::styled(format!("{terminal} `{command}` "), theme::muted()),
+                        Span::styled(how, theme::faint()),
+                    ],
+                    inner as usize,
+                    vec![Span::raw("  ")],
+                );
                 if state.ui.show_tool_details {
                     for line in text.lines().skip(1).take(40) {
-                        let text: String = line
-                            .replace('\t', "  ")
-                            .chars()
-                            .take(inner.saturating_sub(2) as usize)
-                            .collect();
-                        lines.push(Line::from(vec![
-                            Span::styled("│ ", theme::faint()),
-                            Span::styled(text, theme::faint()),
-                        ]));
+                        let line = line.replace('\t', "  ");
+                        lines.extend(barred(&line, "│ ", inner as usize, theme::faint()));
                     }
                 }
                 blocks.push((Speaker::System, lines));
@@ -208,20 +208,26 @@ pub fn chat_lines(state: &AppState, width: u16) -> Vec<Line<'static>> {
                 let rest = text.strip_prefix("system-1").unwrap_or(text);
                 blocks.push((
                     Speaker::System,
-                    vec![Line::from(vec![
-                        Span::styled("system-1", Style::new().fg(theme::INFO)),
-                        Span::styled(rest.to_string(), theme::muted()),
-                    ])],
+                    markdown::wrap_spans(
+                        vec![
+                            Span::styled("system-1", Style::new().fg(theme::INFO)),
+                            Span::styled(rest.to_string(), theme::muted()),
+                        ],
+                        inner as usize,
+                        vec![Span::raw("  ")],
+                    ),
                 ));
             }
             ChatItem::System { text } => {
-                blocks.push((
-                    Speaker::System,
-                    vec![Line::from(Span::styled(
-                        text.clone(),
-                        Style::new().fg(theme::WARN),
-                    ))],
-                ));
+                let mut lines = Vec::new();
+                for line in text.lines() {
+                    lines.extend(markdown::wrap_spans(
+                        vec![Span::styled(line.to_string(), Style::new().fg(theme::WARN))],
+                        inner as usize,
+                        vec![Span::raw("  ")],
+                    ));
+                }
+                blocks.push((Speaker::System, lines));
             }
         }
     }
@@ -259,6 +265,20 @@ pub fn chat_lines(state: &AppState, width: u16) -> Vec<Line<'static>> {
     out
 }
 
+/// One line of tool or process output behind `bar`, broken into rows that fit `width` (all of its
+/// text kept: output is not prose, so it breaks by character, not by word).
+fn barred(line: &str, bar: &'static str, width: usize, style: Style) -> Vec<Line<'static>> {
+    markdown::hard_wrap(line, width.saturating_sub(bar.width()))
+        .into_iter()
+        .map(|row| {
+            Line::from(vec![
+                Span::styled(bar, theme::faint()),
+                Span::styled(row, style),
+            ])
+        })
+        .collect()
+}
+
 /// Collapsed: one `▸ thinking · N words` row. Expanded: dim italic text behind a bar.
 fn thinking_lines(text: &str, expanded: bool, width: u16, live: bool) -> Vec<Line<'static>> {
     let words = text.split_whitespace().count();
@@ -278,4 +298,68 @@ fn thinking_lines(text: &str, expanded: bool, width: u16, live: bool) -> Vec<Lin
         }
     }
     lines
+}
+
+#[cfg(test)]
+mod wrap_tests {
+    use super::*;
+    use crate::store::types::Startup;
+
+    fn rows(state: &AppState, width: u16) -> Vec<String> {
+        chat_lines(state, width)
+            .iter()
+            .map(|l| l.spans.iter().map(|s| s.content.as_ref()).collect())
+            .collect()
+    }
+
+    #[test]
+    fn long_lines_wrap_and_nothing_is_cut_off() {
+        let mut state = AppState::new(Startup::default(), 160_000);
+        let command = "clear; sed -n '80,261p' docs/rewrite-plan.md; echo ===END";
+        state.session.items = vec![
+            ChatItem::Tool {
+                call_id: "c1".into(),
+                name: "terminal_send".into(),
+                summary: format!("{{\"text\":\"{command}\",\"id\":\"tfb542b41\"}}"),
+                detail: None,
+                nested: false,
+                result: Some(
+                    "site://canvas names no folder, so there is nothing to open there".into(),
+                ),
+                is_error: true,
+            },
+            ChatItem::System1 {
+                text: format!(
+                    "system-1 forwarded `{command}` to you (approve 0.71 below 0.90; reject 0.20, forward 0.09)"
+                ),
+            },
+            ChatItem::System {
+                text:
+                    "a notice that is longer than the pane is wide, and must wrap onto the next row"
+                        .into(),
+            },
+        ];
+        let width = 40;
+        let shown = rows(&state, width);
+        // Compared without whitespace: a word longer than a row is broken across rows.
+        let squash = |s: &str| s.split_whitespace().collect::<String>();
+        let all = squash(&shown.concat());
+        for part in [
+            "tfb542b41",
+            "nothing to open there",
+            "forward 0.09)",
+            "onto the next row",
+        ] {
+            assert!(
+                all.contains(&squash(part)),
+                "{part:?} was cut off: {shown:#?}"
+            );
+        }
+        for row in &shown {
+            assert!(
+                row.width() <= width as usize,
+                "row wider than the pane: {row:?}"
+            );
+        }
+    }
 }
