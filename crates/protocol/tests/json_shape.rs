@@ -102,6 +102,7 @@ fn background_processes() {
             { "terminal": "t1", "command": "npm run dev", "cwd": "/p", "started": "2026-11-21T12:00:00Z" }
         ] }),
     );
+    round_trip(&MessageSource::System1, json!({ "kind": "system1" }));
     round_trip(
         &MessageSource::Process {
             terminal: "t1".into(),

@@ -84,7 +84,8 @@ pub enum Role {
     Tool,
 }
 
-/// Where a user-side message came from.
+/// Where a message from outside the model came from: a user-side message, or a line the server
+/// adds to the chat (`System1`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
@@ -106,6 +107,9 @@ pub enum MessageSource {
     Mcp {
         server: String,
     },
+    /// The `[system1]` model decided an approval for the user (a system line: approved, rejected
+    /// or forwarded, with its reason). Shown in the chat; the model never reads it.
+    System1,
 }
 
 /// A complete chat message, as stored in the transcript.
