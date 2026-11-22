@@ -798,7 +798,7 @@ impl WebPane {
             return;
         }
         if let Some(browser) = self.browser.as_ref() {
-            crate::trace("pane: loading its page again (it changed on the server)");
+            crate::trace("pane: loading its page again (changed on the server, or asked for)");
             // The cache is skipped: the point of this is the new text, and a view's own answer is
             // never worth revalidating.
             browser.reload_ignore_cache();
