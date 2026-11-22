@@ -120,6 +120,10 @@ class EffectRunner {
         _request(url, ClientCommandProcessList(session: session), dispatch).then((result) {
           if (result is CommandResultProcesses) dispatch(ProcessesLoaded(url, session, result.processes));
         });
+      case DeskCommand(:final url, :final session, :final command):
+        _request(url, command, dispatch).then((result) {
+          if (result is CommandResultDesk) dispatch(DeskLoaded(url, session, result.desk));
+        });
     }
   }
 
