@@ -41,6 +41,27 @@ impl SessionDesk {
             }
             DeskTab::Changes { site } => format!("changes:{}", site_name(site)?),
             DeskTab::LiveView => "live".to_string(),
+            DeskTab::App { name, path } => {
+                if !crate::app_upstream::valid_name(name) {
+                    return Err(format!("`{name}` isn't an app's name"));
+                }
+                crate::app_upstream::desk_path(path)?;
+                format!("{}{name}", Self::APP_ID)
+            }
+        })
+    }
+
+    /// The start of an app tab's id: `app:` and the app's name.
+    pub const APP_ID: &str = "app:";
+
+    /// `tab` as the desk keeps it: an app tab's path without its leading `/`.
+    fn normalised(tab: DeskTab) -> Result<DeskTab, String> {
+        Ok(match tab {
+            DeskTab::App { name, path } => DeskTab::App {
+                path: crate::app_upstream::desk_path(&path)?,
+                name,
+            },
+            tab => tab,
         })
     }
 
@@ -48,12 +69,19 @@ impl SessionDesk {
     /// focusing is `unseen` until the user shows it. Its id.
     pub fn open(&mut self, tab: DeskTab, focus: bool, by: DeskBy) -> Result<String, String> {
         let id = Self::key(&tab)?;
-        if !self.0.tabs.iter().any(|t| t.id == id) {
-            self.0.tabs.push(DeskEntry {
+        let tab = Self::normalised(tab)?;
+        match self.0.tabs.iter_mut().find(|t| t.id == id) {
+            // An app tab opened at another path goes there; it is new to see when the agent moved it.
+            Some(open) if open.tab != tab => {
+                open.tab = tab;
+                open.unseen |= by == DeskBy::Agent && !focus;
+            }
+            Some(_) => {}
+            None => self.0.tabs.push(DeskEntry {
                 id: id.clone(),
                 tab,
                 unseen: by == DeskBy::Agent && !focus,
-            });
+            }),
         }
         if focus {
             self.focus(&id)?;
@@ -217,6 +245,41 @@ mod tests {
         );
         let back: DeskTab = serde_json::from_str(r#"{"kind":"live_view"}"#).unwrap();
         assert_eq!(back, DeskTab::LiveView);
+    }
+
+    #[test]
+    fn an_app_is_one_tab_per_desk_at_its_latest_path() {
+        let app = |path: &str| DeskTab::App {
+            name: "canvas".into(),
+            path: path.into(),
+        };
+        let mut desk = SessionDesk::default();
+        let id = desk.open(app(""), true, DeskBy::User).unwrap();
+        assert_eq!(id, "app:canvas");
+        // The agent moves it to a board: the same tab, at the new path, unseen.
+        desk.open(app("/board/3?x=1"), false, DeskBy::Agent)
+            .unwrap();
+        assert_eq!(desk.desk().tabs.len(), 1);
+        assert_eq!(desk.desk().tabs[0].tab, app("board/3?x=1"));
+        assert!(desk.desk().tabs[0].unseen);
+        // Opened again where it is: nothing changes.
+        desk.open(app("board/3?x=1"), false, DeskBy::User).unwrap();
+        assert!(desk.desk().tabs[0].unseen);
+        assert_eq!(
+            serde_json::to_string(&app("b")).unwrap(),
+            r#"{"kind":"app","name":"canvas","path":"b"}"#
+        );
+        let back: DeskTab = serde_json::from_str(r#"{"kind":"app","name":"canvas"}"#).unwrap();
+        assert_eq!(back, app(""));
+        for bad in [
+            DeskTab::App {
+                name: "a/b".into(),
+                path: String::new(),
+            },
+            app("../x"),
+        ] {
+            assert!(SessionDesk::key(&bad).is_err(), "{bad:?}");
+        }
     }
 
     #[test]

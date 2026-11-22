@@ -2,6 +2,29 @@
 // Source of truth: crates/protocol (Rust).
 // ignore_for_file: annotate_overrides, prefer_const_constructors, unnecessary_this
 
+/// A local web server composer serves at `/apps/<name>/`.
+class AppInfo {
+  const AppInfo({
+    required this.name,
+    required this.title,
+  });
+
+  final String name;
+
+  /// What to call it: its `title`, else its name.
+  final String title;
+
+  factory AppInfo.fromJson(Map<String, Object?> json) => AppInfo(
+        name: json['name'] as String,
+        title: json['title'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'name': name,
+        'title': title,
+      };
+}
+
 enum ApprovalDecision {
   approve('approve'),
   deny('deny'),
@@ -1256,7 +1279,7 @@ class DeskEntry {
     this.unseen = false,
   });
 
-  /// `page:site://x`, `terminal:<id>`, `changes:<site>`, `live`.
+  /// `page:site://x`, `terminal:<id>`, `changes:<site>`, `live`, `app:<name>`.
   final String id;
 
   final DeskTab tab;
@@ -1286,6 +1309,7 @@ sealed class DeskTab {
         'terminal' => DeskTabTerminal.fromJson(json),
         'changes' => DeskTabChanges.fromJson(json),
         'live_view' => DeskTabLiveView.fromJson(json),
+        'app' => DeskTabApp.fromJson(json),
         _ => DeskTabUnknown(json),
       };
 
@@ -1356,6 +1380,31 @@ final class DeskTabLiveView extends DeskTab {
 
   Map<String, Object?> toJson() => {
         'kind': 'live_view',
+      };
+}
+
+/// One of the user's own local web servers (`[apps.<name>]`, served at `/apps/<name>/`), at
+/// `path` relative to its root (`""`: its page; may carry `?query`). One per app per desk
+/// (id `app:<name>`): opening it at another path moves that tab there.
+final class DeskTabApp extends DeskTab {
+  const DeskTabApp({
+    required this.name,
+    this.path,
+  });
+
+  final String name;
+
+  final String? path;
+
+  factory DeskTabApp.fromJson(Map<String, Object?> json) => DeskTabApp(
+        name: json['name'] as String,
+        path: json['path'] == null ? null : json['path'] as String,
+      );
+
+  Map<String, Object?> toJson() => {
+        'kind': 'app',
+        'name': name,
+        if (path != null) 'path': path,
       };
 }
 
@@ -1801,6 +1850,7 @@ class ServerInfo {
     required this.slots,
     this.viewer,
     this.harnesses = const [],
+    this.apps = const [],
   });
 
   /// `server.name` from config.toml, else the hostname.
@@ -1823,6 +1873,10 @@ class ServerInfo {
   /// The outside agents (`[acp.<name>]` in config.toml) an agentic session may run on.
   final List<String> harnesses;
 
+  /// The user's own local web servers (`[apps.<name>]` in config.toml), served at
+  /// `/apps/<name>/` (needs the token, like the rest); a desk's `app` tab shows one.
+  final List<AppInfo> apps;
+
   factory ServerInfo.fromJson(Map<String, Object?> json) => ServerInfo(
         name: json['name'] as String,
         version: json['version'] as String,
@@ -1830,6 +1884,7 @@ class ServerInfo {
         slots: (json['slots'] as num).toInt(),
         viewer: json['viewer'] == null ? null : json['viewer'] as String,
         harnesses: json['harnesses'] == null ? const [] : (json['harnesses'] as List).map((e) => e as String).toList(),
+        apps: json['apps'] == null ? const [] : (json['apps'] as List).map((e) => AppInfo.fromJson(e as Map<String, Object?>)).toList(),
       );
 
   Map<String, Object?> toJson() => {
@@ -1839,6 +1894,7 @@ class ServerInfo {
         'slots': slots,
         if (viewer != null) 'viewer': viewer,
         if (harnesses.isNotEmpty) 'harnesses': harnesses,
+        if (apps.isNotEmpty) 'apps': apps.map((e) => e.toJson()).toList(),
       };
 }
 

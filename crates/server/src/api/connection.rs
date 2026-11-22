@@ -11,6 +11,7 @@ use tokio::sync::mpsc;
 use crate::api::event_scope::{EventScope, scope};
 use crate::api::glob::url_matches;
 use crate::api::viewer_proxy;
+use crate::app_upstream::AppUpstream;
 use crate::attachments::resolve;
 use crate::harness::AcpConfig;
 use crate::server::Server;
@@ -423,6 +424,11 @@ impl Connection {
             } => {
                 if tab == DeskTab::LiveView && viewer_proxy::viewer_path(server).is_none() {
                     return Err(viewer_proxy::NO_LIVE_VIEW.into());
+                }
+                if let DeskTab::App { name, .. } = &tab
+                    && AppUpstream::find(&server.config(), name).is_none()
+                {
+                    return Err(crate::api::app_proxy::no_app(name));
                 }
                 change_desk(server, &session, |desk| {
                     desk.open(tab, focus, DeskBy::User).map(|_| ())

@@ -196,8 +196,7 @@ async fn forward(State(server): State<Arc<Server>>, request: Request) -> Respons
     let (parts, body) = request.into_parts();
     let mut upstream_request = client().request(parts.method.clone(), &url);
     for (name, value) in &parts.headers {
-        if !dropped(name, &DROPPED_REQUEST_HEADERS) && !name.as_str().starts_with("x-forwarded-")
-        {
+        if !dropped(name, &DROPPED_REQUEST_HEADERS) && !name.as_str().starts_with("x-forwarded-") {
             upstream_request = upstream_request.header(name, value);
         }
     }
@@ -228,9 +227,9 @@ async fn forward(State(server): State<Arc<Server>>, request: Request) -> Respons
     let mut response = Response::new(body);
     *response.status_mut() = status;
     for (name, value) in &headers {
-        let theirs = name == header::SET_COOKIE
-            && value.to_str().map_or(true, is_composer_cookie)
-            || dropped(name, &DROPPED_RESPONSE_HEADERS);
+        let composers =
+            name == header::SET_COOKIE && value.to_str().map_or(true, is_composer_cookie);
+        let theirs = composers || dropped(name, &DROPPED_RESPONSE_HEADERS);
         if !theirs {
             response.headers_mut().append(name, value.clone());
         }
@@ -283,9 +282,7 @@ async fn socket(app: AppUpstream, url: String, request: Request) -> Response {
         handshake.headers_mut().insert(header::COOKIE, cookies);
     }
     if let Ok(prefix) = HeaderValue::from_str(&app.served_at()) {
-        handshake
-            .headers_mut()
-            .insert("x-forwarded-prefix", prefix);
+        handshake.headers_mut().insert("x-forwarded-prefix", prefix);
     }
     let (upstream, answer) = match tokio_tungstenite::connect_async(handshake).await {
         Ok(connected) => connected,
@@ -399,7 +396,10 @@ mod tests {
         );
         assert_eq!(app_cookies(&headers).unwrap(), "theme=dark; app=1");
         let mut only_ours = HeaderMap::new();
-        only_ours.insert(header::COOKIE, HeaderValue::from_static("composer_token_1=s"));
+        only_ours.insert(
+            header::COOKIE,
+            HeaderValue::from_static("composer_token_1=s"),
+        );
         assert_eq!(app_cookies(&only_ours), None);
         assert!(is_composer_cookie("composer_token_7420=x; Path=/"));
         assert!(!is_composer_cookie("session=composer_token"));

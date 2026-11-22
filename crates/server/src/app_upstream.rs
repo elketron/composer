@@ -3,6 +3,7 @@
 
 use std::collections::BTreeMap;
 
+use composer_protocol::http::AppInfo;
 use reqwest::Url;
 
 use crate::config::Config;
@@ -37,6 +38,22 @@ pub fn check(apps: &BTreeMap<String, AppConfig>) -> Result<(), String> {
         .try_for_each(|(name, app)| AppUpstream::new(name, app).map(|_| ()))
 }
 
+/// The configured apps as clients see them (`GET /api/info`), by name.
+pub fn listed(config: &Config) -> Vec<AppInfo> {
+    config
+        .apps
+        .iter()
+        .filter(|(name, app)| AppUpstream::new(name, app).is_ok())
+        .map(|(name, app)| AppInfo {
+            name: name.clone(),
+            title: match app.title.trim() {
+                "" => name.clone(),
+                title => title.to_string(),
+            },
+        })
+        .collect()
+}
+
 impl AppUpstream {
     pub fn new(name: &str, app: &AppConfig) -> Result<Self, String> {
         let setting = format!("[apps.{name}]");
@@ -57,7 +74,9 @@ impl AppUpstream {
             ));
         }
         if !base.username().is_empty() || base.password().is_some() {
-            return Err(format!("{setting} url `{text}` must not hold a user or password"));
+            return Err(format!(
+                "{setting} url `{text}` must not hold a user or password"
+            ));
         }
         base.set_query(None);
         base.set_fragment(None);
@@ -211,7 +230,10 @@ mod tests {
         for (text, why) in [
             ("[apps.x]\nurl = \"http://192.168.1.5:4477\"\n", "loopback"),
             ("[apps.x]\nurl = \"http://example.com\"\n", "loopback"),
-            ("[apps.x]\nurl = \"http://127.0.0.1.example.com\"\n", "loopback"),
+            (
+                "[apps.x]\nurl = \"http://127.0.0.1.example.com\"\n",
+                "loopback",
+            ),
             ("[apps.x]\nurl = \"ftp://127.0.0.1\"\n", "http(s)"),
             ("[apps.x]\nurl = \"127.0.0.1:4477\"\n", "url"),
             ("[apps.x]\nurl = \"http://u:p@127.0.0.1:1\"\n", "user"),
@@ -231,18 +253,12 @@ mod tests {
     #[test]
     fn urls_stay_under_the_app() {
         let up = AppUpstream::new("c", &app("http://127.0.0.1:4477")).unwrap();
-        assert_eq!(
-            up.url("/", None, false).unwrap(),
-            "http://127.0.0.1:4477/"
-        );
+        assert_eq!(up.url("/", None, false).unwrap(), "http://127.0.0.1:4477/");
         assert_eq!(
             up.url("/api/x", Some("a=1"), false).unwrap(),
             "http://127.0.0.1:4477/api/x?a=1"
         );
-        assert_eq!(
-            up.url("/ws", None, true).unwrap(),
-            "ws://127.0.0.1:4477/ws"
-        );
+        assert_eq!(up.url("/ws", None, true).unwrap(), "ws://127.0.0.1:4477/ws");
         let sub = AppUpstream::new("c", &app("http://127.0.0.1:4477/sub/")).unwrap();
         assert_eq!(
             sub.url("/a/", None, false).unwrap(),
@@ -286,7 +302,15 @@ mod tests {
         assert_eq!(desk_path(" /board/3 ").unwrap(), "board/3");
         assert_eq!(desk_path("board/?x=1#y").unwrap(), "board/?x=1#y");
         assert_eq!(desk_path("?b=../x").unwrap(), "?b=../x");
-        for bad in ["../x", "a/../../b", "a//b", "%2e%2e/x", "a\\b", "a b", "//x"] {
+        for bad in [
+            "../x",
+            "a/../../b",
+            "a//b",
+            "%2e%2e/x",
+            "a\\b",
+            "a b",
+            "//x",
+        ] {
             assert!(desk_path(bad).is_err(), "{bad}");
         }
     }
@@ -300,7 +324,11 @@ mod tests {
             ("/sub/x?y=1", "/apps/c/x?y=1"),
             ("http://127.0.0.1:4477/sub/z", "/apps/c/z"),
         ] {
-            assert_eq!(up.local_path(location).as_deref(), Some(served), "{location}");
+            assert_eq!(
+                up.local_path(location).as_deref(),
+                Some(served),
+                "{location}"
+            );
         }
         for location in [
             "x/y",

@@ -188,3 +188,36 @@ async fn the_live_view_opens_by_hand_only_with_a_viewer() {
     assert_eq!(now.active.as_deref(), Some("live"));
     assert_eq!(now.tabs[0].tab, DeskTab::LiveView);
 }
+
+#[tokio::test]
+async fn an_app_opens_by_hand_only_when_it_is_configured() {
+    let open = |id: &str, name: &str| ClientCommand::DeskOpen {
+        session: id.to_string(),
+        tab: DeskTab::App {
+            name: name.into(),
+            path: "board".into(),
+        },
+        focus: true,
+    };
+    let mut config = Config::defaults();
+    config.apps.insert(
+        "canvas".into(),
+        composer_server::AppConfig {
+            url: "http://127.0.0.1:9".into(),
+            title: String::new(),
+        },
+    );
+    let (_dir, server, _provider, addr) = start_with(config, vec![]).await;
+    let id = server
+        .sessions
+        .create(composer_protocol::RunKind::Agentic, None, None)
+        .unwrap()
+        .id()
+        .to_string();
+    let mut client = connect(addr, &server.token).await;
+    let refused = desk(&mut client, 1, open(&id, "nope")).await.unwrap_err();
+    assert!(refused.contains("[apps.nope]"), "{refused}");
+    let now = desk(&mut client, 2, open(&id, "canvas")).await.unwrap();
+    assert_eq!(ids(&now), ["app:canvas"]);
+    assert_eq!(now.active.as_deref(), Some("app:canvas"));
+}

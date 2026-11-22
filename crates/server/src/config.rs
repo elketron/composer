@@ -4,8 +4,8 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::config_sections::{
-    AgentConfig, AppConfig, AttachmentsConfig, DesktopConfig, McpServerConfig, ProviderConfig, ServerConfig,
-    TerminalsConfig, ViewerConfig,
+    AgentConfig, AppConfig, AttachmentsConfig, DesktopConfig, McpServerConfig, ProviderConfig,
+    ServerConfig, TerminalsConfig, ViewerConfig,
 };
 use crate::error::{Result, ServerError};
 
