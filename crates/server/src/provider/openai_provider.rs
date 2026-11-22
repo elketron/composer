@@ -215,6 +215,9 @@ fn request_body(model: &str, request: &ModelRequest) -> Value {
     if let Some(effort) = &request.reasoning_effort {
         body["reasoning_effort"] = json!(effort);
     }
+    if let Some(format) = &request.response_format {
+        body["response_format"] = format.clone();
+    }
     body
 }
 
@@ -318,6 +321,7 @@ mod tests {
             tools: vec![],
             model: None,
             reasoning_effort: None,
+            response_format: None,
         }
     }
 
@@ -419,6 +423,7 @@ mod tests {
             tools: vec![],
             model: None,
             reasoning_effort: Some("medium".into()),
+            response_format: None,
         };
         assert_eq!(request_body("m", &request)["reasoning_effort"], "medium");
     }
@@ -452,6 +457,7 @@ mod tests {
             tools: vec![],
             model: model.map(str::to_string),
             reasoning_effort: None,
+            response_format: None,
         };
         assert_eq!(request_body("default", &request(None))["model"], "default");
         assert!(

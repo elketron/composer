@@ -56,6 +56,8 @@ pub struct ModelRequest {
     pub model: Option<String>,
     /// `reasoning_effort` to send (the run's settings, else `[agent] reasoning_effort`).
     pub reasoning_effort: Option<String>,
+    /// `response_format` to send (structured output), as the API takes it.
+    pub response_format: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

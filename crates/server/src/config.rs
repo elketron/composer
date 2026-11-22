@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::config_sections::{
     AgentConfig, AppConfig, AttachmentsConfig, DesktopConfig, McpServerConfig, ProviderConfig,
-    ServerConfig, TerminalsConfig, ViewerConfig,
+    ServerConfig, System1Config, TerminalsConfig, ViewerConfig,
 };
 use crate::error::{Result, ServerError};
 
@@ -16,6 +16,8 @@ pub struct Config {
     pub provider: ProviderConfig,
     #[serde(default = "section")]
     pub server: ServerConfig,
+    #[serde(default = "section")]
+    pub system1: System1Config,
     #[serde(default = "section")]
     pub agent: AgentConfig,
     #[serde(default = "section")]
@@ -85,6 +87,8 @@ mod tests {
         assert_eq!(c.agent.slots, 2);
         assert_eq!(c.server.bind, "127.0.0.1:7420");
         assert!(c.provider.model.is_empty());
+        assert!(c.system1.model.is_empty());
+        assert_eq!(c.system1.timeout_secs, 15);
     }
 
     #[test]
