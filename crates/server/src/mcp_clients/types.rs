@@ -9,6 +9,9 @@ pub struct RemoteTool {
     pub input_schema: Value,
 }
 
+/// Where a transport hands the params of each `notifications/composer/event` its server sends.
+pub type EventSink = std::sync::Arc<dyn Fn(Value) + Send + Sync>;
+
 /// How JSON-RPC messages reach a server: a child's stdio, or streamable HTTP.
 #[async_trait]
 pub trait Transport: Send + Sync {
@@ -23,6 +26,10 @@ pub trait Transport: Send + Sync {
 
     /// Whether the server said its tools changed since the last call (and clears it).
     fn take_tools_changed(&self) -> bool;
+
+    /// After the handshake: starts listening for what the server sends on its own, where the
+    /// transport needs that (stdio reads its stdout all along).
+    fn listen(&self) {}
 }
 
 /// `stdio` or `http`.

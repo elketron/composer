@@ -4,9 +4,10 @@ use std::time::Duration;
 use serde_json::{Value, json};
 
 use crate::McpServerConfig;
+use crate::mcp_clients::SESSION_META;
 use crate::mcp_clients::http_transport::HttpTransport;
 use crate::mcp_clients::stdio_transport::StdioTransport;
-use crate::mcp_clients::types::{RemoteTool, Transport};
+use crate::mcp_clients::types::{EventSink, RemoteTool, Transport};
 use crate::tools::CallResult;
 use crate::tools::expand_home;
 
@@ -25,12 +26,14 @@ pub struct McpClient {
 impl McpClient {
     /// Starts or reaches the server, does the handshake and lists its tools. A stdio server
     /// starts in the workspace's `sites` (or its `cwd`), with `workspace`'s variables set (its own
-    /// `env` on top).
+    /// `env` on top). The events the server sends (`notifications/composer/event`) go to
+    /// `on_event`.
     pub async fn connect(
         name: &str,
         config: &McpServerConfig,
         workspace: &BTreeMap<String, String>,
         sites: &std::path::Path,
+        on_event: EventSink,
     ) -> Result<Self, String> {
         if let Some(problem) = &config.problem {
             return Err(problem.clone());
@@ -52,6 +55,7 @@ impl McpClient {
                 &config.command,
                 command,
                 CALL_TIMEOUT,
+                on_event,
             )?)
         } else if !config.url.is_empty() {
             let mut headers: BTreeMap<String, String> = config
@@ -75,6 +79,7 @@ impl McpClient {
                 &config.url,
                 &headers,
                 CALL_TIMEOUT,
+                on_event,
             )?)
         } else {
             return Err("needs a `command` (stdio) or a `url` (HTTP)".into());
@@ -102,6 +107,7 @@ impl McpClient {
         transport
             .notify("notifications/initialized", json!({}))
             .await?;
+        transport.listen();
         let client = Self {
             transport,
             tools: std::sync::Mutex::default(),
@@ -162,12 +168,19 @@ impl McpClient {
         Ok(())
     }
 
-    /// Calls a tool: its output as text, whether it failed, and its images.
-    pub async fn call(&self, tool: &str, args: Value) -> Result<CallResult, String> {
-        let result = self
-            .transport
-            .request("tools/call", json!({ "name": tool, "arguments": args }))
-            .await?;
+    /// Calls a tool for `session` (named in `_meta`, [`SESSION_META`]): its output as text,
+    /// whether it failed, and its images.
+    pub async fn call(
+        &self,
+        tool: &str,
+        args: Value,
+        session: Option<&str>,
+    ) -> Result<CallResult, String> {
+        let mut params = json!({ "name": tool, "arguments": args });
+        if let Some(session) = session {
+            params["_meta"] = json!({ SESSION_META: session });
+        }
+        let result = self.transport.request("tools/call", params).await?;
         Ok(CallResult {
             text: output_text(&result),
             is_error: result["isError"].as_bool().unwrap_or(false),
