@@ -80,6 +80,17 @@ async fn drive(server: Arc<Server>, session: Arc<Session>) {
     }
 }
 
+/// Records a note in a session without starting a turn: the model reads it with the next one.
+/// While a turn runs, the note is queued instead, so it never lands between a tool call and its
+/// result.
+pub fn note(server: &Arc<Server>, session: &Arc<Session>, message: ChatMessage) {
+    if session.is_running() {
+        submit(server, session, message);
+    } else {
+        accept_user_message(server, session, message);
+    }
+}
+
 /// Records a user message (in the transcript, and as the model sees it in history) and gives
 /// that model text: attachments and pages named, files inlined.
 fn accept_user_message(

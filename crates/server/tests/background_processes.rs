@@ -264,6 +264,16 @@ async fn background_processes() {
         "{}",
         message.content
     );
+    // The user knows they stopped it: the note waits for the next turn instead of starting one.
+    let woke = tokio::time::timeout(Duration::from_millis(1500), async {
+        loop {
+            if let ServerMessage::TurnStarted { .. } = next_event(&mut client).await {
+                return;
+            }
+        }
+    })
+    .await;
+    assert!(woke.is_err(), "a user stop started a turn");
 
     // The server stopping ends every one, and what they started.
     let pid_file = dir.path().join("left.pid");

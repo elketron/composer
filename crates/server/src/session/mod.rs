@@ -26,5 +26,5 @@ pub use session_folder::SessionFolder;
 pub use session_manager::SessionManager;
 pub use session_sink::SessionSink;
 pub use transcript::{FULL_PARSES, Transcript, is_ephemeral};
-pub use turn::{compact_now, submit};
+pub use turn::{compact_now, note, submit};
 pub use types::{StepOutput, TranscriptInner};

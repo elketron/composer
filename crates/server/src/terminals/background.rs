@@ -8,7 +8,7 @@ use composer_protocol::{ChatMessage, MessageSource, Role};
 use portable_pty::ExitStatus;
 
 use crate::server::Server;
-use crate::session::submit;
+use crate::session::{note, submit};
 use crate::terminals::Terminal;
 use crate::terminals::terminal_registry::{GRACE, exited as terminal_exited};
 use crate::terminals::types::StoppedBy;
@@ -84,7 +84,13 @@ pub(crate) fn exited(
         }),
     };
     let _entered = runtime.enter();
-    submit(&server, &session, message);
+    // The user stopped it: they know. The agent reads the note with its next turn instead of
+    // being woken for it.
+    if matches!(by, Some(StoppedBy::User)) {
+        note(&server, &session, message);
+    } else {
+        submit(&server, &session, message);
+    }
 }
 
 /// "Background process t… (`cmd`) exited with code 1. Its last lines: …"
@@ -104,12 +110,12 @@ fn message_text(
     };
     let lines = terminal.text(EXIT_LINES);
     let tail = if lines.is_empty() {
-        "It printed nothing.".to_string()
+        "No output.".to_string()
     } else {
         format!("Its last lines:\n```\n{lines}\n```")
     };
     format!(
-        "[background process {} (`{command}`) {how}]\n{tail}",
+        "[automatic notice: background process {} (`{command}`) {how}]\n{tail}",
         terminal.id
     )
 }
